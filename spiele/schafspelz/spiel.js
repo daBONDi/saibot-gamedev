@@ -12,7 +12,9 @@ const SICHT = 290;                    // Wie weit du sehen kannst
 const TEMPO_SPIELER = 170;            // Wie schnell du läufst
 const TEMPO_SCHAF = 105;              // Wie schnell die anderen Schafe laufen
 const TEMPO_WOLF = 135;               // Wie schnell der Wolf jagt
-const WOLF_PAUSE = 22;                // Sekunden zwischen zwei Angriffen
+const WOLF_PAUSE = 22;                // Sekunden zwischen zwei Angriffen (Computer-Wolf)
+const WOLF_CHANCE = 0.4;              // Wie oft DU der Wolf bist (0.4 = 40 %)
+const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
 
 const ORTE = [
   { name: 'Stall',        bei: 'beim Stall',         x: 320,  y: 300,  aufgabe: 'Heu fressen',     labelY: -225 },
@@ -96,6 +98,7 @@ let schafe = [], spieler = null, wolf = null;
 let wolle = [], effekte = [];
 let treffen = null, ende = null, nachricht = null;
 let glockeGenutzt = false;
+let spielerIstWolf = false;
 let kamera = { x: 0, y: 0 };
 let klickZiel = null;
 let maus = { x: 0, y: 0 };
@@ -124,23 +127,34 @@ function neuesSpiel() {
   treffen = null; ende = null; klickZiel = null;
   glockeGenutzt = false;
 
+  // Bist du diesmal ein Schaf oder der Wolf?
+  spielerIstWolf = Math.random() < WOLF_CHANCE;
+
   spieler = macheSchaf('Du', '#ffffff', true);
-  spieler.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 5);
-  spieler.alleAufgaben = [...spieler.aufgaben];
-  spieler.gesamt = 5;
+  if (!spielerIstWolf) {
+    spieler.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 5);
+    spieler.alleAufgaben = [...spieler.aufgaben];
+    spieler.gesamt = 5;
+  }
   schafe.push(spieler);
 
   NAMEN.forEach((n, i) => {
     const s = macheSchaf(n, FARBEN[i], false);
-    s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 4);
-    s.gesamt = 4;
+    const anzahl = spielerIstWolf ? 5 : 4;   // Gegen dich als Wolf haben die Schafe mehr zu tun
+    s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, anzahl);
+    s.gesamt = anzahl;
     schafe.push(s);
   });
 
-  // Ein zufälliges Schaf ist heimlich der Wolf!
-  wolf = zufall(schafe.filter(s => !s.istSpieler));
+  if (spielerIstWolf) {
+    wolf = spieler;
+    wolf.cooldown = 10;
+  } else {
+    // Ein zufälliges Schaf ist heimlich der Wolf!
+    wolf = zufall(schafe.filter(s => !s.istSpieler));
+    wolf.cooldown = 18;
+  }
   wolf.istWolf = true;
-  wolf.cooldown = 18;
 
   alleZurGlocke();
   zustand = 'intro';
@@ -176,9 +190,9 @@ function fortschritt() {
   return e / g;
 }
 
-function beende(gewonnen, grund) {
+function beende(sieger, grund) {   // sieger: 'schafe' oder 'wolf'
   zustand = 'ende';
-  ende = { gewonnen, grund, seit: zeit };
+  ende = { gewonnen: (sieger === 'wolf') === spielerIstWolf, grund, seit: zeit };
 }
 
 // ===== Bewegung =====
@@ -301,31 +315,44 @@ function fressen(opfer) {
   opfer.aufgaben = [];
   opfer.aufgabeAktiv = null;
   wolf.jagt = null; wolf.ziel = null;
-  wolf.cooldown = WOLF_PAUSE + Math.random() * 8;
+  wolf.cooldown = spielerIstWolf ? SPIELER_WOLF_PAUSE : WOLF_PAUSE + Math.random() * 8;
 
   const ort = naechsterOrt(opfer);
   wolle.push({ x: opfer.x, y: opfer.y, opfer, ort });
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2 });
 
-  // Schafe, die weiter weg waren, haben vielleicht etwas gesehen
+  // Wer in der Nähe war, hat etwas gesehen!
+  const zeugen = [];
   for (const s of schafe) {
-    if (!s.istSpieler && s.lebt && !s.istWolf && dist(s, wolf) < 420 && Math.random() < 0.6) {
+    if (s.istSpieler || !s.lebt || s.istWolf) continue;
+    const d = dist(s, wolf);
+    if (d < 230 || (d < 420 && Math.random() < 0.6)) {
       s.verdacht = { wer: wolf, ort };
+      zeugen.push(s);
     }
   }
+  if (spielerIstWolf) {
+    zeigeNachricht(zeugen.length
+      ? `👀 Oh nein! ${zeugen.map(z => z.name).join(', ')} hat dich gesehen!`
+      : 'HAPS! 😋 Niemand hat dich gesehen.', 3);
+  }
 
-  if (opfer.istSpieler) { beende(false, 'Der Wolf hat dich erwischt!'); return; }
+  if (opfer.istSpieler) { beende('wolf', 'Der Wolf hat dich erwischt!'); return; }
   pruefeWolfSieg();
 }
 
 function pruefeWolfSieg() {
   const uebrig = schafe.filter(s => s.lebt && !s.istWolf).length;
-  if (uebrig <= 1) { beende(false, 'Der Wolf hat zu viele Schafe gefressen!'); return true; }
+  if (uebrig <= 1) { beende('wolf', spielerIstWolf ? 'Du hast fast alle Schafe gefressen! 😋' : 'Der Wolf hat zu viele Schafe gefressen!'); return true; }
   return false;
 }
 
 // ===== Aktion (E / Leertaste / Knopf) =====
 function moeglicheAktion() {
+  if (spielerIstWolf && spieler.cooldown <= 0) {
+    const opfer = schafe.find(s => s.lebt && !s.istSpieler && dist(s, spieler) < 50);
+    if (opfer) return { text: 'Fressen!', tun: () => fressen(opfer) };
+  }
   for (const w of wolle) if (dist(spieler, w) < 80) return { text: 'Wolle melden!', tun: () => starteTreffen(spieler, w) };
   for (const i of spieler.aufgaben) {
     if (dist(spieler, ORTE[i]) < 55 && spieler.aufgabeAktiv === null) {
@@ -352,11 +379,16 @@ function starteTreffen(melder, fund) {
   const anklaeger = [];
 
   for (const s of lebende) {
-    if (s.istSpieler) { aussagen.set(s, 'Das bist du! Wen hältst du für den Wolf?'); continue; }
+    if (s.istSpieler) {
+      aussagen.set(s, spielerIstWolf ? 'Das bist du (der Wolf 🤫). Wen willst du verdächtigen?' : 'Das bist du! Wen hältst du für den Wolf?');
+      continue;
+    }
     const teile = [];
     if (s === melder && fund) teile.push(`Ich hab Wolle von ${fund.opfer.name} ${fund.ort.bei} gefunden! 😱`);
     if (!s.istWolf && s.verdacht && s.verdacht.wer.lebt) {
-      teile.push(`Ich hab gesehen, wie ${s.verdacht.wer.name} sich ${s.verdacht.ort.bei} an jemanden rangeschlichen hat! 😨`);
+      teile.push(s.verdacht.wer.istSpieler
+        ? `Ich hab gesehen, wie DU dich ${s.verdacht.ort.bei} an jemanden rangeschlichen hast! 😨`
+        : `Ich hab gesehen, wie ${s.verdacht.wer.name} sich ${s.verdacht.ort.bei} an jemanden rangeschlichen hat! 😨`);
       anklaeger.push(s);
     }
     if (!teile.length) {
@@ -368,7 +400,7 @@ function starteTreffen(melder, fund) {
     aussagen.set(s, teile.join(' '));
   }
 
-  if (wolf.lebt && anklaeger.length) {
+  if (wolf.lebt && !wolf.istSpieler && anklaeger.length) {
     const ort = zufall([...ORTE, GLOCKE]);
     aussagen.set(wolf, `Was?! ${anklaeger[0].name} lügt! Ich war die ganze Zeit ${ort.bei}! 😤`);
   }
@@ -399,7 +431,7 @@ function abstimmen(wahl) {
       ziel = s.verdacht.wer;
     } else {
       const r = Math.random();
-      if (wahl && wahl !== s && r < 0.55) ziel = wahl;   // Folgt deiner Stimme
+      if (wahl && wahl !== s && r < (spielerIstWolf ? 0.4 : 0.55)) ziel = wahl;   // Folgt deiner Stimme
       else if (r < 0.8) ziel = null;                     // Überspringen
       else ziel = zufall(andere);
     }
@@ -421,9 +453,10 @@ function abstimmen(wahl) {
 
   t.stimmen = stimmen; t.raus = raus; t.skip = skip; t.phase = 'ergebnis';
   if (!raus) t.ergebnis = 'Niemand wurde vom Hof gejagt. 🤷';
+  else if (raus.istSpieler && raus.istWolf) t.ergebnis = 'Die Herde hat DICH vom Hof gejagt ... du WARST der Wolf! 😱';
   else if (raus.istWolf) t.ergebnis = `${raus.name} wurde vom Hof gejagt ... und WAR der Wolf! 🐺🎉`;
   else if (raus.istSpieler) t.ergebnis = 'Die Herde hat DICH vom Hof gejagt! 😢';
-  else t.ergebnis = `${raus.name} wurde vom Hof gejagt ... war aber KEIN Wolf. 😢`;
+  else t.ergebnis = `${raus.name} wurde vom Hof gejagt ... war aber KEIN Wolf. ${spielerIstWolf ? '😈' : '😢'}`;
 }
 
 function treffenWeiter() {
@@ -433,8 +466,8 @@ function treffenWeiter() {
     raus.lebt = false;
     raus.erledigt = raus.gesamt;
     raus.aufgaben = [];
-    if (raus.istWolf) { beende(true, 'Ihr habt den Wolf erwischt!'); return; }
-    if (raus.istSpieler) { beende(false, 'Die Herde hat dich rausgeworfen, obwohl du ein echtes Schaf bist!'); return; }
+    if (raus.istWolf) { beende('schafe', spielerIstWolf ? 'Die Herde hat dich durchschaut!' : 'Ihr habt den Wolf erwischt!'); return; }
+    if (raus.istSpieler) { beende('wolf', 'Die Herde hat dich rausgeworfen, obwohl du ein echtes Schaf bist!'); return; }
     if (pruefeWolfSieg()) return;
   }
   for (const s of schafe) s.verdacht = null;
@@ -478,7 +511,8 @@ function update(dt) {
 
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
-  if (wolf.lebt) wolfLogik(dt);
+  if (spielerIstWolf) wolf.cooldown -= dt;
+  else if (wolf.lebt) wolfLogik(dt);
   if (zustand !== 'spiel') return;
 
   // Andere Schafe finden Wolle und rufen ein Treffen ein
@@ -489,7 +523,7 @@ function update(dt) {
     }
   }
 
-  if (fortschritt() >= 1) beende(true, 'Alle Aufgaben sind erledigt! Der Hof ist sicher.');
+  if (fortschritt() >= 1) beende('schafe', spielerIstWolf ? 'Die Schafe haben alle Aufgaben geschafft!' : 'Alle Aufgaben sind erledigt! Der Hof ist sicher.');
 }
 
 // ===== Zeichnen =====
@@ -664,6 +698,14 @@ function zeichneHUD() {
   ctx.fillStyle = '#333'; ctx.fillRect(26, 42, 276, 18);
   ctx.fillStyle = '#4ade80'; ctx.fillRect(26, 42, 276 * fortschritt(), 18);
 
+  if (spielerIstWolf) {
+    ctx.fillStyle = 'rgba(70,10,20,0.85)';
+    rundesRechteck(14, 80, 300, 96, 10); ctx.fill();
+    text('🐺 Du bist der Wolf!', 26, 98, 16, '#ff6b6b', 'left', false);
+    text('Friss die Schafe, bevor sie fertig sind!', 26, 122, 13, '#fff', 'left', false);
+    if (spieler.cooldown > 0) text(`Fressen in ${Math.ceil(spieler.cooldown)} Sekunden ...`, 26, 150, 15, '#c9c3ff', 'left', false);
+    else text('Fressen ist bereit! 😋', 26, 150, 15, '#4ade80', 'left', false);
+  } else {
   // Deine Aufgaben
   ctx.fillStyle = 'rgba(20,20,50,0.8)';
   rundesRechteck(14, 80, 240, 30 + spieler.alleAufgaben.length * 22, 10); ctx.fill();
@@ -672,6 +714,7 @@ function zeichneHUD() {
     const fertig = !spieler.aufgaben.includes(i);
     text(`${fertig ? '✅' : '⬜'} ${ORTE[i].aufgabe}`, 26, 120 + n * 22, 13, fertig ? '#8f8' : '#fff', 'left', false);
   });
+  }
 
   // Anzahl Schafe
   const lebend = schafe.filter(s => s.lebt).length;
@@ -759,10 +802,12 @@ function zeichneTreffen() {
 function zeichneEnde() {
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.fillRect(0, 0, W, H);
-  if (ende.gewonnen) text('🎉 Die Schafe gewinnen! 🎉', W / 2, 150, 44, '#4ade80');
-  else text('🐺 Der Wolf gewinnt! 🐺', W / 2, 150, 44, '#ff6b6b');
+  let titel;
+  if (spielerIstWolf) titel = ende.gewonnen ? '😈 Du hast gewonnen, Wolf! 😈' : '🐑 Die Schafe haben gewonnen!';
+  else titel = ende.gewonnen ? '🎉 Die Schafe gewinnen! 🎉' : '🐺 Der Wolf gewinnt! 🐺';
+  text(titel, W / 2, 150, 44, ende.gewonnen ? '#4ade80' : '#ff6b6b');
   text(ende.grund, W / 2, 215, 20, '#fff');
-  text(`Der Wolf war: ${wolf.name}`, W / 2, 300, 24, '#ffd166');
+  text(spielerIstWolf ? 'Der Wolf warst: DU! 😈' : `Der Wolf war: ${wolf.name}`, W / 2, 300, 24, '#ffd166');
   zeichneSchafKoerper(W / 2 - 40, 370, wolf.farbe, 1, 0, false, 1.6);
   text('🐺', W / 2 + 50, 360, 56, '#fff', 'center', false);
   if (zeit - ende.seit > 1) {
@@ -777,8 +822,9 @@ function zeichneIntro() {
   ctx.fillStyle = '#05060f';
   ctx.fillRect(0, 0, W, H);
   const licht = ctx.createRadialGradient(W / 2, 380, 20, W / 2, 380, 420);
-  licht.addColorStop(0, `rgba(111,227,255,${Math.min(0.35, t * 0.15)})`);
-  licht.addColorStop(1, 'rgba(111,227,255,0)');
+  const lf = spielerIstWolf ? '255,60,60' : '111,227,255';
+  licht.addColorStop(0, `rgba(${lf},${Math.min(0.35, t * 0.15)})`);
+  licht.addColorStop(1, `rgba(${lf},0)`);
   ctx.fillStyle = licht;
   ctx.fillRect(0, 0, W, H);
 
@@ -794,7 +840,8 @@ function zeichneIntro() {
     ctx.save();
     ctx.translate(W / 2, 140);
     ctx.scale(pop, pop);
-    text('🐑 EIN SCHAF! 🐑', 0, 0, 64, '#6fe3ff');
+    if (spielerIstWolf) text('🐺 DER WOLF! 🐺', 0, 0, 64, '#ff4d4d');
+    else text('🐑 EIN SCHAF! 🐑', 0, 0, 64, '#6fe3ff');
     ctx.restore();
   }
 
@@ -815,16 +862,22 @@ function zeichneIntro() {
     ctx.globalAlpha = 1;
     const hopp = Math.abs(Math.sin(zeit * 4)) * 8;
     zeichneSchafKoerper(W / 2, 360 - hopp, spieler.farbe, 1, 0, false, 2.4);
-    text('DU', W / 2, 290 - hopp, 22, '#ffd166');
+    text(spielerIstWolf ? 'DU 😈' : 'DU', W / 2, 290 - hopp, 22, '#ffd166');
   }
 
   // 4. Die Warnung
   if (t > 3.8) {
     ctx.globalAlpha = Math.min(1, (t - 3.8) / 0.6);
-    text('Erledige deine Aufgaben und finde den Wolf!', W / 2, 455, 22, '#fff', 'center', false);
     const blink = 0.6 + Math.sin(zeit * 6) * 0.4;
-    ctx.globalAlpha *= blink;
-    text('⚠️ Achtung: Einer von ihnen ist ein Wolf im Schafspelz! 🐺', W / 2, 495, 20, '#ff6b6b');
+    if (spielerIstWolf) {
+      text('Friss die Schafe, wenn sie allein sind. Psst, niemand darf es sehen!', W / 2, 455, 20, '#fff', 'center', false);
+      ctx.globalAlpha *= blink;
+      text('🤫 Lass dich beim Herden-Treffen nicht erwischen!', W / 2, 495, 20, '#ff6b6b');
+    } else {
+      text('Erledige deine Aufgaben und finde den Wolf!', W / 2, 455, 22, '#fff', 'center', false);
+      ctx.globalAlpha *= blink;
+      text('⚠️ Achtung: Einer von ihnen ist ein Wolf im Schafspelz! 🐺', W / 2, 495, 20, '#ff6b6b');
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -842,7 +895,7 @@ function zeichneTitel() {
     zeichneSchafKoerper(x, y, FARBEN[i], i % 2 ? -1 : 1, zeit * 6 + i, true);
   }
   const zeilen = [
-    'Eines der Schafe ist in Wirklichkeit ein Wolf!',
+    'Eines der Schafe ist ein Wolf! Und manchmal ... bist DU der Wolf! 😈',
     '🟡  Erledige deine Aufgaben auf dem Bauernhof (gelbe ! auf der Karte).',
     '🧶  Findest du Wolle von einem gefressenen Schaf? Melde sie!',
     '🔔  Beim Herden-Treffen stimmt ihr ab, wer der Wolf ist.',
