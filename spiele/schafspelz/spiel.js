@@ -91,6 +91,91 @@ function umbrechen(t, x, y, maxB, zeilenH, groesse, farbe) {
   ctx.fillText(zeile, x, y);
 }
 
+// ===== Töne (mit Web Audio, ganz ohne Sound-Dateien!) =====
+let audio = null;
+let tonAn = true;
+
+function tonStart() {
+  // Browser erlauben Töne erst, nachdem man geklickt oder eine Taste gedrückt hat
+  if (!audio) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audio = new AC();
+  }
+  if (audio && audio.state === 'suspended') audio.resume();
+}
+
+// Ein einzelner Ton: Höhe (Hz), wann (Sekunden), wie lange, Klang, Lautstärke, End-Höhe
+function ton(hoehe, start, dauer, klang = 'sine', laut = 0.2, hoeheEnde = null) {
+  if (!audio || !tonAn) return;
+  const t0 = audio.currentTime + start;
+  const osz = audio.createOscillator(), g = audio.createGain();
+  osz.type = klang;
+  osz.frequency.setValueAtTime(hoehe, t0);
+  if (hoeheEnde) osz.frequency.exponentialRampToValueAtTime(hoeheEnde, t0 + dauer);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(laut, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dauer);
+  osz.connect(g).connect(audio.destination);
+  osz.start(t0);
+  osz.stop(t0 + dauer + 0.05);
+}
+
+// Ton mit Wackeln (für Mäh und Geheul)
+function wackelTon(punkte, start, dauer, klang, laut, wackelTempo, wackelStaerke) {
+  if (!audio || !tonAn) return;
+  const t0 = audio.currentTime + start;
+  const osz = audio.createOscillator(), wackel = audio.createOscillator();
+  const wg = audio.createGain(), g = audio.createGain(), filter = audio.createBiquadFilter();
+  osz.type = klang;
+  osz.frequency.setValueAtTime(punkte[0][1], t0);
+  for (const [zeitpunkt, hoehe] of punkte.slice(1)) osz.frequency.linearRampToValueAtTime(hoehe, t0 + zeitpunkt);
+  wackel.frequency.value = wackelTempo;
+  wg.gain.value = wackelStaerke;
+  wackel.connect(wg).connect(osz.frequency);
+  filter.type = 'lowpass';
+  filter.frequency.value = 1800;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(laut, t0 + dauer * 0.2);
+  g.gain.linearRampToValueAtTime(laut * 0.8, t0 + dauer * 0.7);
+  g.gain.linearRampToValueAtTime(0.0001, t0 + dauer);
+  osz.connect(filter).connect(g).connect(audio.destination);
+  osz.start(t0); wackel.start(t0);
+  osz.stop(t0 + dauer + 0.05); wackel.stop(t0 + dauer + 0.05);
+}
+
+const sound = {
+  // Trommelwirbel, wird immer lauter
+  spannung() {
+    for (let i = 0; i < 12; i++) ton(100 + i * 5, i * 0.1, 0.09, 'triangle', 0.1 + i * 0.015);
+  },
+  // Fröhliche Melodie + Mäh!
+  schaf() {
+    [523, 659, 784, 1047].forEach((f, i) => ton(f, i * 0.12, 0.4, 'triangle', 0.2));
+    wackelTon([[0, 430], [0.6, 370]], 0.6, 0.7, 'sawtooth', 0.15, 16, 30);
+  },
+  // Tiefer, gruseliger Akkord + Wolfsgeheul
+  wolf() {
+    [55, 65.4, 77.8].forEach(f => ton(f, 0, 1.8, 'sawtooth', 0.12));
+    wackelTon([[0, 280], [0.6, 620], [1.4, 600], [2.1, 420]], 0.4, 2.1, 'sine', 0.22, 5, 12);
+  },
+  // Alarm! Wolle gefunden
+  wolle() {
+    for (let i = 0; i < 3; i++) {
+      ton(600, i * 0.4, 0.2, 'square', 0.1, 950);
+      ton(950, i * 0.4 + 0.2, 0.2, 'square', 0.1, 600);
+    }
+  },
+  // Bim-Bam der Glocke
+  glocke() {
+    [0, 0.5].forEach((st, i) => {
+      const grund = i ? 660 : 880;
+      ton(grund, st, 1.4, 'sine', 0.25);
+      ton(grund * 2.4, st, 0.6, 'sine', 0.08);
+      ton(grund * 4, st, 0.3, 'sine', 0.04);
+    });
+  },
+};
+
 // ===== Spielzustand =====
 let zustand = 'titel';   // 'titel', 'intro', 'spiel', 'treffen', 'ende'
 let intro = 0;           // Wie lange das Intro schon läuft
@@ -374,6 +459,7 @@ function aktion() {
 // ===== Herden-Treffen =====
 function starteTreffen(melder, fund) {
   zustand = 'treffen';
+  if (fund) sound.wolle(); else sound.glocke();
   const lebende = schafe.filter(s => s.lebt);
   const aussagen = new Map();
   const anklaeger = [];
@@ -506,7 +592,14 @@ function update(dt) {
   for (const e of effekte) e.t -= dt;
   effekte = effekte.filter(e => e.t > 0);
   if (nachricht) { nachricht.t -= dt; if (nachricht.t <= 0) nachricht = null; }
-  if (zustand === 'intro') { intro += dt; if (intro > 8) introFertig(); return; }
+  if (zustand === 'intro') {
+    const vorher = intro;
+    intro += dt;
+    if (vorher < 0.2 && intro >= 0.2) sound.spannung();
+    if (vorher < 1.5 && intro >= 1.5) { if (spielerIstWolf) sound.wolf(); else sound.schaf(); }
+    if (intro > 8) introFertig();
+    return;
+  }
   if (zustand !== 'spiel') return;
 
   bewegeSpieler(dt);
@@ -900,7 +993,7 @@ function zeichneTitel() {
     '🧶  Findest du Wolle von einem gefressenen Schaf? Melde sie!',
     '🔔  Beim Herden-Treffen stimmt ihr ab, wer der Wolf ist.',
     '🕵️  Merk dir, wo die Schafe waren! Der Wolf schwindelt oft.',
-    '⌨️  Laufen: Pfeiltasten / WASD oder klicken  •  Aktion: E oder Leertaste',
+    '⌨️  Laufen: Pfeiltasten / WASD oder klicken  •  Aktion: E oder Leertaste  •  Ton: M',
   ];
   zeilen.forEach((z, i) => text(z, W / 2, 255 + i * 34, 17, i === 0 ? '#ffd166' : '#fff', 'center', false));
   const puls = 1 + Math.sin(zeit * 4) * 0.05;
@@ -942,8 +1035,10 @@ function zeichne() {
 
 // ===== Eingabe =====
 addEventListener('keydown', e => {
+  tonStart();
   const k = e.key.toLowerCase();
   tasten[k] = true;
+  if (k === 'm' && !e.repeat) { tonAn = !tonAn; zeigeNachricht(tonAn ? '🔊 Ton an' : '🔇 Ton aus', 1.5); }
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   if (zustand === 'titel' && (k === 'enter' || k === ' ')) neuesSpiel();
@@ -959,6 +1054,7 @@ function punkt(e) {
   return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
 }
 canvas.addEventListener('pointerdown', e => {
+  tonStart();
   const p = punkt(e);
   maus = p;
   if (zustand === 'titel') { neuesSpiel(); return; }
