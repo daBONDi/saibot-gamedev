@@ -15,16 +15,14 @@ const TEMPO_WOLF = 135;               // Wie schnell der Wolf jagt
 const WOLF_PAUSE = 22;                // Sekunden zwischen zwei Angriffen (Computer-Wolf)
 const WOLF_CHANCE = 0.4;              // Wie oft DU der Wolf bist (0.4 = 40 %)
 const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
+const SABOTAGE_PAUSE = 40;            // Sekunden zwischen zwei Sabotagen
+const GATTER_ZEIT = 45;               // So viele Sekunden hat die Herde, um das Gatter zu schließen
 
-const ORTE = [
-  { name: 'Stall',        bei: 'beim Stall',         x: 320,  y: 300,  aufgabe: 'Heu fressen',     labelY: -225, spiel: 'heu' },
-  { name: 'Mühle',        bei: 'bei der Mühle',      x: 900,  y: 300,  aufgabe: 'Korn mahlen',     labelY: -265, spiel: 'kurbel' },
-  { name: 'Teich',        bei: 'beim Teich',         x: 1480, y: 320,  aufgabe: 'Wasser trinken',  labelY: -195, spiel: 'eimer' },
-  { name: 'Scheune',      bei: 'bei der Scheune',    x: 320,  y: 1080, aufgabe: 'Wolle abgeben',   labelY: -215, spiel: 'wolle' },
-  { name: 'Blumenwiese',  bei: 'auf der Blumenwiese', x: 900, y: 1120, aufgabe: 'Blumen gießen',   labelY: -145, spiel: 'blumen' },
-  { name: 'Gemüsegarten', bei: 'im Gemüsegarten',    x: 1480, y: 1080, aufgabe: 'Zaun reparieren', labelY: -200, spiel: 'zaun' },
-];
-const GLOCKE = { name: 'Glocke', bei: 'bei der Glocke', x: 900, y: 680 };
+// Die Karten (Orte, Farben ...) stehen in karten.js
+let KARTE, ORTE, GLOCKE;
+let kartenNr = 0;
+try { kartenNr = Number(localStorage.getItem('schafspelz-karte')) || 0; } catch (e) { /* egal */ }
+if (!(kartenNr >= 0 && kartenNr < KARTEN.length)) kartenNr = 0;
 
 const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke'];
 const FARBEN = ['#ff9ecf', '#8fd3ff', '#ffe066', '#9be89b', '#c9a0ff', '#ffb36b', '#d9b38c'];
@@ -185,6 +183,12 @@ const sound = {
   traurig() { [392, 370, 349, 330].forEach((f, i) => ton(f, i * 0.3, i === 3 ? 0.8 : 0.3, 'triangle', 0.18)); },
   // Hmm: Niemand fliegt raus
   hmm() { ton(330, 0, 0.25, 'sine', 0.15); ton(294, 0.3, 0.4, 'sine', 0.15); },
+  // Nebel zieht auf: tiefes Wuuusch
+  nebel() { ton(400, 0, 1.4, 'sine', 0.15, 70); ton(300, 0.15, 1.4, 'triangle', 0.1, 50); },
+  // Alarm: Gatter offen!
+  alarm() { for (let i = 0; i < 4; i++) { ton(880, i * 0.3, 0.15, 'square', 0.08); ton(660, i * 0.3 + 0.15, 0.15, 'square', 0.08); } },
+  // Piep (Countdown)
+  piep() { ton(1000, 0, 0.07, 'square', 0.04); },
   // Bim-Bam der Glocke
   glocke() {
     [0, 0.5].forEach((st, i) => {
@@ -205,16 +209,60 @@ let treffen = null, ende = null, nachricht = null;
 let glockeGenutzt = false;
 let spielerIstWolf = false;
 let miniSpiel = null;   // Das Mini-Spiel, das gerade offen ist
+let sicht = SICHT;      // Wie weit du gerade siehst (im Nebel weniger)
+let sabotage = null;    // { art: 'nebel' oder 'gatter', t: Restzeit }
+let sabotagePause = 0;
+let deko = [];          // Blumen, Tannen, Palmen ...
+const schneeflocken = [];
+for (let i = 0; i < 70; i++) schneeflocken.push({ x: Math.random() * W, y: Math.random() * H, v: 25 + Math.random() * 40, p: Math.random() * 6 });
 let kamera = { x: 0, y: 0 };
 let klickZiel = null;
 let maus = { x: 0, y: 0 };
 let zeit = 0;
 const tasten = {};
 
-// Blumen auf der Wiese (einmal zufällig verteilt)
-const blumen = [];
-for (let i = 0; i < 220; i++) {
-  blumen.push({ x: Math.random() * WELT_B, y: Math.random() * WELT_H, f: zufall(['#fff', '#ffe066', '#ff9ecf', '#c9a0ff']) });
+// ===== Karte laden =====
+function ladeKarte(nr) {
+  KARTE = KARTEN[nr];
+  ORTE = KARTE.orte;
+  GLOCKE = { name: 'Glocke', bei: 'bei der Glocke', x: KARTE.treffpunkt.x, y: KARTE.treffpunkt.y };
+  deko = macheDeko();
+}
+
+function abstandZurLinie(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = begrenzt(((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy), 0, 1);
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+// Ist hier Platz für einen Baum? (nicht auf Wegen und Orten)
+function freierPlatz(p) {
+  if (dist(p, GLOCKE) < 200 || dist(p, KARTE.laterne) < 110 || dist(p, KARTE.gatter) < 160) return false;
+  for (const o of ORTE) {
+    if (dist(p, { x: o.x, y: o.y - 90 }) < 220) return false;
+    if (abstandZurLinie(p, GLOCKE, o) < 50) return false;
+  }
+  return true;
+}
+
+function macheDeko() {
+  const d = [];
+  const punkte = (anzahl, farben) => {
+    for (let i = 0; i < anzahl; i++) d.push({ art: 'punkt', x: Math.random() * WELT_B, y: Math.random() * WELT_H, f: zufall(farben) });
+  };
+  if (KARTE.deko === 'blumen') punkte(220, ['#fff', '#ffe066', '#ff9ecf', '#c9a0ff']);
+  if (KARTE.deko === 'tannen') punkte(80, ['#cfe0ee', '#b9cfe2']);
+  if (KARTE.deko === 'palmen') punkte(100, ['#fff5e6', '#f7c6c6', '#fde2b8']);
+  if (KARTE.deko === 'tannen' || KARTE.deko === 'palmen') {
+    const baeume = [];
+    for (let v = 0; v < 3000 && baeume.length < (KARTE.deko === 'tannen' ? 40 : 26); v++) {
+      const p = { x: 90 + Math.random() * (WELT_B - 180), y: 140 + Math.random() * (WELT_H - 220) };
+      if (freierPlatz(p) && baeume.every(b => dist(b, p) > 70)) baeume.push({ art: KARTE.deko, x: p.x, y: p.y, g: 0.8 + Math.random() * 0.5 });
+    }
+    baeume.sort((a, b) => a.y - b.y);
+    d.push(...baeume);
+  }
+  return d;
 }
 
 function macheSchaf(name, farbe, istSpieler) {
@@ -229,6 +277,8 @@ function macheSchaf(name, farbe, istSpieler) {
 }
 
 function neuesSpiel() {
+  ladeKarte(kartenNr);
+  sabotage = null; sabotagePause = 30; sicht = SICHT;
   schafe = []; wolle = []; effekte = [];
   treffen = null; ende = null; klickZiel = null; miniSpiel = null;
   glockeGenutzt = false;
@@ -337,8 +387,8 @@ function bewegeSpieler(dt) {
     if (dx) spieler.richtung = Math.sign(dx);
     spieler.phase += dt * 12;
   }
-  spieler.x = begrenzt(spieler.x, 30, WELT_B - 30);
-  spieler.y = begrenzt(spieler.y, 40, WELT_H - 30);
+  spieler.x = begrenzt(spieler.x, 50, WELT_B - 50);
+  spieler.y = begrenzt(spieler.y, 60, WELT_H - 50);
 
 }
 
@@ -366,9 +416,13 @@ function bewegeBot(s, dt) {
     s.ziel = { x: o.x + (Math.random() - 0.5) * 60, y: o.y + (Math.random() - 0.5) * 40, ort: ortNr };
   }
   if (laufeZu(s, s.ziel, TEMPO_SCHAF, dt)) {
-    s.amOrt = s.ziel.ort;
-    s.letzterOrt = ORTE[s.ziel.ort];
-    s.warte = 3 + Math.random() * 3;
+    if (s.ziel.ort === null) {   // War unterwegs zum Reparieren
+      s.warte = 1;
+    } else {
+      s.amOrt = s.ziel.ort;
+      s.letzterOrt = ORTE[s.ziel.ort];
+      s.warte = 3 + Math.random() * 3;
+    }
     s.ziel = null;
   }
 }
@@ -379,6 +433,8 @@ function istAllein(ziel) {
 }
 
 function wolfLogik(dt) {
+  // Ab und zu macht der Wolf eine Sabotage
+  if (!sabotage && sabotagePause <= 0 && !wolf.jagt && Math.random() < dt / 12) starteSabotage(zufall(['nebel', 'gatter']));
   wolf.cooldown -= dt;
   if (wolf.cooldown > 0) return;
 
@@ -413,14 +469,15 @@ function fressen(opfer) {
   const ort = naechsterOrt(opfer);
   wolle.push({ x: opfer.x, y: opfer.y, opfer, ort });
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2 });
-  if (spielerIstWolf || dist(opfer, spieler) < SICHT + 20) sound.haps();
+  if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.haps();
 
   // Wer in der Nähe war, hat etwas gesehen!
   const zeugen = [];
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf) continue;
     const d = dist(s, wolf);
-    if (d < 230 || (d < 420 && Math.random() < 0.6)) {
+    const nebel = sabotage && sabotage.art === 'nebel';   // Im Nebel sieht man schlechter
+    if (d < (nebel ? 120 : 230) || (d < (nebel ? 200 : 420) && Math.random() < 0.6)) {
       s.verdacht = { wer: wolf, ort };
       zeugen.push(s);
     }
@@ -441,8 +498,87 @@ function pruefeWolfSieg() {
   return false;
 }
 
+// ===== Sabotage! =====
+function sabotagePunkt() {
+  return sabotage.art === 'nebel' ? KARTE.laterne : KARTE.gatter;
+}
+
+function starteSabotage(art) {
+  if (sabotage || sabotagePause > 0 || zustand !== 'spiel') return;
+  sabotage = {
+    art,
+    t: art === 'gatter' ? GATTER_ZEIT : 40,
+    hilfe: art === 'gatter' ? 6 + Math.random() * 6 : 12 + Math.random() * 8,   // wann Schafe zum Reparieren loslaufen
+  };
+  sabotagePause = SABOTAGE_PAUSE;
+  if (art === 'nebel') {
+    sound.nebel();
+    zeigeNachricht(spielerIstWolf ? '🌫️ Nebel! Die Schafe sehen jetzt fast nichts. 😈' : '🌫️ Nebel! Mach die Laterne an!', 3);
+  } else {
+    sound.alarm();
+    zeigeNachricht(spielerIstWolf ? '🚪 Du hast das Gatter geöffnet! 😈' : '🚪 Das Gatter ist offen! Schnell zumachen!', 3);
+  }
+}
+
+function wolfSabotage(art) {
+  if (miniSpiel) return;
+  if (sabotage) { zeigeNachricht('Es läuft schon eine Sabotage!', 2); return; }
+  if (sabotagePause > 0) { zeigeNachricht(`Sabotage geht erst in ${Math.ceil(sabotagePause)} Sekunden wieder`, 2); return; }
+  starteSabotage(art);
+}
+
+// Die nächsten Schafe laufen los und reparieren
+function schickeHelfer() {
+  const p = sabotagePunkt();
+  const anzahl = sabotage.art === 'gatter' ? 2 : 1;
+  schafe.filter(s => s.lebt && !s.istSpieler && !s.istWolf)
+    .sort((a, b) => dist(a, p) - dist(b, p))
+    .slice(0, anzahl)
+    .forEach(h => { h.ziel = { x: p.x, y: p.y, ort: null }; h.warte = 0; h.amOrt = null; });
+}
+
+function repariert(wer) {
+  const art = sabotage.art;
+  sabotage = null;
+  sound.geschafft();
+  const was = art === 'nebel' ? 'die Laterne angemacht' : 'das Gatter geschlossen';
+  zeigeNachricht(wer.istSpieler ? `✅ Du hast ${was}!` : `✅ ${wer.name} hat ${was}!`, 2.5);
+}
+
+function updateSabotage(dt) {
+  if (sabotagePause > 0) sabotagePause -= dt;
+  // Sicht wird langsam kleiner oder größer
+  const zielSicht = sabotage && sabotage.art === 'nebel' && !spielerIstWolf ? 130 : SICHT;
+  sicht += (zielSicht - sicht) * Math.min(1, dt * 2);
+  if (!sabotage) return;
+
+  const vorher = sabotage.t;
+  sabotage.t -= dt;
+  if (sabotage.art === 'gatter' && Math.ceil(sabotage.t) < Math.ceil(vorher)) sound.piep();
+
+  sabotage.hilfe -= dt;
+  if (sabotage.hilfe <= 0) { schickeHelfer(); sabotage.hilfe = 10; }
+
+  const p = sabotagePunkt();
+  for (const s of schafe) {
+    if (!s.istSpieler && s.lebt && !s.istWolf && dist(s, p) < 45) { repariert(s); return; }
+  }
+
+  if (sabotage.t <= 0) {
+    if (sabotage.art === 'gatter') {
+      beende('wolf', 'Die Herde ist durchs offene Gatter weggelaufen! 🐑💨');
+    } else {
+      sabotage = null;
+      zeigeNachricht('🌤️ Der Nebel ist von selbst verschwunden.', 2);
+    }
+  }
+}
+
 // ===== Aktion (E / Leertaste / Knopf) =====
 function moeglicheAktion() {
+  if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
+    return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => repariert(spieler) };
+  }
   if (spielerIstWolf && spieler.cooldown <= 0) {
     const opfer = schafe.find(s => s.lebt && !s.istSpieler && dist(s, spieler) < 50);
     if (opfer) return { text: 'Fressen!', tun: () => fressen(opfer) };
@@ -469,6 +605,7 @@ function aktion() {
 function starteTreffen(melder, fund) {
   zustand = 'treffen';
   miniSpiel = null;
+  sabotage = null;
   if (fund) sound.wolle(); else sound.glocke();
   const lebende = schafe.filter(s => s.lebt);
   const aussagen = new Map();
@@ -569,6 +706,7 @@ function treffenWeiter() {
   }
   for (const s of schafe) s.verdacht = null;
   wolf.cooldown = 15;
+  sabotagePause = Math.max(sabotagePause, 20);
   alleZurGlocke();
   zustand = 'spiel';
 }
@@ -907,6 +1045,8 @@ function update(dt) {
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
   if (spielerIstWolf) wolf.cooldown -= dt;
   else if (wolf.lebt) wolfLogik(dt);
+  if (zustand !== 'spiel') return;
+  updateSabotage(dt);
   if (zustand !== 'spiel') return;
 
   // Andere Schafe finden Wolle und rufen ein Treffen ein
