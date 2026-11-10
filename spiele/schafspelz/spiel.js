@@ -1111,19 +1111,23 @@ function zeichneWolle(w) {
   text('❗', w.x, w.y - 26 + Math.sin(zeit * 5) * 3, 22);
 }
 
+function dreieck(x1, y1, x2, y2, x3, y3) {
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); ctx.fill();
+}
+
 function zeichneOrt(o) {
   const { x, y } = o;
-  switch (o.name) {
-    case 'Stall':
-      ctx.fillStyle = '#c0392b'; ctx.fillRect(x - 80, y - 150, 160, 100);
-      ctx.fillStyle = '#7b241c';
-      ctx.beginPath(); ctx.moveTo(x - 95, y - 150); ctx.lineTo(x + 95, y - 150); ctx.lineTo(x, y - 210); ctx.fill();
+  const f = o.farben || [];
+  switch (o.bild) {
+    case 'stall':
+      ctx.fillStyle = f[0] || '#c0392b'; ctx.fillRect(x - 80, y - 150, 160, 100);
+      ctx.fillStyle = f[1] || '#7b241c'; dreieck(x - 95, y - 150, x + 95, y - 150, x, y - 210);
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 22, y - 102, 44, 52);
       ctx.fillStyle = '#5d2e0c'; ctx.fillRect(x - 18, y - 98, 36, 48);
       ctx.fillStyle = '#f4d03f'; ctx.fillRect(x + 45, y - 30, 44, 28);
       ctx.strokeStyle = '#b7950b'; ctx.lineWidth = 2; ctx.strokeRect(x + 45, y - 30, 44, 28);
       break;
-    case 'Mühle': {
+    case 'muehle':
       ctx.fillStyle = '#e8d5b0';
       ctx.beginPath(); ctx.moveTo(x - 45, y - 50); ctx.lineTo(x + 45, y - 50); ctx.lineTo(x + 25, y - 190); ctx.lineTo(x - 25, y - 190); ctx.fill();
       ctx.fillStyle = '#6e4b2a'; ctx.fillRect(x - 12, y - 85, 24, 35);
@@ -1133,23 +1137,25 @@ function zeichneOrt(o) {
       ctx.restore();
       ctx.fillStyle = '#444'; ellipse(x, y - 180, 7, 7); ctx.fill();
       break;
-    }
-    case 'Teich':
-      ctx.fillStyle = '#2e86c1'; ellipse(x, y - 105, 150, 70); ctx.fill();
-      ctx.fillStyle = '#5dade2'; ellipse(x - 20, y - 115, 110, 45); ctx.fill();
-      ctx.fillStyle = '#27ae60';
-      ellipse(x + 50, y - 120, 14, 9); ctx.fill();
-      ellipse(x - 70, y - 90, 12, 8); ctx.fill();
+    case 'teich':
+      ctx.fillStyle = f[0] || '#2e86c1'; ellipse(x, y - 105, 150, 70); ctx.fill();
+      ctx.fillStyle = f[1] || '#5dade2'; ellipse(x - 20, y - 115, 110, 45); ctx.fill();
+      if (!o.farben) {
+        ctx.fillStyle = '#27ae60';
+        ellipse(x + 50, y - 120, 14, 9); ctx.fill();
+        ellipse(x - 70, y - 90, 12, 8); ctx.fill();
+      } else {
+        ctx.fillStyle = '#2e5f7a'; ellipse(x + 10, y - 95, 30, 14); ctx.fill();   // Loch im Eis
+      }
       break;
-    case 'Scheune':
-      ctx.fillStyle = '#8e3b2f'; ctx.fillRect(x - 110, y - 180, 220, 130);
-      ctx.fillStyle = '#5b231b';
-      ctx.beginPath(); ctx.moveTo(x - 125, y - 180); ctx.lineTo(x + 125, y - 180); ctx.lineTo(x, y - 240); ctx.fill();
+    case 'scheune':
+      ctx.fillStyle = f[0] || '#8e3b2f'; ctx.fillRect(x - 110, y - 180, 220, 130);
+      ctx.fillStyle = f[1] || '#5b231b'; dreieck(x - 125, y - 180, x + 125, y - 180, x, y - 240);
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 40, y - 130, 80, 80);
-      ctx.strokeStyle = '#8e3b2f'; ctx.lineWidth = 6;
+      ctx.strokeStyle = f[0] || '#8e3b2f'; ctx.lineWidth = 6;
       ctx.beginPath(); ctx.moveTo(x - 36, y - 126); ctx.lineTo(x + 36, y - 54); ctx.moveTo(x + 36, y - 126); ctx.lineTo(x - 36, y - 54); ctx.stroke();
       break;
-    case 'Blumenwiese':
+    case 'wiese':
       ctx.fillStyle = '#3d8b37'; ellipse(x, y - 80, 140, 45); ctx.fill();
       for (let i = 0; i < 30; i++) {
         const w = i * 2.4, r = 20 + (i * 37) % 100;
@@ -1158,37 +1164,182 @@ function zeichneOrt(o) {
       }
       text('🪣', x + 40, y - 10, 24, '#fff', 'center', false);
       break;
-    case 'Gemüsegarten':
+    case 'garten':
       ctx.fillStyle = '#7a5230'; ctx.fillRect(x - 120, y - 180, 240, 120);
       for (let r = 0; r < 3; r++) {
         for (let k = 0; k < 7; k++) {
           const gx = x - 100 + k * 33, gy = y - 155 + r * 38;
-          ctx.fillStyle = '#e67e22';
-          ctx.beginPath(); ctx.moveTo(gx - 5, gy); ctx.lineTo(gx + 5, gy); ctx.lineTo(gx, gy + 14); ctx.fill();
+          ctx.fillStyle = '#e67e22'; dreieck(gx - 5, gy, gx + 5, gy, gx, gy + 14);
           ctx.fillStyle = '#27ae60'; ctx.fillRect(gx - 4, gy - 7, 8, 7);
         }
       }
       ctx.strokeStyle = '#d4ac6e'; ctx.lineWidth = 5;
       ctx.beginPath(); ctx.moveTo(x - 130, y - 50); ctx.lineTo(x - 20, y - 50); ctx.moveTo(x + 10, y - 40); ctx.lineTo(x + 130, y - 55); ctx.stroke();
       break;
+    case 'krippe':
+      ctx.fillStyle = '#6b4f3a';
+      ctx.fillRect(x - 85, y - 150, 8, 100); ctx.fillRect(x + 77, y - 150, 8, 100);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 100, y - 160, 200, 18);   // Dach mit Schnee
+      ctx.fillStyle = '#8d6e4c'; ctx.fillRect(x - 100, y - 145, 200, 6);
+      ctx.fillStyle = '#8d6e4c'; ctx.fillRect(x - 65, y - 85, 130, 35);
+      ctx.fillStyle = '#e9c46a'; ellipse(x, y - 88, 62, 12); ctx.fill();
+      break;
+    case 'iglu':
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(x, y - 45, 95, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = '#c5d8e8'; ctx.lineWidth = 2;
+      for (let r = 1; r < 4; r++) { ctx.beginPath(); ctx.arc(x, y - 45, 95, Math.PI, 0); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 95, y - 45 - r * 25); ctx.lineTo(x + 95, y - 45 - r * 25); ctx.stroke(); }
+      ctx.fillStyle = '#35556b';
+      ctx.beginPath(); ctx.arc(x, y - 45, 30, Math.PI, 0); ctx.fill();
+      break;
+    case 'glashaus':
+      ctx.fillStyle = '#3d8b37'; ctx.fillRect(x - 100, y - 100, 200, 40);
+      for (let i = 0; i < 12; i++) {
+        ctx.fillStyle = ['#ff6fb5', '#ffd166', '#c9a0ff'][i % 3];
+        ellipse(x - 85 + i * 15, y - 85 + (i % 2) * 12, 5, 5); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(200,240,255,0.45)';
+      ctx.fillRect(x - 110, y - 190, 220, 130);
+      dreieck(x - 120, y - 190, x + 120, y - 190, x, y - 210);
+      ctx.strokeStyle = '#8fb3c7'; ctx.lineWidth = 3;
+      ctx.strokeRect(x - 110, y - 190, 220, 130);
+      for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(x - 110 + i * 55, y - 190); ctx.lineTo(x - 110 + i * 55, y - 60); ctx.stroke(); }
+      break;
+    case 'brunnen':
+      ctx.fillStyle = '#6e4b2a';
+      ctx.fillRect(x - 55, y - 160, 8, 95); ctx.fillRect(x + 47, y - 160, 8, 95);
+      ctx.fillStyle = '#c0392b'; dreieck(x - 70, y - 155, x + 70, y - 155, x, y - 195);
+      ctx.fillStyle = '#9e9e9e'; ellipse(x, y - 65, 60, 26); ctx.fill();
+      ctx.fillStyle = '#3b82f6'; ellipse(x, y - 68, 45, 16); ctx.fill();
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, y - 155); ctx.lineTo(x, y - 100); ctx.stroke();
+      ctx.fillStyle = '#8d6e4c'; ctx.fillRect(x - 9, y - 105, 18, 14);
+      break;
+    case 'leuchtturm': {
+      // Lichtstrahl
+      ctx.save(); ctx.translate(x, y - 240); ctx.rotate(zeit);
+      ctx.fillStyle = 'rgba(255,240,150,0.25)'; dreieck(0, 0, 420, -45, 420, 45);
+      ctx.restore();
+      for (let i = 0; i < 5; i++) {
+        const y1 = y - 50 - i * 36, y2 = y1 - 36;
+        const b1 = 38 - i * 3.5, b2 = 38 - (i + 1) * 3.5;
+        ctx.fillStyle = i % 2 ? '#ffffff' : '#e74c3c';
+        ctx.beginPath(); ctx.moveTo(x - b1, y1); ctx.lineTo(x + b1, y1); ctx.lineTo(x + b2, y2); ctx.lineTo(x - b2, y2); ctx.fill();
+      }
+      ctx.fillStyle = '#ffe680'; ctx.fillRect(x - 20, y - 258, 40, 28);
+      ctx.fillStyle = '#c0392b'; dreieck(x - 26, y - 258, x + 26, y - 258, x, y - 282);
+      break;
+    }
+    case 'boot':
+      ctx.fillStyle = '#3a9ad9'; ellipse(x, y - 150, 160, 75); ctx.fill();
+      ctx.fillStyle = '#a0703c'; ctx.fillRect(x - 35, y - 210, 70, 160);
+      ctx.strokeStyle = '#7a5230'; ctx.lineWidth = 2;
+      for (let i = 1; i < 8; i++) { ctx.beginPath(); ctx.moveTo(x - 35, y - 210 + i * 20); ctx.lineTo(x + 35, y - 210 + i * 20); ctx.stroke(); }
+      ctx.fillStyle = '#8d4f2a';
+      ctx.beginPath(); ctx.moveTo(x + 50, y - 180); ctx.lineTo(x + 130, y - 180); ctx.lineTo(x + 115, y - 150); ctx.lineTo(x + 62, y - 150); ctx.fill();
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + 90, y - 180); ctx.lineTo(x + 90, y - 235); ctx.stroke();
+      ctx.fillStyle = '#fff'; dreieck(x + 92, y - 232, x + 92, y - 185, x + 125, y - 190);
+      break;
   }
+  // Etwas Schnee auf Dächern im Winter
+  if (KARTE.schnee && (o.bild === 'muehle')) { ctx.fillStyle = '#fff'; ctx.fillRect(x - 27, y - 194, 54, 8); }
   text(o.name, x, y + o.labelY, 18, '#fff');
 }
 
+function zeichneTanne(t) {
+  const { x, y, g } = t;
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ellipse(x, y + 4, 28 * g, 8 * g); ctx.fill();
+  ctx.fillStyle = '#6b4f3a'; ctx.fillRect(x - 5 * g, y - 12 * g, 10 * g, 16 * g);
+  for (let i = 0; i < 3; i++) {
+    const unten = y - 8 * g - i * 24 * g, b = (60 - i * 14) * g, h = 36 * g;
+    ctx.fillStyle = '#2f6b45'; dreieck(x - b / 2, unten, x + b / 2, unten, x, unten - h);
+    ctx.fillStyle = '#fff'; dreieck(x - b * 0.15, unten - h * 0.7, x + b * 0.15, unten - h * 0.7, x, unten - h);
+  }
+}
+
+function zeichnePalme(p) {
+  const { x, y, g } = p;
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ellipse(x + 10 * g, y + 3, 30 * g, 8 * g); ctx.fill();
+  ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 9 * g; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 18 * g, y - 50 * g, x + 6 * g, y - 100 * g); ctx.stroke();
+  ctx.fillStyle = '#2e8b57';
+  for (let k = 0; k < 6; k++) {
+    ctx.save(); ctx.translate(x + 6 * g, y - 100 * g); ctx.rotate(-Math.PI + k * Math.PI / 5 + 0.1);
+    ellipse(30 * g, 0, 32 * g, 9 * g); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = '#6b4226';
+  ellipse(x + 2 * g, y - 94 * g, 6 * g, 6 * g); ctx.fill();
+  ellipse(x + 12 * g, y - 92 * g, 6 * g, 6 * g); ctx.fill();
+}
+
+function zeichneLaterneUndGatter() {
+  // Laterne
+  const l = KARTE.laterne;
+  const aus = sabotage && sabotage.art === 'nebel';
+  if (!aus) {
+    const g = ctx.createRadialGradient(l.x, l.y - 98, 5, l.x, l.y - 98, 70);
+    g.addColorStop(0, 'rgba(255,230,120,0.6)'); g.addColorStop(1, 'rgba(255,230,120,0)');
+    ctx.fillStyle = g; ellipse(l.x, l.y - 98, 70, 70); ctx.fill();
+  }
+  ctx.fillStyle = '#333'; ctx.fillRect(l.x - 4, l.y - 85, 8, 85);
+  ctx.fillStyle = aus ? '#555' : '#ffe680'; ctx.fillRect(l.x - 13, l.y - 112, 26, 28);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.strokeRect(l.x - 13, l.y - 112, 26, 28);
+  text('Laterne', l.x, l.y - 130, 15);
+
+  // Gatter
+  const t = KARTE.gatter;
+  const offen = sabotage && sabotage.art === 'gatter';
+  ctx.fillStyle = '#6e4b2a';
+  ctx.fillRect(t.x - 110, t.y - 60, 8, 60); ctx.fillRect(t.x + 102, t.y - 60, 8, 60);
+  ctx.fillRect(t.x - 50, t.y - 75, 10, 75); ctx.fillRect(t.x + 40, t.y - 75, 10, 75);
+  ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(t.x - 106, t.y - 45); ctx.lineTo(t.x - 45, t.y - 45); ctx.moveTo(t.x - 106, t.y - 20); ctx.lineTo(t.x - 45, t.y - 20);
+  ctx.moveTo(t.x + 45, t.y - 45); ctx.lineTo(t.x + 106, t.y - 45); ctx.moveTo(t.x + 45, t.y - 20); ctx.lineTo(t.x + 106, t.y - 20);
+  ctx.stroke();
+  ctx.strokeStyle = offen ? '#c0392b' : '#a0703c';
+  ctx.beginPath();
+  if (offen) {   // Gatter schwingt auf
+    ctx.moveTo(t.x - 40, t.y - 55); ctx.lineTo(t.x - 15, t.y + 20);
+    ctx.moveTo(t.x - 40, t.y - 25); ctx.lineTo(t.x - 15, t.y + 45);
+  } else {
+    ctx.moveTo(t.x - 40, t.y - 55); ctx.lineTo(t.x + 40, t.y - 55);
+    ctx.moveTo(t.x - 40, t.y - 25); ctx.lineTo(t.x + 40, t.y - 25);
+    ctx.moveTo(t.x - 40, t.y - 55); ctx.lineTo(t.x + 40, t.y - 25);
+  }
+  ctx.stroke();
+  text(offen ? 'Gatter (OFFEN!)' : 'Gatter', t.x, t.y - 95, 15, offen ? '#ff6b6b' : '#fff');
+}
+
 function zeichneWelt() {
-  // Gras
-  ctx.fillStyle = '#6abf4b';
+  // Boden
+  ctx.fillStyle = KARTE.boden;
   ctx.fillRect(0, 0, WELT_B, WELT_H);
-  for (const b of blumen) { ctx.fillStyle = b.f; ctx.fillRect(b.x, b.y, 3, 3); }
+  for (const d of deko) if (d.art === 'punkt') { ctx.fillStyle = d.f; ctx.fillRect(d.x, d.y, 3, 3); }
   // Wege
-  ctx.strokeStyle = '#c8a96b'; ctx.lineWidth = 34; ctx.lineCap = 'round';
+  ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 34; ctx.lineCap = 'round';
   for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(GLOCKE.x, GLOCKE.y); ctx.lineTo(o.x, o.y); ctx.stroke(); }
-  ctx.fillStyle = '#d6bb82'; ellipse(GLOCKE.x, GLOCKE.y, 150, 110); ctx.fill();
-  // Zaun rundherum
-  ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 8;
-  ctx.strokeRect(10, 10, WELT_B - 20, WELT_H - 20);
+  ctx.fillStyle = KARTE.platz; ellipse(GLOCKE.x, GLOCKE.y, 150, 110); ctx.fill();
+  // Rand: Zaun oder Meer
+  if (KARTE.rand === 'meer') {
+    ctx.strokeStyle = '#3a9ad9'; ctx.lineWidth = 80;
+    ctx.strokeRect(0, 0, WELT_B, WELT_H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 4;
+    const welle = Math.sin(zeit * 2) * 3;
+    ctx.strokeRect(40 + welle, 40 + welle, WELT_B - 80 - welle * 2, WELT_H - 80 - welle * 2);
+  } else {
+    ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 8;
+    ctx.strokeRect(10, 10, WELT_B - 20, WELT_H - 20);
+  }
+  // Bäume
+  for (const d of deko) {
+    if (d.art === 'tannen') zeichneTanne(d);
+    if (d.art === 'palmen') zeichnePalme(d);
+  }
   // Orte
   for (const o of ORTE) zeichneOrt(o);
+  zeichneLaterneUndGatter();
   // Glocke
   ctx.fillStyle = '#6e4b2a'; ctx.fillRect(GLOCKE.x - 4, GLOCKE.y - 90, 8, 80);
   ctx.fillRect(GLOCKE.x - 30, GLOCKE.y - 92, 60, 8);
@@ -1211,11 +1362,45 @@ function zeichneWelt() {
 
 function zeichneDunkel() {
   const sx = spieler.x - kamera.x, sy = spieler.y - kamera.y;
-  const g = ctx.createRadialGradient(sx, sy, SICHT - 70, sx, sy, SICHT + 10);
-  g.addColorStop(0, 'rgba(10,15,40,0)');
-  g.addColorStop(1, 'rgba(10,15,40,0.75)');
+  const nebel = sabotage && sabotage.art === 'nebel';
+  const farbe = nebel ? '90,95,110' : '10,15,40';
+  const g = ctx.createRadialGradient(sx, sy, Math.max(10, sicht - 70), sx, sy, sicht + 10);
+  g.addColorStop(0, `rgba(${farbe},0)`);
+  g.addColorStop(1, `rgba(${farbe},${nebel ? 0.92 : 0.75})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+}
+
+// Schnee, Pfeil zur Sabotage und roter Rand
+function zeichneExtras() {
+  if (KARTE.schnee) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (const f of schneeflocken) {
+      const x = (f.x + Math.sin(zeit + f.p) * 20 + W) % W;
+      const y = (f.y + zeit * f.v) % H;
+      ellipse(x, y, 2.5, 2.5); ctx.fill();
+    }
+  }
+  if (!sabotage || zustand !== 'spiel') return;
+  if (sabotage.art === 'gatter') {
+    ctx.strokeStyle = `rgba(255,0,0,${0.35 + 0.3 * Math.sin(zeit * 8)})`;
+    ctx.lineWidth = 16;
+    ctx.strokeRect(0, 0, W, H);
+  }
+  if (!spielerIstWolf) {
+    const p = sabotagePunkt();
+    const d = dist(p, spieler);
+    if (d > 150) {
+      const w = Math.atan2(p.y - spieler.y, p.x - spieler.x);
+      const sx = spieler.x - kamera.x + Math.cos(w) * 75, sy = spieler.y - kamera.y + Math.sin(w) * 75;
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(w);
+      ctx.fillStyle = sabotage.art === 'gatter' ? '#ff4d4d' : '#ffe680';
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -13); ctx.lineTo(-4, 0); ctx.lineTo(-10, 13); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+  }
 }
 
 function zeichneHUD() {
@@ -1250,6 +1435,31 @@ function zeichneHUD() {
   rundesRechteck(W - 194, 12, 180, 36, 10); ctx.fill();
   text(`🐑 Noch ${lebend} Schafe`, W - 104, 30, 15, '#fff', 'center', false);
 
+  // Sabotage-Knöpfe für den Wolf
+  if (spielerIstWolf && zustand === 'spiel' && !miniSpiel) {
+    const bereit = !sabotage && sabotagePause <= 0;
+    [[SAB_NEBEL, '🌫️ Nebel [1]'], [SAB_GATTER, '🚪 Gatter [2]']].forEach(([r, t]) => {
+      ctx.fillStyle = bereit ? (imRechteck(maus, r) ? '#ff8a8a' : 'rgba(200,40,60,0.9)') : 'rgba(80,60,70,0.8)';
+      rundesRechteck(r.x, r.y, r.w, r.h, 10); ctx.fill();
+      text(t, r.x + r.w / 2, r.y + r.h / 2, 15, bereit ? '#fff' : '#aaa', 'center', false);
+    });
+    if (!bereit && !sabotage) text(`Sabotage in ${Math.ceil(sabotagePause)} s`, W - 104, SAB_GATTER.y + 62, 13, '#c9c3ff', 'center', false);
+  }
+
+  // Warnung bei Sabotage
+  if (sabotage && zustand === 'spiel') {
+    const blink = 0.75 + Math.sin(zeit * 6) * 0.25;
+    ctx.fillStyle = `rgba(150,20,30,${0.85 * blink})`;
+    rundesRechteck(W / 2 - 160, 12, 320, 52, 12); ctx.fill();
+    if (sabotage.art === 'gatter') {
+      text(spielerIstWolf ? '🚪 Gatter ist offen! 😈' : '🚪 Gatter offen! Schnell zumachen!', W / 2, 30, 16, '#fff', 'center', false);
+      text(`Noch ${Math.ceil(sabotage.t)} Sekunden!`, W / 2, 52, 15, '#ffd166', 'center', false);
+    } else {
+      text(spielerIstWolf ? '🌫️ Nebel ist aktiv 😈' : '🌫️ Nebel! Mach die Laterne an!', W / 2, 30, 16, '#fff', 'center', false);
+      text(`Noch ${Math.ceil(sabotage.t)} Sekunden`, W / 2, 52, 14, '#ddd', 'center', false);
+    }
+  }
+
   // Aktions-Knopf
   const a = zustand === 'spiel' && !miniSpiel ? moeglicheAktion() : null;
   if (a) {
@@ -1271,6 +1481,9 @@ function zeichneHUD() {
     text(nachricht.text, W / 2, H - 48, 18, '#fff', 'center', false);
   }
 }
+
+const SAB_NEBEL = { x: W - 194, y: 56, w: 180, h: 40 };
+const SAB_GATTER = { x: W - 194, y: 102, w: 180, h: 40 };
 
 function zeichneKnopf(r, beschriftung, farbe) {
   const hover = imRechteck(maus, r);
@@ -1339,7 +1552,8 @@ function zeichneEnde() {
   zeichneSchafKoerper(W / 2 - 40, 370, wolf.farbe, 1, 0, false, 1.6);
   text('🐺', W / 2 + 50, 360, 56, '#fff', 'center', false);
   if (zeit - ende.seit > 1) {
-    text('Klicke oder drücke Enter für eine neue Runde!', W / 2, 480, 20, '#c9c3ff', 'center', false);
+    text('Enter: Nochmal auf dieser Karte', W / 2, 470, 20, '#c9c3ff', 'center', false);
+    text('Klick: Zurück zur Karten-Auswahl', W / 2, 502, 18, '#c9c3ff', 'center', false);
   }
 }
 
@@ -1412,28 +1626,57 @@ function zeichneIntro() {
   if (t > 4.8) text('Klicke oder drücke Enter zum Losspielen!', W / 2, 560, 17, '#4ade80', 'center', false);
 }
 
+function titelKarten() {
+  const b = 250, h = 120, abstand = 25;
+  const x0 = (W - KARTEN.length * b - (KARTEN.length - 1) * abstand) / 2;
+  return KARTEN.map((k, i) => ({ nr: i, x: x0 + i * (b + abstand), y: 400, w: b, h }));
+}
+function titelKarteBei(p) {
+  const r = titelKarten().find(r => imRechteck(p, r));
+  return r ? r.nr : null;
+}
+function starteMitKarte(nr) {
+  kartenNr = nr;
+  try { localStorage.setItem('schafspelz-karte', String(nr)); } catch (e) { /* egal */ }
+  neuesSpiel();
+}
+
 function zeichneTitel() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#1b1f3a'); g.addColorStop(1, '#3d8b37');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-  text('🐺 Wolf im Schafspelz 🐑', W / 2, 80, 46, '#ffd166');
+  text('🐺 Wolf im Schafspelz 🐑', W / 2, 50, 44, '#ffd166');
   for (let i = 0; i < 7; i++) {
-    const x = 180 + i * 100, y = 175 + Math.sin(zeit * 3 + i) * 6;
+    const x = 180 + i * 100, y = 118 + Math.sin(zeit * 3 + i) * 6;
     zeichneSchafKoerper(x, y, FARBEN[i], i % 2 ? -1 : 1, zeit * 6 + i, true);
   }
   const zeilen = [
     'Eines der Schafe ist ein Wolf! Und manchmal ... bist DU der Wolf! 😈',
-    '🟡  Erledige deine Aufgaben auf dem Bauernhof: kleine Mini-Spiele bei den gelben !',
+    '🟡  Erledige deine Aufgaben: kleine Mini-Spiele bei den gelben !',
     '🧶  Findest du Wolle von einem gefressenen Schaf? Melde sie!',
     '🔔  Beim Herden-Treffen stimmt ihr ab, wer der Wolf ist.',
-    '🕵️  Merk dir, wo die Schafe waren! Der Wolf schwindelt oft.',
-    '⌨️  Laufen: Pfeiltasten / WASD oder klicken  •  Aktion: E oder Leertaste  •  Ton: M',
+    '🌫️  Sabotage! Der Wolf kann Nebel machen oder das Gatter öffnen.',
+    '⌨️  Laufen: Pfeiltasten / WASD  •  Aktion: E  •  Sabotage: 1 / 2  •  Ton: M',
   ];
-  zeilen.forEach((z, i) => text(z, W / 2, 255 + i * 34, 17, i === 0 ? '#ffd166' : '#fff', 'center', false));
-  const puls = 1 + Math.sin(zeit * 4) * 0.05;
-  ctx.save(); ctx.translate(W / 2, 530); ctx.scale(puls, puls);
-  text('Klicke oder drücke Enter zum Starten!', 0, 0, 24, '#4ade80');
+  zeilen.forEach((z, i) => text(z, W / 2, 175 + i * 29, 16, i === 0 ? '#ffd166' : '#fff', 'center', false));
+
+  text('Wähle eine Karte:', W / 2, 377, 20, '#ffd166', 'center', false);
+  for (const r of titelKarten()) {
+    const k = KARTEN[r.nr];
+    const gewaehlt = r.nr === kartenNr;
+    const hover = imRechteck(maus, r);
+    ctx.fillStyle = k.boden;
+    rundesRechteck(r.x, r.y, r.w, r.h, 16); ctx.fill();
+    ctx.strokeStyle = gewaehlt ? '#ffd166' : (hover ? '#fff' : 'rgba(0,0,0,0.3)');
+    ctx.lineWidth = gewaehlt ? 6 : 3; ctx.stroke();
+    const hopp = gewaehlt ? Math.sin(zeit * 5) * 4 : 0;
+    text(k.emoji, r.x + r.w / 2, r.y + 45 + hopp, 44, '#fff', 'center', false);
+    text(k.name, r.x + r.w / 2, r.y + 95, 22, '#fff');
+  }
+  const puls = 1 + Math.sin(zeit * 4) * 0.04;
+  ctx.save(); ctx.translate(W / 2, 562); ctx.scale(puls, puls);
+  text('Klicke auf eine Karte!  (oder ← → und Enter)', 0, 0, 20, '#4ade80');
   ctx.restore();
 }
 
@@ -1444,7 +1687,7 @@ function zeichne() {
 
   kamera.x = begrenzt(spieler.x - W / 2, 0, WELT_B - W);
   kamera.y = begrenzt(spieler.y - H / 2, 0, WELT_H - H);
-  const sichtbar = p => dist(p, spieler) < SICHT + 20;
+  const sichtbar = p => dist(p, spieler) < sicht + 20;
 
   ctx.save();
   ctx.translate(-kamera.x, -kamera.y);
@@ -1463,6 +1706,7 @@ function zeichne() {
   ctx.restore();
 
   zeichneDunkel();
+  zeichneExtras();
   zeichneHUD();
   if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
   if (zustand === 'treffen') zeichneTreffen();
@@ -1477,11 +1721,13 @@ addEventListener('keydown', e => {
   if (k === 'm' && !e.repeat) { tonAn = !tonAn; zeigeNachricht(tonAn ? '🔊 Ton an' : '🔇 Ton aus', 1.5); }
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
-  if (zustand === 'titel' && (k === 'enter' || k === ' ')) neuesSpiel();
+  if (zustand === 'titel' && (k === 'arrowleft' || k === 'arrowright')) kartenNr = (kartenNr + (k === 'arrowright' ? 1 : KARTEN.length - 1)) % KARTEN.length;
+  else if (zustand === 'titel' && (k === 'enter' || k === ' ')) starteMitKarte(kartenNr);
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
   else if (zustand === 'spiel' && miniSpiel) miniTaste(k);
   else if (zustand === 'spiel' && (k === 'e' || k === ' ')) aktion();
+  else if (zustand === 'spiel' && spielerIstWolf && (k === '1' || k === '2')) wolfSabotage(k === '1' ? 'nebel' : 'gatter');
 });
 addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
@@ -1498,12 +1744,14 @@ canvas.addEventListener('pointerdown', e => {
   tonStart();
   const p = punkt(e);
   maus = p;
-  if (zustand === 'titel') { neuesSpiel(); return; }
+  if (zustand === 'titel') { const nr = titelKarteBei(p); if (nr !== null) starteMitKarte(nr); return; }
   if (zustand === 'intro') { if (intro > 1.5) introFertig(); return; }
-  if (zustand === 'ende') { if (zeit - ende.seit > 1) neuesSpiel(); return; }
+  if (zustand === 'ende') { if (zeit - ende.seit > 1) zustand = 'titel'; return; }
   if (zustand === 'treffen') { klickTreffen(p); return; }
   if (zustand === 'spiel' && miniSpiel) { miniDruck(p); return; }
   if (zustand === 'spiel') {
+    if (spielerIstWolf && imRechteck(p, SAB_NEBEL)) { wolfSabotage('nebel'); return; }
+    if (spielerIstWolf && imRechteck(p, SAB_GATTER)) { wolfSabotage('gatter'); return; }
     if (moeglicheAktion() && dist(p, { x: W - 75, y: H - 75 }) < 60) { aktion(); return; }
     klickZiel = { x: p.x + kamera.x, y: p.y + kamera.y };
   }
