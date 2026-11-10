@@ -53,6 +53,23 @@ const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo'];
 const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke'];
 const FARBEN = ['#ff9ecf', '#8fd3ff', '#ffe066', '#9be89b', '#c9a0ff', '#ffb36b', '#d9b38c'];
 
+// ===== Handy-Steuerung =====
+let touchModus = false;   // Wird automatisch an, wenn man den Bildschirm antippt
+try { touchModus = matchMedia('(pointer: coarse)').matches; } catch (e) { /* egal */ }
+const JOY = { x: 115, y: H - 115, r: 70 };                 // Joystick unten links
+const joystick = { id: null, dx: 0, dy: 0 };
+const AKTION_KNOPF = { x: W - 75, y: H - 75, r: 58 };      // Gelber Knopf unten rechts
+const FAEHIGKEIT_RUND = { x: W - 192, y: H - 58, r: 44 };  // Runder Fähigkeits-Knopf
+const TON_KNOPF = { x: W - 244, y: 12, w: 42, h: 36 };
+
+function joystickSetzen(p) {
+  let dx = p.x - JOY.x, dy = p.y - JOY.y;
+  const l = Math.hypot(dx, dy);
+  if (l > JOY.r) { dx = dx / l * JOY.r; dy = dy / l * JOY.r; }
+  joystick.dx = dx / JOY.r; joystick.dy = dy / JOY.r;
+}
+function joystickLos() { joystick.id = null; joystick.dx = 0; joystick.dy = 0; }
+
 // ===== Hilfsfunktionen =====
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const zufall = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -459,6 +476,7 @@ function bewegeSpieler(dt) {
   if (tasten['arrowright'] || tasten['d']) dx += 1;
   if (tasten['arrowup'] || tasten['w']) dy -= 1;
   if (tasten['arrowdown'] || tasten['s']) dy += 1;
+  if (joystick.id !== null && Math.hypot(joystick.dx, joystick.dy) > 0.2) { dx = joystick.dx; dy = joystick.dy; }
 
   if (dx || dy) klickZiel = null;
   else if (klickZiel) {
@@ -1248,11 +1266,11 @@ const X_KNOPF = { x: PX + PB - 46, y: PY + 12, w: 34, h: 34 };
 const KURBEL = { x: MX, y: PY + 260 };
 const KORB = { x: PX + 370, y: PY + 150, w: 170, h: 220 };
 const ANLEITUNG = {
-  heu: 'Klicke auf das ganze Heu, um es zu fressen! 🌾',
-  kurbel: 'Halte die Maus gedrückt und dreh die Kurbel im Kreis!',
-  eimer: 'Halte gedrückt (Maus oder Leertaste) und lass im grünen Bereich los!',
+  heu: 'Friss das ganze Heu: einfach draufklicken oder -tippen! 🌾',
+  kurbel: 'Halte gedrückt und dreh die Kurbel im Kreis!',
+  eimer: 'Halte gedrückt und lass im grünen Bereich los!',
   wolle: 'Zieh die Wollknäuel in den Korb!',
-  blumen: 'Halte die Maus über jede Blume gedrückt, bis sie blüht!',
+  blumen: 'Halte über jeder Blume gedrückt, bis sie blüht!',
   zaun: 'Hau jeden Nagel 3-mal rein! 🔨',
 };
 
@@ -2142,7 +2160,7 @@ function zeichneHUD() {
   }
 
   // Deine Rolle (unten links)
-  if (zustand === 'spiel' && !miniSpiel) {
+  if (zustand === 'spiel' && !miniSpiel && !touchModus) {
     const r = ROLLEN[spieler.rolle];
     const a = rollenAktion();
     const bereit = a && spieler.faehigkeit <= 0 && a.moeglich;
@@ -2174,8 +2192,19 @@ function zeichneHUD() {
     }
   }
 
+  // Handy: Joystick und runder Fähigkeits-Knopf
+  const handyKnoepfe = touchModus && zustand === 'spiel' && !miniSpiel;
+  if (handyKnoepfe && spieler.inGrube == null) zeichneJoystick();
+  if (handyKnoepfe) zeichneFaehigkeitRund();
+
   // Aktions-Knopf
   const a = zustand === 'spiel' && !miniSpiel ? moeglicheAktion() : null;
+  if (!a && handyKnoepfe && spieler.inGrube == null) {
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ellipse(AKTION_KNOPF.x, AKTION_KNOPF.y, AKTION_KNOPF.r, AKTION_KNOPF.r); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 3; ctx.stroke();
+    text('Aktion', AKTION_KNOPF.x, AKTION_KNOPF.y, 15, 'rgba(255,255,255,0.6)', 'center', false);
+  }
   if (a) {
     ctx.fillStyle = 'rgba(255,209,102,0.9)';
     ellipse(W - 75, H - 75, 58, 58); ctx.fill();
@@ -2184,7 +2213,7 @@ function zeichneHUD() {
     ctx.fillStyle = '#1b1f3a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const worte = a.text.split(' ');
     worte.forEach((w, i) => ctx.fillText(w, W - 75, H - 85 + i * 18 - (worte.length - 1) * 4));
-    text('[E]', W - 75, H - 40, 12, '#1b1f3a', 'center', false);
+    if (!touchModus) text('[E]', W - 75, H - 40, 12, '#1b1f3a', 'center', false);
   }
 
   if (nachricht) {
@@ -2202,6 +2231,51 @@ const GRUBE_RECHTS = { x: W / 2 + 85, y: H - 140, w: 130, h: 44 };
 const ROLLE_KNOPF = { x: 14, y: H - 66, w: 300, h: 52 };
 const SAB_NEBEL = { x: W - 194, y: 56, w: 180, h: 40 };
 const SAB_GATTER = { x: W - 194, y: 102, w: 180, h: 40 };
+
+function zeichneJoystick() {
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ellipse(JOY.x, JOY.y, JOY.r, JOY.r); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 3; ctx.stroke();
+  const kx = JOY.x + joystick.dx * JOY.r, ky = JOY.y + joystick.dy * JOY.r;
+  ctx.fillStyle = joystick.id !== null ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)';
+  ellipse(kx, ky, 30, 30); ctx.fill();
+}
+
+function zeichneFaehigkeitRund() {
+  const r = ROLLEN[spieler.rolle];
+  const a = rollenAktion();
+  if (!a) return;
+  const F = FAEHIGKEIT_RUND;
+  const bereit = spieler.faehigkeit <= 0 && a.moeglich;
+  ctx.fillStyle = bereit ? 'rgba(40,110,170,0.95)' : 'rgba(20,20,50,0.85)';
+  ellipse(F.x, F.y, F.r, F.r); ctx.fill();
+  if (bereit) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.5 + Math.sin(zeit * 5) * 0.4})`; ctx.lineWidth = 4;
+    ellipse(F.x, F.y, F.r + 3, F.r + 3); ctx.stroke();
+  }
+  text(r.emoji, F.x, F.y - 2, 30, '#fff', 'center', false);
+  if (spieler.faehigkeit > 0) {   // Countdown als "Tortenstück"
+    const anteil = Math.min(1, spieler.faehigkeit / r.pause);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.moveTo(F.x, F.y);
+    ctx.arc(F.x, F.y, F.r, -Math.PI / 2, -Math.PI / 2 + anteil * Math.PI * 2);
+    ctx.closePath(); ctx.fill();
+    text(String(Math.ceil(spieler.faehigkeit)), F.x, F.y + 2, 20, '#fff');
+  }
+  text(r.knopf, F.x, F.y - F.r - 10, 13, '#fff');
+}
+
+function zeichneTonKnopf() {
+  const T = TON_KNOPF;
+  ctx.fillStyle = 'rgba(20,20,50,0.8)';
+  rundesRechteck(T.x, T.y, T.w, T.h, 10); ctx.fill();
+  text(tonAn ? '🔊' : '🔇', T.x + T.w / 2, T.y + T.h / 2 + 1, 18, '#fff', 'center', false);
+}
+
+function tonUmschalten() {
+  tonAn = !tonAn;
+  zeigeNachricht(tonAn ? '🔊 Ton an' : '🔇 Ton aus', 1.5);
+}
 
 function zeichneKnopf(r, beschriftung, farbe) {
   const hover = imRechteck(maus, r);
@@ -2249,7 +2323,7 @@ function zeichneTreffen() {
   }
 
   if (treffen.phase === 'waehlen') {
-    text('Klicke auf das Schaf, das du für den Wolf hältst!', W / 2, 432, 15, '#ffd166', 'center', false);
+    text('Wähle das Schaf, das du für den Wolf hältst!', W / 2, 432, 15, '#ffd166', 'center', false);
     zeichneKnopf(SKIP_KNOPF, 'Überspringen ⏭', '#c9c3ff');
   } else {
     text(treffen.ergebnis, W / 2, 462, 20, '#fff');
@@ -2272,8 +2346,12 @@ function zeichneEnde() {
   zeichneSchafKoerper(W / 2 - 40, 370, wolf.farbe, 1, 0, false, 1.6);
   text('🐺', W / 2 + 50, 360, 56, '#fff', 'center', false);
   if (zeit - ende.seit > 1) {
-    text('Enter: Nochmal auf dieser Karte', W / 2, 470, 20, '#c9c3ff', 'center', false);
-    text('Klick: Zurück zur Karten-Auswahl', W / 2, 502, 18, '#c9c3ff', 'center', false);
+    if (touchModus) {
+      text('Tippen: Zurück zur Karten-Auswahl', W / 2, 480, 20, '#c9c3ff', 'center', false);
+    } else {
+      text('Enter: Nochmal auf dieser Karte', W / 2, 470, 20, '#c9c3ff', 'center', false);
+      text('Klick: Zurück zur Karten-Auswahl', W / 2, 502, 18, '#c9c3ff', 'center', false);
+    }
   }
 }
 
@@ -2357,7 +2435,7 @@ function zeichneIntro() {
     ctx.globalAlpha = 1;
   }
 
-  if (t > 4.8) text('Klicke oder drücke Enter zum Losspielen!', W / 2, 560, 17, '#4ade80', 'center', false);
+  if (t > 4.8) text(touchModus ? 'Tippe zum Losspielen!' : 'Klicke oder drücke Enter zum Losspielen!', W / 2, 560, 17, '#4ade80', 'center', false);
 }
 
 function titelKarten() {
@@ -2392,7 +2470,8 @@ function zeichneTitel() {
     '🔔  Beim Herden-Treffen stimmt ihr ab, wer der Wolf ist.',
     '🎭  Jeder bekommt eine Rolle (Taste Q). Und manchmal gibt es eine 🐐 Ziege!',
     '🌫️  Der Wolf kann sabotieren und durch 🕳️ Gruben schleichen!',
-    '⌨️  Laufen: Pfeiltasten / WASD  •  Aktion: E  •  Sabotage: 1 / 2  •  Ton: M',
+    touchModus ? '📱  Joystick: laufen  •  Gelber Knopf: Aktion  •  Runder Knopf: Fähigkeit'
+               : '⌨️  Laufen: Pfeiltasten / WASD  •  Aktion: E  •  Sabotage: 1 / 2  •  Ton: M',
   ];
   zeilen.forEach((z, i) => text(z, W / 2, 168 + i * 27, 16, i === 0 ? '#ffd166' : '#fff', 'center', false));
 
@@ -2411,8 +2490,9 @@ function zeichneTitel() {
   }
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   ctx.save(); ctx.translate(W / 2, 562); ctx.scale(puls, puls);
-  text('Klicke auf eine Karte!  (oder ← → und Enter)', 0, 0, 20, '#4ade80');
+  text(touchModus ? 'Tippe auf eine Karte!' : 'Klicke auf eine Karte!  (oder ← → und Enter)', 0, 0, 20, '#4ade80');
   ctx.restore();
+  zeichneTonKnopf();
   if (ENTWICKLER) {
     const test = entwicklerRolle();
     text(`🛠️ Entwickler-Modus${test ? ' • Rolle: ' + test : ''}`, 12, H - 14, 13, '#ffb347', 'left', false);
@@ -2459,6 +2539,7 @@ function zeichne() {
   if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
   if (zustand === 'treffen') zeichneTreffen();
   if (zustand === 'ende') zeichneEnde();
+  zeichneTonKnopf();
 }
 
 // ===== Eingabe =====
@@ -2466,7 +2547,8 @@ addEventListener('keydown', e => {
   tonStart();
   const k = e.key.toLowerCase();
   tasten[k] = true;
-  if (k === 'm' && !e.repeat) { tonAn = !tonAn; zeigeNachricht(tonAn ? '🔊 Ton an' : '🔇 Ton aus', 1.5); }
+  if (k === 'm' && !e.repeat) tonUmschalten();
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'e'].includes(k)) touchModus = false;
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   if (zustand === 'titel' && (k === 'arrowleft' || k === 'arrowright')) kartenNr = (kartenNr + (k === 'arrowright' ? 1 : KARTEN.length - 1)) % KARTEN.length;
@@ -2493,7 +2575,22 @@ function punkt(e) {
 }
 canvas.addEventListener('pointerdown', e => {
   tonStart();
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') touchModus = true;
+  else if (e.pointerType === 'mouse') touchModus = false;
   const p = punkt(e);
+
+  // Ton-Knopf oben rechts
+  if (imRechteck(p, TON_KNOPF) && zustand !== 'intro' && zustand !== 'cutscene') { tonUmschalten(); return; }
+
+  // Joystick (nur am Handy)
+  if (touchModus && zustand === 'spiel' && !miniSpiel && spieler.inGrube == null && dist(p, JOY) < JOY.r + 45) {
+    joystick.id = e.pointerId;
+    joystickSetzen(p);
+    klickZiel = null;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* egal */ }
+    return;
+  }
+
   maus = p;
   if (zustand === 'titel') { const nr = titelKarteBei(p); if (nr !== null) starteMitKarte(nr); return; }
   if (zustand === 'intro') { if (intro > 1.5) introFertig(); return; }
@@ -2502,23 +2599,32 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'treffen') { klickTreffen(p); return; }
   if (zustand === 'spiel' && miniSpiel) { miniDruck(p); return; }
   if (zustand === 'spiel') {
-    if (imRechteck(p, ROLLE_KNOPF)) { nutzeFaehigkeit(); return; }
+    if (touchModus && dist(p, FAEHIGKEIT_RUND) < FAEHIGKEIT_RUND.r + 8 && rollenAktion()) { nutzeFaehigkeit(); return; }
+    if (!touchModus && imRechteck(p, ROLLE_KNOPF)) { nutzeFaehigkeit(); return; }
     if (spielerIstWolf && imRechteck(p, SAB_NEBEL)) { wolfSabotage('nebel'); return; }
     if (spielerIstWolf && imRechteck(p, SAB_GATTER)) { wolfSabotage('gatter'); return; }
     if (spieler.inGrube != null) { grubenKlick(p); return; }
-    if (moeglicheAktion() && dist(p, { x: W - 75, y: H - 75 }) < 60) { aktion(); return; }
+    const aufAktion = dist(p, AKTION_KNOPF) < AKTION_KNOPF.r + 4;
+    if (aufAktion && moeglicheAktion()) { aktion(); return; }
+    if (aufAktion && touchModus) return;
     klickZiel = { x: p.x + kamera.x, y: p.y + kamera.y };
   }
 });
 canvas.addEventListener('pointermove', e => {
+  if (e.pointerId === joystick.id) { joystickSetzen(punkt(e)); return; }
   maus = punkt(e);
   if (miniSpiel) { miniBewegt(maus); return; }
   if (e.buttons && zustand === 'spiel' && klickZiel) {
     klickZiel = { x: maus.x + kamera.x, y: maus.y + kamera.y };
   }
 });
-
-addEventListener('pointerup', () => { if (miniSpiel) miniLos(); });
+function loslassen(e) {
+  if (e.pointerId === joystick.id) { joystickLos(); return; }
+  if (miniSpiel) miniLos();
+}
+addEventListener('pointerup', loslassen);
+addEventListener('pointercancel', loslassen);
+canvas.addEventListener('contextmenu', e => e.preventDefault());   // kein Menü bei langem Drücken
 
 // ===== Spielschleife =====
 let letzte = performance.now();

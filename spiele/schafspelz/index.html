@@ -14,24 +14,79 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 1rem;
+      padding: 0.5rem;
       box-sizing: border-box;
+      touch-action: manipulation;
     }
-    a { color: #ffd166; align-self: flex-start; margin-bottom: 0.5rem; }
-    canvas {
+    .leiste {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       width: 100%;
       max-width: 960px;
+      margin-bottom: 0.4rem;
+    }
+    a { color: #ffd166; }
+    button {
+      background: #ffd166;
+      color: #1b1f3a;
+      border: none;
+      border-radius: 0.6rem;
+      padding: 0.35rem 0.8rem;
+      font: bold 0.95rem system-ui, sans-serif;
+      cursor: pointer;
+    }
+    canvas {
+      /* So groß wie möglich, aber es muss auch in der Höhe aufs Handy passen */
+      width: min(100%, 960px, calc((100vh - 3.5rem) * 1.6));
+      width: min(100%, 960px, calc((100dvh - 3.5rem) * 1.6));
       aspect-ratio: 960 / 600;
       border-radius: 1rem;
       box-shadow: 0 0 30px #6fe3ff55;
       touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
       background: #000;
+    }
+    /* Vollbild: nur noch das Spiel */
+    html:fullscreen body { padding: 0; justify-content: center; }
+    html:fullscreen .leiste { display: none; }
+    html:fullscreen canvas { width: min(100vw, calc(100vh * 1.6)); border-radius: 0; }
+
+    /* Hinweis: Handy quer halten */
+    #drehen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #1b1f3add;
+      font-size: 1.4rem;
+      text-align: center;
+      padding: 40vh 1rem 0;
+    }
+    @media (orientation: portrait) and (pointer: coarse) {
+      #drehen { display: block; }
     }
   </style>
 </head>
 <body>
-  <a href="../../">← Zur Übersicht</a>
+  <div class="leiste">
+    <a href="../../">← Zur Übersicht</a>
+    <button id="vollbild">⛶ Vollbild</button>
+  </div>
   <canvas id="spiel" width="960" height="600"></canvas>
+  <div id="drehen">📱↻<br>Dreh dein Handy quer!</div>
+  <script>
+    // Vollbild-Knopf (geht nicht auf jedem Handy, z. B. nicht auf dem iPhone)
+    const vollbild = document.getElementById('vollbild');
+    if (!document.documentElement.requestFullscreen) vollbild.style.display = 'none';
+    vollbild.addEventListener('click', async () => {
+      try {
+        await document.documentElement.requestFullscreen();
+        await screen.orientation.lock('landscape');
+      } catch (e) { /* egal, dann eben nicht */ }
+    });
+  </script>
   <script src="karten.js"></script>
   <script src="spiel.js"></script>
 </body>
