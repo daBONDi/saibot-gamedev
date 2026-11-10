@@ -227,7 +227,53 @@ function wackelTon(punkte, start, dauer, klang, laut, wackelTempo, wackelStaerke
   osz.stop(t0 + dauer + 0.05); wackel.stop(t0 + dauer + 0.05);
 }
 
+// ===== Musik: Noten abspielen =====
+const NOTEN = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
+// 'A4' -> 440 Hz
+function hz(note) {
+  const m = note.match(/^([A-G]#?)(\d)$/);
+  return 440 * Math.pow(2, (NOTEN[m[1]] - 9) / 12 + (Number(m[2]) - 4));
+}
+// Spielt eine Notenfolge wie 'C5 E5 G5:2 -' (":2" = doppelt so lang, "-" = Pause)
+function spieleNoten(folge, start, schlag, klang, laut, kurz = 0.9) {
+  let t = start;
+  for (const teil of folge.split(' ')) {
+    const [note, laenge = '1'] = teil.split(':');
+    const dauer = Number(laenge) * schlag;
+    if (note !== '-') ton(hz(note), t, dauer * kurz, klang, laut);
+    t += dauer;
+  }
+  return t;   // Wann die Melodie fertig ist
+}
+
 const sound = {
+  // ===== Sieger-Musik: Jedes Team hat seine eigene! =====
+  // 🐑 Schafe: fröhlich und hüpfend
+  siegSchafe(start = 0.6) {
+    const schlag = 0.16;
+    const ende = spieleNoten('C5 E5 G5 C6:2 A5 G5:2 E5 F5 A5 G5 E5:2 C5 D5:2 E5 G5 C6 E6:2 D6 C6:4', start, schlag, 'triangle', 0.16);
+    spieleNoten('C3:4 C3:4 F3:4 G3:4 C3:4 G3:4 C3:8', start, schlag, 'square', 0.05, 0.5);
+    for (let i = 0; i < 14; i++) ton(150, start + i * 2 * schlag, 0.12, 'sine', 0.25, 50);   // Bum!
+    wackelTon([[0, 430], [0.6, 370]], ende + 0.1, 0.7, 'sawtooth', 0.15, 16, 30);              // Määäh!
+  },
+  // 🐺 Wölfe: dunkel und gruselig
+  siegWolf(start = 0.6) {
+    const schlag = 0.25;
+    ton(hz('A2'), start, 5.5, 'sawtooth', 0.06);   // tiefes Brummen
+    ton(hz('E3'), start, 5.5, 'sawtooth', 0.04);
+    const ende = spieleNoten('A4:2 C5 E5 D5:2 C5 B4 A4:4 G#4:2 A4 B4 E5:4', start, schlag, 'triangle', 0.2);
+    for (let i = 0; i < 5; i++) ton(90, start + i * 4 * schlag, 0.4, 'sine', 0.3, 40);        // Bumm ... Bumm ...
+    wackelTon([[0, 300], [0.6, 650], [1.4, 620], [2.0, 420]], ende + 0.1, 2.0, 'sine', 0.22, 5, 12);   // Auuuuu!
+  },
+  // 🐐 Ziege: schräg wie im Zirkus
+  siegZiege(start = 0.6) {
+    const schlag = 0.14;
+    spieleNoten('C3 G3 C3 G3 F3 C4 F3 C4 G3 D4 G3 D4 C3 G3 C3:2', start, schlag, 'square', 0.07, 0.4);   // Umpa-Umpa
+    const ende = spieleNoten('E5 D#5 E5 G5 F#5 G5 C6:2 B5 A#5 A5 G#5 G5:2 - C6:2', start, schlag, 'square', 0.08, 0.6);
+    wackelTon([[0, 700], [0.4, 600]], ende + 0.05, 0.45, 'sawtooth', 0.15, 24, 60);   // Määäck!
+    wackelTon([[0, 820], [0.4, 700]], ende + 0.55, 0.5, 'sawtooth', 0.15, 24, 60);    // Määäck!
+  },
+
   // Trommelwirbel, wird immer lauter
   spannung() {
     for (let i = 0; i < 12; i++) ton(100 + i * 5, i * 0.1, 0.09, 'triangle', 0.1 + i * 0.015);
@@ -509,6 +555,10 @@ function beende(sieger, grund) {   // sieger: 'schafe', 'wolf' oder 'ziege'
     ? sieger === 'ziege'
     : sieger !== 'ziege' && (sieger === 'wolf') === spielerIstWolf;
   ende = { gewonnen, sieger, grund, seit: zeit };
+  // Sieger-Musik vom Team, das gewonnen hat
+  if (sieger === 'ziege') sound.siegZiege();
+  else if (sieger === 'wolf') sound.siegWolf();
+  else sound.siegSchafe();
 }
 
 // ===== Bewegung =====
