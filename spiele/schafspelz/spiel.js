@@ -18,14 +18,14 @@ const ZIEGE_CHANCE = 0.2;             // Wie oft DU die Ziege bist, wenn du kein
 
 // 🛠️ Entwickler-Modus: Funktioniert NUR auf deinem Computer (localhost), nie auf der Webseite!
 // Rolle aussuchen mit der Adresse:  http://localhost:8080/spiele/schafspelz/?rolle=ziege
-// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, schleicher, verkleider, turbo
+// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, schleicher, verkleider, turbo, schlange
 const ENTWICKLER = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
 function entwicklerRolle() {
   if (!ENTWICKLER) return null;
   try { return new URLSearchParams(location.search).get('rolle'); } catch (e) { return null; }
 }
 const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
-const SABOTAGE_PAUSE = 40;            // Sekunden zwischen zwei Sabotagen
+const SABOTAGE_PAUSE = 5;             // Sekunden zwischen zwei Sabotagen
 const GATTER_ZEIT = 45;               // So viele Sekunden hat die Herde, um das Gatter zu schließen
 
 // Die Karten (Orte, Farben ...) stehen in karten.js
@@ -45,10 +45,12 @@ const ROLLEN = {
   schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
   verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
   ziege:       { name: 'Ziege',             emoji: '🐐', knopf: 'Meckern',    pause: 25, text: 'Lass dich beim Herden-Treffen verjagen, dann gewinnst DU!' },
+  schlange:    { name: 'Schlangenwolf',     emoji: '🐍', text: 'Die Wolle deiner Opfer löst sich nach 7 Sekunden auf!' },
   turbo:       { name: 'Turbo-Wolf',        emoji: '⚡', text: 'Du kannst viel öfter fressen als andere Wölfe!' },
 };
 const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler'];
-const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo'];
+const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo', 'schlange'];
+const AUFLOESE_ZEIT = 7;   // So viele Sekunden bleibt die Wolle beim Schlangenwolf liegen
 
 const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke'];
 const FARBEN = ['#ff9ecf', '#8fd3ff', '#ffe066', '#9be89b', '#c9a0ff', '#ffb36b', '#d9b38c'];
@@ -601,7 +603,7 @@ function fressen(opfer) {
   wolf.cooldown = (spielerIstWolf ? SPIELER_WOLF_PAUSE : WOLF_PAUSE + Math.random() * 8) * turbo;
 
   const ort = naechsterOrt(opfer);
-  wolle.push({ x: opfer.x, y: opfer.y, opfer, ort });
+  wolle.push({ x: opfer.x, y: opfer.y, opfer, ort, aufloesen: wolf.rolle === 'schlange' ? AUFLOESE_ZEIT : null });
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, max: 1.2 });
   funken(opfer.x, opfer.y, 25, [opfer.farbe, '#ffffff'], 140, 6, 0.9, 120);   // Wolle fliegt!
   if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.haps();
@@ -1594,6 +1596,20 @@ function update(dt) {
     if (!s.istSpieler && s.lebt && s.meldet && dist(s, GLOCKE) < 60) { sound.glocke(); starteTreffen(s, null); return; }
   }
 
+  // Schlangenwolf: Wolle löst sich auf
+  for (const w of wolle) {
+    if (w.aufloesen == null) continue;
+    w.aufloesen -= dt;
+    if (Math.random() < 0.25) {   // Blubber-Blasen
+      partikel.push({ x: w.x + (Math.random() - 0.5) * 40, y: w.y, vx: 0, vy: -30 - Math.random() * 30, t: 0.8, max: 0.8, farbe: zufall(['#9be89b', '#4ade80']), groesse: 3 + Math.random() * 3, g: 0 });
+    }
+    if (w.aufloesen <= 0) {
+      funken(w.x, w.y, 20, ['#9be89b', '#4ade80', '#ffffff'], 80, 6, 0.9, -50);
+      if (spielerIstWolf) zeigeNachricht('🐍 Die Wolle hat sich aufgelöst. Keine Spuren! 😈', 2.5);
+    }
+  }
+  wolle = wolle.filter(w => w.aufloesen == null || w.aufloesen > 0);
+
   // Andere Schafe finden Wolle und rufen ein Treffen ein
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf) continue;
@@ -1789,6 +1805,21 @@ function zeichneEffekt(e, pos) {
 }
 
 function zeichneWolle(w) {
+  // Beim Schlangenwolf wird die Wolle immer kleiner und grünlich
+  const rest = w.aufloesen == null ? 1 : Math.max(0, w.aufloesen / AUFLOESE_ZEIT);
+  ctx.save();
+  ctx.translate(w.x, w.y); ctx.scale(0.3 + rest * 0.7, 0.3 + rest * 0.7); ctx.translate(-w.x, -w.y);
+  ctx.globalAlpha = 0.4 + rest * 0.6;
+  zeichneWollHaufen(w);
+  if (w.aufloesen != null) {
+    ctx.fillStyle = `rgba(74,222,128,${0.5 * (1 - rest)})`;
+    ellipse(w.x, w.y + 3, 30, 14); ctx.fill();
+  }
+  ctx.restore();
+  if (w.aufloesen != null) text(`🐍 ${Math.ceil(w.aufloesen)}`, w.x, w.y + 30, 13, '#9be89b');
+}
+
+function zeichneWollHaufen(w) {
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ellipse(w.x, w.y + 6, 26, 8); ctx.fill();
   const flocken = [[-14, 2, 8], [-3, -3, 10], [10, 1, 9], [3, 8, 7], [-10, 9, 6], [18, 8, 5]];
