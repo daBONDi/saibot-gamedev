@@ -18,7 +18,7 @@ const ZIEGE_CHANCE = 0.2;             // Wie oft DU die Ziege bist, wenn du kein
 
 // 🛠️ Entwickler-Modus: Funktioniert NUR auf deinem Computer (localhost), nie auf der Webseite!
 // Rolle aussuchen mit der Adresse:  http://localhost:8080/spiele/schafspelz/?rolle=ziege
-// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, schleicher, verkleider, turbo, schlange
+// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, angsthase, schaefer, schleicher, verkleider, turbo, schlange
 const ENTWICKLER = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
 function entwicklerRolle() {
   if (!ENTWICKLER) return null;
@@ -45,11 +45,14 @@ const ROLLEN = {
   bastler:     { name: 'Bastler',           emoji: '🔧', knopf: 'Reparieren', pause: 40, text: 'Du kannst Sabotagen von überall aus reparieren!' },
   schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
   verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
+  angsthase:   { name: 'Angsthase',         emoji: '😱', text: 'Wenn dich ein Wolf frisst, mähst du 8-mal ganz laut – und alle sehen, wo!' },
+  schaefer:    { name: 'Schäfer',           emoji: '🧑‍🌾', knopf: 'Hirtenstab', pause: 30, text: 'Keine Aufgaben! Hau den Wolf mit dem Hirtenstab raus. Triffst du ein Schaf, musst DU gehen!' },
   ziege:       { name: 'Ziege',             emoji: '🐐', knopf: 'Meckern',    pause: 25, text: 'Lass dich beim Herden-Treffen verjagen, dann gewinnst DU!' },
   schlange:    { name: 'Schlangenwolf',     emoji: '🐍', text: 'Die Wolle deiner Opfer löst sich nach ein paar Sekunden auf!' },
   turbo:       { name: 'Turbo-Wolf',        emoji: '⚡', text: 'Du kannst viel öfter fressen als andere Wölfe!' },
 };
-const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler'];
+const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'angsthase', 'schaefer'];
+const SCHAEFER_REICHWEITE = 150;   // So weit reicht der Hirtenstab
 const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo', 'schlange'];
 const AUFLOESE_ZEIT = 7;   // So viele Sekunden bleibt die Wolle beim Schlangenwolf liegen
 
@@ -339,6 +342,17 @@ const sound = {
   plumps() { ton(320, 0, 0.3, 'sine', 0.3, 60); },
   // Bzzzt! (Blitz)
   zap() { ton(1500, 0, 0.15, 'sawtooth', 0.08, 300); ton(900, 0.08, 0.15, 'square', 0.05, 200); },
+  // 8-mal Määäh! (Angsthase)
+  angst() {
+    for (let i = 0; i < 8; i++) {
+      const h = 470 + (i % 3) * 70;
+      wackelTon([[0, h], [0.32, h - 80]], i * 0.38, 0.34, 'sawtooth', 0.15, 18, 40);
+    }
+  },
+  // BONK! (Hirtenstab)
+  bonk() { ton(650, 0, 0.08, 'square', 0.15, 200); ton(160, 0.02, 0.25, 'sine', 0.35, 60); },
+  // Jauuul! (Wolf fliegt)
+  jaul() { wackelTon([[0, 900], [0.6, 450]], 0, 0.6, 'sine', 0.2, 8, 30); },
   // Bim-Bam der Glocke
   glocke() {
     [0, 0.5].forEach((st, i) => {
@@ -359,6 +373,7 @@ let treffen = null, ende = null, nachricht = null;
 let glockeGenutzt = false;
 let spielerIstWolf = false;
 let miniSpiel = null;   // Das Mini-Spiel, das gerade offen ist
+let zielModus = false;  // Schäfer: Wartet darauf, dass du ein Tier antippst
 let sicht = SICHT;      // Wie weit du gerade siehst (im Nebel weniger)
 let sabotage = null;    // { art: 'nebel' oder 'gatter', t: Restzeit }
 let sabotagePause = 0;
@@ -452,6 +467,7 @@ function macheSchaf(name, farbe, istSpieler) {
 
 function neuesSpiel() {
   partikel = [];
+  zielModus = false;
   ladeKarte(kartenNr);
   sabotage = null; sabotagePause = 30; sicht = SICHT;
   schafe = []; wolle = []; effekte = [];
@@ -493,12 +509,15 @@ function neuesSpiel() {
   // Rollen für die Schafe verteilen
   const binZiege = test ? test === 'ziege' : E.ziege && !spielerIstWolf && Math.random() < ZIEGE_CHANCE;
   let rollenUebrig = E.rollen;
-  const vorrat = mischen([...SCHAF_ROLLEN, ...SCHAF_ROLLEN, ...SCHAF_ROLLEN]);
+  // Jede Rolle 3-mal im Topf, nur den Schäfer gibt es höchstens einmal
+  const ohneSchaefer = SCHAF_ROLLEN.filter(r => r !== 'schaefer');
+  const vorrat = mischen([...ohneSchaefer, ...ohneSchaefer, ...ohneSchaefer, 'schaefer']);
   if (!spielerIstWolf) {
     if (binZiege) spieler.rolle = 'ziege';
     else if (SCHAF_ROLLEN.includes(test)) spieler.rolle = test;
     else if (rollenUebrig > 0 || test === 'schaf') spieler.rolle = zufall(SCHAF_ROLLEN);
     if (SCHAF_ROLLEN.includes(spieler.rolle)) rollenUebrig--;
+    if (spieler.rolle === 'schaefer') vorrat.splice(vorrat.indexOf('schaefer'), 1);
   }
   // Wenn du nicht die Ziege bist, ist manchmal ein anderes Schaf die Ziege
   let ziegeFrei = E.ziege && !binZiege && Math.random() < 0.5;
@@ -506,9 +525,9 @@ function neuesSpiel() {
     if (ziegeFrei) { s.rolle = 'ziege'; ziegeFrei = false; }
     else if (rollenUebrig > 0) { s.rolle = vorrat.pop(); rollenUebrig--; }
   }
-  // Die Ziege hat keine echten Aufgaben
+  // Ziege und Schäfer haben keine Aufgaben
   for (const s of schafe) {
-    if (s.rolle === 'ziege') { s.aufgaben = []; s.alleAufgaben = []; s.gesamt = 0; }
+    if (s.rolle === 'ziege' || s.rolle === 'schaefer') { s.aufgaben = []; s.alleAufgaben = []; s.gesamt = 0; }
   }
   botsBeschuetzen();
 
@@ -551,6 +570,7 @@ function fortschritt() {
 function beende(sieger, grund) {   // sieger: 'schafe', 'wolf' oder 'ziege'
   zustand = 'ende';
   miniSpiel = null;
+  zielModus = false;
   const gewonnen = spieler.rolle === 'ziege'
     ? sieger === 'ziege'
     : sieger !== 'ziege' && (sieger === 'wolf') === spielerIstWolf;
@@ -710,7 +730,8 @@ function fressen(opfer, w) {
 
   const ort = naechsterOrt(opfer);
   const schlange = w.rolle === 'schlange';
-  wolle.push({ x: opfer.x, y: opfer.y, opfer, ort, aufloesen: schlange ? E.aufloesen : null, aufloeseMax: E.aufloesen });
+  const haufen = { x: opfer.x, y: opfer.y, opfer, ort, aufloesen: schlange ? E.aufloesen : null, aufloeseMax: E.aufloesen };
+  wolle.push(haufen);
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, max: 1.2 });
   funken(opfer.x, opfer.y, 25, [opfer.farbe, '#ffffff'], 140, 6, 0.9, 120);   // Wolle fliegt!
   if (w.istSpieler || dist(opfer, spieler) < sicht + 20) sound.haps();
@@ -745,9 +766,22 @@ function fressen(opfer, w) {
       : 'HAPS! 😋 Niemand hat dich gesehen.', 3);
   }
 
+  if (opfer.rolle === 'angsthase') angsthaseSchreit(opfer, haufen);   // Zuletzt, damit man die Nachricht sieht!
   if (opfer.istSpieler) { beende('wolf', 'Der Wolf hat dich erwischt!'); return; }
   if (!w.istSpieler && Math.random() < 0.6) planeGrube(w, 350);   // Schnell weg durch eine Grube!
   pruefeWolfSieg();
+}
+
+// 😱 Der Angsthase schreit ganz laut, und alle wissen, wo er ist!
+function angsthaseSchreit(opfer, haufen) {
+  haufen.angst = true;
+  sound.angst();
+  zeigeNachricht(`😱 MÄÄÄH! ${opfer.istSpieler ? 'Du warst' : opfer.name + ' war'} ein Angsthase und hat ganz laut geschrien!`, 3.5);
+  // Die zwei nächsten Schafe rennen hin
+  schafe.filter(s => s.lebt && !s.istSpieler && !s.istWolf)
+    .sort((a, b) => dist(a, haufen) - dist(b, haufen))
+    .slice(0, 2)
+    .forEach(h => { h.ziel = { x: haufen.x, y: haufen.y, ort: null }; h.warte = 0; h.amOrt = null; });
 }
 
 // Gewinnen die Wölfe? (Wenn es nicht mehr Schafe als Wölfe gibt)
@@ -949,6 +983,7 @@ function starteTreffen(melder, fund) {
   zustand = 'treffen';
   miniSpiel = null;
   sabotage = null;
+  zielModus = false;
   for (const s of schafe) s.meldet = false;
   if (fund) sound.wolle(); else sound.glocke();
   const lebende = schafe.filter(s => s.lebt);
@@ -1175,6 +1210,9 @@ function rollenAktion() {
           zeigeNachricht(`🐐 Määäck! ${hoerer.map(h => h.name).join(', ')} findet dich jetzt verdächtig!`, 3);
         } };
     }
+    case 'schaefer': return {
+      text: zielModus ? 'Tier antippen!' : 'Hirtenstab', moeglich: !!naechstesSchaf(SCHAEFER_REICHWEITE), hinweis: 'Kein Tier in der Nähe!',
+      tun() {} };
     case 'schleicher': return {
       text: 'Unsichtbar', moeglich: true,
       tun() {
@@ -1201,8 +1239,56 @@ function faehigkeitsPause() {
   return Math.max(1, Math.round((ROLLEN[spieler.rolle].pause || 0) * STUFEN[E.faehigkeitPause].w));
 }
 
+// Welches Tier kann der Hirtenstab treffen?
+function stabZiele(sch) {
+  return schafe.filter(s => s.lebt && s !== sch && s.inGrube == null && !(s.unsichtbar > 0) && dist(s, sch) < SCHAEFER_REICHWEITE);
+}
+
+// 🧑‍🌾 Der Schäfer schlägt mit dem Hirtenstab zu!
+function hirtenstab(sch, ziel) {
+  sch.faehigkeit = sch.istSpieler ? faehigkeitsPause() : 30;
+  if (sch.istSpieler) zielModus = false;
+  sound.bonk();
+  if (ziel.istWolf) {
+    // Erwischt! Cutscene: Der Schäfer wirft den Wolf raus
+    miniSpiel = null; joystickLos();
+    zustand = 'cutscene';
+    cutscene = { t: 0, art: 'hirte', raus: ziel, hirte: sch };
+    return;
+  }
+  // Oh nein, das war ein Schaf! Der Schäfer muss gehen.
+  effektAn(ziel, 'icon', 1.2, { text: '💥' });
+  funken(sch.x, sch.y, 25, RAUCH, 90, 9, 0.9, -50);
+  sch.lebt = false;
+  sch.erledigt = sch.gesamt;
+  sound.traurig();
+  if (sch.istSpieler) { beende('wolf', `Oh nein! ${ziel.name} war ein Schaf. Du musstest den Hof verlassen! 😵`); return; }
+  zeigeNachricht(`😵 Schäfer ${sch.name} hat aus Versehen ${ziel.istSpieler ? 'DICH' : ziel.name} erwischt und muss gehen!`, 3.5);
+  pruefeWolfSieg();
+}
+
+// Im Ziel-Modus auf ein Tier geklickt?
+function hirtenKlick(p) {
+  const welt = { x: p.x + kamera.x, y: p.y + kamera.y };
+  const ziel = stabZiele(spieler).sort((a, b) => dist(a, welt) - dist(b, welt))[0];
+  if (ziel && dist(ziel, welt) < 45) hirtenstab(spieler, ziel);
+  else { zielModus = false; zeigeNachricht('Hirtenstab abgebrochen.', 1.5); }
+}
+
 function nutzeFaehigkeit() {
   if (zustand !== 'spiel' || miniSpiel) return;
+  if (spieler.rolle === 'schaefer') {
+    if (spieler.faehigkeit > 0) { zeigeNachricht(`Noch ${Math.ceil(spieler.faehigkeit)} Sekunden warten ...`, 1.5); return; }
+    const ziele = stabZiele(spieler).sort((a, b) => dist(a, spieler) - dist(b, spieler));
+    if (zielModus) {   // Nochmal gedrückt: das nächste Tier!
+      if (ziele.length) hirtenstab(spieler, ziele[0]); else zielModus = false;
+      return;
+    }
+    if (!ziele.length) { zeigeNachricht('Kein Tier in der Nähe!', 2); return; }
+    zielModus = true;
+    zeigeNachricht(touchModus ? '🧑‍🌾 Tippe auf ein Tier im gelben Kreis!' : '🧑‍🌾 Klicke auf ein Tier im gelben Kreis! (Q = das nächste, Esc = abbrechen)', 3);
+    return;
+  }
   const a = rollenAktion();
   if (!a) return;
   if (spieler.faehigkeit > 0) { zeigeNachricht(`Noch ${Math.ceil(spieler.faehigkeit)} Sekunden warten ...`, 1.5); return; }
@@ -1237,6 +1323,14 @@ function updateFaehigkeiten(dt) {
         for (const o of schafe) {
           if (o.lebt && !o.istSpieler && !o.istWolf && o !== s && !o.verdacht && dist(o, s) < 200) o.verdacht = { wer: s, ort: naechsterOrt(s), komisch: true };
         }
+      }
+    }
+    // Computer-Schäfer jagen Tiere, die sie für den Wolf halten
+    if (!s.istSpieler && s.lebt && !s.istWolf && s.rolle === 'schaefer' && s.faehigkeit <= 0 && zustand === 'spiel') {
+      const v = s.verdacht;
+      if (v && !v.komisch && v.wer.lebt && v.wer.inGrube == null && !(v.wer.unsichtbar > 0)) {
+        s.ziel = { x: v.wer.x, y: v.wer.y, ort: null }; s.warte = 0; s.amOrt = null;
+        if (dist(s, v.wer) < 45) hirtenstab(s, v.wer);
       }
     }
     // Computer-Spürnasen schnuppern auch!
@@ -1275,7 +1369,17 @@ function weiterNachAbstimmung() {
 }
 
 function endeCutscene() {
+  const c = cutscene;
   cutscene = null;
+  if (c.art === 'hirte') {
+    const w = c.raus;
+    w.lebt = false; w.erledigt = w.gesamt;
+    if (w.istSpieler) { beende('schafe', 'Der Schäfer hat dich erwischt! 🧑‍🌾'); return; }
+    if (!woelfe.some(x => x.lebt)) { beende('schafe', woelfe.length > 1 ? 'Alle Wölfe sind weg! 🧑‍🌾' : 'Der Schäfer hat den Wolf rausgeworfen! 🧑‍🌾'); return; }
+    zustand = 'spiel';
+    if (!pruefeWolfSieg()) zeigeNachricht('🐺 Ein Wolf weniger! Weiter geht\'s!', 2.5);
+    return;
+  }
   zustand = 'treffen';
   treffenWeiter();
 }
@@ -1284,6 +1388,13 @@ function updateCutscene(dt) {
   const c = cutscene, vorher = c.t;
   c.t += dt;
   const ab = z => vorher < z && c.t >= z;
+  if (c.art === 'hirte') {
+    if (ab(1.15)) sound.bonk();
+    if (ab(1.3)) sound.jaul();
+    if (ab(3.8)) { if (!spielerIstWolf) sound.fanfare(); else sound.traurig(); }
+    if (c.t > 8) endeCutscene();
+    return;
+  }
   if (ab(0.8)) sound.trippel();
   if (ab(2.0) && c.raus.istWolf) sound.knurren();
   if (ab(2.0) && c.raus.rolle === 'ziege') sound.meckern();
@@ -1302,7 +1413,96 @@ function cutPos(t) {
   return { x: 680 + k * 220, y: 480 - k * 135, s: 1.2 - k * 1.05 };
 }
 
+// Ein Hirtenstab (Haken oben)
+function zeichneHirtenstab(x, y, groesse = 1, winkel = 0) {
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(winkel); ctx.scale(groesse, groesse);
+  ctx.strokeStyle = '#8d5a2b'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 30); ctx.lineTo(0, -20);
+  ctx.arc(8, -20, 8, Math.PI, 0);
+  ctx.lineTo(16, -12);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function zeichneHirtenCutscene() {
+  const c = cutscene, t = c.t, w = c.raus, h = c.hirte;
+  // Himmel, Hügel, Weg
+  const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
+  const g = ctx.createLinearGradient(0, 0, 0, 360);
+  g.addColorStop(0, himmel[0]); g.addColorStop(1, himmel[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,220,120,0.8)'; ellipse(800, 300, 55, 55); ctx.fill();
+  ctx.fillStyle = KARTE.boden;
+  ctx.beginPath(); ctx.moveTo(0, 360); ctx.quadraticCurveTo(480, 300, 960, 345); ctx.lineTo(960, 600); ctx.lineTo(0, 600); ctx.fill();
+  ctx.fillStyle = KARTE.weg;
+  ctx.beginPath(); ctx.moveTo(590, 600); ctx.lineTo(780, 600); ctx.lineTo(905, 342); ctx.lineTo(895, 342); ctx.fill();
+  // Zaun mit offenem Tor
+  ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(0, 450); ctx.lineTo(610, 455); ctx.moveTo(0, 480); ctx.lineTo(610, 485);
+  ctx.moveTo(760, 455); ctx.lineTo(960, 450); ctx.moveTo(760, 485); ctx.lineTo(960, 480);
+  ctx.moveTo(610, 455); ctx.lineTo(560, 520); ctx.moveTo(610, 485); ctx.lineTo(560, 550);
+  ctx.stroke();
+  ctx.fillStyle = '#6e4b2a';
+  for (let x = 20; x < 960; x += 90) if (x < 610 || x > 750) ctx.fillRect(x, 435, 9, 60);
+
+  // Der Schäfer läuft hin
+  const hx = 250 + Math.min(1, Math.max(0, (t - 0.4) / 0.6)) * 80, hy = 545;
+  zeichneSchafKoerper(hx, hy, h.farbe, 1, t * 12, t > 0.4 && t < 1, 1.5);
+  ctx.fillStyle = '#6b4226';   // Schäferhut
+  ellipse(hx + 31, hy - 26, 20, 5); ctx.fill();
+  ctx.fillRect(hx + 21, hy - 42, 20, 16);
+  text(h.istSpieler ? 'DU' : h.name, hx, hy - 62, 16, h.istSpieler ? '#ffd166' : '#fff');
+  // Hirtenstab schwingen
+  let winkel = -0.3;
+  if (t > 1 && t < 1.25) winkel = -0.8 + (t - 1) / 0.25 * 2;
+  else if (t >= 1.25) winkel = 0.6;
+  zeichneHirtenstab(hx + 50, hy - 5, 1.6, winkel);
+
+  // Der Wolf
+  const start = { x: 440, y: 545 };
+  if (t < 1.25) {
+    const zittern = t > 0.5 ? Math.sin(t * 50) * 2 : 0;
+    zeichneSchafKoerper(start.x + zittern, start.y, w.farbe, -1, 0, false, 1.5);
+    text(w.istSpieler ? 'DU' : w.name, start.x, start.y - 50, 16, w.istSpieler ? '#ffd166' : '#fff');
+  } else {
+    const k = Math.min(1, (t - 1.25) / 2.3);
+    const x = start.x + k * 460, y = start.y - Math.sin(k * Math.PI) * 260 - k * 200;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(k * 12); ctx.scale(1.4 - k * 1.25, 1.4 - k * 1.25);
+    text('🐺', 0, 0, 56, '#fff', 'center', false);
+    ctx.restore();
+    if (t < 2.6) {   // Wolle fliegt weg
+      const kk = t - 1.25;
+      for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = w.farbe;
+        ellipse(start.x + Math.cos(i * 0.63) * kk * 90, start.y - 20 + Math.sin(i * 0.63) * kk * 40 + kk * kk * 80, 7, 7); ctx.fill();
+      }
+    }
+  }
+  if (t > 1.15 && t < 1.9) {
+    const pop = Math.min(1.3, (t - 1.15) * 8);
+    text('💥', start.x, start.y - 30, 60 * pop, '#fff', 'center', false);
+    text('BONK!', start.x + 10, start.y - 95, 38 * pop, '#ffd166');
+  }
+  if (t > 3.5 && t < 4.5) text('✨', 900, 340, 30 + Math.sin(t * 20) * 6, '#fff', 'center', false);
+
+  // Text
+  if (t > 3.8) {
+    const zeile1 = w.istSpieler ? 'Der Schäfer hat DICH erwischt! 🐺' : `${w.name} war ein Wolf! 🐺`;
+    text([...zeile1].slice(0, Math.floor((t - 3.8) * 25)).join(''), W / 2, 110, 36, '#ff6b6b');
+  }
+  if (t > 5) {
+    ctx.globalAlpha = Math.min(1, (t - 5) * 2);
+    text(h.istSpieler ? 'Super gemacht, Schäfer! 🧑‍🌾' : `Schäfer ${h.name} hat ihn rausgeworfen! 🧑‍🌾`, W / 2, 165, 22, '#ffd166');
+    ctx.globalAlpha = 1;
+  }
+  if (t > 1.5) text('Klicken zum Weiterspielen', W - 120, H - 18, 13, 'rgba(255,255,255,0.7)', 'center', false);
+}
+
 function zeichneCutscene() {
+  if (cutscene.art === 'hirte') { zeichneHirtenCutscene(); return; }
   const c = cutscene, t = c.t, r = c.raus;
   const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
   const g = ctx.createLinearGradient(0, 0, 0, 360);
@@ -1709,6 +1909,7 @@ function update(dt) {
   if (zustand !== 'spiel') return;
 
   updateFaehigkeiten(dt);
+  if (zustand !== 'spiel') return;   // z. B. Schäfer-Cutscene hat angefangen
   if (miniSpiel) miniUpdate(dt);
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
@@ -2246,6 +2447,33 @@ function zeichneExtras() {
       ellipse(x, y, 2.5, 2.5); ctx.fill();
     }
   }
+  // 😱 Angsthase: Pfeil zur Wolle (für alle sichtbar)
+  if (zustand === 'spiel') {
+    for (const w of wolle) {
+      if (!w.angst) continue;
+      const sx = w.x - kamera.x, sy = w.y - kamera.y;
+      const puls = 1 + Math.sin(zeit * 8) * 0.15;
+      if (sx > 30 && sx < W - 30 && sy > 30 && sy < H - 30) {
+        ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 4;
+        ellipse(sx, sy, 34 * puls, 20 * puls); ctx.stroke();
+        text('😱', sx, sy - 40, 26 * puls, '#fff', 'center', false);
+      } else {
+        // Pfeil am Bildschirmrand
+        const px = spieler.x - kamera.x, py = spieler.y - kamera.y;
+        const winkel = Math.atan2(sy - py, sx - px);
+        const dx = Math.cos(winkel), dy = Math.sin(winkel);
+        const rand = 45;
+        const f = Math.min(dx ? (dx > 0 ? W - rand - px : rand - px) / dx : 1e9, dy ? (dy > 0 ? H - rand - py : rand - py) / dy : 1e9);
+        const ax = px + dx * f, ay = py + dy * f;
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(winkel); ctx.scale(puls, puls);
+        ctx.fillStyle = '#ff4d4d'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(-12, -16); ctx.lineTo(-5, 0); ctx.lineTo(-12, 16); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+        text('😱', ax - dx * 30, ay - dy * 30, 22, '#fff', 'center', false);
+      }
+    }
+  }
   if (!sabotage || zustand !== 'spiel') return;
   if (sabotage.art === 'gatter') {
     ctx.strokeStyle = `rgba(255,0,0,${0.35 + 0.3 * Math.sin(zeit * 8)})`;
@@ -2284,6 +2512,13 @@ function zeichneHUD() {
     text(freunde.length ? `Wolf-Freund: ${freunde.join(', ')} 🐺` : 'Friss die Schafe, bevor sie fertig sind!', 26, 122, 13, freunde.length ? '#ff9a9a' : '#fff', 'left', false);
     if (spieler.cooldown > 0) text(`Fressen in ${Math.ceil(spieler.cooldown)} Sekunden ...`, 26, 150, 15, '#c9c3ff', 'left', false);
     else text('Fressen ist bereit! 😋', 26, 150, 15, '#4ade80', 'left', false);
+  } else if (spieler.rolle === 'schaefer') {
+    ctx.fillStyle = 'rgba(30,80,40,0.85)';
+    rundesRechteck(14, 80, 300, 96, 10); ctx.fill();
+    text('🧑‍🌾 Du bist der Schäfer!', 26, 98, 16, '#9be89b', 'left', false);
+    text('Keine Aufgaben: Finde den Wolf!', 26, 122, 13, '#fff', 'left', false);
+    text('Triffst du ein Schaf, musst DU gehen!', 26, 150, 13, '#ffd166', 'left', false);
+    zeichneHirtenstab(290, 130, 0.8, 0.2);
   } else if (spieler.rolle === 'ziege') {
     ctx.fillStyle = 'rgba(120,70,10,0.85)';
     rundesRechteck(14, 80, 300, 96, 10); ctx.fill();
@@ -2340,6 +2575,7 @@ function zeichneHUD() {
       rundesRechteck(ROLLE_KNOPF.x - 3, ROLLE_KNOPF.y - 3, ROLLE_KNOPF.w + 6, ROLLE_KNOPF.h + 6, 12); ctx.stroke();
     }
     text(`${r.emoji} ${r.name}`, ROLLE_KNOPF.x + 12, ROLLE_KNOPF.y + 16, 15, '#ffd166', 'left', false);
+    if (spieler.rolle === 'schaefer') zeichneHirtenstab(ROLLE_KNOPF.x + ROLLE_KNOPF.w - 26, ROLLE_KNOPF.y + 26, 0.75, 0.15);
     let zeile;
     if (!a) zeile = r.text;
     else if (spieler.faehigkeit > 0) zeile = `${r.knopf} in ${Math.ceil(spieler.faehigkeit)} s`;
@@ -2422,7 +2658,8 @@ function zeichneFaehigkeitRund() {
     ctx.strokeStyle = `rgba(255,255,255,${0.5 + Math.sin(zeit * 5) * 0.4})`; ctx.lineWidth = 4;
     ellipse(F.x, F.y, F.r + 3, F.r + 3); ctx.stroke();
   }
-  text(r.emoji, F.x, F.y - 2, 30, '#fff', 'center', false);
+  if (spieler.rolle === 'schaefer') zeichneHirtenstab(F.x - 6, F.y + 2, 1.1, 0.15);   // Knopf mit Hirtenstab!
+  else text(r.emoji, F.x, F.y - 2, 30, '#fff', 'center', false);
   if (spieler.faehigkeit > 0) {   // Countdown als "Tortenstück"
     const anteil = Math.min(1, spieler.faehigkeit / faehigkeitsPause());
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -2802,6 +3039,18 @@ function zeichne() {
     zeichneEffekt(e, pos);
     ctx.globalAlpha = 1;
   }
+  // Schäfer: Reichweite vom Hirtenstab
+  if (zielModus && zustand === 'spiel') {
+    ctx.setLineDash([10, 8]);
+    ctx.strokeStyle = 'rgba(255,209,102,0.9)'; ctx.lineWidth = 3;
+    ellipse(spieler.x, spieler.y, SCHAEFER_REICHWEITE, SCHAEFER_REICHWEITE); ctx.stroke();
+    ctx.setLineDash([]);
+    for (const z of stabZiele(spieler)) {
+      if (!sichtbar(z)) continue;
+      ctx.strokeStyle = `rgba(255,209,102,${0.6 + Math.sin(zeit * 8) * 0.4})`; ctx.lineWidth = 4;
+      ellipse(z.x, z.y, 34, 30); ctx.stroke();
+    }
+  }
   ctx.restore();
 
   zeichneDunkel();
@@ -2828,6 +3077,7 @@ addEventListener('keydown', e => {
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'cutscene' && (k === 'enter' || k === ' ') && cutscene.t > 1) endeCutscene();
   else if (zustand === 'spiel' && !miniSpiel && k === 'q') nutzeFaehigkeit();
+  else if (zustand === 'spiel' && zielModus && k === 'escape') zielModus = false;
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
   else if (zustand === 'spiel' && spieler.inGrube != null && ['arrowleft', 'a', 'arrowright', 'd', 'e', ' '].includes(k)) grubenTaste(k);
   else if (zustand === 'spiel' && miniSpiel) miniTaste(k);
@@ -2877,6 +3127,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'spiel') {
     if (touchModus && dist(p, FAEHIGKEIT_RUND) < FAEHIGKEIT_RUND.r + 8 && rollenAktion()) { nutzeFaehigkeit(); return; }
     if (!touchModus && imRechteck(p, ROLLE_KNOPF)) { nutzeFaehigkeit(); return; }
+    if (zielModus) { hirtenKlick(p); return; }
     if (spielerIstWolf && imRechteck(p, SAB_NEBEL)) { wolfSabotage('nebel'); return; }
     if (spielerIstWolf && imRechteck(p, SAB_GATTER)) { wolfSabotage('gatter'); return; }
     if (spieler.inGrube != null) { grubenKlick(p); return; }
