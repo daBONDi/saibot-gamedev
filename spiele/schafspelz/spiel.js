@@ -231,6 +231,8 @@ const sound = {
   meckern() { wackelTon([[0, 620], [0.6, 540]], 0, 0.7, 'sawtooth', 0.15, 24, 60); },
   // Plumps in die Grube
   plumps() { ton(320, 0, 0.3, 'sine', 0.3, 60); },
+  // Bzzzt! (Blitz)
+  zap() { ton(1500, 0, 0.15, 'sawtooth', 0.08, 300); ton(900, 0.08, 0.15, 'square', 0.05, 200); },
   // Bim-Bam der Glocke
   glocke() {
     [0, 0.5].forEach((st, i) => {
@@ -255,6 +257,7 @@ let sicht = SICHT;      // Wie weit du gerade siehst (im Nebel weniger)
 let sabotage = null;    // { art: 'nebel' oder 'gatter', t: Restzeit }
 let sabotagePause = 0;
 let deko = [];          // Blumen, Tannen, Palmen ...
+let partikel = [];      // Funken, Staub, Rauch ...
 const schneeflocken = [];
 for (let i = 0; i < 70; i++) schneeflocken.push({ x: Math.random() * W, y: Math.random() * H, v: 25 + Math.random() * 40, p: Math.random() * 6 });
 let kamera = { x: 0, y: 0 };
@@ -262,6 +265,25 @@ let klickZiel = null;
 let maus = { x: 0, y: 0 };
 let zeit = 0;
 const tasten = {};
+
+// ===== Partikel (Funken, Staub, Rauch) =====
+// x, y: wo  •  anzahl  •  farben  •  tempo  •  groesse  •  dauer (Sekunden)  •  schwerkraft (minus = steigt auf)
+function funken(x, y, anzahl, farben, tempo = 120, groesse = 4, dauer = 0.7, schwerkraft = 0) {
+  for (let i = 0; i < anzahl; i++) {
+    const w = Math.random() * Math.PI * 2, v = tempo * (0.4 + Math.random() * 0.8);
+    const t = dauer * (0.6 + Math.random() * 0.4);
+    partikel.push({ x, y, vx: Math.cos(w) * v, vy: Math.sin(w) * v, t, max: t, farbe: zufall(farben), groesse: groesse * (0.6 + Math.random() * 0.8), g: schwerkraft });
+  }
+}
+const RAUCH = ['#e5e5e5', '#c9c9c9', '#ffffff'];
+const LILA = ['#c9a0ff', '#ffffff', '#8fd3ff'];
+const GOLD = ['#ffd166', '#ffffff', '#ff9f43'];
+const BLAU = ['#8fd3ff', '#ffffff', '#4aa8ff'];
+
+// Ein Effekt, der an einem Schaf klebt
+function effektAn(ziel, art, dauer, extra = {}) {
+  effekte.push({ ziel, art, t: dauer, max: dauer, ...extra });
+}
 
 // ===== Karte laden =====
 function ladeKarte(nr) {
@@ -323,6 +345,7 @@ function macheSchaf(name, farbe, istSpieler) {
 }
 
 function neuesSpiel() {
+  partikel = [];
   ladeKarte(kartenNr);
   sabotage = null; sabotagePause = 30; sicht = SICHT;
   schafe = []; wolle = []; effekte = [];
@@ -544,7 +567,8 @@ function fressen(opfer) {
     opfer.geschuetzt = false;
     wolf.jagt = null; wolf.ziel = null;
     wolf.cooldown = 10;
-    effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, art: 'schild' });
+    effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, max: 1.2, art: 'schild' });
+    funken(opfer.x, opfer.y, 30, BLAU, 160, 5, 0.9);
     if (spielerIstWolf) zeigeNachricht(`🛡️ ${opfer.name} war beschützt! Das hat nicht geklappt.`, 3);
     else if (opfer.istSpieler) zeigeNachricht('🛡️ Puh! Ein Schutzschild hat dich gerettet!', 3);
     if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.schild();
@@ -560,7 +584,8 @@ function fressen(opfer) {
 
   const ort = naechsterOrt(opfer);
   wolle.push({ x: opfer.x, y: opfer.y, opfer, ort });
-  effekte.push({ x: opfer.x, y: opfer.y, t: 1.2 });
+  effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, max: 1.2 });
+  funken(opfer.x, opfer.y, 25, [opfer.farbe, '#ffffff'], 140, 6, 0.9, 120);   // Wolle fliegt!
   if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.haps();
 
   // Computer-Wölfe benutzen auch ihre Fähigkeiten
@@ -569,6 +594,9 @@ function fressen(opfer) {
     const andere = schafe.filter(s => s.lebt && !s.istWolf && !s.istSpieler);
     if (andere.length) wolf.verkleidet = { als: zufall(andere), t: 4 };
   }
+  if (wolf.rolle === 'turbo') funken(opfer.x, opfer.y, 20, GOLD, 170, 3, 0.6);
+  if (!spielerIstWolf && wolf.unsichtbar > 0) funken(wolf.x, wolf.y, 20, LILA, 110, 4, 0.8, -40);
+  if (!spielerIstWolf && wolf.verkleidet && wolf.verkleidet.t > 3.9) funken(wolf.x, wolf.y, 25, RAUCH, 90, 10, 0.9, -60);
   // Wen sehen die anderen? Den Wolf ... oder seine Verkleidung!
   const taeter = wolf.verkleidet ? wolf.verkleidet.als : wolf;
 
@@ -960,41 +988,66 @@ function rollenAktion() {
       text: z ? `Schnuppern (${z.name})` : 'Schnuppern', moeglich: !!z, hinweis: 'Geh näher an ein Schaf heran!',
       tun() {
         z.geruch = z.istWolf ? 'wolf' : 'schaf';
+        effektAn(z, 'schnuppern', 1.8, { wolf: z.istWolf });
         zeigeNachricht(z.istWolf ? `👃 ${z.name} riecht nach WOLF! 🐺` : `👃 ${z.name} riecht nach Schaf. 🐑`, 3);
         sound.schnuppern();
       } };
     case 'flitzer': return {
       text: 'Sprinten', moeglich: true,
-      tun() { spieler.sprint = 4; sound.sprint(); zeigeNachricht('💨 Wuuusch!', 1.5); } };
+      tun() {
+        spieler.sprint = 4; sound.sprint(); zeigeNachricht('💨 Wuuusch!', 1.5);
+        funken(spieler.x, spieler.y + 15, 18, RAUCH, 140, 7, 0.6);
+        effektAn(spieler, 'icon', 1, { text: '💨' });
+      } };
     case 'beschuetzer': return {
       text: z ? `Beschützen (${z.name})` : 'Beschützen', moeglich: !!z, hinweis: 'Geh näher an ein Schaf heran!',
       tun() {
         for (const s of schafe) if (s.beschuetztVonDir) { s.geschuetzt = false; s.beschuetztVonDir = false; }
         z.geschuetzt = true; z.beschuetztVonDir = true;
+        effektAn(z, 'schildAuf', 1);
+        funken(z.x, z.y, 20, BLAU, 110, 4, 0.8);
         zeigeNachricht(`🛡️ Du beschützt jetzt ${z.name}!`, 3);
         sound.schild();
       } };
     case 'bastler': return {
       text: 'Reparieren', moeglich: !!sabotage, hinweis: 'Gerade ist nichts kaputt.',
-      tun() { repariert(spieler); } };
+      tun() {
+        const p = sabotagePunkt();
+        funken(p.x, p.y - 50, 30, GOLD, 170, 4, 0.9, 200);
+        effektAn(spieler, 'werkzeug', 1.3);
+        funken(spieler.x, spieler.y - 55, 15, GOLD, 120, 3, 0.6, 150);
+        repariert(spieler);
+      } };
     case 'ziege': {
       const hoerer = schafe.filter(s => s.lebt && !s.istSpieler && !s.istWolf && dist(s, spieler) < 220);
       return {
         text: 'Meckern', moeglich: hoerer.length > 0, hinweis: 'Niemand ist in der Nähe, der dich hören könnte!',
         tun() {
-          for (const h of hoerer) if (!h.verdacht) h.verdacht = { wer: spieler, ort: naechsterOrt(spieler), komisch: true };
+          for (const h of hoerer) {
+            if (!h.verdacht) h.verdacht = { wer: spieler, ort: naechsterOrt(spieler), komisch: true };
+            effektAn(h, 'icon', 1.6, { text: '🤨', warte: 0.3 });
+          }
+          effektAn(spieler, 'meckern', 1.3);
           sound.meckern();
           zeigeNachricht(`🐐 Määäck! ${hoerer.map(h => h.name).join(', ')} findet dich jetzt verdächtig!`, 3);
         } };
     }
     case 'schleicher': return {
       text: 'Unsichtbar', moeglich: true,
-      tun() { spieler.unsichtbar = 6; sound.nebel(); zeigeNachricht('👻 Du bist 6 Sekunden unsichtbar!', 2); } };
+      tun() {
+        spieler.unsichtbar = 6; sound.nebel(); zeigeNachricht('👻 Du bist 6 Sekunden unsichtbar!', 2);
+        funken(spieler.x, spieler.y, 30, LILA, 130, 4, 0.9, -40);
+        effekte.push({ x: spieler.x, y: spieler.y, art: 'geist', t: 1.2, max: 1.2 });
+      } };
     case 'verkleider': {
       const v = naechstesSchaf(110);
       return {
         text: v ? `Verkleiden (als ${v.name})` : 'Verkleiden', moeglich: !!v, hinweis: 'Geh näher an das Schaf, als das du dich verkleiden willst!',
-        tun() { spieler.verkleidet = { als: v, t: 15 }; sound.plopp(); zeigeNachricht(`🎭 Du siehst jetzt aus wie ${v.name}!`, 2.5); } };
+        tun() {
+          spieler.verkleidet = { als: v, t: 15 }; sound.plopp(); zeigeNachricht(`🎭 Du siehst jetzt aus wie ${v.name}!`, 2.5);
+          funken(spieler.x, spieler.y, 35, RAUCH, 100, 11, 1, -60);
+          effektAn(spieler, 'maske', 1.2);
+        } };
     }
   }
   return null;
@@ -1012,13 +1065,27 @@ function nutzeFaehigkeit() {
 
 function updateFaehigkeiten(dt) {
   for (const s of schafe) {
+    const warUnsichtbar = s.unsichtbar > 0;
     s.faehigkeit -= dt; s.sprint -= dt; s.unsichtbar -= dt;
-    if (s.verkleidet) { s.verkleidet.t -= dt; if (s.verkleidet.t <= 0 || !s.verkleidet.als.lebt) s.verkleidet = null; }
+    if (warUnsichtbar && s.unsichtbar <= 0 && s.lebt && s.inGrube == null) funken(s.x, s.y, 20, LILA, 110, 4, 0.7, -40);   // wieder sichtbar!
+    if (s.verkleidet) {
+      s.verkleidet.t -= dt;
+      if (s.verkleidet.t <= 0 || !s.verkleidet.als.lebt) {
+        s.verkleidet = null;
+        if (s.lebt && s.inGrube == null) funken(s.x, s.y, 25, RAUCH, 90, 10, 0.8, -60);   // Puff! Verkleidung weg
+      }
+    }
+    // Staubwolken beim Sprinten
+    if (s.sprint > 0 && s.laeuft && Math.random() < 0.6) {
+      partikel.push({ x: s.x - s.richtung * 18, y: s.y + 18, vx: -s.richtung * 40 + (Math.random() - 0.5) * 30, vy: -20 * Math.random(), t: 0.45, max: 0.45, farbe: '#d6c7a8', groesse: 6 + Math.random() * 4, g: 0 });
+    }
     // Computer-Ziegen benehmen sich komisch
     if (!s.istSpieler && s.lebt && s.rolle === 'ziege') {
       s.schnupperZeit -= dt;
       if (s.schnupperZeit <= 0) {
         s.schnupperZeit = 35;
+        effektAn(s, 'meckern', 1.3);
+        if (dist(s, spieler) < sicht + 20) sound.meckern();
         for (const o of schafe) {
           if (o.lebt && !o.istSpieler && !o.istWolf && o !== s && !o.verdacht && dist(o, s) < 200) o.verdacht = { wer: s, ort: naechsterOrt(s), komisch: true };
         }
@@ -1467,6 +1534,13 @@ function zeichneMiniSpiel() {
 function update(dt) {
   for (const e of effekte) e.t -= dt;
   effekte = effekte.filter(e => e.t > 0);
+  for (const p of partikel) {
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vy += p.g * dt;
+    p.vx *= 0.97; p.vy *= 0.97;
+    p.t -= dt;
+  }
+  partikel = partikel.filter(p => p.t > 0);
   if (nachricht) { nachricht.t -= dt; if (nachricht.t <= 0) nachricht = null; }
   if (zustand === 'intro') {
     const vorher = intro;
@@ -1483,7 +1557,15 @@ function update(dt) {
   if (miniSpiel) miniUpdate(dt);
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
-  if (spielerIstWolf) wolf.cooldown -= dt;
+  if (spielerIstWolf) {
+    const vorher = wolf.cooldown;
+    wolf.cooldown -= dt;
+    if (wolf.rolle === 'turbo' && vorher > 0 && wolf.cooldown <= 0) {
+      funken(wolf.x, wolf.y - 10, 25, GOLD, 180, 3, 0.6);
+      effektAn(wolf, 'icon', 1.2, { text: '⚡' });
+      sound.zap();
+    }
+  }
   else if (wolf.lebt) wolfLogik(dt);
   if (zustand !== 'spiel') return;
   updateSabotage(dt);
@@ -1547,9 +1629,26 @@ function zeichneSchaf(s) {
   if (s.verkleidet) { farbe = s.verkleidet.als.farbe; name = s.verkleidet.als.name; }
   if (s.unsichtbar > 0) {
     if (!s.istSpieler) return;   // Unsichtbar!
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.25 + Math.sin(zeit * 8) * 0.12;   // flimmert
+  }
+  // Speed-Linien beim Sprinten
+  if (s.sprint > 0 && s.laeuft) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const l = 20 + ((zeit * 200 + i * 37) % 30);
+      ctx.beginPath(); ctx.moveTo(s.x - s.richtung * 32, s.y - 12 + i * 11); ctx.lineTo(s.x - s.richtung * (32 + l), s.y - 12 + i * 11); ctx.stroke();
+    }
   }
   zeichneSchafKoerper(s.x, s.y, farbe, s.richtung, s.phase, s.laeuft);
+  // Schutzblase (nur der Beschützer sieht sie)
+  if (s.beschuetztVonDir && s.geschuetzt) {
+    const glanz = 0.45 + Math.sin(zeit * 4) * 0.25;
+    ctx.fillStyle = 'rgba(143,211,255,0.12)';
+    ellipse(s.x, s.y - 2, 38, 33); ctx.fill();
+    ctx.strokeStyle = `rgba(143,211,255,${glanz})`; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${glanz})`;
+    ellipse(s.x - 18, s.y - 18, 6, 3); ctx.fill();
+  }
   text(name, s.x, s.y - 32, 13, s.istSpieler ? '#ffd166' : '#fff');
   ctx.globalAlpha = 1;
   // Kleine Symbole, die nur DU siehst
@@ -1561,6 +1660,114 @@ function zeichneSchaf(s) {
   if (spieler.rolle === 'spuernase' && s.geruch) symbol += s.geruch === 'wolf' ? '🐺' : '✅';
   if (s.beschuetztVonDir && s.geschuetzt) symbol += '🛡️';
   if (symbol) text(symbol, s.x, s.y - 52, 16, '#fff', 'center', false);
+}
+
+// ===== Animationen der Effekte =====
+function zeichneEffekt(e, pos) {
+  const k = e.max ? 1 - e.t / e.max : 0;   // Fortschritt: 0 = Anfang, 1 = Ende
+  const { x, y } = pos;
+  switch (e.art) {
+    case 'plumps':
+      ctx.globalAlpha = Math.min(1, e.t);
+      text('💨', x, y - 10 - (0.8 - e.t) * 30, 34, '#fff', 'center', false);
+      break;
+    case 'schild': {
+      ctx.globalAlpha = Math.min(1, e.t);
+      ctx.strokeStyle = '#8fd3ff'; ctx.lineWidth = 5;
+      ellipse(x, y, 20 + k * 60, 16 + k * 50); ctx.stroke();
+      text('🛡️', x, y - 20 - k * 30, 50, '#fff', 'center', false);
+      text('GERETTET!', x, y + 34, 20, '#4ade80');
+      break;
+    }
+    case 'schnuppern': {
+      // Duftwolken schweben vom Schaf zur Nase
+      const zu = spieler;
+      for (let i = 0; i < 6; i++) {
+        const f = (k - i * 0.07) / 0.5;
+        if (f <= 0 || f >= 1) continue;
+        const dx = zu.x - x, dy = zu.y - y, l = Math.hypot(dx, dy) || 1;
+        const welle = Math.sin(f * Math.PI * 3 + i) * 12;
+        const px = x + dx * f - dy / l * welle, py = y - 15 + (dy) * f + dx / l * welle;
+        ctx.globalAlpha = Math.sin(f * Math.PI) * 0.9;
+        ctx.fillStyle = e.wolf ? '#a3a36b' : '#9be89b';
+        ellipse(px, py, 6, 6); ctx.fill();
+        ellipse(px + 5, py - 4, 4, 4); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if (k < 0.6) text('👃', zu.x + zu.richtung * 26, zu.y - 52 + Math.sin(zeit * 20) * 2, 22, '#fff', 'center', false);
+      // Ergebnis springt hoch
+      if (k > 0.5) {
+        const pop = Math.min(1.3, (k - 0.5) / 0.1) - Math.max(0, Math.min(0.3, (k - 0.6) / 0.1 * 0.3));
+        ctx.globalAlpha = k > 0.85 ? (1 - k) / 0.15 : 1;
+        if (e.wolf) {
+          ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 4;
+          ellipse(x, y - 70, 26 * pop, 26 * pop); ctx.stroke();
+        }
+        text(e.wolf ? '🐺' : '✅', x, y - 70, 34 * pop, '#fff', 'center', false);
+      }
+      break;
+    }
+    case 'schildAuf': {
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = '#8fd3ff'; ctx.lineWidth = 6 * (1 - k) + 1;
+      ellipse(x, y, 10 + k * 45, 8 + k * 40); ctx.stroke();
+      ctx.globalAlpha = Math.min(1, (1 - k) * 2);
+      text('🛡️', x, y - 45 - k * 25, 20 + k * 20, '#fff', 'center', false);
+      break;
+    }
+    case 'werkzeug': {
+      ctx.save();
+      ctx.translate(x, y - 62);
+      ctx.rotate(k * Math.PI * 4);
+      ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
+      text('🔧', 0, 0, 30 + Math.sin(k * Math.PI) * 10, '#fff', 'center', false);
+      ctx.restore();
+      break;
+    }
+    case 'meckern': {
+      // Schallwellen breiten sich aus
+      for (let i = 0; i < 3; i++) {
+        const kk = k * 1.4 - i * 0.2;
+        if (kk <= 0 || kk >= 1) continue;
+        ctx.globalAlpha = (1 - kk) * 0.7;
+        ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 5;
+        ellipse(x, y, 30 + kk * 190, 22 + kk * 150); ctx.stroke();
+      }
+      ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+      const wackel = Math.sin(zeit * 60) * 3;
+      text('MÄÄÄCK!', x + wackel, y - 62, 22 * Math.min(1, k * 6), '#ffb347');
+      break;
+    }
+    case 'geist': {
+      ctx.globalAlpha = 1 - k;
+      text('👻', x + Math.sin(k * 10) * 10, y - 20 - k * 70, 40, '#fff', 'center', false);
+      break;
+    }
+    case 'maske': {
+      ctx.save();
+      ctx.translate(x, y - 60);
+      ctx.rotate(Math.sin(k * Math.PI * 3) * 0.6);
+      const pop = Math.min(1.2, k * 5);
+      ctx.scale(pop, pop);
+      ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+      text('🎭', 0, 0, 36, '#fff', 'center', false);
+      ctx.restore();
+      break;
+    }
+    case 'icon': {
+      const kk = e.warte ? Math.max(0, (k - e.warte) / (1 - e.warte)) : k;
+      if (kk <= 0) break;
+      const pop = Math.min(1.25, kk * 8) - Math.max(0, Math.min(0.25, (kk - 0.15) * 2));
+      ctx.globalAlpha = kk > 0.75 ? (1 - kk) / 0.25 : 1;
+      text(e.text, x, y - 62 - kk * 12, 26 * pop, '#fff', 'center', false);
+      break;
+    }
+    default: {   // HAPS!
+      ctx.globalAlpha = Math.min(1, e.t);
+      text('🐺', x, y - 20 - (1.2 - e.t) * 25, 60, '#fff', 'center', false);
+      text('HAPS!', x, y + 30, 22, '#ff6b6b');
+    }
+  }
 }
 
 function zeichneWolle(w) {
@@ -1941,6 +2148,10 @@ function zeichneHUD() {
     const bereit = a && spieler.faehigkeit <= 0 && a.moeglich;
     ctx.fillStyle = bereit ? (imRechteck(maus, ROLLE_KNOPF) ? '#8fd3ff' : 'rgba(40,110,170,0.9)') : 'rgba(20,20,50,0.85)';
     rundesRechteck(ROLLE_KNOPF.x, ROLLE_KNOPF.y, ROLLE_KNOPF.w, ROLLE_KNOPF.h, 10); ctx.fill();
+    if (bereit) {   // Leuchtet, wenn die Fähigkeit bereit ist
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 + Math.sin(zeit * 5) * 0.4})`; ctx.lineWidth = 3;
+      rundesRechteck(ROLLE_KNOPF.x - 3, ROLLE_KNOPF.y - 3, ROLLE_KNOPF.w + 6, ROLLE_KNOPF.h + 6, 12); ctx.stroke();
+    }
     text(`${r.emoji} ${r.name}`, ROLLE_KNOPF.x + 12, ROLLE_KNOPF.y + 16, 15, '#ffd166', 'left', false);
     let zeile;
     if (!a) zeile = r.text;
@@ -2224,19 +2435,20 @@ function zeichne() {
   for (const w of wolle) if (sichtbar(w)) zeichneWolle(w);
   const zuSehen = schafe.filter(s => s.lebt && (s.istSpieler || sichtbar(s))).sort((a, b) => a.y - b.y);
   for (const s of zuSehen) zeichneSchaf(s);
-  // Der Wolf zeigt sich kurz, wenn er zuschlägt!
+  // Partikel
+  for (const p of partikel) {
+    if (!sichtbar(p)) continue;
+    const a = p.t / p.max;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.farbe;
+    ellipse(p.x, p.y, p.groesse * (0.4 + a * 0.6), p.groesse * (0.4 + a * 0.6)); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Effekte
   for (const e of effekte) {
-    if (!sichtbar(e)) continue;
-    ctx.globalAlpha = Math.min(1, e.t);
-    if (e.art === 'plumps') {
-      text('💨', e.x, e.y - 10 - (0.8 - e.t) * 30, 34, '#fff', 'center', false);
-    } else if (e.art === 'schild') {
-      text('🛡️', e.x, e.y - 20 - (1.2 - e.t) * 25, 50, '#fff', 'center', false);
-      text('GERETTET!', e.x, e.y + 30, 20, '#4ade80');
-    } else {
-      text('🐺', e.x, e.y - 20 - (1.2 - e.t) * 25, 60, '#fff', 'center', false);
-      text('HAPS!', e.x, e.y + 30, 22, '#ff6b6b');
-    }
+    const pos = e.ziel || e;
+    if (!sichtbar(pos)) continue;
+    zeichneEffekt(e, pos);
     ctx.globalAlpha = 1;
   }
   ctx.restore();
