@@ -17,12 +17,12 @@ const WOLF_CHANCE = 0.4;              // Wie oft DU der Wolf bist (0.4 = 40 %)
 const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
 
 const ORTE = [
-  { name: 'Stall',        bei: 'beim Stall',         x: 320,  y: 300,  aufgabe: 'Heu fressen',     labelY: -225 },
-  { name: 'Mühle',        bei: 'bei der Mühle',      x: 900,  y: 300,  aufgabe: 'Korn mahlen',     labelY: -265 },
-  { name: 'Teich',        bei: 'beim Teich',         x: 1480, y: 320,  aufgabe: 'Wasser trinken',  labelY: -195 },
-  { name: 'Scheune',      bei: 'bei der Scheune',    x: 320,  y: 1080, aufgabe: 'Wolle abgeben',   labelY: -215 },
-  { name: 'Blumenwiese',  bei: 'auf der Blumenwiese', x: 900, y: 1120, aufgabe: 'Blumen gießen',   labelY: -145 },
-  { name: 'Gemüsegarten', bei: 'im Gemüsegarten',    x: 1480, y: 1080, aufgabe: 'Zaun reparieren', labelY: -200 },
+  { name: 'Stall',        bei: 'beim Stall',         x: 320,  y: 300,  aufgabe: 'Heu fressen',     labelY: -225, spiel: 'heu' },
+  { name: 'Mühle',        bei: 'bei der Mühle',      x: 900,  y: 300,  aufgabe: 'Korn mahlen',     labelY: -265, spiel: 'kurbel' },
+  { name: 'Teich',        bei: 'beim Teich',         x: 1480, y: 320,  aufgabe: 'Wasser trinken',  labelY: -195, spiel: 'eimer' },
+  { name: 'Scheune',      bei: 'bei der Scheune',    x: 320,  y: 1080, aufgabe: 'Wolle abgeben',   labelY: -215, spiel: 'wolle' },
+  { name: 'Blumenwiese',  bei: 'auf der Blumenwiese', x: 900, y: 1120, aufgabe: 'Blumen gießen',   labelY: -145, spiel: 'blumen' },
+  { name: 'Gemüsegarten', bei: 'im Gemüsegarten',    x: 1480, y: 1080, aufgabe: 'Zaun reparieren', labelY: -200, spiel: 'zaun' },
 ];
 const GLOCKE = { name: 'Glocke', bei: 'bei der Glocke', x: 900, y: 680 };
 
@@ -165,6 +165,26 @@ const sound = {
       ton(950, i * 0.4 + 0.2, 0.2, 'square', 0.1, 600);
     }
   },
+  // Mampf (Heu fressen)
+  mampf() { ton(180, 0, 0.07, 'square', 0.12, 90); ton(160, 0.1, 0.07, 'square', 0.12, 80); },
+  // Klack (Kurbel)
+  klack() { ton(900, 0, 0.04, 'square', 0.06); },
+  // Plopp (Wolle in den Korb, Blume blüht)
+  plopp() { ton(300, 0, 0.12, 'sine', 0.25, 700); },
+  // Tock (Hammer)
+  hammer() { ton(140, 0, 0.12, 'triangle', 0.3, 60); ton(1600, 0, 0.04, 'square', 0.05); },
+  // Oh-oh (etwas falsch gemacht)
+  fehler() { ton(300, 0, 0.18, 'sawtooth', 0.12); ton(200, 0.2, 0.3, 'sawtooth', 0.12); },
+  // Mini-Spiel geschafft!
+  geschafft() { [523, 659, 784].forEach((f, i) => ton(f, i * 0.08, 0.25, 'triangle', 0.18)); ton(1047, 0.24, 0.5, 'triangle', 0.2); },
+  // HAPS! Der Wolf schlägt zu
+  haps() { ton(220, 0, 0.25, 'sawtooth', 0.25, 60); ton(90, 0.05, 0.3, 'square', 0.15, 40); },
+  // Tusch: Der Wolf wurde erwischt
+  fanfare() { [392, 523, 659, 784].forEach((f, i) => ton(f, i * 0.14, i === 3 ? 0.8 : 0.18, 'square', 0.1)); },
+  // Wah-wah: falsches Schaf rausgeworfen
+  traurig() { [392, 370, 349, 330].forEach((f, i) => ton(f, i * 0.3, i === 3 ? 0.8 : 0.3, 'triangle', 0.18)); },
+  // Hmm: Niemand fliegt raus
+  hmm() { ton(330, 0, 0.25, 'sine', 0.15); ton(294, 0.3, 0.4, 'sine', 0.15); },
   // Bim-Bam der Glocke
   glocke() {
     [0, 0.5].forEach((st, i) => {
@@ -184,6 +204,7 @@ let wolle = [], effekte = [];
 let treffen = null, ende = null, nachricht = null;
 let glockeGenutzt = false;
 let spielerIstWolf = false;
+let miniSpiel = null;   // Das Mini-Spiel, das gerade offen ist
 let kamera = { x: 0, y: 0 };
 let klickZiel = null;
 let maus = { x: 0, y: 0 };
@@ -209,7 +230,7 @@ function macheSchaf(name, farbe, istSpieler) {
 
 function neuesSpiel() {
   schafe = []; wolle = []; effekte = [];
-  treffen = null; ende = null; klickZiel = null;
+  treffen = null; ende = null; klickZiel = null; miniSpiel = null;
   glockeGenutzt = false;
 
   // Bist du diesmal ein Schaf oder der Wolf?
@@ -277,6 +298,7 @@ function fortschritt() {
 
 function beende(sieger, grund) {   // sieger: 'schafe' oder 'wolf'
   zustand = 'ende';
+  miniSpiel = null;
   ende = { gewonnen: (sieger === 'wolf') === spielerIstWolf, grund, seit: zeit };
 }
 
@@ -294,6 +316,7 @@ function laufeZu(s, z, tempo, dt) {
 }
 
 function bewegeSpieler(dt) {
+  if (miniSpiel) { spieler.laeuft = false; return; }   // Beim Mini-Spiel steht man still
   let dx = 0, dy = 0;
   if (tasten['arrowleft'] || tasten['a']) dx -= 1;
   if (tasten['arrowright'] || tasten['d']) dx += 1;
@@ -317,21 +340,6 @@ function bewegeSpieler(dt) {
   spieler.x = begrenzt(spieler.x, 30, WELT_B - 30);
   spieler.y = begrenzt(spieler.y, 40, WELT_H - 30);
 
-  // Aufgabe erledigen (2 Sekunden stehen bleiben)
-  if (spieler.aufgabeAktiv !== null) {
-    const o = ORTE[spieler.aufgabeAktiv];
-    if (dist(spieler, o) > 55) {
-      spieler.aufgabeAktiv = null;
-    } else {
-      spieler.aufgabeT += dt;
-      if (spieler.aufgabeT >= 2) {
-        spieler.aufgaben = spieler.aufgaben.filter(i => i !== spieler.aufgabeAktiv);
-        spieler.erledigt++;
-        zeigeNachricht('✅ ' + o.aufgabe + ' geschafft!', 2);
-        spieler.aufgabeAktiv = null;
-      }
-    }
-  }
 }
 
 function bewegeBot(s, dt) {
@@ -405,6 +413,7 @@ function fressen(opfer) {
   const ort = naechsterOrt(opfer);
   wolle.push({ x: opfer.x, y: opfer.y, opfer, ort });
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2 });
+  if (spielerIstWolf || dist(opfer, spieler) < SICHT + 20) sound.haps();
 
   // Wer in der Nähe war, hat etwas gesehen!
   const zeugen = [];
@@ -440,8 +449,8 @@ function moeglicheAktion() {
   }
   for (const w of wolle) if (dist(spieler, w) < 80) return { text: 'Wolle melden!', tun: () => starteTreffen(spieler, w) };
   for (const i of spieler.aufgaben) {
-    if (dist(spieler, ORTE[i]) < 55 && spieler.aufgabeAktiv === null) {
-      return { text: ORTE[i].aufgabe, tun: () => { spieler.aufgabeAktiv = i; spieler.aufgabeT = 0; } };
+    if (dist(spieler, ORTE[i]) < 55) {
+      return { text: ORTE[i].aufgabe, tun: () => { miniSpiel = neuesMiniSpiel(i); klickZiel = null; } };
     }
   }
   if (dist(spieler, GLOCKE) < 70 && !glockeGenutzt) {
@@ -459,6 +468,7 @@ function aktion() {
 // ===== Herden-Treffen =====
 function starteTreffen(melder, fund) {
   zustand = 'treffen';
+  miniSpiel = null;
   if (fund) sound.wolle(); else sound.glocke();
   const lebende = schafe.filter(s => s.lebt);
   const aussagen = new Map();
@@ -538,6 +548,7 @@ function abstimmen(wahl) {
   if (gleich || max <= skip) raus = null;
 
   t.stimmen = stimmen; t.raus = raus; t.skip = skip; t.phase = 'ergebnis';
+  if (!raus) sound.hmm(); else if (raus.istWolf) sound.fanfare(); else sound.traurig();
   if (!raus) t.ergebnis = 'Niemand wurde vom Hof gejagt. 🤷';
   else if (raus.istSpieler && raus.istWolf) t.ergebnis = 'Die Herde hat DICH vom Hof gejagt ... du WARST der Wolf! 😱';
   else if (raus.istWolf) t.ergebnis = `${raus.name} wurde vom Hof gejagt ... und WAR der Wolf! 🐺🎉`;
@@ -587,6 +598,295 @@ function klickTreffen(p) {
   }
 }
 
+// ===== Mini-Spiele für die Aufgaben =====
+const PX = 180, PY = 70, PB = 600, PH = 460;   // Fenster vom Mini-Spiel
+const MX = PX + PB / 2;
+const X_KNOPF = { x: PX + PB - 46, y: PY + 12, w: 34, h: 34 };
+const KURBEL = { x: MX, y: PY + 260 };
+const KORB = { x: PX + 370, y: PY + 150, w: 170, h: 220 };
+const ANLEITUNG = {
+  heu: 'Klicke auf das ganze Heu, um es zu fressen! 🌾',
+  kurbel: 'Halte die Maus gedrückt und dreh die Kurbel im Kreis!',
+  eimer: 'Halte gedrückt (Maus oder Leertaste) und lass im grünen Bereich los!',
+  wolle: 'Zieh die Wollknäuel in den Korb!',
+  blumen: 'Halte die Maus über jede Blume gedrückt, bis sie blüht!',
+  zaun: 'Hau jeden Nagel 3-mal rein! 🔨',
+};
+
+function neuesMiniSpiel(ortNr) {
+  const art = ORTE[ortNr].spiel;
+  const m = { ortNr, art, fertig: false, fertigT: 0, halten: false, text: '' };
+  if (art === 'heu') {
+    m.heu = [];
+    for (let i = 0; i < 6; i++) m.heu.push({ x: PX + 90 + Math.random() * (PB - 180), y: PY + 140 + Math.random() * (PH - 230), weg: false });
+  }
+  if (art === 'kurbel') { m.drehung = 0; m.letzterWinkel = null; }
+  if (art === 'eimer') m.wasser = 0;
+  if (art === 'wolle') {
+    m.baelle = [0, 1, 2].map(i => ({ x: PX + 120, y: PY + 160 + i * 95, sx: PX + 120, sy: PY + 160 + i * 95, drin: false, f: FARBEN[i * 2] }));
+    m.greift = null;
+  }
+  if (art === 'blumen') m.blumen = [0, 1, 2, 3].map(i => ({ x: PX + 120 + i * 120, wasser: 0, f: FARBEN[i] }));
+  if (art === 'zaun') m.naegel = [0, 1, 2, 3].map(i => ({ x: PX + 130 + i * 115, schlaege: 0 }));
+  return m;
+}
+
+function miniGeschafft() {
+  if (miniSpiel.fertig) return;
+  miniSpiel.fertig = true;
+  sound.geschafft();
+}
+
+function aufgabeErledigt(nr) {
+  spieler.aufgaben = spieler.aufgaben.filter(i => i !== nr);
+  spieler.erledigt++;
+  zeigeNachricht('✅ ' + ORTE[nr].aufgabe + ' geschafft!', 2);
+  miniSpiel = null;
+}
+
+function kurbeln(m, menge) {
+  const viertel = Math.PI / 2;
+  const vorher = m.drehung;
+  m.drehung += menge;
+  if (Math.floor(m.drehung / viertel) > Math.floor(vorher / viertel)) sound.klack();
+  if (m.drehung >= Math.PI * 6) miniGeschafft();   // 3 ganze Runden
+}
+
+function eimerLos(m) {
+  if (m.wasser >= 0.7 && m.wasser <= 0.85) miniGeschafft();
+  else if (m.wasser > 0.85) { m.wasser = 0; m.text = 'Zu viel! Nochmal von vorne 💦'; sound.fehler(); }
+}
+
+function miniDruck(p) {
+  const m = miniSpiel;
+  if (imRechteck(p, X_KNOPF)) { miniSpiel = null; return; }
+  if (m.fertig) return;
+  m.halten = true;
+  if (m.art === 'heu') {
+    const h = m.heu.find(h => !h.weg && dist(p, h) < 40);
+    if (h) { h.weg = true; sound.mampf(); }
+    if (m.heu.every(h => h.weg)) miniGeschafft();
+  }
+  if (m.art === 'kurbel') m.letzterWinkel = Math.atan2(p.y - KURBEL.y, p.x - KURBEL.x);
+  if (m.art === 'wolle') m.greift = m.baelle.find(b => !b.drin && dist(p, b) < 35) || null;
+  if (m.art === 'zaun') {
+    const n = m.naegel.find(n => n.schlaege < 3 && Math.abs(p.x - n.x) < 35 && p.y > PY + 150 && p.y < PY + 340);
+    if (n) { n.schlaege++; sound.hammer(); }
+    if (m.naegel.every(n => n.schlaege >= 3)) miniGeschafft();
+  }
+}
+
+function miniBewegt(p) {
+  const m = miniSpiel;
+  if (!m || m.fertig) return;
+  if (m.art === 'kurbel' && m.halten && m.letzterWinkel !== null) {
+    const w = Math.atan2(p.y - KURBEL.y, p.x - KURBEL.x);
+    let d = w - m.letzterWinkel;
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    m.letzterWinkel = w;
+    kurbeln(m, Math.abs(d));
+  }
+  if (m.art === 'wolle' && m.greift) { m.greift.x = p.x; m.greift.y = p.y; }
+}
+
+function miniLos() {
+  const m = miniSpiel;
+  if (!m) return;
+  const warGehalten = m.halten;
+  m.halten = false;
+  m.letzterWinkel = null;
+  if (m.fertig) return;
+  if (m.art === 'eimer' && warGehalten) eimerLos(m);
+  if (m.art === 'wolle' && m.greift) {
+    const b = m.greift;
+    m.greift = null;
+    if (imRechteck(b, KORB)) {
+      b.drin = true;
+      const n = m.baelle.filter(x => x.drin).length - 1;
+      b.x = KORB.x + 40 + n * 45; b.y = KORB.y + KORB.h - 55;
+      sound.plopp();
+      if (m.baelle.every(x => x.drin)) miniGeschafft();
+    } else {
+      b.x = b.sx; b.y = b.sy;
+    }
+  }
+}
+
+function miniTaste(k) {
+  const m = miniSpiel;
+  if (k === 'escape') { miniSpiel = null; return; }
+  if (m.fertig) return;
+  if (m.art === 'kurbel' && (k === ' ' || k === 'e')) kurbeln(m, 0.5);
+  if (m.art === 'eimer' && (k === ' ' || k === 'e')) m.halten = true;
+}
+
+function miniUpdate(dt) {
+  const m = miniSpiel;
+  if (m.fertig) {
+    m.fertigT += dt;
+    if (m.fertigT > 0.9) aufgabeErledigt(m.ortNr);
+    return;
+  }
+  if (m.art === 'eimer' && m.halten) {
+    m.wasser += dt * 0.4;
+    m.text = '';
+    if (m.wasser > 1.05) { m.wasser = 0; m.halten = false; m.text = 'Übergelaufen! Nochmal 💦'; sound.fehler(); }
+  }
+  if (m.art === 'blumen' && m.halten) {
+    for (const b of m.blumen) {
+      if (b.wasser < 1 && Math.abs(maus.x - b.x) < 50 && maus.y > PY + 110 && maus.y < PY + 400) {
+        b.wasser += dt * 1.2;
+        if (b.wasser >= 1) { b.wasser = 1; sound.plopp(); }
+      }
+    }
+    if (m.blumen.every(b => b.wasser >= 1)) miniGeschafft();
+  }
+}
+
+function zeichneMiniSpiel() {
+  const m = miniSpiel;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fdf6e3';
+  rundesRechteck(PX, PY, PB, PH, 20); ctx.fill();
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.stroke();
+
+  text(ORTE[m.ortNr].aufgabe, MX, PY + 32, 26, '#1b1f3a', 'center', false);
+  text(ANLEITUNG[m.art], MX, PY + 66, 15, '#555', 'center', false);
+  ctx.fillStyle = imRechteck(maus, X_KNOPF) ? '#ff6b6b' : '#e0c9a6';
+  rundesRechteck(X_KNOPF.x, X_KNOPF.y, X_KNOPF.w, X_KNOPF.h, 8); ctx.fill();
+  text('✕', X_KNOPF.x + 17, X_KNOPF.y + 18, 20, '#1b1f3a', 'center', false);
+
+  if (m.art === 'heu') {
+    ctx.fillStyle = '#9ccc65';
+    rundesRechteck(PX + 30, PY + 95, PB - 60, PH - 145, 14); ctx.fill();
+    for (const h of m.heu) {
+      if (h.weg) continue;
+      ctx.fillStyle = '#e9c46a';
+      ellipse(h.x, h.y + 10, 32, 14); ctx.fill();
+      ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 3;
+      for (let k = -3; k <= 3; k++) {
+        ctx.beginPath(); ctx.moveTo(h.x + k * 6, h.y + 12); ctx.lineTo(h.x + k * 10, h.y - 18); ctx.stroke();
+      }
+    }
+    text(`${m.heu.filter(h => h.weg).length} / ${m.heu.length} gefressen`, MX, PY + PH - 30, 16, '#1b1f3a', 'center', false);
+  }
+
+  if (m.art === 'kurbel') {
+    const { x, y } = KURBEL;
+    ctx.fillStyle = '#9e9e9e'; ellipse(x, y, 120, 120); ctx.fill();
+    ctx.fillStyle = '#bdbdbd'; ellipse(x, y, 100, 100); ctx.fill();
+    ctx.strokeStyle = '#8a8a8a'; ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const w = m.drehung + i * Math.PI / 4;
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(w) * 20, y + Math.sin(w) * 20); ctx.lineTo(x + Math.cos(w) * 95, y + Math.sin(w) * 95); ctx.stroke();
+    }
+    const gx = x + Math.cos(m.drehung) * 95, gy = y + Math.sin(m.drehung) * 95;
+    ctx.strokeStyle = '#6e4b2a'; ctx.lineWidth = 12; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(gx, gy); ctx.stroke();
+    ctx.fillStyle = '#e74c3c'; ellipse(gx, gy, 18, 18); ctx.fill();
+    ctx.fillStyle = '#555'; ellipse(x, y, 12, 12); ctx.fill();
+    // Mehl-Balken
+    const anteil = Math.min(1, m.drehung / (Math.PI * 6));
+    ctx.fillStyle = '#ddd'; rundesRechteck(PX + 100, PY + 400, PB - 200, 22, 8); ctx.fill();
+    ctx.fillStyle = '#fff3c4'; rundesRechteck(PX + 100, PY + 400, (PB - 200) * anteil, 22, 8); ctx.fill();
+    ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 2; rundesRechteck(PX + 100, PY + 400, PB - 200, 22, 8); ctx.stroke();
+    text('Mehl 🌾', PX + 60, PY + 411, 14, '#1b1f3a', 'center', false);
+  }
+
+  if (m.art === 'eimer') {
+    const oben = PY + 140, unten = PY + 390, hoehe = unten - oben;
+    const eimer = () => {
+      ctx.beginPath();
+      ctx.moveTo(MX - 90, oben); ctx.lineTo(MX + 90, oben);
+      ctx.lineTo(MX + 65, unten); ctx.lineTo(MX - 65, unten); ctx.closePath();
+    };
+    // Grüner Ziel-Bereich
+    ctx.fillStyle = 'rgba(74,222,128,0.35)';
+    ctx.fillRect(MX - 130, unten - hoehe * 0.85, 260, hoehe * 0.15);
+    text('Hier loslassen! ➜', MX + 120, unten - hoehe * 0.775, 15, '#15803d', 'left', false);
+    ctx.fillStyle = '#e8e8e8'; eimer(); ctx.fill();
+    // Wasser
+    ctx.save(); eimer(); ctx.clip();
+    const w = Math.min(1, m.wasser);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(MX - 100, unten - hoehe * w, 200, hoehe * w);
+    ctx.restore();
+    ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 5; eimer(); ctx.stroke();
+    // Wasserhahn
+    ctx.fillStyle = '#6b7280'; ctx.fillRect(MX - 60, PY + 90, 70, 14); ctx.fillRect(MX - 4, PY + 90, 14, 30);
+    if (m.halten) {
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillRect(MX - 1, PY + 120, 8, unten - hoehe * w - (PY + 120));
+    }
+    if (m.text) text(m.text, MX, PY + 418, 17, '#dc2626', 'center', false);
+  }
+
+  if (m.art === 'wolle') {
+    ctx.fillStyle = '#a0703c';
+    rundesRechteck(KORB.x, KORB.y, KORB.w, KORB.h, 16); ctx.fill();
+    ctx.strokeStyle = '#7a5230'; ctx.lineWidth = 3;
+    for (let i = 1; i < 6; i++) {
+      ctx.beginPath(); ctx.moveTo(KORB.x, KORB.y + i * 36); ctx.lineTo(KORB.x + KORB.w, KORB.y + i * 36); ctx.stroke();
+    }
+    text('Korb', KORB.x + KORB.w / 2, KORB.y - 16, 16, '#1b1f3a', 'center', false);
+    // Das gegriffene Knäuel zuletzt zeichnen, damit es oben liegt
+    const reihe = [...m.baelle.filter(b => b !== m.greift), ...(m.greift ? [m.greift] : [])];
+    for (const b of reihe) {
+      ctx.fillStyle = b.f; ellipse(b.x, b.y, 28, 28); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 2;
+      for (let k = -1; k <= 1; k++) {
+        ctx.beginPath(); ctx.ellipse(b.x + k * 8, b.y, 10, 26, 0.4, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+  }
+
+  if (m.art === 'blumen') {
+    const boden = PY + 360;
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(PX + 40, boden, PB - 80, 40);
+    for (const b of m.blumen) {
+      const welk = 1 - b.wasser;
+      const kx = b.x + welk * 35, ky = boden - 150 + welk * 70;
+      ctx.strokeStyle = welk > 0 ? '#8a9a3a' : '#2e7d32'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(b.x, boden); ctx.quadraticCurveTo(b.x, ky, kx, ky); ctx.stroke();
+      if (b.wasser >= 1) {
+        ctx.fillStyle = b.f;
+        for (let i = 0; i < 6; i++) { const w = i * Math.PI / 3; ellipse(kx + Math.cos(w) * 18, ky + Math.sin(w) * 18, 13, 13); ctx.fill(); }
+        ctx.fillStyle = '#ffd166'; ellipse(kx, ky, 12, 12); ctx.fill();
+      } else {
+        ctx.fillStyle = '#9a8a5a'; ellipse(kx, ky, 12, 9); ctx.fill();
+      }
+      ctx.fillStyle = '#ddd'; ctx.fillRect(b.x - 30, boden + 14, 60, 10);
+      ctx.fillStyle = '#3b82f6'; ctx.fillRect(b.x - 30, boden + 14, 60 * b.wasser, 10);
+    }
+    if (m.halten) {
+      for (let i = 0; i < 3; i++) text('💧', maus.x - 15 + i * 15, maus.y + 25 + ((zeit * 120 + i * 20) % 40), 16, '#fff', 'center', false);
+    }
+  }
+
+  if (m.art === 'zaun') {
+    const brett = PY + 280;
+    ctx.fillStyle = '#c69c6d'; ctx.fillRect(PX + 60, brett, PB - 120, 60);
+    ctx.strokeStyle = '#9c7448'; ctx.lineWidth = 2;
+    for (let i = 1; i < 3; i++) { ctx.beginPath(); ctx.moveTo(PX + 60, brett + i * 20); ctx.lineTo(PX + PB - 60, brett + i * 20); ctx.stroke(); }
+    for (const n of m.naegel) {
+      const raus = (3 - n.schlaege) * 22;
+      ctx.fillStyle = '#9ca3af'; ctx.fillRect(n.x - 3, brett + 10 - raus, 6, raus);
+      ctx.fillStyle = '#4b5563'; ellipse(n.x, brett + 10 - raus, 15, 6); ctx.fill();
+    }
+    if (!m.fertig) text('🔨', maus.x + 10, maus.y - 10, 40, '#fff', 'center', false);
+  }
+
+  if (m.fertig) {
+    const pop = Math.min(1.2, 0.5 + m.fertigT * 2);
+    ctx.save(); ctx.translate(MX, PY + PH / 2); ctx.scale(pop, pop);
+    text('✅ Geschafft!', 0, 0, 52, '#4ade80');
+    ctx.restore();
+  }
+  text('Pass auf: Die Zeit läuft weiter! 🐺', MX, PY + PH - 10, 13, '#b91c1c', 'center', false);
+}
+
 // ===== Spiel-Update =====
 function update(dt) {
   for (const e of effekte) e.t -= dt;
@@ -602,6 +902,7 @@ function update(dt) {
   }
   if (zustand !== 'spiel') return;
 
+  if (miniSpiel) miniUpdate(dt);
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
   if (spielerIstWolf) wolf.cooldown -= dt;
@@ -655,12 +956,6 @@ function zeichneSchafKoerper(x, y, farbe, richtung, phase, laeuft, groesse = 1) 
 function zeichneSchaf(s) {
   zeichneSchafKoerper(s.x, s.y, s.farbe, s.richtung, s.phase, s.laeuft);
   text(s.name, s.x, s.y - 32, 13, s.istSpieler ? '#ffd166' : '#fff');
-  if (s.istSpieler && s.aufgabeAktiv !== null) {
-    ctx.fillStyle = '#222';
-    ctx.fillRect(s.x - 25, s.y - 52, 50, 8);
-    ctx.fillStyle = '#4ade80';
-    ctx.fillRect(s.x - 25, s.y - 52, 50 * Math.min(1, s.aufgabeT / 2), 8);
-  }
 }
 
 function zeichneWolle(w) {
@@ -816,7 +1111,7 @@ function zeichneHUD() {
   text(`🐑 Noch ${lebend} Schafe`, W - 104, 30, 15, '#fff', 'center', false);
 
   // Aktions-Knopf
-  const a = zustand === 'spiel' ? moeglicheAktion() : null;
+  const a = zustand === 'spiel' && !miniSpiel ? moeglicheAktion() : null;
   if (a) {
     ctx.fillStyle = 'rgba(255,209,102,0.9)';
     ellipse(W - 75, H - 75, 58, 58); ctx.fill();
@@ -989,7 +1284,7 @@ function zeichneTitel() {
   }
   const zeilen = [
     'Eines der Schafe ist ein Wolf! Und manchmal ... bist DU der Wolf! 😈',
-    '🟡  Erledige deine Aufgaben auf dem Bauernhof (gelbe ! auf der Karte).',
+    '🟡  Erledige deine Aufgaben auf dem Bauernhof: kleine Mini-Spiele bei den gelben !',
     '🧶  Findest du Wolle von einem gefressenen Schaf? Melde sie!',
     '🔔  Beim Herden-Treffen stimmt ihr ab, wer der Wolf ist.',
     '🕵️  Merk dir, wo die Schafe waren! Der Wolf schwindelt oft.',
@@ -1029,6 +1324,7 @@ function zeichne() {
 
   zeichneDunkel();
   zeichneHUD();
+  if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
   if (zustand === 'treffen') zeichneTreffen();
   if (zustand === 'ende') zeichneEnde();
 }
@@ -1044,9 +1340,14 @@ addEventListener('keydown', e => {
   if (zustand === 'titel' && (k === 'enter' || k === ' ')) neuesSpiel();
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
+  else if (zustand === 'spiel' && miniSpiel) miniTaste(k);
   else if (zustand === 'spiel' && (k === 'e' || k === ' ')) aktion();
 });
-addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
+addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  tasten[k] = false;
+  if (miniSpiel && miniSpiel.art === 'eimer' && (k === ' ' || k === 'e')) miniLos();
+});
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
 
 function punkt(e) {
@@ -1061,6 +1362,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'intro') { if (intro > 1.5) introFertig(); return; }
   if (zustand === 'ende') { if (zeit - ende.seit > 1) neuesSpiel(); return; }
   if (zustand === 'treffen') { klickTreffen(p); return; }
+  if (zustand === 'spiel' && miniSpiel) { miniDruck(p); return; }
   if (zustand === 'spiel') {
     if (moeglicheAktion() && dist(p, { x: W - 75, y: H - 75 }) < 60) { aktion(); return; }
     klickZiel = { x: p.x + kamera.x, y: p.y + kamera.y };
@@ -1068,10 +1370,13 @@ canvas.addEventListener('pointerdown', e => {
 });
 canvas.addEventListener('pointermove', e => {
   maus = punkt(e);
+  if (miniSpiel) { miniBewegt(maus); return; }
   if (e.buttons && zustand === 'spiel' && klickZiel) {
     klickZiel = { x: maus.x + kamera.x, y: maus.y + kamera.y };
   }
 });
+
+addEventListener('pointerup', () => { if (miniSpiel) miniLos(); });
 
 // ===== Spielschleife =====
 let letzte = performance.now();
