@@ -5,14 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Spiele von Tobias</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #1b1f3a; color: #fff; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-    a { color: #ffd166; font-size: 1.3rem; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(160deg, #1b1f3a, #3a1f5c);
+      color: #fff;
+      min-height: 100vh;
+      margin: 0;
+      padding: 2rem 1rem;
+      box-sizing: border-box;
+    }
+    main { max-width: 40rem; margin: 0 auto; text-align: center; }
+    h1 { font-size: 2.5rem; margin-bottom: 0.3rem; }
+    p { color: #c9c3ff; }
+    ul { list-style: none; padding: 0; display: grid; gap: 1rem; margin-top: 2rem; }
+    li a {
+      display: block;
+      padding: 1rem;
+      background: #ffd166;
+      color: #1b1f3a;
+      font-size: 1.3rem;
+      font-weight: bold;
+      text-decoration: none;
+      border-radius: 1rem;
+      transition: transform 0.15s;
+    }
+    li a:hover { transform: scale(1.05); }
+    .leer { color: #8f88c9; font-style: italic; }
   </style>
 </head>
 <body>
-  <h1>🎮 Spiele von Tobias</h1>
-  <ul>
-    <!-- Hier kommen die Links zu den Spielen hin, z. B. <li><a href="spiele/weltraum/">Weltraum</a></li> -->
-  </ul>
+  <main>
+    <h1>🎮 Spiele von Tobias</h1>
+    <p>Willkommen! Such dir ein Spiel aus und leg los.</p>
+    <ul>
+      <!-- Hier kommen die Links zu den Spielen hin, z. B. <li><a href="spiele/weltraum/">🚀 Weltraum</a></li> -->
+      <li class="leer">Bald gibt es hier das erste Spiel … 🚧</li>
+    </ul>
+  </main>
 </body>
 </html>
