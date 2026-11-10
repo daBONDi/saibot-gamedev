@@ -90,7 +90,8 @@ function umbrechen(t, x, y, maxB, zeilenH, groesse, farbe) {
 }
 
 // ===== Spielzustand =====
-let zustand = 'titel';   // 'titel', 'spiel', 'treffen', 'ende'
+let zustand = 'titel';   // 'titel', 'intro', 'spiel', 'treffen', 'ende'
+let intro = 0;           // Wie lange das Intro schon läuft
 let schafe = [], spieler = null, wolf = null;
 let wolle = [], effekte = [];
 let treffen = null, ende = null, nachricht = null;
@@ -142,8 +143,13 @@ function neuesSpiel() {
   wolf.cooldown = 18;
 
   alleZurGlocke();
+  zustand = 'intro';
+  intro = 0;
+}
+
+function introFertig() {
   zustand = 'spiel';
-  zeigeNachricht('Eines der Schafe ist ein Wolf im Schafspelz! Pass gut auf! 🐺', 4);
+  zeigeNachricht('Los geht\'s! Pass gut auf! 🐺', 3);
 }
 
 function alleZurGlocke() {
@@ -467,6 +473,7 @@ function update(dt) {
   for (const e of effekte) e.t -= dt;
   effekte = effekte.filter(e => e.t > 0);
   if (nachricht) { nachricht.t -= dt; if (nachricht.t <= 0) nachricht = null; }
+  if (zustand === 'intro') { intro += dt; if (intro > 8) introFertig(); return; }
   if (zustand !== 'spiel') return;
 
   bewegeSpieler(dt);
@@ -763,6 +770,67 @@ function zeichneEnde() {
   }
 }
 
+// ===== Intro: Wer bist du? =====
+function zeichneIntro() {
+  const t = intro;
+  // Dunkler Hintergrund mit Scheinwerfer
+  ctx.fillStyle = '#05060f';
+  ctx.fillRect(0, 0, W, H);
+  const licht = ctx.createRadialGradient(W / 2, 380, 20, W / 2, 380, 420);
+  licht.addColorStop(0, `rgba(111,227,255,${Math.min(0.35, t * 0.15)})`);
+  licht.addColorStop(1, 'rgba(111,227,255,0)');
+  ctx.fillStyle = licht;
+  ctx.fillRect(0, 0, W, H);
+
+  // 1. "Du bist ..."
+  ctx.globalAlpha = Math.min(1, t / 0.8);
+  text('Du bist ...', W / 2, t < 1.5 ? H / 2 - 40 : 70, 34, '#c9c3ff', 'center', false);
+  ctx.globalAlpha = 1;
+
+  // 2. "EIN SCHAF!" springt rein
+  if (t > 1.5) {
+    const k = Math.min(1, (t - 1.5) / 0.4);
+    const pop = k < 1 ? k * 1.3 : 1 + Math.sin(zeit * 3) * 0.03;
+    ctx.save();
+    ctx.translate(W / 2, 140);
+    ctx.scale(pop, pop);
+    text('🐑 EIN SCHAF! 🐑', 0, 0, 64, '#6fe3ff');
+    ctx.restore();
+  }
+
+  // 3. Die Herde taucht auf, du stehst vorne in der Mitte
+  if (t > 2.4) {
+    const andere = schafe.filter(s => !s.istSpieler);
+    andere.forEach((s, i) => {
+      const k = Math.min(1, Math.max(0, (t - 2.4 - i * 0.12) / 0.4));
+      if (k <= 0) return;
+      ctx.globalAlpha = k * 0.85;
+      const seite = i < 4 ? -1 : 1;
+      const nr = i < 4 ? i : i - 4;
+      const x = W / 2 + seite * (150 + nr * 85);
+      const y = 330 + nr * 12 - (1 - k) * 20;
+      zeichneSchafKoerper(x, y, s.farbe, -seite, 0, false, 1.3);
+      text(s.name, x, y - 45, 14, '#fff', 'center', false);
+    });
+    ctx.globalAlpha = 1;
+    const hopp = Math.abs(Math.sin(zeit * 4)) * 8;
+    zeichneSchafKoerper(W / 2, 360 - hopp, spieler.farbe, 1, 0, false, 2.4);
+    text('DU', W / 2, 290 - hopp, 22, '#ffd166');
+  }
+
+  // 4. Die Warnung
+  if (t > 3.8) {
+    ctx.globalAlpha = Math.min(1, (t - 3.8) / 0.6);
+    text('Erledige deine Aufgaben und finde den Wolf!', W / 2, 455, 22, '#fff', 'center', false);
+    const blink = 0.6 + Math.sin(zeit * 6) * 0.4;
+    ctx.globalAlpha *= blink;
+    text('⚠️ Achtung: Einer von ihnen ist ein Wolf im Schafspelz! 🐺', W / 2, 495, 20, '#ff6b6b');
+    ctx.globalAlpha = 1;
+  }
+
+  if (t > 4.8) text('Klicke oder drücke Enter zum Losspielen!', W / 2, 560, 17, '#4ade80', 'center', false);
+}
+
 function zeichneTitel() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#1b1f3a'); g.addColorStop(1, '#3d8b37');
@@ -791,6 +859,7 @@ function zeichneTitel() {
 function zeichne() {
   ctx.clearRect(0, 0, W, H);
   if (zustand === 'titel') { zeichneTitel(); return; }
+  if (zustand === 'intro') { zeichneIntro(); return; }
 
   kamera.x = begrenzt(spieler.x - W / 2, 0, WELT_B - W);
   kamera.y = begrenzt(spieler.y - H / 2, 0, WELT_H - H);
@@ -825,6 +894,7 @@ addEventListener('keydown', e => {
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   if (zustand === 'titel' && (k === 'enter' || k === ' ')) neuesSpiel();
+  else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
   else if (zustand === 'spiel' && (k === 'e' || k === ' ')) aktion();
 });
@@ -839,6 +909,7 @@ canvas.addEventListener('pointerdown', e => {
   const p = punkt(e);
   maus = p;
   if (zustand === 'titel') { neuesSpiel(); return; }
+  if (zustand === 'intro') { if (intro > 1.5) introFertig(); return; }
   if (zustand === 'ende') { if (zeit - ende.seit > 1) neuesSpiel(); return; }
   if (zustand === 'treffen') { klickTreffen(p); return; }
   if (zustand === 'spiel') {
