@@ -15,6 +15,15 @@ const TEMPO_WOLF = 135;               // Wie schnell der Wolf jagt
 const WOLF_PAUSE = 22;                // Sekunden zwischen zwei Angriffen (Computer-Wolf)
 const WOLF_CHANCE = 0.4;              // Wie oft DU der Wolf bist (0.4 = 40 %)
 const ZIEGE_CHANCE = 0.2;             // Wie oft DU die Ziege bist, wenn du kein Wolf bist
+
+// 🛠️ Entwickler-Modus: Funktioniert NUR auf deinem Computer (localhost), nie auf der Webseite!
+// Rolle aussuchen mit der Adresse:  http://localhost:8080/spiele/schafspelz/?rolle=ziege
+// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, schleicher, verkleider, turbo
+const ENTWICKLER = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
+function entwicklerRolle() {
+  if (!ENTWICKLER) return null;
+  try { return new URLSearchParams(location.search).get('rolle'); } catch (e) { return null; }
+}
 const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
 const SABOTAGE_PAUSE = 40;            // Sekunden zwischen zwei Sabotagen
 const GATTER_ZEIT = 45;               // So viele Sekunden hat die Herde, um das Gatter zu schließen
@@ -321,7 +330,8 @@ function neuesSpiel() {
   glockeGenutzt = false;
 
   // Bist du diesmal ein Schaf oder der Wolf?
-  spielerIstWolf = Math.random() < WOLF_CHANCE;
+  const test = entwicklerRolle();
+  spielerIstWolf = test ? (test === 'wolf' || WOLF_ROLLEN.includes(test)) : Math.random() < WOLF_CHANCE;
 
   spieler = macheSchaf('Du', '#ffffff', true);
   if (!spielerIstWolf) {
@@ -350,12 +360,12 @@ function neuesSpiel() {
   wolf.istWolf = true;
 
   // Rollen verteilen
-  const binZiege = !spielerIstWolf && Math.random() < ZIEGE_CHANCE;
+  const binZiege = test ? test === 'ziege' : !spielerIstWolf && Math.random() < ZIEGE_CHANCE;
   // Wenn du nicht die Ziege bist, ist manchmal ein anderes Schaf die Ziege
   const botRollen = mischen(['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'normal', 'normal', !binZiege && Math.random() < 0.5 ? 'ziege' : 'normal']);
   schafe.filter(s => !s.istSpieler).forEach((s, i) => { s.rolle = botRollen[i]; });
-  spieler.rolle = binZiege ? 'ziege' : zufall(SCHAF_ROLLEN);
-  wolf.rolle = zufall(WOLF_ROLLEN);
+  spieler.rolle = binZiege ? 'ziege' : (SCHAF_ROLLEN.includes(test) ? test : zufall(SCHAF_ROLLEN));
+  wolf.rolle = spielerIstWolf && WOLF_ROLLEN.includes(test) ? test : zufall(WOLF_ROLLEN);
   // Die Ziege hat keine echten Aufgaben
   for (const s of schafe) {
     if (s.rolle === 'ziege') { s.aufgaben = []; s.alleAufgaben = []; s.gesamt = 0; }
@@ -2192,6 +2202,10 @@ function zeichneTitel() {
   ctx.save(); ctx.translate(W / 2, 562); ctx.scale(puls, puls);
   text('Klicke auf eine Karte!  (oder ← → und Enter)', 0, 0, 20, '#4ade80');
   ctx.restore();
+  if (ENTWICKLER) {
+    const test = entwicklerRolle();
+    text(`🛠️ Entwickler-Modus${test ? ' • Rolle: ' + test : ''}`, 12, H - 14, 13, '#ffb347', 'left', false);
+  }
 }
 
 function zeichne() {
