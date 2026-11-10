@@ -13,6 +13,8 @@
 //   'krippe', 'iglu', 'glashaus', 'brunnen', 'leuchtturm', 'boot'
 // Mit "farben" kannst du bei manchen Bildern die Farben ändern.
 //
+// "gruben" sind die Löcher, durch die nur Wölfe schleichen können.
+// Sie sind der Reihe nach verbunden (die letzte führt wieder zur ersten).
 // "himmel" sind die Farben vom Himmel in der Cutscene (oben, unten).
 //
 // Die Welt ist 1800 breit und 1300 hoch.
@@ -24,6 +26,7 @@ const KARTEN = [
     treffpunkt: { x: 900, y: 680 },
     laterne: { x: 160, y: 690 },
     gatter: { x: 1690, y: 690 },
+    gruben: [{ x: 600, y: 470 }, { x: 1220, y: 470 }, { x: 1220, y: 900 }, { x: 600, y: 900 }],
     orte: [
       { name: 'Stall',        bei: 'beim Stall',          x: 320,  y: 300,  aufgabe: 'Heu fressen',     labelY: -225, spiel: 'heu',    bild: 'stall' },
       { name: 'Mühle',        bei: 'bei der Mühle',       x: 900,  y: 300,  aufgabe: 'Korn mahlen',     labelY: -265, spiel: 'kurbel', bild: 'muehle' },
@@ -39,6 +42,7 @@ const KARTEN = [
     treffpunkt: { x: 880, y: 650 },
     laterne: { x: 560, y: 420 },
     gatter: { x: 1690, y: 640 },
+    gruben: [{ x: 230, y: 300 }, { x: 1230, y: 560 }, { x: 1650, y: 1180 }, { x: 720, y: 900 }],
     orte: [
       { name: 'Futterkrippe',      bei: 'bei der Futterkrippe',   x: 300,  y: 640,  aufgabe: 'Heu fressen',          labelY: -175, spiel: 'heu',    bild: 'krippe' },
       { name: 'Windrad',           bei: 'beim Windrad',           x: 900,  y: 290,  aufgabe: 'Korn mahlen',          labelY: -265, spiel: 'kurbel', bild: 'muehle' },
@@ -54,6 +58,7 @@ const KARTEN = [
     treffpunkt: { x: 900, y: 660 },
     laterne: { x: 1560, y: 640 },
     gatter: { x: 220, y: 660 },
+    gruben: [{ x: 600, y: 480 }, { x: 1230, y: 470 }, { x: 1230, y: 880 }, { x: 600, y: 880 }],
     orte: [
       { name: 'Fischerhütte', bei: 'bei der Fischerhütte', x: 320,  y: 300,  aufgabe: 'Seegras fressen', labelY: -225, spiel: 'heu',    bild: 'stall', farben: ['#3a8fb7', '#1f5f7a'] },
       { name: 'Brunnen',      bei: 'beim Brunnen',         x: 900,  y: 300,  aufgabe: 'Wasser holen',    labelY: -205, spiel: 'eimer',  bild: 'brunnen' },
