@@ -31,58 +31,18 @@
     }
     li a:hover { transform: scale(1.05); }
     .leer { color: #8f88c9; font-style: italic; }
-    .logo { width: 100%; max-width: 22rem; height: auto; animation: schweben 3s ease-in-out infinite; }
-    .auge { animation: blinzeln 4s infinite; transform-origin: center; transform-box: fill-box; }
-    .antenne { animation: blinken 1s infinite alternate; }
+    .logo {
+      width: 100%; max-width: 20rem; height: auto;
+      border-radius: 2rem;
+      box-shadow: 0 0 30px #6fe3ff88;
+      animation: schweben 3s ease-in-out infinite;
+    }
     @keyframes schweben { 50% { transform: translateY(-8px); } }
-    @keyframes blinzeln { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
-    @keyframes blinken { to { fill: #ffd166; } }
   </style>
 </head>
 <body>
   <main>
-    <!-- Saibot-Logo (Saibot = Tobias rückwärts!) -->
-    <svg class="logo" viewBox="0 0 360 200" role="img" aria-label="Saibot Logo">
-      <defs>
-        <linearGradient id="metall" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#e0e4ff"/>
-          <stop offset="1" stop-color="#8a8fc9"/>
-        </linearGradient>
-        <linearGradient id="schrift" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#ffd166"/>
-          <stop offset="0.5" stop-color="#ff6fb5"/>
-          <stop offset="1" stop-color="#6fe3ff"/>
-        </linearGradient>
-        <filter id="leuchten" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <!-- Antenne -->
-      <line x1="180" y1="28" x2="180" y2="10" stroke="#e0e4ff" stroke-width="4"/>
-      <circle class="antenne" cx="180" cy="8" r="6" fill="#ff6fb5" filter="url(#leuchten)"/>
-      <!-- Ohren -->
-      <rect x="118" y="52" width="12" height="30" rx="4" fill="#8a8fc9"/>
-      <rect x="230" y="52" width="12" height="30" rx="4" fill="#8a8fc9"/>
-      <!-- Kopf -->
-      <rect x="128" y="28" width="104" height="80" rx="18" fill="url(#metall)" stroke="#1b1f3a" stroke-width="3"/>
-      <!-- Visier -->
-      <rect x="140" y="44" width="80" height="30" rx="12" fill="#1b1f3a"/>
-      <!-- Augen -->
-      <circle class="auge" cx="162" cy="59" r="8" fill="#6fe3ff" filter="url(#leuchten)"/>
-      <circle class="auge" cx="198" cy="59" r="8" fill="#6fe3ff" filter="url(#leuchten)"/>
-      <!-- Mund -->
-      <rect x="160" y="86" width="40" height="10" rx="3" fill="#1b1f3a"/>
-      <line x1="170" y1="86" x2="170" y2="96" stroke="#8a8fc9" stroke-width="2"/>
-      <line x1="180" y1="86" x2="180" y2="96" stroke="#8a8fc9" stroke-width="2"/>
-      <line x1="190" y1="86" x2="190" y2="96" stroke="#8a8fc9" stroke-width="2"/>
-      <!-- Schriftzug -->
-      <text x="180" y="170" text-anchor="middle" font-family="'Arial Black', Impact, sans-serif"
-            font-size="58" font-weight="900" letter-spacing="6"
-            fill="url(#schrift)" stroke="#1b1f3a" stroke-width="2" filter="url(#leuchten)">SAIBOT</text>
-      <text x="180" y="194" text-anchor="middle" font-family="system-ui, sans-serif"
-            font-size="14" letter-spacing="4" fill="#c9c3ff">GAMES</text>
-    </svg>
+    <img class="logo" src="bilder/logo.jpg" alt="Saibot – Programming &amp; Gaming">
     <h1>🎮 Spiele von Tobias</h1>
     <p>Willkommen! Such dir ein Spiel aus und leg los.</p>
     <ul>
