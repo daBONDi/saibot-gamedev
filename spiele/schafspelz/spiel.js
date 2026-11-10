@@ -37,7 +37,8 @@ if (!(kartenNr >= 0 && kartenNr < KARTEN.length)) kartenNr = 0;
 // ===== Rollen =====
 // "pause" = Sekunden, bis man die Fähigkeit wieder benutzen kann
 const ROLLEN = {
-  normal:      { name: 'Schaf',             emoji: '🐑', text: '' },
+  normal:      { name: 'Schaf',             emoji: '🐑', text: 'Ganz normales Schaf. Erledige deine Aufgaben!' },
+  wolf:        { name: 'Wolf',              emoji: '🐺', text: 'Ganz normaler Wolf. Friss die Schafe!' },
   spuernase:   { name: 'Spürnase',          emoji: '👃', knopf: 'Schnuppern', pause: 30, text: 'Schnupper an anderen Schafen: Riechen sie nach Wolf?' },
   flitzer:     { name: 'Flitzer',           emoji: '💨', knopf: 'Sprinten',   pause: 20, text: 'Du kannst kurz superschnell rennen!' },
   beschuetzer: { name: 'Beschützer',        emoji: '🛡️', knopf: 'Beschützen', pause: 30, text: 'Beschütze ein Schaf. Der Wolf kann es dann nicht fressen!' },
@@ -45,15 +46,55 @@ const ROLLEN = {
   schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
   verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
   ziege:       { name: 'Ziege',             emoji: '🐐', knopf: 'Meckern',    pause: 25, text: 'Lass dich beim Herden-Treffen verjagen, dann gewinnst DU!' },
-  schlange:    { name: 'Schlangenwolf',     emoji: '🐍', text: 'Die Wolle deiner Opfer löst sich nach 7 Sekunden auf!' },
+  schlange:    { name: 'Schlangenwolf',     emoji: '🐍', text: 'Die Wolle deiner Opfer löst sich nach ein paar Sekunden auf!' },
   turbo:       { name: 'Turbo-Wolf',        emoji: '⚡', text: 'Du kannst viel öfter fressen als andere Wölfe!' },
 };
 const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler'];
 const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo', 'schlange'];
 const AUFLOESE_ZEIT = 7;   // So viele Sekunden bleibt die Wolle beim Schlangenwolf liegen
 
-const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke'];
-const FARBEN = ['#ff9ecf', '#8fd3ff', '#ffe066', '#9be89b', '#c9a0ff', '#ffb36b', '#d9b38c'];
+const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke', 'Puschel', 'Wuschel', 'Kiki', 'Zottel', 'Fluffi', 'Hanni'];
+const FARBEN = ['#ff9ecf', '#8fd3ff', '#ffe066', '#9be89b', '#c9a0ff', '#ffb36b', '#d9b38c', '#7fe0d0', '#ff7b7b', '#b0c4ff', '#e0e0a0', '#f5b0ff', '#a0d080'];
+
+// ===== Einstellungen für "Eigenes Spiel" =====
+// Stufen für Pausen: 0 = superkurz ... 4 = superlang
+const STUFEN = [
+  { w: 0.25, n: 'superkurz' }, { w: 0.5, n: 'kurz' }, { w: 1, n: 'normal' }, { w: 1.5, n: 'lang' }, { w: 2, n: 'superlang' },
+];
+// So ist ein normales Spiel
+const STANDARD = {
+  schafe: 7,          // Schafe (mit dir, falls du ein Schaf bist)
+  woelfe: 1,          // Wölfe
+  rollen: 5,          // So viele Schafe bekommen eine Spezial-Rolle
+  ziege: true,        // Gibt es manchmal eine Ziege?
+  wolfRollen: true,   // Haben Wölfe Spezial-Rollen?
+  sprint: 4,          // Sekunden
+  unsichtbar: 6,      // Sekunden
+  verkleidung: 15,    // Sekunden
+  aufloesen: AUFLOESE_ZEIT,
+  faehigkeitPause: 2, // Stufe (normal)
+  fressPause: 2,      // Stufe (normal)
+  sabotagePause: SABOTAGE_PAUSE,
+};
+// Was man im Menü einstellen kann
+const EINSTELLUNGEN_LISTE = [
+  { key: 'karte',           name: '🗺️ Karte',               spalte: 0, typ: 'karte' },
+  { key: 'schafe',          name: '🐑 Schafe',               spalte: 0, min: 3, max: 11, schritt: 1 },
+  { key: 'woelfe',          name: '🐺 Wölfe',                spalte: 0, min: 1, max: 3, schritt: 1 },
+  { key: 'rollen',          name: '🎭 Schafe mit Rolle',     spalte: 0, min: 0, max: 11, schritt: 1 },
+  { key: 'ziege',           name: '🐐 Ziege',                spalte: 0, typ: 'anaus' },
+  { key: 'wolfRollen',      name: '😈 Wolf-Rollen',          spalte: 0, typ: 'anaus' },
+  { key: 'sprint',          name: '💨 Sprint',               spalte: 1, min: 1, max: 10, schritt: 1, einheit: ' s' },
+  { key: 'unsichtbar',      name: '👻 Unsichtbar',           spalte: 1, min: 1, max: 15, schritt: 1, einheit: ' s' },
+  { key: 'verkleidung',     name: '🎭 Verkleidung',          spalte: 1, min: 3, max: 30, schritt: 3, einheit: ' s' },
+  { key: 'aufloesen',       name: '🐍 Wolle löst sich auf',  spalte: 1, min: 3, max: 20, schritt: 1, einheit: ' s' },
+  { key: 'faehigkeitPause', name: '⏳ Fähigkeit-Pause',      spalte: 1, typ: 'stufe' },
+  { key: 'fressPause',      name: '😋 Fress-Pause',          spalte: 1, typ: 'stufe' },
+  { key: 'sabotagePause',   name: '🌫️ Sabotage-Pause',       spalte: 1, min: 0, max: 60, schritt: 5, einheit: ' s' },
+];
+let eigene = { ...STANDARD };   // Deine eigenen Einstellungen (werden gemerkt)
+try { Object.assign(eigene, JSON.parse(localStorage.getItem('schafspelz-eigenes-spiel') || '{}')); } catch (e) { /* egal */ }
+let E = { ...STANDARD };        // Die Einstellungen für das laufende Spiel
 
 // ===== Handy-Steuerung =====
 let touchModus = false;   // Wird automatisch an, wenn man den Bildschirm antippt
@@ -266,7 +307,7 @@ const sound = {
 // ===== Spielzustand =====
 let zustand = 'titel';   // 'titel', 'intro', 'spiel', 'treffen', 'ende'
 let intro = 0;           // Wie lange das Intro schon läuft
-let schafe = [], spieler = null, wolf = null;
+let schafe = [], spieler = null, wolf = null, woelfe = [];
 let wolle = [], effekte = [];
 let treffen = null, ende = null, nachricht = null;
 let glockeGenutzt = false;
@@ -371,9 +412,10 @@ function neuesSpiel() {
   treffen = null; ende = null; klickZiel = null; miniSpiel = null;
   glockeGenutzt = false;
 
-  // Bist du diesmal ein Schaf oder der Wolf?
+  // Bist du diesmal ein Schaf oder ein Wolf? (Bei mehr Wölfen öfter!)
   const test = entwicklerRolle();
-  spielerIstWolf = test ? (test === 'wolf' || WOLF_ROLLEN.includes(test)) : Math.random() < WOLF_CHANCE;
+  const wolfChance = 1 - Math.pow(1 - WOLF_CHANCE, E.woelfe);
+  spielerIstWolf = test ? (test === 'wolf' || WOLF_ROLLEN.includes(test)) : Math.random() < wolfChance;
 
   spieler = macheSchaf('Du', '#ffffff', true);
   if (!spielerIstWolf) {
@@ -383,31 +425,41 @@ function neuesSpiel() {
   }
   schafe.push(spieler);
 
-  NAMEN.forEach((n, i) => {
-    const s = macheSchaf(n, FARBEN[i], false);
+  const anzahlTiere = E.schafe + E.woelfe;   // alle zusammen, mit dir
+  for (let i = 0; i < anzahlTiere - 1; i++) {
+    const s = macheSchaf(NAMEN[i], FARBEN[i], false);
     const anzahl = spielerIstWolf ? 5 : 4;   // Gegen dich als Wolf haben die Schafe mehr zu tun
     s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, anzahl);
     s.gesamt = anzahl;
     schafe.push(s);
-  });
-
-  if (spielerIstWolf) {
-    wolf = spieler;
-    wolf.cooldown = 10;
-  } else {
-    // Ein zufälliges Schaf ist heimlich der Wolf!
-    wolf = zufall(schafe.filter(s => !s.istSpieler));
-    wolf.cooldown = 18;
   }
-  wolf.istWolf = true;
 
-  // Rollen verteilen
-  const binZiege = test ? test === 'ziege' : !spielerIstWolf && Math.random() < ZIEGE_CHANCE;
+  // Wölfe auslosen
+  const bots = mischen(schafe.filter(s => !s.istSpieler));
+  woelfe = spielerIstWolf ? [spieler, ...bots.slice(0, E.woelfe - 1)] : bots.slice(0, E.woelfe);
+  for (const w of woelfe) {
+    w.istWolf = true;
+    w.cooldown = w.istSpieler ? 10 : 18 + Math.random() * 8;
+    w.rolle = (w.istSpieler && WOLF_ROLLEN.includes(test)) ? test : (E.wolfRollen ? zufall(WOLF_ROLLEN) : 'wolf');
+  }
+  wolf = woelfe[0];
+
+  // Rollen für die Schafe verteilen
+  const binZiege = test ? test === 'ziege' : E.ziege && !spielerIstWolf && Math.random() < ZIEGE_CHANCE;
+  let rollenUebrig = E.rollen;
+  const vorrat = mischen([...SCHAF_ROLLEN, ...SCHAF_ROLLEN, ...SCHAF_ROLLEN]);
+  if (!spielerIstWolf) {
+    if (binZiege) spieler.rolle = 'ziege';
+    else if (SCHAF_ROLLEN.includes(test)) spieler.rolle = test;
+    else if (rollenUebrig > 0 || test === 'schaf') spieler.rolle = zufall(SCHAF_ROLLEN);
+    if (SCHAF_ROLLEN.includes(spieler.rolle)) rollenUebrig--;
+  }
   // Wenn du nicht die Ziege bist, ist manchmal ein anderes Schaf die Ziege
-  const botRollen = mischen(['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'normal', 'normal', !binZiege && Math.random() < 0.5 ? 'ziege' : 'normal']);
-  schafe.filter(s => !s.istSpieler).forEach((s, i) => { s.rolle = botRollen[i]; });
-  spieler.rolle = binZiege ? 'ziege' : (SCHAF_ROLLEN.includes(test) ? test : zufall(SCHAF_ROLLEN));
-  wolf.rolle = spielerIstWolf && WOLF_ROLLEN.includes(test) ? test : zufall(WOLF_ROLLEN);
+  let ziegeFrei = E.ziege && !binZiege && Math.random() < 0.5;
+  for (const s of mischen(schafe.filter(x => !x.istSpieler && !x.istWolf))) {
+    if (ziegeFrei) { s.rolle = 'ziege'; ziegeFrei = false; }
+    else if (rollenUebrig > 0) { s.rolle = vorrat.pop(); rollenUebrig--; }
+  }
   // Die Ziege hat keine echten Aufgaben
   for (const s of schafe) {
     if (s.rolle === 'ziege') { s.aufgaben = []; s.alleAufgaben = []; s.gesamt = 0; }
@@ -428,8 +480,9 @@ function alleZurGlocke() {
   const lebende = schafe.filter(s => s.lebt);
   lebende.forEach((s, i) => {
     const w = i / lebende.length * Math.PI * 2;
-    s.x = GLOCKE.x + Math.cos(w) * 110;
-    s.y = GLOCKE.y + Math.sin(w) * 80;
+    const r = 110 + Math.max(0, lebende.length - 8) * 9;   // Bei vielen Tieren ein größerer Kreis
+    s.x = GLOCKE.x + Math.cos(w) * r;
+    s.y = GLOCKE.y + Math.sin(w) * r * 0.75;
     s.ziel = null; s.jagt = null; s.amOrt = null;
     s.warte = Math.random() * 2;
     s.aufgabeAktiv = null;
@@ -536,116 +589,128 @@ function bewegeBot(s, dt) {
   }
 }
 
-// ===== Der Wolf =====
+// ===== Die Wölfe =====
+// Ist das Schaf allein? (Andere Wölfe zählen nicht, die halten zusammen!)
 function istAllein(ziel) {
-  return !schafe.some(s => s.lebt && s !== ziel && s !== wolf && dist(s, ziel) < 230);
+  return !schafe.some(s => s.lebt && s !== ziel && !s.istWolf && dist(s, ziel) < 230);
 }
 
-function wolfLogik(dt) {
+// Was ein Computer-Wolf macht
+function wolfLogik(w, dt) {
   // Ab und zu macht der Wolf eine Sabotage
-  if (!sabotage && sabotagePause <= 0 && !wolf.jagt && Math.random() < dt / 12) starteSabotage(zufall(['nebel', 'gatter']));
-  wolf.cooldown -= dt;
+  if (!sabotage && sabotagePause <= 0 && !w.jagt && Math.random() < dt / 12) starteSabotage(zufall(['nebel', 'gatter']));
+  w.cooldown -= dt;
 
   // Unterwegs durch die Gruben?
-  if (wolf.grubenPlan) {
-    const gp = wolf.grubenPlan, G = KARTE.gruben;
+  if (w.grubenPlan) {
+    const gp = w.grubenPlan, G = KARTE.gruben;
     if (gp.phase === 'hin') {
-      if (laufeZu(wolf, G[gp.von], TEMPO_WOLF, dt)) { springeInGrube(wolf, gp.von); gp.phase = 'drin'; gp.t = 1.5; }
+      if (laufeZu(w, G[gp.von], TEMPO_WOLF, dt)) { springeInGrube(w, gp.von); gp.phase = 'drin'; gp.t = 1.5; }
     } else {
       gp.t -= dt;
-      if (gp.t <= 0) { wolf.grubenPlan = null; kletterRaus(wolf, gp.nach); }
+      if (gp.t <= 0) { w.grubenPlan = null; kletterRaus(w, gp.nach); }
     }
     return;
   }
-  if (!wolf.jagt && Math.random() < dt / 30) planeGrube(220);
+  if (!w.jagt && Math.random() < dt / 30) planeGrube(w, 220);
 
-  if (wolf.cooldown > 0) return;
+  if (w.cooldown > 0) return;
 
-  if (wolf.jagt) {
-    const z = wolf.jagt;
+  if (w.jagt) {
+    const z = w.jagt;
     // Aufgeben, wenn jemand anderes in der Nähe ist
-    if (!z.lebt || !istAllein(z) || dist(wolf, z) > 450) {
-      wolf.jagt = null; wolf.ziel = null;
+    if (!z.lebt || !istAllein(z) || dist(w, z) > 450) {
+      w.jagt = null; w.ziel = null;
       return;
     }
-    if (dist(wolf, z) < 32) { fressen(z); return; }
-    laufeZu(wolf, z, TEMPO_WOLF, dt);
+    if (dist(w, z) < 32) { fressen(z, w); return; }
+    laufeZu(w, z, TEMPO_WOLF, dt);
     return;
   }
 
   // Ein Schaf suchen, das ganz allein ist ...
-  const opfer = schafe.filter(s => s.lebt && !s.istWolf && dist(s, wolf) < 400 && istAllein(s));
+  const opfer = schafe.filter(s => s.lebt && !s.istWolf && dist(s, w) < 400 && istAllein(s));
   if (opfer.length) {
-    wolf.jagt = zufall(opfer);
-    wolf.warte = 0; wolf.amOrt = null;
+    w.jagt = zufall(opfer);
+    w.warte = 0; w.amOrt = null;
   }
 }
 
-function fressen(opfer) {
+// Wolf w frisst das Schaf opfer
+function fressen(opfer, w) {
   // Beschützt? Dann klappt es nicht!
   if (opfer.geschuetzt) {
     opfer.geschuetzt = false;
-    wolf.jagt = null; wolf.ziel = null;
-    wolf.cooldown = 10;
+    w.jagt = null; w.ziel = null;
+    w.cooldown = 10;
     effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, max: 1.2, art: 'schild' });
     funken(opfer.x, opfer.y, 30, BLAU, 160, 5, 0.9);
-    if (spielerIstWolf) zeigeNachricht(`🛡️ ${opfer.name} war beschützt! Das hat nicht geklappt.`, 3);
+    if (w.istSpieler) zeigeNachricht(`🛡️ ${opfer.name} war beschützt! Das hat nicht geklappt.`, 3);
     else if (opfer.istSpieler) zeigeNachricht('🛡️ Puh! Ein Schutzschild hat dich gerettet!', 3);
-    if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.schild();
+    if (w.istSpieler || dist(opfer, spieler) < sicht + 20) sound.schild();
     return;
   }
   opfer.lebt = false;
   opfer.erledigt = opfer.gesamt;
   opfer.aufgaben = [];
   opfer.aufgabeAktiv = null;
-  wolf.jagt = null; wolf.ziel = null;
-  const turbo = wolf.rolle === 'turbo' ? 0.6 : 1;
-  wolf.cooldown = (spielerIstWolf ? SPIELER_WOLF_PAUSE : WOLF_PAUSE + Math.random() * 8) * turbo;
+  w.jagt = null; w.ziel = null;
+  const turbo = w.rolle === 'turbo' ? 0.6 : 1;
+  w.cooldown = (w.istSpieler ? SPIELER_WOLF_PAUSE : WOLF_PAUSE + Math.random() * 8) * turbo * STUFEN[E.fressPause].w;
 
   const ort = naechsterOrt(opfer);
-  wolle.push({ x: opfer.x, y: opfer.y, opfer, ort, aufloesen: wolf.rolle === 'schlange' ? AUFLOESE_ZEIT : null });
+  const schlange = w.rolle === 'schlange';
+  wolle.push({ x: opfer.x, y: opfer.y, opfer, ort, aufloesen: schlange ? E.aufloesen : null, aufloeseMax: E.aufloesen });
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, max: 1.2 });
   funken(opfer.x, opfer.y, 25, [opfer.farbe, '#ffffff'], 140, 6, 0.9, 120);   // Wolle fliegt!
-  if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.haps();
+  if (w.istSpieler || dist(opfer, spieler) < sicht + 20) sound.haps();
 
   // Computer-Wölfe benutzen auch ihre Fähigkeiten
-  if (!spielerIstWolf && wolf.rolle === 'schleicher' && Math.random() < 0.5) wolf.unsichtbar = 3;
-  if (!spielerIstWolf && wolf.rolle === 'verkleider' && Math.random() < 0.6) {
+  if (!w.istSpieler && w.rolle === 'schleicher' && Math.random() < 0.5) w.unsichtbar = 3;
+  if (!w.istSpieler && w.rolle === 'verkleider' && Math.random() < 0.6) {
     const andere = schafe.filter(s => s.lebt && !s.istWolf && !s.istSpieler);
-    if (andere.length) wolf.verkleidet = { als: zufall(andere), t: 4 };
+    if (andere.length) w.verkleidet = { als: zufall(andere), t: 4 };
   }
-  if (wolf.rolle === 'turbo') funken(opfer.x, opfer.y, 20, GOLD, 170, 3, 0.6);
-  if (!spielerIstWolf && wolf.unsichtbar > 0) funken(wolf.x, wolf.y, 20, LILA, 110, 4, 0.8, -40);
-  if (!spielerIstWolf && wolf.verkleidet && wolf.verkleidet.t > 3.9) funken(wolf.x, wolf.y, 25, RAUCH, 90, 10, 0.9, -60);
+  if (w.rolle === 'turbo') funken(opfer.x, opfer.y, 20, GOLD, 170, 3, 0.6);
+  if (!w.istSpieler && w.unsichtbar > 0) funken(w.x, w.y, 20, LILA, 110, 4, 0.8, -40);
+  if (!w.istSpieler && w.verkleidet && w.verkleidet.t > 3.9) funken(w.x, w.y, 25, RAUCH, 90, 10, 0.9, -60);
   // Wen sehen die anderen? Den Wolf ... oder seine Verkleidung!
-  const taeter = wolf.verkleidet ? wolf.verkleidet.als : wolf;
+  const taeter = w.verkleidet ? w.verkleidet.als : w;
 
   // Wer in der Nähe war, hat etwas gesehen!
   const zeugen = [];
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf) continue;
-    if (wolf.unsichtbar > 0 || s === taeter) continue;
-    const d = dist(s, wolf);
+    if (w.unsichtbar > 0 || s === taeter) continue;
+    const d = dist(s, w);
     const nebel = sabotage && sabotage.art === 'nebel';   // Im Nebel sieht man schlechter
     if (d < (nebel ? 120 : 230) || (d < (nebel ? 200 : 420) && Math.random() < 0.6)) {
       s.verdacht = { wer: taeter, ort };
       zeugen.push(s);
     }
   }
-  if (spielerIstWolf) {
+  if (w.istSpieler) {
     zeigeNachricht(zeugen.length
       ? `👀 Oh nein! ${zeugen.map(z => z.name).join(', ')} hat dich gesehen!`
       : 'HAPS! 😋 Niemand hat dich gesehen.', 3);
   }
 
   if (opfer.istSpieler) { beende('wolf', 'Der Wolf hat dich erwischt!'); return; }
-  if (!spielerIstWolf && Math.random() < 0.6) planeGrube(350);   // Schnell weg durch eine Grube!
+  if (!w.istSpieler && Math.random() < 0.6) planeGrube(w, 350);   // Schnell weg durch eine Grube!
   pruefeWolfSieg();
 }
 
+// Gewinnen die Wölfe? (Wenn es nicht mehr Schafe als Wölfe gibt)
 function pruefeWolfSieg() {
   const uebrig = schafe.filter(s => s.lebt && !s.istWolf).length;
-  if (uebrig <= 1) { beende('wolf', spielerIstWolf ? 'Du hast fast alle Schafe gefressen! 😋' : 'Der Wolf hat zu viele Schafe gefressen!'); return true; }
+  const woelfeDa = woelfe.filter(w => w.lebt).length;
+  if (woelfeDa > 0 && uebrig <= woelfeDa) {
+    let grund;
+    if (spielerIstWolf) grund = woelfe.length > 1 ? 'Ihr Wölfe habt fast alle Schafe gefressen! 😋' : 'Du hast fast alle Schafe gefressen! 😋';
+    else grund = woelfe.length > 1 ? 'Die Wölfe haben zu viele Schafe gefressen!' : 'Der Wolf hat zu viele Schafe gefressen!';
+    beende('wolf', grund);
+    return true;
+  }
   return false;
 }
 
@@ -661,7 +726,7 @@ function starteSabotage(art) {
     t: art === 'gatter' ? GATTER_ZEIT : 40,
     hilfe: art === 'gatter' ? 6 + Math.random() * 6 : 12 + Math.random() * 8,   // wann Schafe zum Reparieren loslaufen
   };
-  sabotagePause = SABOTAGE_PAUSE;
+  sabotagePause = E.sabotagePause;
   if (art === 'nebel') {
     sound.nebel();
     zeigeNachricht(spielerIstWolf ? '🌫️ Nebel! Die Schafe sehen jetzt fast nichts. 😈' : '🌫️ Nebel! Mach die Laterne an!', 3);
@@ -736,18 +801,18 @@ function naechsteGrube(p, max) {
 }
 
 // Computer-Wolf plant einen Weg durch die Gruben
-function planeGrube(max) {
-  const von = naechsteGrube(wolf, max);
+function planeGrube(w, max) {
+  const von = naechsteGrube(w, max);
   if (von === null) return;
   const andere = KARTE.gruben.map((g, i) => i).filter(i => i !== von);
-  wolf.grubenPlan = { phase: 'hin', von, nach: zufall(andere) };
-  wolf.jagt = null; wolf.ziel = null; wolf.warte = 0; wolf.amOrt = null;
+  w.grubenPlan = { phase: 'hin', von, nach: zufall(andere) };
+  w.jagt = null; w.ziel = null; w.warte = 0; w.amOrt = null;
 }
 
-// Hat jemand gesehen, wie der Wolf in eine Grube springt?
-function grubenZeugen(p) {
-  if (wolf.unsichtbar > 0) return;
-  const taeter = wolf.verkleidet ? wolf.verkleidet.als : wolf;
+// Hat jemand gesehen, wie Wolf w in eine Grube springt?
+function grubenZeugen(p, w) {
+  if (w.unsichtbar > 0) return;
+  const taeter = w.verkleidet ? w.verkleidet.als : w;
   const nebel = sabotage && sabotage.art === 'nebel';
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf || s === taeter || s.meldet) continue;
@@ -755,7 +820,7 @@ function grubenZeugen(p) {
       s.verdacht = { wer: taeter, ort: naechsterOrt(p), grube: true };
       s.meldet = true;
       s.ziel = { x: GLOCKE.x, y: GLOCKE.y, ort: null }; s.warte = 0; s.amOrt = null;
-      if (spielerIstWolf) zeigeNachricht(`👀 Oh nein! ${s.name} hat dich gesehen und rennt zur Glocke!`, 3);
+      if (w.istSpieler) zeigeNachricht(`👀 Oh nein! ${s.name} hat dich gesehen und rennt zur Glocke!`, 3);
     }
   }
 }
@@ -766,7 +831,7 @@ function springeInGrube(w, i) {
   w.jagt = null; w.ziel = null;
   effekte.push({ x: g.x, y: g.y, t: 0.8, art: 'plumps' });
   if (w.istSpieler || dist(g, spieler) < sicht + 20) sound.plumps();
-  grubenZeugen(g);
+  grubenZeugen(g, w);
 }
 
 function kletterRaus(w, i) {
@@ -774,7 +839,7 @@ function kletterRaus(w, i) {
   w.inGrube = null; w.x = g.x; w.y = g.y + 28;
   effekte.push({ x: g.x, y: g.y, t: 0.8, art: 'plumps' });
   if (w.istSpieler || dist(g, spieler) < sicht + 20) sound.plumps();
-  grubenZeugen(g);
+  grubenZeugen(g, w);
 }
 
 function wechsleGrube(richtung) {
@@ -804,8 +869,8 @@ function moeglicheAktion() {
     return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => repariert(spieler) };
   }
   if (spielerIstWolf && spieler.cooldown <= 0) {
-    const opfer = schafe.find(s => s.lebt && !s.istSpieler && dist(s, spieler) < 50);
-    if (opfer) return { text: 'Fressen!', tun: () => fressen(opfer) };
+    const opfer = schafe.find(s => s.lebt && !s.istSpieler && !s.istWolf && dist(s, spieler) < 50);
+    if (opfer) return { text: 'Fressen!', tun: () => fressen(opfer, spieler) };
   }
   if (spielerIstWolf) {
     const g = naechsteGrube(spieler, 50);
@@ -909,12 +974,12 @@ function abstimmen(wahl) {
     const andere = t.lebende.filter(o => o !== s);
     let ziel;
     if (s.istWolf) {
-      const gegenMich = t.anklaeger.filter(a => a.verdacht.wer === s);
-      const beschuldigt = t.anklaeger.map(a => a.verdacht.wer).filter(b => b !== s && b.lebt);
-      if (gegenMich.length) ziel = zufall(gegenMich);
+      const gegenUns = t.anklaeger.filter(a => a.verdacht.wer.istWolf);   // Wer verpetzt einen Wolf?
+      const beschuldigt = t.anklaeger.map(a => a.verdacht.wer).filter(b => !b.istWolf && b.lebt);
+      if (gegenUns.length) ziel = zufall(gegenUns);
       else if (beschuldigt.length) ziel = zufall(beschuldigt);
-      else if (wahl && wahl !== s) ziel = wahl;
-      else ziel = zufall(andere);
+      else if (wahl && !wahl.istWolf) ziel = wahl;
+      else ziel = zufall(andere.filter(o => !o.istWolf));
     } else if (s.verdacht && s.verdacht.wer.lebt) {
       ziel = s.verdacht.wer;
     } else {
@@ -954,7 +1019,10 @@ function treffenWeiter() {
     raus.erledigt = raus.gesamt;
     raus.aufgaben = [];
     if (raus.rolle === 'ziege') { beende('ziege', raus.istSpieler ? 'Du wolltest verjagt werden – und es hat geklappt! 😏' : `${raus.name} war die Ziege und wollte verjagt werden!`); return; }
-    if (raus.istWolf) { beende('schafe', spielerIstWolf ? 'Die Herde hat dich durchschaut!' : 'Ihr habt den Wolf erwischt!'); return; }
+    if (raus.istWolf) {
+      if (raus.istSpieler) { beende('schafe', 'Die Herde hat dich durchschaut!'); return; }
+      if (!woelfe.some(w => w.lebt)) { beende('schafe', woelfe.length > 1 ? 'Ihr habt alle Wölfe erwischt!' : 'Ihr habt den Wolf erwischt!'); return; }
+    }
     if (raus.istSpieler) { beende('wolf', 'Die Herde hat dich rausgeworfen, obwohl du ein echtes Schaf bist!'); return; }
     if (pruefeWolfSieg()) return;
   }
@@ -963,19 +1031,24 @@ function treffenWeiter() {
     s.geschuetzt = false;
   }
   botsBeschuetzen();
-  wolf.cooldown = 15;
+  for (const w of woelfe) w.cooldown = 15;
   sabotagePause = Math.max(sabotagePause, 20);
   alleZurGlocke();
   zustand = 'spiel';
 }
 
 function kartenRechtecke() {
-  const breite = 205, hoehe = 150, abstand = 12;
-  const x0 = 30 + (900 - 4 * breite - 3 * abstand) / 2;
+  const n = treffen.lebende.length;
+  const spalten = n <= 8 ? 4 : 5;
+  const reihen = Math.ceil(n / spalten);
+  const abstand = reihen > 2 ? 8 : 12;
+  const breite = spalten === 4 ? 205 : 166;
+  const hoehe = reihen > 2 ? 98 : 150;
+  const x0 = 30 + (900 - spalten * breite - (spalten - 1) * abstand) / 2;
   return treffen.lebende.map((s, i) => ({
     s,
-    x: x0 + (i % 4) * (breite + abstand),
-    y: 115 + Math.floor(i / 4) * (hoehe + abstand),
+    x: x0 + (i % spalten) * (breite + abstand),
+    y: 115 + Math.floor(i / spalten) * (hoehe + abstand),
     w: breite, h: hoehe,
   }));
 }
@@ -1015,7 +1088,7 @@ function rollenAktion() {
     case 'flitzer': return {
       text: 'Sprinten', moeglich: true,
       tun() {
-        spieler.sprint = 4; sound.sprint(); zeigeNachricht('💨 Wuuusch!', 1.5);
+        spieler.sprint = E.sprint; sound.sprint(); zeigeNachricht('💨 Wuuusch!', 1.5);
         funken(spieler.x, spieler.y + 15, 18, RAUCH, 140, 7, 0.6);
         effektAn(spieler, 'icon', 1, { text: '💨' });
       } };
@@ -1055,7 +1128,7 @@ function rollenAktion() {
     case 'schleicher': return {
       text: 'Unsichtbar', moeglich: true,
       tun() {
-        spieler.unsichtbar = 6; sound.nebel(); zeigeNachricht('👻 Du bist 6 Sekunden unsichtbar!', 2);
+        spieler.unsichtbar = E.unsichtbar; sound.nebel(); zeigeNachricht(`👻 Du bist ${E.unsichtbar} Sekunden unsichtbar!`, 2);
         funken(spieler.x, spieler.y, 30, LILA, 130, 4, 0.9, -40);
         effekte.push({ x: spieler.x, y: spieler.y, art: 'geist', t: 1.2, max: 1.2 });
       } };
@@ -1064,13 +1137,18 @@ function rollenAktion() {
       return {
         text: v ? `Verkleiden (als ${v.name})` : 'Verkleiden', moeglich: !!v, hinweis: 'Geh näher an das Schaf, als das du dich verkleiden willst!',
         tun() {
-          spieler.verkleidet = { als: v, t: 15 }; sound.plopp(); zeigeNachricht(`🎭 Du siehst jetzt aus wie ${v.name}!`, 2.5);
+          spieler.verkleidet = { als: v, t: E.verkleidung }; sound.plopp(); zeigeNachricht(`🎭 Du siehst jetzt aus wie ${v.name}!`, 2.5);
           funken(spieler.x, spieler.y, 35, RAUCH, 100, 11, 1, -60);
           effektAn(spieler, 'maske', 1.2);
         } };
     }
   }
   return null;
+}
+
+// Wie lange man nach einer Fähigkeit warten muss
+function faehigkeitsPause() {
+  return Math.max(1, Math.round((ROLLEN[spieler.rolle].pause || 0) * STUFEN[E.faehigkeitPause].w));
 }
 
 function nutzeFaehigkeit() {
@@ -1080,7 +1158,7 @@ function nutzeFaehigkeit() {
   if (spieler.faehigkeit > 0) { zeigeNachricht(`Noch ${Math.ceil(spieler.faehigkeit)} Sekunden warten ...`, 1.5); return; }
   if (!a.moeglich) { zeigeNachricht(a.hinweis, 2); return; }
   a.tun();
-  spieler.faehigkeit = ROLLEN[spieler.rolle].pause;
+  spieler.faehigkeit = faehigkeitsPause();
 }
 
 function updateFaehigkeiten(dt) {
@@ -1227,8 +1305,9 @@ function zeichneCutscene() {
   if (p.y >= 470) zeichneVerjagtes();
 
   // Die Herde schaut zu
-  c.herde.slice(0, 8).forEach((s, i) => {
-    const x = 50 + i * 62, y = 545 + (i % 2) * 22;
+  const abstand = Math.min(62, 520 / Math.max(1, c.herde.length));
+  c.herde.forEach((s, i) => {
+    const x = 50 + i * abstand, y = 545 + (i % 2) * 22;
     zeichneSchafKoerper(x, y, s.farbe, 1, 0, false, 1);
     if (s.istSpieler) text('DU', x, y - 35, 13, '#ffd166');
   });
@@ -1248,9 +1327,15 @@ function zeichneCutscene() {
     ctx.globalAlpha = Math.min(1, (t - 5.2) * 2);
     let zeile2;
     if (r.rolle === 'ziege') zeile2 = r.istSpieler ? 'Du wolltest verjagt werden ... DU GEWINNST! 🎉' : 'Sie wollte verjagt werden ... Die Ziege gewinnt! 😱';
-    else if (r.istWolf) zeile2 = spielerIstWolf ? 'Die Schafe haben dich durchschaut!' : 'Die Herde ist gerettet! 🎉';
+    else if (r.istWolf) {
+      const rest = woelfe.filter(w => w.lebt && w !== r).length;
+      if (r.istSpieler) zeile2 = 'Die Schafe haben dich durchschaut!';
+      else if (rest === 0) zeile2 = 'Die Herde ist gerettet! 🎉';
+      else if (spielerIstWolf) zeile2 = 'Dein Wolf-Freund ist weg ... jetzt musst du es schaffen! 😰';
+      else zeile2 = rest === 1 ? 'Aber ein Wolf ist noch unter euch ... 🐺' : `Aber ${rest} Wölfe sind noch unter euch ... 🐺`;
+    }
     else if (r.istSpieler) zeile2 = 'Die Herde hat sich geirrt ...';
-    else zeile2 = spielerIstWolf ? 'Keiner ahnt, dass DU der Wolf bist ... 😈' : 'Der Wolf ist immer noch unter euch ... 🐺';
+    else zeile2 = spielerIstWolf ? 'Keiner ahnt, dass DU ein Wolf bist ... 😈' : (woelfe.filter(w => w.lebt).length > 1 ? 'Die Wölfe sind immer noch unter euch ... 🐺' : 'Der Wolf ist immer noch unter euch ... 🐺');
     text(zeile2, W / 2, 165, 22, '#ffd166');
     ctx.globalAlpha = 1;
   }
@@ -1578,15 +1663,15 @@ function update(dt) {
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
   if (spielerIstWolf) {
-    const vorher = wolf.cooldown;
-    wolf.cooldown -= dt;
-    if (wolf.rolle === 'turbo' && vorher > 0 && wolf.cooldown <= 0) {
-      funken(wolf.x, wolf.y - 10, 25, GOLD, 180, 3, 0.6);
-      effektAn(wolf, 'icon', 1.2, { text: '⚡' });
+    const vorher = spieler.cooldown;
+    spieler.cooldown -= dt;
+    if (spieler.rolle === 'turbo' && vorher > 0 && spieler.cooldown <= 0) {
+      funken(spieler.x, spieler.y - 10, 25, GOLD, 180, 3, 0.6);
+      effektAn(spieler, 'icon', 1.2, { text: '⚡' });
       sound.zap();
     }
   }
-  else if (wolf.lebt) wolfLogik(dt);
+  for (const w of woelfe) if (!w.istSpieler && w.lebt) wolfLogik(w, dt);
   if (zustand !== 'spiel') return;
   updateSabotage(dt);
   if (zustand !== 'spiel') return;
@@ -1683,7 +1768,8 @@ function zeichneSchaf(s) {
     ctx.fillStyle = `rgba(255,255,255,${glanz})`;
     ellipse(s.x - 18, s.y - 18, 6, 3); ctx.fill();
   }
-  text(name, s.x, s.y - 32, 13, s.istSpieler ? '#ffd166' : '#fff');
+  const freund = spielerIstWolf && s.istWolf && !s.istSpieler;   // Wölfe erkennen sich!
+  text(name, s.x, s.y - 32, 13, s.istSpieler ? '#ffd166' : (freund ? '#ff6b6b' : '#fff'));
   ctx.globalAlpha = 1;
   // Kleine Symbole, die nur DU siehst
   let symbol = '';
@@ -1691,6 +1777,7 @@ function zeichneSchaf(s) {
   if (s.istSpieler && s.unsichtbar > 0) symbol += '👻';
   if (s.istSpieler && s.sprint > 0) symbol += '💨';
   if (s.istSpieler && s.rolle === 'ziege') symbol += '🐐';
+  if (freund) symbol += '🐺';
   if (spieler.rolle === 'spuernase' && s.geruch) symbol += s.geruch === 'wolf' ? '🐺' : '✅';
   if (s.beschuetztVonDir && s.geschuetzt) symbol += '🛡️';
   if (symbol) text(symbol, s.x, s.y - 52, 16, '#fff', 'center', false);
@@ -1806,7 +1893,7 @@ function zeichneEffekt(e, pos) {
 
 function zeichneWolle(w) {
   // Beim Schlangenwolf wird die Wolle immer kleiner und grünlich
-  const rest = w.aufloesen == null ? 1 : Math.max(0, w.aufloesen / AUFLOESE_ZEIT);
+  const rest = w.aufloesen == null ? 1 : Math.max(0, w.aufloesen / w.aufloeseMax);
   ctx.save();
   ctx.translate(w.x, w.y); ctx.scale(0.3 + rest * 0.7, 0.3 + rest * 0.7); ctx.translate(-w.x, -w.y);
   ctx.globalAlpha = 0.4 + rest * 0.6;
@@ -2143,7 +2230,8 @@ function zeichneHUD() {
     ctx.fillStyle = 'rgba(70,10,20,0.85)';
     rundesRechteck(14, 80, 300, 96, 10); ctx.fill();
     text('🐺 Du bist der Wolf!', 26, 98, 16, '#ff6b6b', 'left', false);
-    text('Friss die Schafe, bevor sie fertig sind!', 26, 122, 13, '#fff', 'left', false);
+    const freunde = woelfe.filter(w => !w.istSpieler && w.lebt).map(w => w.name);
+    text(freunde.length ? `Wolf-Freund: ${freunde.join(', ')} 🐺` : 'Friss die Schafe, bevor sie fertig sind!', 26, 122, 13, freunde.length ? '#ff9a9a' : '#fff', 'left', false);
     if (spieler.cooldown > 0) text(`Fressen in ${Math.ceil(spieler.cooldown)} Sekunden ...`, 26, 150, 15, '#c9c3ff', 'left', false);
     else text('Fressen ist bereit! 😋', 26, 150, 15, '#4ade80', 'left', false);
   } else if (spieler.rolle === 'ziege') {
@@ -2286,7 +2374,7 @@ function zeichneFaehigkeitRund() {
   }
   text(r.emoji, F.x, F.y - 2, 30, '#fff', 'center', false);
   if (spieler.faehigkeit > 0) {   // Countdown als "Tortenstück"
-    const anteil = Math.min(1, spieler.faehigkeit / r.pause);
+    const anteil = Math.min(1, spieler.faehigkeit / faehigkeitsPause());
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.beginPath(); ctx.moveTo(F.x, F.y);
     ctx.arc(F.x, F.y, F.r, -Math.PI / 2, -Math.PI / 2 + anteil * Math.PI * 2);
@@ -2334,9 +2422,14 @@ function zeichneTreffen() {
     ctx.strokeStyle = istRaus ? '#ff4d4d' : (hover ? '#ffd166' : '#5a4fa0');
     ctx.lineWidth = istRaus ? 5 : 2; ctx.stroke();
 
-    zeichneSchafKoerper(k.x + 32, k.y + 34, s.farbe, 1, 0, false, 0.8);
-    text(s.name, k.x + 62, k.y + 30, 17, s.istSpieler ? '#ffd166' : '#fff', 'left', false);
-    umbrechen(treffen.aussagen.get(s) || '', k.x + 10, k.y + 62, k.w - 20, 17, 13, '#ddd8ff');
+    const klein = k.h < 120;
+    const freund = spielerIstWolf && s.istWolf && !s.istSpieler;
+    zeichneSchafKoerper(k.x + (klein ? 24 : 32), k.y + (klein ? 26 : 34), s.farbe, 1, 0, false, klein ? 0.6 : 0.8);
+    text(s.name + (freund ? ' 🐺' : ''), k.x + (klein ? 46 : 62), k.y + (klein ? 24 : 30), klein ? 14 : 17, s.istSpieler ? '#ffd166' : (freund ? '#ff6b6b' : '#fff'), 'left', false);
+    ctx.save();
+    rundesRechteck(k.x, k.y, k.w, k.h, 12); ctx.clip();   // Text bleibt in der Karte
+    umbrechen(treffen.aussagen.get(s) || '', k.x + 8, k.y + (klein ? 44 : 62), k.w - 16, klein ? 13 : 17, klein ? 11 : 13, '#ddd8ff');
+    ctx.restore();
 
     // Wer hat für dieses Schaf gestimmt?
     if (treffen.phase === 'ergebnis') {
@@ -2373,9 +2466,16 @@ function zeichneEnde() {
   else titel = ende.gewonnen ? '🎉 Die Schafe gewinnen! 🎉' : '🐺 Der Wolf gewinnt! 🐺';
   text(titel, W / 2, 150, 44, ende.gewonnen ? '#4ade80' : '#ff6b6b');
   text(ende.grund, W / 2, 215, 20, '#fff');
-  text(spielerIstWolf ? 'Der Wolf warst: DU! 😈' : `Der Wolf war: ${wolf.name}`, W / 2, 300, 24, '#ffd166');
-  zeichneSchafKoerper(W / 2 - 40, 370, wolf.farbe, 1, 0, false, 1.6);
-  text('🐺', W / 2 + 50, 360, 56, '#fff', 'center', false);
+  const namen = woelfe.map(w => w.istSpieler ? 'DU' : w.name);
+  let wer;
+  if (woelfe.length === 1) wer = spielerIstWolf ? 'Der Wolf warst: DU! 😈' : `Der Wolf war: ${namen[0]}`;
+  else wer = `Die Wölfe waren: ${namen.slice(0, -1).join(', ')} und ${namen[namen.length - 1]}`;
+  text(wer, W / 2, 300, 24, '#ffd166');
+  woelfe.forEach((w, i) => {
+    const x = W / 2 + (i - (woelfe.length - 1) / 2) * 170;
+    zeichneSchafKoerper(x - 30, 375, w.farbe, 1, 0, false, 1.3);
+    text('🐺', x + 42, 365, 44, '#fff', 'center', false);
+  });
   if (zeit - ende.seit > 1) {
     if (touchModus) {
       text('Tippen: Zurück zur Karten-Auswahl', W / 2, 480, 20, '#c9c3ff', 'center', false);
@@ -2423,6 +2523,8 @@ function zeichneIntro() {
     const r = ROLLEN[spieler.rolle];
     text(`Deine Rolle: ${r.emoji} ${r.name}`, W / 2, 200, 26, '#ffd166');
     text(r.text, W / 2, 232, 16, '#ddd', 'center', false);
+    const freunde = woelfe.filter(w => !w.istSpieler).map(w => w.name);
+    if (spielerIstWolf && freunde.length) text(`Dein Wolf-Freund: ${freunde.join(' und ')} 🐺`, W / 2, 262, 17, '#ff6b6b', 'center', false);
     ctx.globalAlpha = 1;
   }
 
@@ -2433,12 +2535,16 @@ function zeichneIntro() {
       const k = Math.min(1, Math.max(0, (t - 2.4 - i * 0.12) / 0.4));
       if (k <= 0) return;
       ctx.globalAlpha = k * 0.85;
-      const seite = i < 4 ? -1 : 1;
-      const nr = i < 4 ? i : i - 4;
-      const x = W / 2 + seite * (150 + nr * 85);
-      const y = 330 + nr * 12 - (1 - k) * 20;
-      zeichneSchafKoerper(x, y, s.farbe, -seite, 0, false, 1.3);
-      text(s.name, x, y - 45, 14, '#fff', 'center', false);
+      const haelfte = Math.ceil(andere.length / 2);
+      const seite = i < haelfte ? -1 : 1;
+      const nr = i < haelfte ? i : i - haelfte;
+      const abstand = Math.min(85, 300 / haelfte);
+      const gross = haelfte <= 4 ? 1.3 : 0.95;
+      const x = W / 2 + seite * (150 + nr * abstand);
+      const y = 330 + (haelfte <= 4 ? nr * 12 : (nr % 2) * 26) - (1 - k) * 20;
+      const freund = spielerIstWolf && s.istWolf;
+      zeichneSchafKoerper(x, y, s.farbe, -seite, 0, false, gross);
+      text(s.name + (freund ? ' 🐺' : ''), x, y - 45 * gross, haelfte <= 4 ? 14 : 12, freund ? '#ff6b6b' : '#fff', 'center', false);
     });
     ctx.globalAlpha = 1;
     const hopp = Math.abs(Math.sin(zeit * 4)) * 8;
@@ -2480,8 +2586,90 @@ function titelKarteBei(p) {
 }
 function starteMitKarte(nr) {
   kartenNr = nr;
+  E = { ...STANDARD };   // Normales Spiel
   try { localStorage.setItem('schafspelz-karte', String(nr)); } catch (e) { /* egal */ }
   neuesSpiel();
+}
+
+// ===== Menü: Eigenes Spiel =====
+const EIGENES_KNOPF = { x: W - 224, y: H - 58, w: 210, h: 44 };
+const STANDARD_KNOPF = { x: 60, y: 515, w: 200, h: 48 };
+const ZURUECK_KNOPF = { x: 380, y: 515, w: 200, h: 48 };
+const STARTEN_KNOPF = { x: 700, y: 515, w: 200, h: 48 };
+
+function einstellungsZeilen() {
+  const zaehler = [0, 0];
+  return EINSTELLUNGEN_LISTE.map(e => {
+    const x = e.spalte === 0 ? 40 : 500, y = 125 + zaehler[e.spalte]++ * 48;
+    return { e, x, y, w: 420, h: 40, minus: { x: x + 226, y: y + 2, w: 40, h: 36 }, plus: { x: x + 370, y: y + 2, w: 40, h: 36 } };
+  });
+}
+
+function einstellungsWert(e) {
+  if (e.typ === 'karte') return `${KARTEN[kartenNr].emoji} ${KARTEN[kartenNr].name}`;
+  if (e.typ === 'anaus') return eigene[e.key] ? 'An ✅' : 'Aus ❌';
+  if (e.typ === 'stufe') return STUFEN[eigene[e.key]].n;
+  return eigene[e.key] + (e.einheit || '');
+}
+
+function einstellungAendern(e, richtung) {
+  if (e.typ === 'karte') {
+    kartenNr = (kartenNr + richtung + KARTEN.length) % KARTEN.length;
+    try { localStorage.setItem('schafspelz-karte', String(kartenNr)); } catch (err) { /* egal */ }
+    return;
+  }
+  if (e.typ === 'anaus') eigene[e.key] = !eigene[e.key];
+  else if (e.typ === 'stufe') eigene[e.key] = begrenzt(eigene[e.key] + richtung, 0, STUFEN.length - 1);
+  else eigene[e.key] = begrenzt(eigene[e.key] + richtung * e.schritt, e.min, e.max);
+  // Es muss immer mehr Schafe als Wölfe geben!
+  eigene.schafe = Math.max(eigene.schafe, eigene.woelfe * 2 + 1);
+  eigene.rollen = Math.min(eigene.rollen, eigene.schafe);
+  speichereEigene();
+  sound.klack();
+}
+
+function speichereEigene() {
+  try { localStorage.setItem('schafspelz-eigenes-spiel', JSON.stringify(eigene)); } catch (err) { /* egal */ }
+}
+
+function klickEinstellungen(p) {
+  for (const z of einstellungsZeilen()) {
+    if (imRechteck(p, z.minus)) { einstellungAendern(z.e, -1); return; }
+    if (imRechteck(p, z.plus)) { einstellungAendern(z.e, 1); return; }
+  }
+  if (imRechteck(p, STANDARD_KNOPF)) { eigene = { ...STANDARD }; speichereEigene(); zeigeNachricht('↺ Alles wieder normal', 1.5); }
+  if (imRechteck(p, ZURUECK_KNOPF)) zustand = 'titel';
+  if (imRechteck(p, STARTEN_KNOPF)) { E = { ...eigene }; neuesSpiel(); }
+}
+
+function zeichneEinstellungen() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#1b1f3a'); g.addColorStop(1, '#3a1f5c');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  text('⚙️ Eigenes Spiel', W / 2, 42, 34, '#ffd166');
+  text('Stell alles so ein, wie du willst!', W / 2, 76, 16, '#c9c3ff', 'center', false);
+  text('🐑 Tiere & Rollen', 250, 106, 16, '#ffd166', 'center', false);
+  text('⏱️ Zeiten', 710, 106, 16, '#ffd166', 'center', false);
+
+  for (const z of einstellungsZeilen()) {
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    rundesRechteck(z.x, z.y, z.w, z.h, 10); ctx.fill();
+    text(z.e.name, z.x + 12, z.y + z.h / 2, 15, '#fff', 'left', false);
+    for (const [r, zeichen] of [[z.minus, '−'], [z.plus, '+']]) {
+      ctx.fillStyle = imRechteck(maus, r) ? '#fff' : '#ffd166';
+      rundesRechteck(r.x, r.y, r.w, r.h, 8); ctx.fill();
+      text(zeichen, r.x + r.w / 2, r.y + r.h / 2 + 1, 22, '#1b1f3a', 'center', false);
+    }
+    text(einstellungsWert(z.e), z.x + 318, z.y + z.h / 2, 14, '#fff', 'center', false);
+  }
+
+  const gesamt = eigene.schafe + eigene.woelfe;
+  text(`Zusammen ${gesamt} Tiere: ${eigene.schafe} Schafe und ${eigene.woelfe} ${eigene.woelfe === 1 ? 'Wolf' : 'Wölfe'}`, W / 2, 478, 17, '#9be89b', 'center', false);
+  zeichneKnopf(STANDARD_KNOPF, '↺ Standard', '#c9c3ff');
+  zeichneKnopf(ZURUECK_KNOPF, '◀ Zurück', '#c9c3ff');
+  zeichneKnopf(STARTEN_KNOPF, '▶ Starten!', '#4ade80');
+  if (nachricht) text(nachricht.text, W / 2, 575, 15, '#fff', 'center', false);
+  zeichneTonKnopf();
 }
 
 function zeichneTitel() {
@@ -2523,6 +2711,7 @@ function zeichneTitel() {
   ctx.save(); ctx.translate(W / 2, 562); ctx.scale(puls, puls);
   text(touchModus ? 'Tippe auf eine Karte!' : 'Klicke auf eine Karte!  (oder ← → und Enter)', 0, 0, 20, '#4ade80');
   ctx.restore();
+  zeichneKnopf(EIGENES_KNOPF, '⚙️ Eigenes Spiel', '#c9a0ff');
   zeichneTonKnopf();
   if (ENTWICKLER) {
     const test = entwicklerRolle();
@@ -2533,6 +2722,7 @@ function zeichneTitel() {
 function zeichne() {
   ctx.clearRect(0, 0, W, H);
   if (zustand === 'titel') { zeichneTitel(); return; }
+  if (zustand === 'einstellungen') { zeichneEinstellungen(); return; }
   if (zustand === 'intro') { zeichneIntro(); return; }
   if (zustand === 'cutscene') { zeichneCutscene(); return; }
 
@@ -2582,7 +2772,8 @@ addEventListener('keydown', e => {
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'e'].includes(k)) touchModus = false;
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
-  if (zustand === 'titel' && (k === 'arrowleft' || k === 'arrowright')) kartenNr = (kartenNr + (k === 'arrowright' ? 1 : KARTEN.length - 1)) % KARTEN.length;
+  if (zustand === 'einstellungen' && k === 'escape') zustand = 'titel';
+  else if (zustand === 'titel' && (k === 'arrowleft' || k === 'arrowright')) kartenNr = (kartenNr + (k === 'arrowright' ? 1 : KARTEN.length - 1)) % KARTEN.length;
   else if (zustand === 'titel' && (k === 'enter' || k === ' ')) starteMitKarte(kartenNr);
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'cutscene' && (k === 'enter' || k === ' ') && cutscene.t > 1) endeCutscene();
@@ -2623,7 +2814,11 @@ canvas.addEventListener('pointerdown', e => {
   }
 
   maus = p;
-  if (zustand === 'titel') { const nr = titelKarteBei(p); if (nr !== null) starteMitKarte(nr); return; }
+  if (zustand === 'einstellungen') { klickEinstellungen(p); return; }
+  if (zustand === 'titel') {
+    if (imRechteck(p, EIGENES_KNOPF)) { zustand = 'einstellungen'; return; }
+    const nr = titelKarteBei(p); if (nr !== null) starteMitKarte(nr); return;
+  }
   if (zustand === 'intro') { if (intro > 1.5) introFertig(); return; }
   if (zustand === 'ende') { if (zeit - ende.seit > 1) zustand = 'titel'; return; }
   if (zustand === 'cutscene') { if (cutscene.t > 1) endeCutscene(); return; }
