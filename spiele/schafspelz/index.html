@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wolf im Schafspelz</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #1b1f3a, #3a1f5c);
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    a { color: #ffd166; align-self: flex-start; margin-bottom: 0.5rem; }
+    canvas {
+      width: 100%;
+      max-width: 960px;
+      aspect-ratio: 960 / 600;
+      border-radius: 1rem;
+      box-shadow: 0 0 30px #6fe3ff55;
+      touch-action: none;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <a href="../../">← Zur Übersicht</a>
+  <canvas id="spiel" width="960" height="600"></canvas>
+  <script src="spiel.js"></script>
+</body>
+</html>
