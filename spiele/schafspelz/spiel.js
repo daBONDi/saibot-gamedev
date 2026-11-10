@@ -24,6 +24,21 @@ let kartenNr = 0;
 try { kartenNr = Number(localStorage.getItem('schafspelz-karte')) || 0; } catch (e) { /* egal */ }
 if (!(kartenNr >= 0 && kartenNr < KARTEN.length)) kartenNr = 0;
 
+// ===== Rollen =====
+// "pause" = Sekunden, bis man die Fähigkeit wieder benutzen kann
+const ROLLEN = {
+  normal:      { name: 'Schaf',             emoji: '🐑', text: '' },
+  spuernase:   { name: 'Spürnase',          emoji: '👃', knopf: 'Schnuppern', pause: 30, text: 'Schnupper an anderen Schafen: Riechen sie nach Wolf?' },
+  flitzer:     { name: 'Flitzer',           emoji: '💨', knopf: 'Sprinten',   pause: 20, text: 'Du kannst kurz superschnell rennen!' },
+  beschuetzer: { name: 'Beschützer',        emoji: '🛡️', knopf: 'Beschützen', pause: 30, text: 'Beschütze ein Schaf. Der Wolf kann es dann nicht fressen!' },
+  bastler:     { name: 'Bastler',           emoji: '🔧', knopf: 'Reparieren', pause: 40, text: 'Du kannst Sabotagen von überall aus reparieren!' },
+  schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
+  verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
+  turbo:       { name: 'Turbo-Wolf',        emoji: '⚡', text: 'Du kannst viel öfter fressen als andere Wölfe!' },
+};
+const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler'];
+const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo'];
+
 const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke'];
 const FARBEN = ['#ff9ecf', '#8fd3ff', '#ffe066', '#9be89b', '#c9a0ff', '#ffb36b', '#d9b38c'];
 
@@ -189,6 +204,18 @@ const sound = {
   alarm() { for (let i = 0; i < 4; i++) { ton(880, i * 0.3, 0.15, 'square', 0.08); ton(660, i * 0.3 + 0.15, 0.15, 'square', 0.08); } },
   // Piep (Countdown)
   piep() { ton(1000, 0, 0.07, 'square', 0.04); },
+  // Schnupper-schnupper
+  schnuppern() { for (let i = 0; i < 4; i++) ton(2000, i * 0.12, 0.06, 'triangle', 0.05, 1200); },
+  // Wuuusch
+  sprint() { ton(200, 0, 0.4, 'sawtooth', 0.08, 900); },
+  // Schutzschild: Pling!
+  schild() { ton(1200, 0, 0.5, 'sine', 0.15); ton(1800, 0.05, 0.5, 'sine', 0.1); },
+  // Trommelwirbel nach der Abstimmung
+  trommel() { for (let i = 0; i < 10; i++) ton(110 + i * 4, i * 0.08, 0.07, 'triangle', 0.12); },
+  // Trippel-trappel (Schaf rennt weg)
+  trippel() { for (let i = 0; i < 12; i++) ton(i % 2 ? 500 : 420, i * 0.13, 0.05, 'triangle', 0.08); },
+  // Grrrr
+  knurren() { wackelTon([[0, 90], [0.8, 70]], 0, 0.9, 'sawtooth', 0.2, 25, 15); },
   // Bim-Bam der Glocke
   glocke() {
     [0, 0.5].forEach((st, i) => {
@@ -273,6 +300,8 @@ function macheSchaf(name, farbe, istSpieler) {
     ziel: null, warte: 0, amOrt: null, letzterOrt: GLOCKE,
     verdacht: null, cooldown: 0, jagt: null,
     aufgabeAktiv: null, aufgabeT: 0,
+    rolle: 'normal', faehigkeit: 8, sprint: 0, unsichtbar: 0, verkleidet: null,
+    geschuetzt: false, geruch: null, schnupperZeit: 20 + Math.random() * 20,
   };
 }
 
@@ -311,6 +340,13 @@ function neuesSpiel() {
     wolf.cooldown = 18;
   }
   wolf.istWolf = true;
+
+  // Rollen verteilen
+  const botRollen = mischen(['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'normal', 'normal', 'normal']);
+  schafe.filter(s => !s.istSpieler).forEach((s, i) => { s.rolle = botRollen[i]; });
+  spieler.rolle = zufall(SCHAF_ROLLEN);
+  wolf.rolle = zufall(WOLF_ROLLEN);
+  botsBeschuetzen();
 
   alleZurGlocke();
   zustand = 'intro';
@@ -382,8 +418,9 @@ function bewegeSpieler(dt) {
   const laenge = Math.hypot(dx, dy);
   spieler.laeuft = laenge > 0;
   if (laenge > 0) {
-    spieler.x += dx / laenge * TEMPO_SPIELER * dt;
-    spieler.y += dy / laenge * TEMPO_SPIELER * dt;
+    const tempo = TEMPO_SPIELER * (spieler.sprint > 0 ? 1.8 : 1);
+    spieler.x += dx / laenge * tempo * dt;
+    spieler.y += dy / laenge * tempo * dt;
     if (dx) spieler.richtung = Math.sign(dx);
     spieler.phase += dt * 12;
   }
@@ -415,7 +452,7 @@ function bewegeBot(s, dt) {
     const o = ORTE[ortNr];
     s.ziel = { x: o.x + (Math.random() - 0.5) * 60, y: o.y + (Math.random() - 0.5) * 40, ort: ortNr };
   }
-  if (laufeZu(s, s.ziel, TEMPO_SCHAF, dt)) {
+  if (laufeZu(s, s.ziel, TEMPO_SCHAF * (s.rolle === 'flitzer' ? 1.25 : 1), dt)) {
     if (s.ziel.ort === null) {   // War unterwegs zum Reparieren
       s.warte = 1;
     } else {
@@ -459,26 +496,48 @@ function wolfLogik(dt) {
 }
 
 function fressen(opfer) {
+  // Beschützt? Dann klappt es nicht!
+  if (opfer.geschuetzt) {
+    opfer.geschuetzt = false;
+    wolf.jagt = null; wolf.ziel = null;
+    wolf.cooldown = 10;
+    effekte.push({ x: opfer.x, y: opfer.y, t: 1.2, art: 'schild' });
+    if (spielerIstWolf) zeigeNachricht(`🛡️ ${opfer.name} war beschützt! Das hat nicht geklappt.`, 3);
+    else if (opfer.istSpieler) zeigeNachricht('🛡️ Puh! Ein Schutzschild hat dich gerettet!', 3);
+    if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.schild();
+    return;
+  }
   opfer.lebt = false;
   opfer.erledigt = opfer.gesamt;
   opfer.aufgaben = [];
   opfer.aufgabeAktiv = null;
   wolf.jagt = null; wolf.ziel = null;
-  wolf.cooldown = spielerIstWolf ? SPIELER_WOLF_PAUSE : WOLF_PAUSE + Math.random() * 8;
+  const turbo = wolf.rolle === 'turbo' ? 0.6 : 1;
+  wolf.cooldown = (spielerIstWolf ? SPIELER_WOLF_PAUSE : WOLF_PAUSE + Math.random() * 8) * turbo;
 
   const ort = naechsterOrt(opfer);
   wolle.push({ x: opfer.x, y: opfer.y, opfer, ort });
   effekte.push({ x: opfer.x, y: opfer.y, t: 1.2 });
   if (spielerIstWolf || dist(opfer, spieler) < sicht + 20) sound.haps();
 
+  // Computer-Wölfe benutzen auch ihre Fähigkeiten
+  if (!spielerIstWolf && wolf.rolle === 'schleicher' && Math.random() < 0.5) wolf.unsichtbar = 3;
+  if (!spielerIstWolf && wolf.rolle === 'verkleider' && Math.random() < 0.6) {
+    const andere = schafe.filter(s => s.lebt && !s.istWolf && !s.istSpieler);
+    if (andere.length) wolf.verkleidet = { als: zufall(andere), t: 4 };
+  }
+  // Wen sehen die anderen? Den Wolf ... oder seine Verkleidung!
+  const taeter = wolf.verkleidet ? wolf.verkleidet.als : wolf;
+
   // Wer in der Nähe war, hat etwas gesehen!
   const zeugen = [];
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf) continue;
+    if (wolf.unsichtbar > 0 || s === taeter) continue;
     const d = dist(s, wolf);
     const nebel = sabotage && sabotage.art === 'nebel';   // Im Nebel sieht man schlechter
     if (d < (nebel ? 120 : 230) || (d < (nebel ? 200 : 420) && Math.random() < 0.6)) {
-      s.verdacht = { wer: wolf, ort };
+      s.verdacht = { wer: taeter, ort };
       zeugen.push(s);
     }
   }
@@ -557,6 +616,9 @@ function updateSabotage(dt) {
   if (sabotage.art === 'gatter' && Math.ceil(sabotage.t) < Math.ceil(vorher)) sound.piep();
 
   sabotage.hilfe -= dt;
+  sabotage.alter = (sabotage.alter || 0) + dt;
+  const bastler = schafe.find(s => !s.istSpieler && s.lebt && !s.istWolf && s.rolle === 'bastler');
+  if (bastler && sabotage.alter > 14) { repariert(bastler); return; }
   if (sabotage.hilfe <= 0) { schickeHelfer(); sabotage.hilfe = 10; }
 
   const p = sabotagePunkt();
@@ -613,15 +675,23 @@ function starteTreffen(melder, fund) {
 
   for (const s of lebende) {
     if (s.istSpieler) {
-      aussagen.set(s, spielerIstWolf ? 'Das bist du (der Wolf 🤫). Wen willst du verdächtigen?' : 'Das bist du! Wen hältst du für den Wolf?');
+      const r = ROLLEN[s.rolle];
+      aussagen.set(s, (spielerIstWolf ? 'Das bist du (der Wolf 🤫). Wen willst du verdächtigen?' : 'Das bist du! Wen hältst du für den Wolf?') + ` Deine Rolle: ${r.emoji} ${r.name}`);
       continue;
     }
     const teile = [];
     if (s === melder && fund) teile.push(`Ich hab Wolle von ${fund.opfer.name} ${fund.ort.bei} gefunden! 😱`);
     if (!s.istWolf && s.verdacht && s.verdacht.wer.lebt) {
-      teile.push(s.verdacht.wer.istSpieler
-        ? `Ich hab gesehen, wie DU dich ${s.verdacht.ort.bei} an jemanden rangeschlichen hast! 😨`
-        : `Ich hab gesehen, wie ${s.verdacht.wer.name} sich ${s.verdacht.ort.bei} an jemanden rangeschlichen hat! 😨`);
+      const v = s.verdacht;
+      if (v.nase) {
+        teile.push(v.wer.istSpieler
+          ? 'Ich hab an DIR geschnuppert: Du riechst nach WOLF! 👃'
+          : `Ich hab an ${v.wer.name} geschnuppert: riecht nach WOLF! 👃`);
+      } else {
+        teile.push(v.wer.istSpieler
+          ? `Ich hab gesehen, wie DU dich ${v.ort.bei} an jemanden rangeschlichen hast! 😨`
+          : `Ich hab gesehen, wie ${v.wer.name} sich ${v.ort.bei} an jemanden rangeschlichen hat! 😨`);
+      }
       anklaeger.push(s);
     }
     if (!teile.length) {
@@ -633,9 +703,12 @@ function starteTreffen(melder, fund) {
     aussagen.set(s, teile.join(' '));
   }
 
-  if (wolf.lebt && !wolf.istSpieler && anklaeger.length) {
-    const ort = zufall([...ORTE, GLOCKE]);
-    aussagen.set(wolf, `Was?! ${anklaeger[0].name} lügt! Ich war die ganze Zeit ${ort.bei}! 😤`);
+  // Wer beschuldigt wird, wehrt sich
+  for (const a of anklaeger) {
+    const b = a.verdacht.wer;
+    if (b.istSpieler || b === melder) continue;
+    if (b.istWolf) aussagen.set(b, `Was?! ${a.name} lügt! Ich war die ganze Zeit ${zufall([...ORTE, GLOCKE]).bei}! 😤`);
+    else aussagen.set(b, `Was?! Das war ich nicht! 😢 Ich war ${b.letzterOrt.bei}, ehrlich!`);
   }
 
   let grund;
@@ -657,7 +730,10 @@ function abstimmen(wahl) {
     const andere = t.lebende.filter(o => o !== s);
     let ziel;
     if (s.istWolf) {
-      if (t.anklaeger.length) ziel = zufall(t.anklaeger);
+      const gegenMich = t.anklaeger.filter(a => a.verdacht.wer === s);
+      const beschuldigt = t.anklaeger.map(a => a.verdacht.wer).filter(b => b !== s && b.lebt);
+      if (gegenMich.length) ziel = zufall(gegenMich);
+      else if (beschuldigt.length) ziel = zufall(beschuldigt);
       else if (wahl && wahl !== s) ziel = wahl;
       else ziel = zufall(andere);
     } else if (s.verdacht && s.verdacht.wer.lebt) {
@@ -685,12 +761,10 @@ function abstimmen(wahl) {
   if (gleich || max <= skip) raus = null;
 
   t.stimmen = stimmen; t.raus = raus; t.skip = skip; t.phase = 'ergebnis';
-  if (!raus) sound.hmm(); else if (raus.istWolf) sound.fanfare(); else sound.traurig();
+  if (!raus) sound.hmm(); else sound.trommel();
   if (!raus) t.ergebnis = 'Niemand wurde vom Hof gejagt. 🤷';
-  else if (raus.istSpieler && raus.istWolf) t.ergebnis = 'Die Herde hat DICH vom Hof gejagt ... du WARST der Wolf! 😱';
-  else if (raus.istWolf) t.ergebnis = `${raus.name} wurde vom Hof gejagt ... und WAR der Wolf! 🐺🎉`;
-  else if (raus.istSpieler) t.ergebnis = 'Die Herde hat DICH vom Hof gejagt! 😢';
-  else t.ergebnis = `${raus.name} wurde vom Hof gejagt ... war aber KEIN Wolf. ${spielerIstWolf ? '😈' : '😢'}`;
+  else if (raus.istSpieler) t.ergebnis = 'Die Herde jagt DICH vom Hof ... 😱';
+  else t.ergebnis = `${raus.name} wird vom Hof gejagt ... 😱`;
 }
 
 function treffenWeiter() {
@@ -704,7 +778,11 @@ function treffenWeiter() {
     if (raus.istSpieler) { beende('wolf', 'Die Herde hat dich rausgeworfen, obwohl du ein echtes Schaf bist!'); return; }
     if (pruefeWolfSieg()) return;
   }
-  for (const s of schafe) s.verdacht = null;
+  for (const s of schafe) {
+    if (!(s.verdacht && s.verdacht.nase)) s.verdacht = null;   // Was die Nase weiß, bleibt!
+    s.geschuetzt = false;
+  }
+  botsBeschuetzen();
   wolf.cooldown = 15;
   sabotagePause = Math.max(sabotagePause, 20);
   alleZurGlocke();
@@ -732,8 +810,210 @@ function klickTreffen(p) {
     }
     if (imRechteck(p, SKIP_KNOPF)) abstimmen(null);
   } else if (imRechteck(p, WEITER_KNOPF)) {
+    weiterNachAbstimmung();
+  }
+}
+
+// ===== Fähigkeiten der Rollen =====
+function naechstesSchaf(max) {
+  const z = schafe.filter(s => s.lebt && !s.istSpieler).sort((a, b) => dist(a, spieler) - dist(b, spieler))[0];
+  return z && dist(z, spieler) < max ? z : null;
+}
+
+// Was kann deine Rolle gerade machen?
+function rollenAktion() {
+  const z = naechstesSchaf(70);
+  switch (spieler.rolle) {
+    case 'spuernase': return {
+      text: z ? `Schnuppern (${z.name})` : 'Schnuppern', moeglich: !!z, hinweis: 'Geh näher an ein Schaf heran!',
+      tun() {
+        z.geruch = z.istWolf ? 'wolf' : 'schaf';
+        zeigeNachricht(z.istWolf ? `👃 ${z.name} riecht nach WOLF! 🐺` : `👃 ${z.name} riecht nach Schaf. 🐑`, 3);
+        sound.schnuppern();
+      } };
+    case 'flitzer': return {
+      text: 'Sprinten', moeglich: true,
+      tun() { spieler.sprint = 4; sound.sprint(); zeigeNachricht('💨 Wuuusch!', 1.5); } };
+    case 'beschuetzer': return {
+      text: z ? `Beschützen (${z.name})` : 'Beschützen', moeglich: !!z, hinweis: 'Geh näher an ein Schaf heran!',
+      tun() {
+        for (const s of schafe) if (s.beschuetztVonDir) { s.geschuetzt = false; s.beschuetztVonDir = false; }
+        z.geschuetzt = true; z.beschuetztVonDir = true;
+        zeigeNachricht(`🛡️ Du beschützt jetzt ${z.name}!`, 3);
+        sound.schild();
+      } };
+    case 'bastler': return {
+      text: 'Reparieren', moeglich: !!sabotage, hinweis: 'Gerade ist nichts kaputt.',
+      tun() { repariert(spieler); } };
+    case 'schleicher': return {
+      text: 'Unsichtbar', moeglich: true,
+      tun() { spieler.unsichtbar = 6; sound.nebel(); zeigeNachricht('👻 Du bist 6 Sekunden unsichtbar!', 2); } };
+    case 'verkleider': {
+      const v = naechstesSchaf(110);
+      return {
+        text: v ? `Verkleiden (als ${v.name})` : 'Verkleiden', moeglich: !!v, hinweis: 'Geh näher an das Schaf, als das du dich verkleiden willst!',
+        tun() { spieler.verkleidet = { als: v, t: 15 }; sound.plopp(); zeigeNachricht(`🎭 Du siehst jetzt aus wie ${v.name}!`, 2.5); } };
+    }
+  }
+  return null;
+}
+
+function nutzeFaehigkeit() {
+  if (zustand !== 'spiel' || miniSpiel) return;
+  const a = rollenAktion();
+  if (!a) return;
+  if (spieler.faehigkeit > 0) { zeigeNachricht(`Noch ${Math.ceil(spieler.faehigkeit)} Sekunden warten ...`, 1.5); return; }
+  if (!a.moeglich) { zeigeNachricht(a.hinweis, 2); return; }
+  a.tun();
+  spieler.faehigkeit = ROLLEN[spieler.rolle].pause;
+}
+
+function updateFaehigkeiten(dt) {
+  for (const s of schafe) {
+    s.faehigkeit -= dt; s.sprint -= dt; s.unsichtbar -= dt;
+    if (s.verkleidet) { s.verkleidet.t -= dt; if (s.verkleidet.t <= 0 || !s.verkleidet.als.lebt) s.verkleidet = null; }
+    // Computer-Spürnasen schnuppern auch!
+    if (!s.istSpieler && s.lebt && !s.istWolf && s.rolle === 'spuernase') {
+      s.schnupperZeit -= dt;
+      if (s.schnupperZeit <= 0) {
+        const z = schafe.find(o => o.lebt && o !== s && dist(o, s) < 120 && !(o.unsichtbar > 0));
+        if (z) {
+          s.schnupperZeit = 40;
+          if (z.istWolf) s.verdacht = { wer: z, ort: naechsterOrt(s), nase: true };
+        }
+      }
+    }
+  }
+}
+
+// Computer-Beschützer passen auf ein Schaf auf
+function botsBeschuetzen() {
+  for (const s of schafe) {
+    if (s.istSpieler || !s.lebt || s.istWolf || s.rolle !== 'beschuetzer') continue;
+    const andere = schafe.filter(o => o.lebt && o !== s && !o.istWolf);
+    if (andere.length) zufall(andere).geschuetzt = true;
+  }
+}
+
+// ===== Cutscene: Ein Schaf wird vom Hof gejagt =====
+let cutscene = null;
+
+function weiterNachAbstimmung() {
+  if (treffen.raus) {
+    zustand = 'cutscene';
+    cutscene = { t: 0, raus: treffen.raus, herde: schafe.filter(s => s.lebt && s !== treffen.raus) };
+  } else {
     treffenWeiter();
   }
+}
+
+function endeCutscene() {
+  cutscene = null;
+  zustand = 'treffen';
+  treffenWeiter();
+}
+
+function updateCutscene(dt) {
+  const c = cutscene, vorher = c.t;
+  c.t += dt;
+  const ab = z => vorher < z && c.t >= z;
+  if (ab(0.8)) sound.trippel();
+  if (ab(2.0) && c.raus.istWolf) sound.knurren();
+  if (ab(4.0)) { if (c.raus.istWolf !== spielerIstWolf) sound.fanfare(); else sound.traurig(); }
+  if (c.t > 8) endeCutscene();
+}
+
+// Wo ist das verjagte Schaf gerade?
+function cutPos(t) {
+  if (t < 0.8) return { x: 330 + Math.sin(t * 40) * 2, y: 540, s: 1.5 };   // zittert
+  if (t < 2) { const k = (t - 0.8) / 1.2; return { x: 330 + k * 350, y: 540 - k * 60, s: 1.5 - k * 0.3 }; }
+  const k = Math.min(1, (t - 2) / 2.5);
+  return { x: 680 + k * 220, y: 480 - k * 135, s: 1.2 - k * 1.05 };
+}
+
+function zeichneCutscene() {
+  const c = cutscene, t = c.t, r = c.raus;
+  const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
+  const g = ctx.createLinearGradient(0, 0, 0, 360);
+  g.addColorStop(0, himmel[0]); g.addColorStop(1, himmel[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,220,120,0.8)'; ellipse(800, 300, 55, 55); ctx.fill();
+
+  // Hügel und Weg in die Ferne
+  ctx.fillStyle = KARTE.boden;
+  ctx.beginPath(); ctx.moveTo(0, 360); ctx.quadraticCurveTo(480, 300, 960, 345); ctx.lineTo(960, 600); ctx.lineTo(0, 600); ctx.fill();
+  ctx.fillStyle = KARTE.weg;
+  ctx.beginPath(); ctx.moveTo(590, 600); ctx.lineTo(780, 600); ctx.lineTo(905, 342); ctx.lineTo(895, 342); ctx.fill();
+
+  const p = cutPos(t);
+  const zeichneVerjagtes = () => {
+    if (r.istWolf && t > 2) {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.scale(-p.s, p.s);   // Wolf schaut nach rechts
+      text('🐺', 0, -5, 60, '#fff', 'center', false);
+      ctx.restore();
+    } else {
+      zeichneSchafKoerper(p.x, p.y, r.farbe, 1, t * 14, t > 0.8, p.s);
+    }
+    if (t < 2) text(r.name, p.x, p.y - 50 * p.s, 18, r.istSpieler ? '#ffd166' : '#fff');
+  };
+
+  // Hinter dem Zaun? Dann zuerst zeichnen
+  if (p.y < 470) zeichneVerjagtes();
+
+  // Zaun mit offenem Tor
+  ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(0, 450); ctx.lineTo(610, 455); ctx.moveTo(0, 480); ctx.lineTo(610, 485);
+  ctx.moveTo(760, 455); ctx.lineTo(960, 450); ctx.moveTo(760, 485); ctx.lineTo(960, 480);
+  ctx.moveTo(610, 455); ctx.lineTo(560, 520); ctx.moveTo(610, 485); ctx.lineTo(560, 550);   // Tor steht offen
+  ctx.stroke();
+  ctx.fillStyle = '#6e4b2a';
+  for (let x = 20; x < 960; x += 90) if (x < 610 || x > 750) ctx.fillRect(x, 435, 9, 60);
+  ctx.fillRect(605, 430, 11, 70); ctx.fillRect(755, 430, 11, 70);
+
+  // Wolle fliegt, wenn der Wolf enttarnt wird
+  if (r.istWolf && t > 2 && t < 3.5) {
+    const w = cutPos(2);
+    for (let i = 0; i < 10; i++) {
+      const k = t - 2;
+      ctx.fillStyle = r.farbe;
+      ellipse(w.x + Math.cos(i * 0.63) * k * 90, w.y - 20 + Math.sin(i * 0.63) * k * 40 + k * k * 80, 7, 7); ctx.fill();
+    }
+  }
+
+  if (p.y >= 470) zeichneVerjagtes();
+
+  // Die Herde schaut zu
+  c.herde.slice(0, 8).forEach((s, i) => {
+    const x = 50 + i * 62, y = 545 + (i % 2) * 22;
+    zeichneSchafKoerper(x, y, s.farbe, 1, 0, false, 1);
+    if (s.istSpieler) text('DU', x, y - 35, 13, '#ffd166');
+  });
+
+  // Text, Buchstabe für Buchstabe
+  if (t > 4) {
+    let zeile1;
+    if (r.istSpieler && r.istWolf) zeile1 = 'Du warst der Wolf ... und wurdest erwischt! 🐺';
+    else if (r.istSpieler) zeile1 = 'Du warst KEIN Wolf ... 😢';
+    else if (r.istWolf) zeile1 = `${r.name} war der Wolf! 🐺`;
+    else zeile1 = `${r.name} war KEIN Wolf. 😢`;
+    const buchstaben = [...zeile1];
+    text(buchstaben.slice(0, Math.floor((t - 4) * 25)).join(''), W / 2, 110, 36, r.istWolf ? '#ff6b6b' : '#fff');
+  }
+  if (t > 5.2) {
+    ctx.globalAlpha = Math.min(1, (t - 5.2) * 2);
+    let zeile2;
+    if (r.istWolf) zeile2 = spielerIstWolf ? 'Die Schafe haben dich durchschaut!' : 'Die Herde ist gerettet! 🎉';
+    else if (r.istSpieler) zeile2 = 'Die Herde hat sich geirrt ...';
+    else zeile2 = spielerIstWolf ? 'Keiner ahnt, dass DU der Wolf bist ... 😈' : 'Der Wolf ist immer noch unter euch ... 🐺';
+    text(zeile2, W / 2, 165, 22, '#ffd166');
+    ctx.globalAlpha = 1;
+  }
+  if (t > 5.8) {
+    const rr = ROLLEN[r.rolle];
+    text(`Rolle: ${rr.emoji} ${rr.name}`, W / 2, 205, 18, '#ddd', 'center', false);
+  }
+  if (t > 1.5) text('Klicken zum Weiterspielen', W - 120, H - 18, 13, 'rgba(255,255,255,0.7)', 'center', false);
 }
 
 // ===== Mini-Spiele für die Aufgaben =====
@@ -1038,8 +1318,10 @@ function update(dt) {
     if (intro > 8) introFertig();
     return;
   }
+  if (zustand === 'cutscene') { updateCutscene(dt); return; }
   if (zustand !== 'spiel') return;
 
+  updateFaehigkeiten(dt);
   if (miniSpiel) miniUpdate(dt);
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && s.lebt) bewegeBot(s, dt);
@@ -1094,8 +1376,23 @@ function zeichneSchafKoerper(x, y, farbe, richtung, phase, laeuft, groesse = 1) 
 }
 
 function zeichneSchaf(s) {
-  zeichneSchafKoerper(s.x, s.y, s.farbe, s.richtung, s.phase, s.laeuft);
-  text(s.name, s.x, s.y - 32, 13, s.istSpieler ? '#ffd166' : '#fff');
+  let farbe = s.farbe, name = s.name;
+  if (s.verkleidet) { farbe = s.verkleidet.als.farbe; name = s.verkleidet.als.name; }
+  if (s.unsichtbar > 0) {
+    if (!s.istSpieler) return;   // Unsichtbar!
+    ctx.globalAlpha = 0.35;
+  }
+  zeichneSchafKoerper(s.x, s.y, farbe, s.richtung, s.phase, s.laeuft);
+  text(name, s.x, s.y - 32, 13, s.istSpieler ? '#ffd166' : '#fff');
+  ctx.globalAlpha = 1;
+  // Kleine Symbole, die nur DU siehst
+  let symbol = '';
+  if (s.istSpieler && s.verkleidet) symbol += '🎭';
+  if (s.istSpieler && s.unsichtbar > 0) symbol += '👻';
+  if (s.istSpieler && s.sprint > 0) symbol += '💨';
+  if (spieler.rolle === 'spuernase' && s.geruch) symbol += s.geruch === 'wolf' ? '🐺' : '✅';
+  if (s.beschuetztVonDir && s.geschuetzt) symbol += '🛡️';
+  if (symbol) text(symbol, s.x, s.y - 52, 16, '#fff', 'center', false);
 }
 
 function zeichneWolle(w) {
@@ -1446,6 +1743,21 @@ function zeichneHUD() {
     if (!bereit && !sabotage) text(`Sabotage in ${Math.ceil(sabotagePause)} s`, W - 104, SAB_GATTER.y + 62, 13, '#c9c3ff', 'center', false);
   }
 
+  // Deine Rolle (unten links)
+  if (zustand === 'spiel' && !miniSpiel) {
+    const r = ROLLEN[spieler.rolle];
+    const a = rollenAktion();
+    const bereit = a && spieler.faehigkeit <= 0 && a.moeglich;
+    ctx.fillStyle = bereit ? (imRechteck(maus, ROLLE_KNOPF) ? '#8fd3ff' : 'rgba(40,110,170,0.9)') : 'rgba(20,20,50,0.85)';
+    rundesRechteck(ROLLE_KNOPF.x, ROLLE_KNOPF.y, ROLLE_KNOPF.w, ROLLE_KNOPF.h, 10); ctx.fill();
+    text(`${r.emoji} ${r.name}`, ROLLE_KNOPF.x + 12, ROLLE_KNOPF.y + 16, 15, '#ffd166', 'left', false);
+    let zeile;
+    if (!a) zeile = r.text;
+    else if (spieler.faehigkeit > 0) zeile = `${r.knopf} in ${Math.ceil(spieler.faehigkeit)} s`;
+    else zeile = `[Q] ${a.text}`;
+    text(zeile, ROLLE_KNOPF.x + 12, ROLLE_KNOPF.y + 37, a ? 14 : 11, bereit ? '#fff' : '#c9c3ff', 'left', false);
+  }
+
   // Warnung bei Sabotage
   if (sabotage && zustand === 'spiel') {
     const blink = 0.75 + Math.sin(zeit * 6) * 0.25;
@@ -1477,11 +1789,12 @@ function zeichneHUD() {
     ctx.font = 'bold 18px system-ui, sans-serif';
     const b = ctx.measureText(nachricht.text).width + 40;
     ctx.fillStyle = 'rgba(20,20,50,0.9)';
-    rundesRechteck(W / 2 - b / 2, H - 70, b, 44, 12); ctx.fill();
-    text(nachricht.text, W / 2, H - 48, 18, '#fff', 'center', false);
+    rundesRechteck(W / 2 - b / 2, H - 130, b, 44, 12); ctx.fill();
+    text(nachricht.text, W / 2, H - 108, 18, '#fff', 'center', false);
   }
 }
 
+const ROLLE_KNOPF = { x: 14, y: H - 66, w: 300, h: 52 };
 const SAB_NEBEL = { x: W - 194, y: 56, w: 180, h: 40 };
 const SAB_GATTER = { x: W - 194, y: 102, w: 180, h: 40 };
 
@@ -1587,6 +1900,15 @@ function zeichneIntro() {
     ctx.restore();
   }
 
+  // Deine Rolle
+  if (t > 2.0) {
+    ctx.globalAlpha = Math.min(1, (t - 2.0) / 0.5);
+    const r = ROLLEN[spieler.rolle];
+    text(`Deine Rolle: ${r.emoji} ${r.name}`, W / 2, 200, 26, '#ffd166');
+    text(r.text, W / 2, 232, 16, '#ddd', 'center', false);
+    ctx.globalAlpha = 1;
+  }
+
   // 3. Die Herde taucht auf, du stehst vorne in der Mitte
   if (t > 2.4) {
     const andere = schafe.filter(s => !s.istSpieler);
@@ -1656,10 +1978,11 @@ function zeichneTitel() {
     '🟡  Erledige deine Aufgaben: kleine Mini-Spiele bei den gelben !',
     '🧶  Findest du Wolle von einem gefressenen Schaf? Melde sie!',
     '🔔  Beim Herden-Treffen stimmt ihr ab, wer der Wolf ist.',
+    '🎭  Jeder bekommt eine Rolle mit Spezial-Fähigkeit (Taste Q)!',
     '🌫️  Sabotage! Der Wolf kann Nebel machen oder das Gatter öffnen.',
     '⌨️  Laufen: Pfeiltasten / WASD  •  Aktion: E  •  Sabotage: 1 / 2  •  Ton: M',
   ];
-  zeilen.forEach((z, i) => text(z, W / 2, 175 + i * 29, 16, i === 0 ? '#ffd166' : '#fff', 'center', false));
+  zeilen.forEach((z, i) => text(z, W / 2, 168 + i * 27, 16, i === 0 ? '#ffd166' : '#fff', 'center', false));
 
   text('Wähle eine Karte:', W / 2, 377, 20, '#ffd166', 'center', false);
   for (const r of titelKarten()) {
@@ -1684,6 +2007,7 @@ function zeichne() {
   ctx.clearRect(0, 0, W, H);
   if (zustand === 'titel') { zeichneTitel(); return; }
   if (zustand === 'intro') { zeichneIntro(); return; }
+  if (zustand === 'cutscene') { zeichneCutscene(); return; }
 
   kamera.x = begrenzt(spieler.x - W / 2, 0, WELT_B - W);
   kamera.y = begrenzt(spieler.y - H / 2, 0, WELT_H - H);
@@ -1699,8 +2023,13 @@ function zeichne() {
   for (const e of effekte) {
     if (!sichtbar(e)) continue;
     ctx.globalAlpha = Math.min(1, e.t);
-    text('🐺', e.x, e.y - 20 - (1.2 - e.t) * 25, 60, '#fff', 'center', false);
-    text('HAPS!', e.x, e.y + 30, 22, '#ff6b6b');
+    if (e.art === 'schild') {
+      text('🛡️', e.x, e.y - 20 - (1.2 - e.t) * 25, 50, '#fff', 'center', false);
+      text('GERETTET!', e.x, e.y + 30, 20, '#4ade80');
+    } else {
+      text('🐺', e.x, e.y - 20 - (1.2 - e.t) * 25, 60, '#fff', 'center', false);
+      text('HAPS!', e.x, e.y + 30, 22, '#ff6b6b');
+    }
     ctx.globalAlpha = 1;
   }
   ctx.restore();
@@ -1724,6 +2053,8 @@ addEventListener('keydown', e => {
   if (zustand === 'titel' && (k === 'arrowleft' || k === 'arrowright')) kartenNr = (kartenNr + (k === 'arrowright' ? 1 : KARTEN.length - 1)) % KARTEN.length;
   else if (zustand === 'titel' && (k === 'enter' || k === ' ')) starteMitKarte(kartenNr);
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
+  else if (zustand === 'cutscene' && (k === 'enter' || k === ' ') && cutscene.t > 1) endeCutscene();
+  else if (zustand === 'spiel' && !miniSpiel && k === 'q') nutzeFaehigkeit();
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
   else if (zustand === 'spiel' && miniSpiel) miniTaste(k);
   else if (zustand === 'spiel' && (k === 'e' || k === ' ')) aktion();
@@ -1747,9 +2078,11 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'titel') { const nr = titelKarteBei(p); if (nr !== null) starteMitKarte(nr); return; }
   if (zustand === 'intro') { if (intro > 1.5) introFertig(); return; }
   if (zustand === 'ende') { if (zeit - ende.seit > 1) zustand = 'titel'; return; }
+  if (zustand === 'cutscene') { if (cutscene.t > 1) endeCutscene(); return; }
   if (zustand === 'treffen') { klickTreffen(p); return; }
   if (zustand === 'spiel' && miniSpiel) { miniDruck(p); return; }
   if (zustand === 'spiel') {
+    if (imRechteck(p, ROLLE_KNOPF)) { nutzeFaehigkeit(); return; }
     if (spielerIstWolf && imRechteck(p, SAB_NEBEL)) { wolfSabotage('nebel'); return; }
     if (spielerIstWolf && imRechteck(p, SAB_GATTER)) { wolfSabotage('gatter'); return; }
     if (moeglicheAktion() && dist(p, { x: W - 75, y: H - 75 }) < 60) { aktion(); return; }

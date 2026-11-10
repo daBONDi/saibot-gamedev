@@ -13,11 +13,13 @@
 //   'krippe', 'iglu', 'glashaus', 'brunnen', 'leuchtturm', 'boot'
 // Mit "farben" kannst du bei manchen Bildern die Farben ändern.
 //
+// "himmel" sind die Farben vom Himmel in der Cutscene (oben, unten).
+//
 // Die Welt ist 1800 breit und 1300 hoch.
 
 const KARTEN = [
   {
-    name: 'Bauernhof', emoji: '🌾',
+    name: 'Bauernhof', himmel: ['#3b2a6b', '#ff9a62'], emoji: '🌾',
     boden: '#6abf4b', weg: '#c8a96b', platz: '#d6bb82', rand: 'zaun', deko: 'blumen',
     treffpunkt: { x: 900, y: 680 },
     laterne: { x: 160, y: 690 },
@@ -32,7 +34,7 @@ const KARTEN = [
     ],
   },
   {
-    name: 'Winterdorf', emoji: '❄️',
+    name: 'Winterdorf', himmel: ['#0f1a33', '#5a76a8'], emoji: '❄️',
     boden: '#eef4fa', weg: '#b8c7d6', platz: '#d5e1ec', rand: 'zaun', deko: 'tannen', schnee: true,
     treffpunkt: { x: 880, y: 650 },
     laterne: { x: 560, y: 420 },
@@ -47,7 +49,7 @@ const KARTEN = [
     ],
   },
   {
-    name: 'Schafsinsel', emoji: '🏝️',
+    name: 'Schafsinsel', himmel: ['#2a3f7a', '#ffb36b'], emoji: '🏝️',
     boden: '#f0d9a0', weg: '#dcc086', platz: '#e6cc90', rand: 'meer', deko: 'palmen',
     treffpunkt: { x: 900, y: 660 },
     laterne: { x: 1560, y: 640 },
