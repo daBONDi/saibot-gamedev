@@ -44,18 +44,18 @@ const MECH_TYPEN = [
     rakete: { pause: 4, schaden: 40, radius: 85, anzahl: 1 },
     sterne: { leben: 3, tempo: 3, schaden: 3, weite: 3 } },
   { id: 'blitz', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell und boostet ständig, hält aber wenig aus.',
-    leben: 70, tempo: 230, groesse: 0.85, boostPause: 1.2,
-    mg: { pause: 0.075, schaden: 4, tempo: 950, weite: 550, streuung: 0.07 },
+    leben: 80, tempo: 230, groesse: 0.85, boostPause: 1.2,
+    mg: { pause: 0.075, schaden: 5, tempo: 950, weite: 550, streuung: 0.07 },
     rakete: { pause: 5, schaden: 30, radius: 70, anzahl: 1 },
     sterne: { leben: 1, tempo: 5, schaden: 2, weite: 2 } },
   { id: 'koloss', name: 'Stahlkoloss', emoji: '🛡️', akzent: '#9ca3af', text: 'Riesig und langsam, aber hält extrem viel aus!',
-    leben: 180, tempo: 120, groesse: 1.3, boostPause: 4,
-    mg: { pause: 0.14, schaden: 8, tempo: 850, weite: 600, streuung: 0.06 },
+    leben: 150, tempo: 120, groesse: 1.3, boostPause: 4,
+    mg: { pause: 0.14, schaden: 7, tempo: 850, weite: 600, streuung: 0.06 },
     rakete: { pause: 5, schaden: 55, radius: 110, anzahl: 1 },
     sterne: { leben: 5, tempo: 1, schaden: 4, weite: 3 } },
   { id: 'adler', name: 'Adlerauge', emoji: '🎯', akzent: '#4ade80', text: 'Scharfschütze! Die Railgun trifft ganz weit und ganz hart.',
     leben: 80, tempo: 160, groesse: 1, boostPause: 2.5,
-    mg: { pause: 0.9, schaden: 40, tempo: 2600, weite: 1400, streuung: 0, strahl: true },
+    mg: { pause: 1.0, schaden: 34, tempo: 2600, weite: 1400, streuung: 0, strahl: true },
     rakete: { pause: 6, schaden: 30, radius: 70, anzahl: 1 },
     sterne: { leben: 2, tempo: 3, schaden: 5, weite: 5 } },
   { id: 'feuer', name: 'Feuersturm', emoji: '🔥', akzent: '#fb923c', text: 'Raketen-Profi: schießt 3 Raketen auf einmal!',
@@ -298,7 +298,7 @@ const sound = {
 function lautBei(p) { return spieler ? Math.max(0, 1 - dist(p, spieler) / 900) : 0; }
 
 // ===== Spielzustand =====
-let zustand = 'titel';   // 'titel', 'spiel', 'ende'
+let zustand = 'titel';   // 'titel', 'auswahl', 'spiel', 'ende'
 let modus = 'punkt';
 let mechs = [], spieler = null, schuesse = [], partikel = [], killfeed = [];
 let ziele = [], aktivesZiel = 0, angreifer = 'blau', verteidiger = 'rot';
@@ -1490,8 +1490,9 @@ function modusKarten() {
 const imRechteck = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
 // Ein Mech von oben gemalt (nur fürs Titelbild)
-function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase) {
+function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ = MECH_TYPEN[0]) {
   const T = TEAMS[team];
+  groesse *= typ.groesse;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(groesse, groesse);
@@ -1510,14 +1511,17 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase) {
   ctx.restore();
   ctx.rotate(zielWinkel);
   ctx.fillStyle = '#4b5060'; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
-  rr(8, -13, 34, 7, 2); ctx.fill(); ctx.stroke();
-  rr(8, 6, 34, 7, 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = T.dunkel;
-  rr(-16, -28, 24, 11, 3); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#ffd166';
-  kreis(-9, -22.5, 2.5); ctx.fill(); kreis(0, -22.5, 2.5); ctx.fill();
+  if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
+  else { rr(8, -13, 34, 7, 2); ctx.fill(); ctx.stroke(); rr(8, 6, 34, 7, 2); ctx.fill(); ctx.stroke(); }
+  for (const s of typ.rakete.anzahl > 1 ? [-1, 1] : [-1]) {   // Raketenwerfer
+    ctx.fillStyle = T.dunkel; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
+    rr(-16, s > 0 ? 17 : -28, 24, 11, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffd166';
+    kreis(-9, s > 0 ? 22.5 : -22.5, 2.5); ctx.fill(); kreis(0, s > 0 ? 22.5 : -22.5, 2.5); ctx.fill();
+  }
   ctx.fillStyle = T.farbe; ctx.strokeStyle = T.dunkel; ctx.lineWidth = 3;
   rr(-19, -17, 36, 34, 9); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = typ.akzent; ctx.fillRect(-17, -2, 12, 4);   // Streifen in der Mech-Farbe
   ctx.fillStyle = '#1b1f2a';
   rr(-1, -10, 15, 20, 5); ctx.fill();
   ctx.fillStyle = T.hell;
@@ -1535,8 +1539,8 @@ function zeichneTitel() {
   for (let y = 0; y <= H; y += 60) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
   ctx.stroke();
 
-  zeichneMech2D('blau', 90, 515, 2.2, 0, Math.atan2(maus.y - 515, maus.x - 90), zeit * 6);
-  zeichneMech2D('rot', W - 90, 515, 2.2, Math.PI, Math.PI + Math.sin(zeit) * 0.3, zeit * 6);
+  zeichneMech2D('blau', 90, 515, 2, 0, Math.atan2(maus.y - 515, maus.x - 90), zeit * 6, meinMech);
+  zeichneMech2D('rot', W - 90, 515, 2, Math.PI, Math.PI + Math.sin(zeit) * 0.3, zeit * 6, MECH_TYPEN[2]);
 
   const titelG = ctx.createLinearGradient(W / 2 - 300, 0, W / 2 + 300, 0);
   titelG.addColorStop(0, '#93c5fd'); titelG.addColorStop(0.5, '#ffffff'); titelG.addColorStop(1, '#fca5a5');
@@ -1554,9 +1558,59 @@ function zeichneTitel() {
   }
 
   text('🎮 WASD: Laufen  ·  Maus: Umschauen  ·  Linksklick: MG  ·  Rechtsklick / Q: Rakete  ·  Shift: Boost  ·  Esc: Pause', W / 2, 455, 13, '#c9c3ff', 'center', false);
-  text(`Du (blau) + 3 Computer-Mechs gegen ${TEAM_GROESSE} Gegner (rot)`, W / 2, 478, 13, '#8a8fb0', 'center', false);
+  text(`Du (blau) + 3 Computer-Mechs gegen ${TEAM_GROESSE} Gegner (rot)  ·  ${MECH_TYPEN.length} verschiedene Mechs!`, W / 2, 478, 13, '#8a8fb0', 'center', false);
   if (!renderer) text('⚠️ 3D geht auf diesem Computer leider nicht (kein WebGL).', W / 2, 580, 16, '#ff6b6b');
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 20, 14, '#fff', 'center', false);
+}
+
+// ===== Mech-Auswahl =====
+let gewaehlterModus = 'punkt';
+const ZURUECK_KNOPF = { x: 30, y: 540, w: 150, h: 40 };
+function mechKarten() {
+  return MECH_TYPEN.map((t, i) => ({ t, x: 30 + i * 182, y: 105, w: 172, h: 415 }));
+}
+function zeichneAuswahl() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#14161c'); g.addColorStop(1, '#2b3140');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const modusInfo = MODI.find(x => x.id === gewaehlterModus);
+  text('Wähle deinen Mech!', W / 2, 45, 38, '#ffd166');
+  text(`Spielmodus: ${modusInfo.emoji} ${modusInfo.name}`, W / 2, 82, 16, '#c9c3ff', 'center', false);
+
+  for (const k of mechKarten()) {
+    const t = k.t, hover = imRechteck(maus, k), meiner = t === meinMech;
+    ctx.fillStyle = hover ? '#3a4256' : 'rgba(30,34,46,0.92)';
+    rr(k.x, k.y, k.w, k.h, 14); ctx.fill();
+    ctx.strokeStyle = hover ? '#ffd166' : (meiner ? t.akzent : '#4a5266'); ctx.lineWidth = hover || meiner ? 4 : 2; ctx.stroke();
+    const mx = k.x + k.w / 2;
+    // Der Mech dreht sich langsam
+    zeichneMech2D('blau', mx - 8, k.y + 85, 1.25, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, hover ? zeit * 8 : 0, t);
+    text(t.emoji, k.x + 22, k.y + 24, 22, '#fff', 'center', false);
+    if (meiner) text('✓', k.x + k.w - 20, k.y + 24, 20, t.akzent, 'center', false);
+    text(t.name, mx, k.y + 165, 20, t.akzent);
+    umbrechen(t.text, k.x + 12, k.y + 195, k.w - 24, 17, 12, '#c9c3ff');
+    // Sterne für die Werte
+    [['❤️', 'Leben', t.sterne.leben], ['💨', 'Tempo', t.sterne.tempo], ['💥', 'Schaden', t.sterne.schaden], ['🎯', 'Weite', t.sterne.weite]].forEach(([e, name, n], i) => {
+      const y = k.y + 280 + i * 30;
+      text(e, k.x + 20, y, 14, '#fff', 'center', false);
+      text(name, k.x + 34, y, 12, '#c9c3ff', 'left', false);
+      for (let j = 0; j < 5; j++) {
+        ctx.fillStyle = j < n ? t.akzent : 'rgba(255,255,255,0.12)';
+        rr(k.x + 96 + j * 14, y - 5, 11, 10, 3); ctx.fill();
+      }
+    });
+    text(t.rakete.anzahl > 1 ? `🚀 ${t.rakete.anzahl} Raketen` : (t.mg.strahl ? '⚡ Railgun' : '🔫 Doppel-MG'), mx, k.y + 395, 13, '#fff', 'center', false);
+  }
+  const zh = imRechteck(maus, ZURUECK_KNOPF);
+  ctx.fillStyle = zh ? '#3a4256' : 'rgba(30,34,46,0.92)';
+  rr(ZURUECK_KNOPF.x, ZURUECK_KNOPF.y, ZURUECK_KNOPF.w, ZURUECK_KNOPF.h, 10); ctx.fill();
+  text('← Zurück', ZURUECK_KNOPF.x + ZURUECK_KNOPF.w / 2, ZURUECK_KNOPF.y + 20, 16, zh ? '#ffd166' : '#fff', 'center', false);
+  text('Klick auf einen Mech, um zu starten!', W / 2 + 60, 560, 16, '#8a8fb0', 'center', false);
+}
+function waehleMech(t) {
+  meinMech = t;
+  try { localStorage.setItem('kaempfer-mech', t.id); } catch (e) { /* egal */ }
+  neuesSpiel(gewaehlterModus);
 }
 
 function zeichneEnde() {
@@ -1590,6 +1644,7 @@ function zeichneEnde() {
 function zeichne() {
   ctx.clearRect(0, 0, W, H);
   if (zustand === 'titel') { zeichneTitel(); return; }
+  if (zustand === 'auswahl') { zeichneAuswahl(); return; }
   zeichne3D();
   zeichneHUD();
   if (zustand === 'ende') zeichneEnde();
@@ -1621,6 +1676,7 @@ addEventListener('keydown', e => {
   if (zustand === 'spiel' && k === 'escape' && !pause) { pause = true; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && pause && k === 'enter') { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) neuesSpiel(modus);
+  else if (zustand === 'auswahl' && k === 'escape') zustand = 'titel';
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => {
@@ -1637,7 +1693,12 @@ canvas.addEventListener('pointerdown', e => {
   tonStart();
   if (!mausGefangen) { const p = punkt(e); maus.x = p.x; maus.y = p.y; }
   if (zustand === 'titel') {
-    for (const k of modusKarten()) if (imRechteck(maus, k)) { neuesSpiel(k.m.id); return; }
+    for (const k of modusKarten()) if (imRechteck(maus, k)) { gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
+    return;
+  }
+  if (zustand === 'auswahl') {
+    for (const k of mechKarten()) if (imRechteck(maus, k)) { waehleMech(k.t); return; }
+    if (imRechteck(maus, ZURUECK_KNOPF)) zustand = 'titel';
     return;
   }
   if (zustand === 'ende') { if (zeit - ende.seit > 1) zustand = 'titel'; return; }
