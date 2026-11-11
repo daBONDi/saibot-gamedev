@@ -1970,16 +1970,16 @@ function update(dt) {
 }
 
 // ===== Zeichnen =====
-function zeichneSchafKoerper(x, y, farbe, richtung, phase, laeuft, groesse = 1) {
+function zeichneSchafKoerper(x, y, farbe, richtung, phase, laeuft, groesse = 1, geist = false) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(groesse, groesse);
   // Schatten
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ellipse(0, 21, 24, 6); ctx.fill();
-  // Beine
+  if (!geist) { ellipse(0, 21, 24, 6); ctx.fill(); }   // Geister schweben, die haben keinen Schatten hier
+  // Beine (Geister haben keine!)
   ctx.fillStyle = '#333';
-  [-12, -5, 5, 12].forEach((bx, i) => {
+  if (!geist) [-12, -5, 5, 12].forEach((bx, i) => {
     const h = laeuft ? Math.sin(phase + i * Math.PI / 2) * 3 : 0;
     ctx.fillRect(bx - 2, 6, 4, 13 + h);
   });
@@ -2050,8 +2050,11 @@ function zeichneSchaf(s) {
 // 👻 Du als Geist: durchsichtig und schwebend
 function zeichneGeist(s) {
   const schweben = Math.sin(zeit * 3) * 6;
+  // Schatten auf dem Boden (wird kleiner, wenn der Geist höher schwebt)
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ellipse(s.x, s.y + 21, 20 - schweben, 5); ctx.fill();
   ctx.globalAlpha = 0.45;
-  zeichneSchafKoerper(s.x, s.y - 12 + schweben, '#e8ecff', s.richtung, s.phase, s.laeuft);
+  zeichneSchafKoerper(s.x, s.y - 12 + schweben, '#e8ecff', s.richtung, s.phase, false, 1, true);   // true = ohne Beine
   ctx.globalAlpha = 1;
   text('👻', s.x, s.y - 58 + schweben, 22, '#fff', 'center', false);
   text('Du', s.x, s.y - 40 + schweben, 13, '#e0e0ff');
