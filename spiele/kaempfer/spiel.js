@@ -63,9 +63,10 @@ const MECH_TYPEN = [
     mg: { pause: 0.13, schaden: 5, tempo: 900, weite: 600, streuung: 0.06 },
     rakete: { pause: 4.5, schaden: 28, radius: 80, anzahl: 3 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 3 } },
-  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie! Granaten fliegen im Bogen über Wände. Hoch schauen = weiter!',
+  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie! Ziel anvisieren, dann regnen 10 Raketen runter. Hoch schauen = weiter!',
     leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5,
-    mg: { granate: true, pause: 1.8, schaden: 38, radius: 95, tempo: 520, weite: 1100, minWeite: 180, streuung: 0.03 },
+    // salve: Erst anvisieren (zielZeit), dann fliegen "anzahl" Raketen im Bogen und landen im Kreis (streuRadius) ums Ziel
+    mg: { salve: true, pause: 7, zielZeit: 0.8, anzahl: 10, abstand: 0.12, schaden: 14, radius: 60, streuRadius: 110, tempo: 520, weite: 1100, minWeite: 180 },
     rakete: { pause: 5, schaden: 35, radius: 80, anzahl: 1 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 5 } },
 ];
@@ -310,7 +311,9 @@ const sound = {
     ton(700, 0, 0.05, 'square', 0.035 * laut, 200);
     rauschen(0, 0.06, 0.08 * laut, 3000);
   },
-  moerser(laut = 1) { ton(110, 0, 0.35, 'square', 0.15 * laut, 45); rauschen(0, 0.45, 0.3 * laut, 1500); },
+  anvisieren() { [880, 1100, 1320].forEach((f, i) => ton(f, i * 0.12, 0.1, 'square', 0.07)); },
+  warnung() { for (let i = 0; i < 3; i++) { ton(440, i * 0.25, 0.12, 'square', 0.09); ton(330, i * 0.25 + 0.12, 0.12, 'square', 0.09); } },
+  salve(laut = 1) { ton(260, 0, 0.25, 'sawtooth', 0.05 * laut, 900); rauschen(0, 0.2, 0.08 * laut, 3000); },
   pfeifen(laut = 1) { ton(1400, 0, 0.9, 'sine', 0.05 * laut, 500); },
   railgun(laut = 1) { ton(1800, 0, 0.35, 'sawtooth', 0.08 * laut, 120); ton(3000, 0, 0.1, 'square', 0.04 * laut, 800); rauschen(0, 0.3, 0.15 * laut, 5000); },
   rakete(laut = 1) { ton(180, 0, 0.45, 'sawtooth', 0.07 * laut, 700); rauschen(0, 0.4, 0.12 * laut, 2500); },
@@ -502,7 +505,7 @@ function feuern(m) {
   if (m.mgPause > 0 || m.tot) return;
   const mg = m.typ.mg, gr = m.typ.groesse;
   m.mgPause = mg.pause * (m.istSpieler ? 1 : BOT_FEUER_LANGSAMER);
-  if (mg.granate) { granateFeuern(m); return; }
+  if (mg.salve) { if (!m.salve) salveStarten(m); return; }
   if (!mg.strahl) m.lauf = -m.lauf;   // Abwechselnd links und rechts schießen (die Railgun hat nur ein Rohr)
   const seite = mg.strahl ? 0.4 : m.lauf;
   const w = m.zielWinkel + (Math.random() - 0.5) * 2 * mg.streuung;
@@ -515,7 +518,7 @@ function feuern(m) {
   else partikel.push({ x, y, h: 52 * gr, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
 }
 
-// ☄️ Artillerie: Die Granate fliegt im hohen Bogen und explodiert, wo sie landet
+// ☄️ Artillerie: Ziel anvisieren ... und dann regnet es Raketen!
 function landePunkt(m) {
   const mg = m.typ.mg;
   const weite = begrenzt(m.zielWeite || 500, mg.minWeite, mg.weite);
@@ -524,21 +527,45 @@ function landePunkt(m) {
     y: begrenzt(m.y + Math.sin(m.zielWinkel) * weite, 10, WELT_H - 10),
   };
 }
-function granateFeuern(m) {
+function salveStarten(m) {
+  const mg = m.typ.mg;
+  m.salve = { ziel: landePunkt(m), warten: mg.zielZeit, rest: mg.anzahl, timer: 0, laengste: 0 };
+  if (m.istSpieler) { sound.anvisieren(); zeigeNachricht('🎯 Ziel erfasst!', 1.2, m.typ.akzent); }
+  else if (spieler && !spieler.tot && m.team !== spieler.team && dist(m.salve.ziel, spieler) < mg.streuRadius + 150) {
+    sound.warnung(); zeigeNachricht('⚠️ Raketenhagel! Lauf weg!', 1.5, '#ff6b6b');
+  }
+}
+function updateSalve(m, dt) {
+  const sv = m.salve, mg = m.typ.mg;
+  if (sv.warten > 0) { sv.warten -= dt; return; }   // Erst kurz anvisieren ...
+  sv.timer -= dt;
+  while (sv.timer <= 0 && sv.rest > 0) {             // ... dann eine Rakete nach der anderen!
+    salvenRakete(m, sv.ziel);
+    sv.rest--;
+    sv.timer += mg.abstand;
+  }
+  if (sv.rest <= 0) {   // Warten, bis die letzte Rakete gelandet ist
+    sv.aus = (sv.aus === undefined ? sv.laengste : sv.aus) - dt;
+    if (sv.aus <= 0) m.salve = null;
+  }
+}
+let letzterPfiff = 0;
+function salvenRakete(m, ziel) {
   const mg = m.typ.mg, gr = m.typ.groesse;
-  const ziel = landePunkt(m);
-  ziel.x += (Math.random() - 0.5) * 2 * mg.streuung * 300;   // ein bisschen ungenau
-  ziel.y += (Math.random() - 0.5) * 2 * mg.streuung * 300;
-  const weite = dist(m, ziel);
-  const x = m.x + Math.cos(m.zielWinkel) * 20, y = m.y + Math.sin(m.zielWinkel) * 20;
+  const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * mg.streuRadius;   // irgendwo im Kreis
+  const zx = begrenzt(ziel.x + Math.cos(a) * r, 10, WELT_B - 10), zy = begrenzt(ziel.y + Math.sin(a) * r, 10, WELT_H - 10);
+  const x = m.x - Math.cos(m.zielWinkel) * 8, y = m.y - Math.sin(m.zielWinkel) * 8;
+  const weite = Math.hypot(zx - x, zy - y);
+  const dauer = 0.9 + weite / mg.tempo;
   schuesse.push({
-    art: 'granate', x, y, sx: x, sy: y, zx: ziel.x, zy: ziel.y, h: 85 * gr, startH: 85 * gr,
-    k: 0, dauer: Math.max(0.5, weite / mg.tempo), scheitel: 120 + weite * 0.35,
+    art: 'salve', bogen: true, x, y, sx: x, sy: y, zx, zy, h: 100 * gr, startH: 100 * gr,
+    k: 0, dauer, scheitel: 220 + weite * 0.3,
     vx: 0, vy: 0, rest: 1e9, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m,
   });
-  sound.moerser(m.istSpieler ? 1 : lautBei(m));
-  if (m.istSpieler) { rueckstoss = 14; muendung = 0.12; wackeln = Math.max(wackeln, 3); }
-  else partikel.push({ x, y, h: 90 * gr, vh: 60, vx: 0, vy: 0, t: 0.6, max: 0.6, farbe: '#888888', rauch: true });
+  m.salve.laengste = Math.max(m.salve.laengste, dauer + 0.1);
+  partikel.push({ x, y, h: 100 * gr, vh: 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 0.8, max: 0.8, farbe: '#999999', rauch: true });
+  sound.salve(m.istSpieler ? 1 : lautBei(m));
+  if (m.istSpieler) { rueckstoss = 4; muendung = 0.06; }
 }
 
 function rakete(m) {
@@ -555,15 +582,16 @@ function rakete(m) {
 }
 
 function explosion(x, y, team, von, radius = 85, schadenMax = 40) {
-  for (let i = 0; i < 30; i++) {
+  const menge = Math.min(1, radius / 85);
+  for (let i = 0; i < 30 * menge; i++) {
     const a = Math.random() * Math.PI * 2, v = 50 + Math.random() * 200;
     partikel.push({ x, y, h: 30, vh: 50 + Math.random() * 250, g: 400, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.6, max: 0.6, farbe: zufall(['#ffd166', '#ff9f43', '#ff5e3a', '#ffffff']) });
   }
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 10 * menge; i++) {
     partikel.push({ x: x + (Math.random() - 0.5) * 40, y: y + (Math.random() - 0.5) * 40, h: 20 + Math.random() * 30, vh: 30 + Math.random() * 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 1.4, max: 1.4, farbe: zufall(['#555555', '#444444', '#666666']), rauch: true });
   }
   partikel.push({ x, y, h: 40, vh: 0, vx: 0, vy: 0, t: 0.35, max: 0.35, kugel: radius, farbe: '#ffb347' });
-  sound.boom(Math.max(0.15, lautBei({ x, y })));
+  sound.boom(Math.max(0.15, lautBei({ x, y })) * menge);
   if (spieler && dist({ x, y }, spieler) < 400) wackeln = Math.max(wackeln, 8);
   if (team === null) return;
   for (const m of mechs) {
@@ -600,6 +628,7 @@ function schaden(m, menge, von) {
 function zerstoert(m, von) {
   m.tot = true;
   m.leben = 0;
+  m.salve = null;
   m.neustart = NEUSTART_ZEIT;
   m.tode++;
   m.zerstoertVon = von;
@@ -620,14 +649,16 @@ function zerstoert(m, von) {
 
 function updateSchuesse(dt) {
   for (const s of schuesse) {
-    if (s.art === 'granate') {   // Fliegt im Bogen über alles drüber
+    if (s.bogen) {   // Fliegt im Bogen über alles drüber
       s.k += dt / s.dauer;
       const k = Math.min(1, s.k);
+      const ax = s.x, ay = s.y, ah = s.h;
       s.x = s.sx + (s.zx - s.sx) * k;
       s.y = s.sy + (s.zy - s.sy) * k;
       s.h = s.startH * (1 - k) + 4 * s.scheitel * k * (1 - k);
-      if (Math.random() < 0.7) partikel.push({ x: s.x, y: s.y, h: s.h, vh: 5, vx: 0, vy: 0, t: 0.5, max: 0.5, farbe: '#b9a7d6', rauch: true });
-      if (!s.pfiff && k > 0.6 && spieler && dist({ x: s.zx, y: s.zy }, spieler) < 300) { s.pfiff = true; sound.pfeifen(); }   // Fiiiiuuu ... gleich knallt's!
+      s.dx = s.x - ax; s.dy = s.y - ay; s.dh = s.h - ah;   // Flugrichtung (damit die Rakete richtig zeigt)
+      if (Math.random() < 0.6) partikel.push({ x: s.x, y: s.y, h: s.h, vh: 5, vx: 0, vy: 0, t: 0.5, max: 0.5, farbe: '#b9a7d6', rauch: true });
+      if (k > 0.6 && zeit - letzterPfiff > 1 && spieler && dist({ x: s.zx, y: s.zy }, spieler) < 300) { letzterPfiff = zeit; sound.pfeifen(); }   // Fiiiiuuu ... gleich knallt's!
       if (k >= 1) { s.weg = true; explosion(s.zx, s.zy, s.team, s.von, s.radius, s.schaden); }
       continue;
     }
@@ -677,7 +708,7 @@ function updateSpieler(dt) {
   if ((tasten['shift'] || tasten[' ']) && (dx || dy)) boosten(m, Math.atan2(dy, dx));
   bewege(m, dx, dy, dt);
   m.zielWinkel = blick.links;
-  if (m.typ.mg.granate) {   // Artillerie: Je höher du schaust, desto weiter fliegt die Granate
+  if (m.typ.mg.salve) {   // Artillerie: Je höher du schaust, desto weiter weg ist das Ziel
     const mg = m.typ.mg;
     m.zielWeite = mg.minWeite + (blick.hoch + 0.5) / 0.9 * (mg.weite - mg.minWeite);
   }
@@ -710,7 +741,7 @@ function botDenken(m, dt) {
     for (const o of mechs) {
       if (o.tot || o.team === m.team) continue;
       const d = dist(m, o);
-      const sichtbar = sichtFrei(m, o) || (m.typ.mg.granate && mechs.some(f => !f.tot && f.team === m.team && f !== m && dist(f, o) < 700 && sichtFrei(f, o)));
+      const sichtbar = sichtFrei(m, o) || (m.typ.mg.salve && mechs.some(f => !f.tot && f.team === m.team && f !== m && dist(f, o) < 700 && sichtFrei(f, o)));
       if (d < besterD && sichtbar) { bester = o; besterD = d; }
     }
     if (bester !== m.gegner) m.reaktion = 0.35 + Math.random() * 0.25;   // Bots brauchen kurz, bis sie reagieren
@@ -742,10 +773,11 @@ function botDenken(m, dt) {
     // Hin und her ausweichen
     const seite = Math.sin(zeit * 1.3 + m.seed) > 0 ? 1 : -1;
     dx += -gy * seite * 0.7; dy += gx * seite * 0.7;
-    const abstand = m.typ.mg.strahl || m.typ.mg.granate ? 450 : 220;   // Scharfschützen und Artillerie bleiben lieber weit weg
+    const abstand = m.typ.mg.strahl || m.typ.mg.salve ? 450 : 220;   // Scharfschützen und Artillerie bleiben lieber weit weg
     if (d < abstand) { dx -= gx * 0.8; dy -= gy * 0.8; }   // Nicht zu nah ran
     // Zielen (mit Vorhalten, damit sie bewegte Ziele treffen)
-    const flug = d / m.typ.mg.tempo;
+    const mg = m.typ.mg;
+    const flug = mg.salve ? (mg.zielZeit + 0.9 + d / mg.tempo) * 0.4 : d / mg.tempo;   // Artillerie: Wo ist er ungefähr, wenn die Raketen landen?
     const vorne = { x: g.x + g.vx * flug, y: g.y + g.vy * flug };   // Da wird der Gegner gleich sein
     const zielW = Math.atan2(vorne.y - m.y, vorne.x - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * BOT_UNGENAU;
     m.zielWeite = dist(m, vorne);
@@ -759,6 +791,13 @@ function botDenken(m, dt) {
     if (m.seitHit < 0.05 && Math.random() < 0.25) boosten(m, Math.atan2(gx, -gy) + (Math.random() < 0.5 ? 0 : Math.PI));
   } else if (dx || dy) {
     m.zielWinkel = drehe(m.zielWinkel, Math.atan2(dy, dx), dt * 5);
+  }
+
+  // Raketenhagel von Gegnern? Schnell raus aus dem Kreis!
+  for (const o of mechs) {
+    if (!o.salve || o.team === m.team) continue;
+    const z = o.salve.ziel, d = dist(m, z);
+    if (d < o.typ.mg.streuRadius + 60) { dx += (m.x - z.x) / (d || 1) * 2; dy += (m.y - z.y) / (d || 1) * 2; }
   }
 
   // 4. Festgesteckt? Dann neuen Weg suchen und kurz zur Seite
@@ -881,6 +920,7 @@ function update(dt) {
       continue;
     }
     if (m.seitHit > HEILEN_NACH) m.leben = Math.min(m.typ.leben, m.leben + HEILEN_TEMPO * dt);
+    if (m.salve) updateSalve(m, dt);
   }
   updateSpieler(dt);
   for (const m of mechs) if (!m.istSpieler && !m.tot) botDenken(m, dt);
@@ -1300,19 +1340,20 @@ function baueMech(m) {
   const visier = new THREE.Mesh(new THREE.BoxGeometry(3, 6, 16), new THREE.MeshBasicMaterial({ color: T.hell }));
   visier.position.set(24.5, 16, 0);
   torso.add(visier);
-  if (typ.mg.granate) {
-    // ☄️ Donnerhagel: ein dicker Mörser auf dem Rücken, schräg nach oben
-    torso.add(klotz(24, 14, 22, teamDunkel, -6, 28, 10));
-    const moerser = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 46, 12), dunkelMat);
-    moerser.rotation.z = -0.75;   // schräg nach vorne oben
-    moerser.position.set(6, 46, 10);
-    moerser.castShadow = true;
-    torso.add(moerser);
-    const muendung = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 8.5, 4, 12), akzentMat);
-    muendung.rotation.z = -0.75;
-    muendung.position.set(21, 61, 10);
-    torso.add(muendung);
-    torso.add(klotz(10, 8, 30, grauMat, 14, 2, 0));   // kleine Stütze vorne
+  if (typ.mg.salve) {
+    // ☄️ Donnerhagel: ein großer Raketenwerfer mit 9 Rohren auf dem Rücken, schräg nach oben
+    const werfer = new THREE.Group();
+    werfer.position.set(-4, 38, 6);
+    werfer.rotation.z = 0.45;
+    werfer.add(klotz(26, 24, 32, teamDunkel, 0, 0, 0));
+    for (const y of [-7, 0, 7]) for (const z of [-10, 0, 10]) {
+      const loch = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 2, 8), akzentMat);
+      loch.rotation.z = Math.PI / 2;
+      loch.position.set(13.5, y, z);
+      werfer.add(loch);
+    }
+    torso.add(werfer);
+    for (const s of [-1, 1]) torso.add(klotz(14, 8, 7, grauMat, 12, 3, s * 21));   // kleine Arme vorne
   } else if (typ.mg.strahl) {
     // 🎯 Adlerauge: eine lange Railgun mit Zielfernrohr
     torso.add(klotz(22, 12, 10, grauMat, 12, 4, 21));
@@ -1446,8 +1487,8 @@ const kugelGeo = new THREE.BoxGeometry(26, 2.5, 2.5);
 const kugelMat = { blau: new THREE.MeshBasicMaterial({ color: '#bfdbfe' }), rot: new THREE.MeshBasicMaterial({ color: '#fecaca' }) };
 const strahlGeo = new THREE.BoxGeometry(90, 3, 3);
 const strahlMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
-const granatenGeo = new THREE.SphereGeometry(7, 12, 8);
-const granatenMat = new THREE.MeshStandardMaterial({ color: '#3b2f4a', emissive: '#c084fc', emissiveIntensity: 0.7 });
+const salvenGeo = new THREE.CylinderGeometry(2.5, 3.5, 20, 8).rotateX(Math.PI / 2);   // zeigt nach vorne (z)
+const salvenMat = new THREE.MeshStandardMaterial({ color: '#e5e7eb', emissive: '#c084fc', emissiveIntensity: 0.6 });
 const raketenGeo = new THREE.BoxGeometry(18, 6, 6);
 const raketenMat = new THREE.MeshStandardMaterial({ color: '#dddddd', emissive: '#ff9f43', emissiveIntensity: 0.4 });
 let schussMeshes = [];
@@ -1456,13 +1497,14 @@ function zeigeSchuesse() {
     if (!s.mesh) {
       if (s.art === 'kugel') s.mesh = new THREE.Mesh(kugelGeo, kugelMat[s.team]);
       else if (s.art === 'strahl') s.mesh = new THREE.Mesh(strahlGeo, strahlMat);
-      else if (s.art === 'granate') s.mesh = new THREE.Mesh(granatenGeo, granatenMat);
+      else if (s.art === 'salve') s.mesh = new THREE.Mesh(salvenGeo, salvenMat);
       else s.mesh = new THREE.Mesh(raketenGeo, raketenMat);
       s.mesh.rotation.y = -Math.atan2(s.vy, s.vx);
       szene.add(s.mesh);
       schussMeshes.push(s);
     }
     s.mesh.position.set(s.x, s.h, s.y);
+    if (s.bogen && s.dx !== undefined) s.mesh.lookAt(s.x + s.dx, s.h + s.dh, s.y + s.dy);   // Rakete zeigt in Flugrichtung
   }
   schussMeshes = schussMeshes.filter(s => {
     if (s.weg) { szene.remove(s.mesh); return false; }
@@ -1531,20 +1573,22 @@ muendungsBlitz.scale.set(14, 14, 1);
 function baueWaffen(typ) {
   while (waffen.children.length) waffen.remove(waffen.children[0]);
   const mat = metall(TEAMS.blau.farbe), akzent = metall(typ.akzent);
-  if (typ.mg.granate) {   // ☄️ Ein dicker Mörser rechts, schräg nach oben
-    const halter = new THREE.Mesh(new THREE.BoxGeometry(12, 9, 18), mat);
-    halter.position.set(16, -16, -24);
-    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 30, 12), dunkelMat);
-    rohr.rotation.x = Math.PI / 2 + 0.45;
-    rohr.position.set(16, -8, -40);
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 3, 12), akzent);
-    ring.rotation.x = Math.PI / 2 + 0.45;
-    ring.position.set(16, -2.5, -52);
-    waffen.add(halter, rohr, ring);
-    blitzMat.color.set('#c084fc');
+  if (typ.mg.salve) {   // ☄️ Raketenwerfer rechts, schräg nach oben
+    const werfer = new THREE.Group();
+    werfer.position.set(17, -14, -34);
+    werfer.rotation.x = 0.35;
+    werfer.add(new THREE.Mesh(new THREE.BoxGeometry(18, 14, 26), mat));
+    for (const x of [-5, 0, 5]) for (const y of [-3.5, 3.5]) {
+      const loch = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 1.5, 8), akzent);
+      loch.rotation.x = Math.PI / 2;
+      loch.position.set(x, y, -13.2);
+      werfer.add(loch);
+    }
+    waffen.add(werfer);
+    blitzMat.color.set('#ffb347');
     waffen.add(muendungsBlitz);
-    waffen.userData.muendungZ = -56;
-    waffen.userData.muendungY = 0;
+    waffen.userData.muendungZ = -50;
+    waffen.userData.muendungY = -6;
     waffen.traverse(o => { o.renderOrder = 10; });
     return;
   }
@@ -1574,20 +1618,49 @@ function baueWaffen(typ) {
 }
 baueWaffen(meinMech);
 
-// ----- Zielring: Hier landet deine Granate -----
-const zielRing = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48), new THREE.MeshBasicMaterial({ color: '#c084fc', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+// ----- Zielkreise der Artillerie -----
+// Dein Zielring (zum Anvisieren) und die Kreise, wo gerade Raketen runterkommen
+const zielRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: '#c084fc', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
 zielRing.rotation.x = -Math.PI / 2;
 szene.add(zielRing);
+const salvenKreise = new Map();   // Mech -> Kreis auf dem Boden
+function zeigeSalvenKreise() {
+  for (const m of mechs) {
+    if (!m.salve) continue;
+    let k = salvenKreise.get(m);
+    if (!k) {
+      const freund = m.team === spieler.team;
+      const farbe = freund ? '#c084fc' : '#ef4444';
+      k = new THREE.Group();
+      const rand = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 48), new THREE.MeshBasicMaterial({ color: farbe, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      const flaeche = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshBasicMaterial({ color: farbe, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+      const kreuz = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.14, 24), rand.material);
+      for (const t of [rand, flaeche, kreuz]) { t.rotation.x = -Math.PI / 2; k.add(t); }
+      k.userData.rand = rand;
+      szene.add(k);
+      salvenKreise.set(m, k);
+    }
+    k.position.set(m.salve.ziel.x, 2.5, m.salve.ziel.y);
+    k.scale.setScalar(m.typ.mg.streuRadius + m.typ.mg.radius * 0.5);
+    k.userData.rand.material.opacity = 0.5 + Math.abs(Math.sin(zeit * 8)) * 0.5;   // blinkt
+  }
+  for (const [m, k] of salvenKreise) {   // Kreise ohne Salve wegräumen
+    if (m.salve && mechs.includes(m)) continue;
+    szene.remove(k);
+    salvenKreise.delete(m);
+  }
+}
 
 // ----- Kamera und Zeichnen der 3D-Welt -----
 function zeichne3D() {
   if (kartenAnimation) kartenAnimation();
-  zielRing.visible = !spieler.tot && !!spieler.typ.mg.granate && zustand === 'spiel';
+  zeigeSalvenKreise();
+  zielRing.visible = !spieler.tot && !!spieler.typ.mg.salve && !spieler.salve && zustand === 'spiel';
   if (zielRing.visible) {
     const p = landePunkt(spieler);
     zielRing.position.set(p.x, 2, p.y);
-    zielRing.scale.setScalar(spieler.typ.mg.radius * (0.9 + Math.sin(zeit * 6) * 0.06));
-    zielRing.material.opacity = spieler.mgPause > 0 ? 0.3 : 0.85;
+    zielRing.scale.setScalar(spieler.typ.mg.streuRadius + spieler.typ.mg.radius * 0.5);
+    zielRing.material.opacity = spieler.mgPause > 0 ? 0.25 : 0.85;
   }
   for (const m of mechs) zeigeMech(m);
   zeigeZiele();
@@ -1601,7 +1674,7 @@ function zeichne3D() {
     waffen.visible = true;
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
     muendungsBlitz.visible = muendung > 0;
-    muendungsBlitz.position.set(m.typ.mg.strahl || m.typ.mg.granate ? 15 : m.lauf * 15, waffen.userData.muendungY, waffen.userData.muendungZ);
+    muendungsBlitz.position.set(m.typ.mg.strahl ? 15 : (m.typ.mg.salve ? 17 : m.lauf * 15), waffen.userData.muendungY, waffen.userData.muendungZ);
   } else {
     // Zerstört: Die Kamera fliegt hoch und schaut auf dein Wrack
     const w = m.wrack;
@@ -1809,11 +1882,17 @@ function zeichneHUD() {
     }
   }
 
-  // ----- Artillerie: Wie weit fliegt die Granate? -----
-  if (zustand === 'spiel' && !m.tot && m.typ.mg.granate) {
-    const weite = Math.round(dist(m, landePunkt(m)) / 10);
-    text(`☄️ ${weite} m`, W / 2 + 30, H / 2 + 34, 15, m.typ.akzent, 'left');
-    if (m.mgPause > 0) balken(W / 2 - 25, H / 2 + 26, 50, 5, 1 - m.mgPause / m.typ.mg.pause, m.typ.akzent);
+  // ----- Artillerie: Wie weit ist das Ziel, und ist der Raketenhagel bereit? -----
+  if (zustand === 'spiel' && !m.tot && m.typ.mg.salve) {
+    if (m.salve) text(m.salve.warten > 0 ? '🎯 Ziel erfasst ...' : `☄️ Raketenhagel! ${m.salve.rest}`, W / 2, H / 2 + 40, 16, m.typ.akzent);
+    else {
+      const weite = Math.round(dist(m, landePunkt(m)) / 10);
+      text(`🎯 ${weite} m`, W / 2 + 30, H / 2 + 34, 15, m.typ.akzent, 'left');
+      if (m.mgPause > 0) {
+        balken(W / 2 - 25, H / 2 + 50, 50, 5, 1 - m.mgPause / m.typ.mg.pause, m.typ.akzent);
+        text(`Nachladen ${Math.ceil(m.mgPause)} s`, W / 2, H / 2 + 64, 11, '#c9c3ff', 'center', false);
+      } else text('Linksklick: anvisieren!', W / 2, H / 2 + 58, 12, '#fff', 'center', false);
+    }
   }
 
   // ----- Fadenkreuz in der Mitte -----
@@ -1873,7 +1952,12 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
   ctx.restore();
   ctx.rotate(zielWinkel);
   ctx.fillStyle = '#4b5060'; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
-  if (typ.mg.granate) { rr(-6, 8, 44, 16, 6); ctx.fill(); ctx.stroke(); ctx.fillStyle = typ.akzent; kreis(38, 16, 7); ctx.fill(); }   // dicker Mörser
+  if (typ.mg.salve) {   // Raketenwerfer mit 9 Rohren
+    ctx.fillStyle = T.dunkel; rr(-22, 2, 28, 26, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = typ.akzent;
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { kreis(-16 + i * 8, 8 + j * 7, 2.5); ctx.fill(); }
+    ctx.fillStyle = '#4b5060';
+  }
   else if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
   else { rr(8, -13, 34, 7, 2); ctx.fill(); ctx.stroke(); rr(8, 6, 34, 7, 2); ctx.fill(); ctx.stroke(); }
   for (const s of typ.rakete.anzahl > 1 ? [-1, 1] : [-1]) {   // Raketenwerfer
@@ -1973,7 +2057,7 @@ function zeichneAuswahl() {
         rr(k.x + 36 + j * 18, y - 6, 14, 12, 3); ctx.fill();
       }
     });
-    text(t.mg.granate ? '☄️ Granaten' : (t.rakete.anzahl > 1 ? `🚀 ${t.rakete.anzahl} Raketen` : (t.mg.strahl ? '⚡ Railgun' : '🔫 Doppel-MG')), mx, k.y + 395, 13, '#fff', 'center', false);
+    text(t.mg.salve ? '☄️ Raketenhagel' : (t.rakete.anzahl > 1 ? `🚀 ${t.rakete.anzahl} Raketen` : (t.mg.strahl ? '⚡ Railgun' : '🔫 Doppel-MG')), mx, k.y + 395, 13, '#fff', 'center', false);
   }
   const zh = imRechteck(maus, ZURUECK_KNOPF);
   ctx.fillStyle = zh ? '#3a4256' : 'rgba(30,34,46,0.92)';
