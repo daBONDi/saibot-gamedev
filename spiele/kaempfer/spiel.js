@@ -66,7 +66,7 @@ const MECH_TYPEN = [
   { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie! Ziel anvisieren, dann regnen 10 Raketen runter. Hoch schauen = weiter!',
     leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5,
     // salve: Erst anvisieren (zielZeit), dann fliegen "anzahl" Raketen im Bogen und landen im Kreis (streuRadius) ums Ziel
-    mg: { salve: true, pause: 7, zielZeit: 0.8, anzahl: 10, abstand: 0.12, schaden: 14, radius: 60, streuRadius: 110, tempo: 520, weite: 1100, minWeite: 180 },
+    mg: { salve: true, pause: 5.5, zielZeit: 0.5, anzahl: 10, abstand: 0.1, schaden: 18, radius: 60, streuRadius: 110, tempo: 750, weite: 1100, minWeite: 180 },
     rakete: { pause: 5, schaden: 35, radius: 80, anzahl: 1 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 5 } },
 ];
@@ -504,7 +504,7 @@ function boosten(m, richtung) {
 function feuern(m) {
   if (m.mgPause > 0 || m.tot) return;
   const mg = m.typ.mg, gr = m.typ.groesse;
-  m.mgPause = mg.pause * (m.istSpieler ? 1 : BOT_FEUER_LANGSAMER);
+  m.mgPause = mg.pause * (m.istSpieler || mg.salve ? 1 : BOT_FEUER_LANGSAMER);   // Der Raketenhagel lädt bei Bots nicht langsamer
   if (mg.salve) { if (!m.salve) salveStarten(m); return; }
   if (!mg.strahl) m.lauf = -m.lauf;   // Abwechselnd links und rechts schießen (die Railgun hat nur ein Rohr)
   const seite = mg.strahl ? 0.4 : m.lauf;
@@ -529,7 +529,7 @@ function landePunkt(m) {
 }
 function salveStarten(m) {
   const mg = m.typ.mg;
-  m.salve = { ziel: landePunkt(m), warten: mg.zielZeit, rest: mg.anzahl, timer: 0, laengste: 0 };
+  m.salve = { ziel: landePunkt(m), warten: mg.zielZeit, rest: mg.anzahl, timer: 0, laengste: 0, bemerkt: new Map() };
   if (m.istSpieler) { sound.anvisieren(); zeigeNachricht('🎯 Ziel erfasst!', 1.2, m.typ.akzent); }
   else if (spieler && !spieler.tot && m.team !== spieler.team && dist(m.salve.ziel, spieler) < mg.streuRadius + 150) {
     sound.warnung(); zeigeNachricht('⚠️ Raketenhagel! Lauf weg!', 1.5, '#ff6b6b');
@@ -556,7 +556,7 @@ function salvenRakete(m, ziel) {
   const zx = begrenzt(ziel.x + Math.cos(a) * r, 10, WELT_B - 10), zy = begrenzt(ziel.y + Math.sin(a) * r, 10, WELT_H - 10);
   const x = m.x - Math.cos(m.zielWinkel) * 8, y = m.y - Math.sin(m.zielWinkel) * 8;
   const weite = Math.hypot(zx - x, zy - y);
-  const dauer = 0.9 + weite / mg.tempo;
+  const dauer = 0.6 + weite / mg.tempo;
   schuesse.push({
     art: 'salve', bogen: true, x, y, sx: x, sy: y, zx, zy, h: 100 * gr, startH: 100 * gr,
     k: 0, dauer, scheitel: 220 + weite * 0.3,
@@ -777,7 +777,7 @@ function botDenken(m, dt) {
     if (d < abstand) { dx -= gx * 0.8; dy -= gy * 0.8; }   // Nicht zu nah ran
     // Zielen (mit Vorhalten, damit sie bewegte Ziele treffen)
     const mg = m.typ.mg;
-    const flug = mg.salve ? (mg.zielZeit + 0.9 + d / mg.tempo) * 0.4 : d / mg.tempo;   // Artillerie: Wo ist er ungefähr, wenn die Raketen landen?
+    const flug = mg.salve ? (mg.zielZeit + 0.6 + d / mg.tempo) * 0.4 : d / mg.tempo;   // Artillerie: Wo ist er ungefähr, wenn die Raketen landen?
     const vorne = { x: g.x + g.vx * flug, y: g.y + g.vy * flug };   // Da wird der Gegner gleich sein
     const zielW = Math.atan2(vorne.y - m.y, vorne.x - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * BOT_UNGENAU;
     m.zielWeite = dist(m, vorne);
@@ -793,11 +793,13 @@ function botDenken(m, dt) {
     m.zielWinkel = drehe(m.zielWinkel, Math.atan2(dy, dx), dt * 5);
   }
 
-  // Raketenhagel von Gegnern? Schnell raus aus dem Kreis!
+  // Raketenhagel von Gegnern? Schnell raus aus dem Kreis! (Aber nur, wenn der Bot ihn bemerkt hat)
   for (const o of mechs) {
     if (!o.salve || o.team === m.team) continue;
     const z = o.salve.ziel, d = dist(m, z);
-    if (d < o.typ.mg.streuRadius + 60) { dx += (m.x - z.x) / (d || 1) * 2; dy += (m.y - z.y) / (d || 1) * 2; }
+    if (d > o.typ.mg.streuRadius + 60) continue;
+    if (!o.salve.bemerkt.has(m)) o.salve.bemerkt.set(m, Math.random() < 0.5 ? zeit + 0.4 + Math.random() * 0.6 : Infinity);
+    if (zeit >= o.salve.bemerkt.get(m)) { dx += (m.x - z.x) / (d || 1) * 2; dy += (m.y - z.y) / (d || 1) * 2; }
   }
 
   // 4. Festgesteckt? Dann neuen Weg suchen und kurz zur Seite
