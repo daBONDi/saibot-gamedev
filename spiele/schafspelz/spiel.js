@@ -25,7 +25,7 @@ function entwicklerRolle() {
   if (!ENTWICKLER) return null;
   try { return new URLSearchParams(location.search).get('rolle'); } catch (e) { return null; }
 }
-// Fress-Animation aussuchen mit:  ?rolle=schaf&tod=klavier   (banane, niesen, kitzeln, klavier)
+// Fress-Animation aussuchen mit:  ?rolle=schaf&tod=klavier   (banane, niesen, kitzeln, klavier, moebel)
 function entwicklerTod() {
   if (!ENTWICKLER) return null;
   try { return new URLSearchParams(location.search).get('tod'); } catch (e) { return null; }
@@ -375,6 +375,10 @@ const sound = {
     ton(70, 0, 0.6, 'square', 0.3, 30);
     ['C3', 'D#3', 'F#3', 'A3', 'C4', 'D#4'].forEach((n, i) => ton(hz(n), 0.01 * i, 1.2, 'triangle', 0.08));
   },
+  // *Schnipp!* (Finger-Schnippen)
+  schnipp() { ton(2400, 0, 0.05, 'square', 0.12, 1200); ton(3200, 0.01, 0.03, 'triangle', 0.08); },
+  // RUMMS! (Möbelstück landet)
+  rumms() { ton(110 + Math.random() * 40, 0, 0.25, 'square', 0.18, 40); ton(600, 0, 0.06, 'triangle', 0.08, 200); },
   // Huuuuu! (Geist)
   huuu() { wackelTon([[0, 350], [0.8, 520], [1.6, 380]], 0, 1.6, 'sine', 0.15, 4, 25); },
   // Bim-Bam der Glocke
@@ -1440,6 +1444,10 @@ function updateCutscene(dt) {
     if (v === 'niesen' && ab(1.3)) sound.hatschi();
     if (v === 'kitzeln') { if (ab(1.0)) sound.kichern(); if (ab(2.1)) sound.kichern(); if (ab(3.0)) sound.poff(); }
     if (v === 'klavier') { if (ab(1.5)) sound.pfeifen(); if (ab(2.3)) sound.krach(); }
+    if (v === 'moebel') {
+      if (ab(1.0)) sound.schnipp();
+      MOEBEL.forEach((m, i) => { if (ab(MOEBEL_START + i * MOEBEL_ABSTAND + MOEBEL_FALL)) sound.rumms(); });
+    }
     if (ab(3.7)) sound.huuu();
     if (c.t > 8) endeCutscene();
     return;
@@ -1558,13 +1566,21 @@ function zeichneHirtenCutscene() {
 }
 
 // ===== 🎬 Fress-Cutscene: Der Wolf erwischt dich auf dumme Art! =====
-const FRESS_ARTEN = ['banane', 'niesen', 'kitzeln', 'klavier'];
+const FRESS_ARTEN = ['banane', 'niesen', 'kitzeln', 'klavier', 'moebel'];
 const FRESS_TITEL = {
   banane:  'Auf der Banane ausgerutscht! 🍌',
   niesen:  'Weggeniest! 🤧',
   kitzeln: 'Kaputtgekitzelt! 🪶',
   klavier: 'Plattgemacht! 🎹',
+  moebel:  'Von Möbeln zerquetscht! 🛋️',
 };
+
+// 🛋️ Möbel-Regen: Was runterfällt, wann und wohin (der Reihe nach von unten nach oben)
+const MOEBEL = [
+  { e: '🛋️', dx: -10 }, { e: '🛏️', dx: 30 }, { e: '🚽', dx: -45 }, { e: '📺', dx: 40 },
+  { e: '🛁', dx: -15 }, { e: '🪑', dx: 35 }, { e: '🚪', dx: -35 }, { e: '🖼️', dx: 15 }, { e: '🧸', dx: 0 },
+];
+const MOEBEL_START = 1.3, MOEBEL_ABSTAND = 0.22, MOEBEL_FALL = 0.35;
 
 // Ein Wolf im Schafspelz: Schafkörper mit Wolfskopf
 function zeichneWolfFigur(x, y, w, richtung, phase, laeuft, groesse) {
@@ -1683,6 +1699,37 @@ function zeichneFressCutscene() {
       if (t < 3.1) text('KRAWUMM!', SX, SY - 170, 60 * Math.min(1.2, (t - 2.3) * 8), '#ff6b6b');
       if (t > 3.0) text('😵', SX + 95, SY + 15, 26, '#fff', 'center', false);
     }
+  } else if (v === 'moebel') {
+    const erstesLanden = MOEBEL_START + MOEBEL_FALL;
+    if (t < erstesLanden) {
+      zeichneSchafKoerper(SX, SY, farbe, -1, 0, false, GR);
+      if (t > 1.1) text('😨', SX - 30, SY - 75, 30, '#fff', 'center', false);
+    } else {
+      // Plattgedrückt unter dem Möbel-Berg
+      ctx.save();
+      ctx.translate(SX, SY + 25); ctx.scale(1.4, 0.25);
+      zeichneSchafKoerper(0, 0, farbe, -1, 0, false, GR);
+      ctx.restore();
+    }
+    // Die Möbel fallen eins nach dem anderen
+    MOEBEL.forEach((m, i) => {
+      const start = MOEBEL_START + i * MOEBEL_ABSTAND;
+      if (t < start) return;
+      const k = Math.min(1, (t - start) / MOEBEL_FALL);
+      const zielY = SY - 5 - i * 40;          // Der Stapel wird immer höher
+      const y = -60 + k * k * (zielY + 60);   // fällt immer schneller
+      const huepf = k >= 1 ? Math.max(0, Math.sin((t - start - MOEBEL_FALL) * 20)) * 6 * Math.max(0, 1 - (t - start - MOEBEL_FALL) * 4) : 0;
+      ctx.save();
+      ctx.translate(SX + m.dx, y - huepf);
+      ctx.rotate((i % 2 ? 1 : -1) * 0.15 * (1 - k * 0.5));
+      text(m.e, 0, 0, 72, '#fff', 'center', false);
+      ctx.restore();
+    });
+    const letztes = MOEBEL_START + (MOEBEL.length - 1) * MOEBEL_ABSTAND + MOEBEL_FALL;
+    if (t > erstesLanden && t < letztes + 0.4) {
+      const n = Math.floor((t - MOEBEL_START) / MOEBEL_ABSTAND);
+      text(['RUMMS!', 'BAMM!', 'KRACH!', 'PLONK!', 'BOING!'][n % 5], SX + 170, 250 + (n % 3) * 50, 36, '#ff6b6b');
+    }
   }
 
   // ----- Der Wolf -----
@@ -1710,6 +1757,14 @@ function zeichneFressCutscene() {
     text('Kille kille! 😈', wx, wy - 105, 20, '#fff');
   }
   if (v === 'klavier' && t > 0.6 && t < 2.0) text('Guck mal, da oben! ☝️', wx + 20, wy - 110, 22, '#fff');
+  if (v === 'moebel') {
+    if (t > 0.4 && t < 1.0) text('Pass mal auf ... 😏', wx, wy - 110, 22, '#fff');
+    if (t > 1.0 && t < 1.8) {   // *SCHNIPP!* mit Funkeln an der Pfote
+      const pop = Math.min(1.2, (t - 1.0) * 8);
+      text('✨', wx + 55, wy - 45, 40 * pop, '#fff', 'center', false);
+      text('*SCHNIPP!*', wx + 20, wy - 115, 34 * pop, '#ffd166');
+    }
+  }
   if (t > 3.5) text(v === 'klavier' ? 'Ups! 🤭' : 'Hihi! 😋', wx, wy - 105, 24, '#fff');
 
   // ----- Du wirst ein Geist und schwebst nach oben -----
