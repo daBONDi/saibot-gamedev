@@ -94,44 +94,117 @@ const ANGRIFF_BONUS = 90;     // Angriff: Extra-Zeit, wenn Punkt A erobert ist
 const EROBERN_TEMPO = 4;      // Angriff: So schnell wird ein Punkt erobert (Prozent pro Sekunde)
 
 // ===== Die Karten =====
-// Jede Karte hat Hindernisse. "links" sind die auf der linken Seite, die rechte Seite wird automatisch gespiegelt!
-// "art" sagt, wie ein Hindernis aussieht: wand, kiste (Fabrik) oder fels, kristall, pilz, stein (Planet)
-// Wichtig: Die Mitte (1200, 700) und die Punkte A und B müssen frei bleiben!
+// Jede Karte hat Blöcke. "links" sind die auf der linken Seite, die rechte Seite wird automatisch gespiegelt!
+// Mit "auchUnten: true" gibt es den Block zusätzlich unten (oben/unten gespiegelt).
+// "art" sagt, wie ein Block aussieht:
+//   Fabrik: wand, kiste, plattform (zum Draufstehen), rampe, steg (Brücke), gelaender, saeule
+//   Planet: fels, kristall, pilz, stein, huegel (zum Draufstehen), hang (Rampe)
+// "oben" ist die Höhe der Oberkante, "unten" die Unterkante (bei Brücken kann man drunter durchlaufen!)
+// "rampe" sagt, wo die hohe Seite einer Rampe ist: 'n' (oben), 's' (unten), 'w' (links), 'o' (rechts)
+// Wichtig: Die Mitte (1200, 700) und die Punkte A und B (780 / 1620, 700) müssen frei bleiben!
+const STUFE = 25;          // So hoch darf eine Stufe sein, die ein Mech einfach hochlaufen kann
+const MECH_HOEHE = 70;     // So hoch ist ein normaler Mech
 const KARTEN = [
   {
     id: 'fabrik', name: 'Stahlfabrik', emoji: '🏭',
     links: [
-      { x: 320, y: 250, w: 40, h: 250, art: 'wand' }, { x: 320, y: 900, w: 40, h: 250, art: 'wand' },
+      { x: 320, y: 250, w: 40, h: 250, art: 'wand', auchUnten: true },
       { x: 430, y: 620, w: 120, h: 160, art: 'wand' },
-      { x: 600, y: 120, w: 60, h: 250, art: 'wand' }, { x: 600, y: 1030, w: 60, h: 250, art: 'wand' },
-      { x: 820, y: 380, w: 200, h: 50, art: 'wand' }, { x: 820, y: 970, w: 200, h: 50, art: 'wand' },
+      { x: 820, y: 400, w: 200, h: 50, art: 'wand', auchUnten: true },
       { x: 960, y: 600, w: 50, h: 200, art: 'wand' },
-      { x: 1000, y: 100, w: 60, h: 160, art: 'wand' }, { x: 1000, y: 1140, w: 60, h: 160, art: 'wand' },
-      { x: 1100, y: 560, w: 40, h: 40, art: 'kiste' }, { x: 1100, y: 800, w: 40, h: 40, art: 'kiste' },
+      { x: 1100, y: 560, w: 40, h: 40, art: 'kiste', auchUnten: true },
+      // 1. Etage: Plattform mit Rampe und eine lange Brücke (Steg) zur anderen Seite
+      { x: 580, y: 40, w: 280, h: 200, art: 'plattform', oben: 110, auchUnten: true },
+      { x: 580, y: 240, w: 110, h: 240, art: 'rampe', rampe: 'n', oben: 110, auchUnten: true },
+      { x: 860, y: 90, w: 340, h: 100, art: 'steg', unten: 100, oben: 110, auchUnten: true },
+      { x: 860, y: 90, w: 340, h: 6, art: 'gelaender', unten: 110, oben: 140, auchUnten: true },
+      { x: 860, y: 184, w: 340, h: 6, art: 'gelaender', unten: 110, oben: 140, auchUnten: true },
+      { x: 930, y: 125, w: 30, h: 30, art: 'saeule', oben: 100, auchUnten: true },
+      { x: 1110, y: 125, w: 30, h: 30, art: 'saeule', oben: 100, auchUnten: true },
     ],
-    mitte: [{ x: 1170, y: 200, w: 60, h: 220, art: 'wand' }, { x: 1170, y: 980, w: 60, h: 220, art: 'wand' }],
+    mitte: [{ x: 1170, y: 260, w: 60, h: 160, art: 'wand', auchUnten: true }],
   },
   {
     id: 'planet', name: 'Planet Xyloria', emoji: '🪐',
     links: [
-      { x: 330, y: 300, w: 70, h: 160, art: 'fels' }, { x: 330, y: 940, w: 70, h: 160, art: 'fels' },
+      { x: 330, y: 300, w: 70, h: 160, art: 'fels', auchUnten: true },
       { x: 470, y: 640, w: 90, h: 120, art: 'fels' },
-      { x: 640, y: 180, w: 80, h: 80, art: 'kristall' }, { x: 640, y: 1140, w: 80, h: 80, art: 'kristall' },
-      { x: 820, y: 420, w: 180, h: 60, art: 'fels' }, { x: 820, y: 920, w: 180, h: 60, art: 'fels' },
       { x: 990, y: 640, w: 40, h: 40, art: 'pilz' },
-      { x: 1000, y: 150, w: 70, h: 120, art: 'kristall' }, { x: 1000, y: 1130, w: 70, h: 120, art: 'kristall' },
-      { x: 1110, y: 590, w: 36, h: 36, art: 'stein' }, { x: 1110, y: 775, w: 36, h: 36, art: 'stein' },
+      { x: 1110, y: 590, w: 36, h: 36, art: 'stein', auchUnten: true },
+      { x: 820, y: 330, w: 60, h: 60, art: 'kristall', auchUnten: true },
+      { x: 980, y: 260, w: 70, h: 90, art: 'kristall', auchUnten: true },
+      // Hügel zum Draufklettern, mit zwei Hängen
+      { x: 640, y: 40, w: 260, h: 230, art: 'huegel', oben: 100, auchUnten: true },
+      { x: 640, y: 270, w: 130, h: 230, art: 'hang', rampe: 'n', oben: 100, auchUnten: true },
+      { x: 900, y: 40, w: 230, h: 150, art: 'hang', rampe: 'w', oben: 100, auchUnten: true },
     ],
-    mitte: [{ x: 1160, y: 250, w: 80, h: 160, art: 'kristall' }, { x: 1160, y: 990, w: 80, h: 160, art: 'kristall' }],
+    mitte: [{ x: 1160, y: 250, w: 80, h: 160, art: 'kristall', auchUnten: true }],
   },
 ];
+const STANDARD_HOEHE = { wand: 110, kiste: 40, fels: 100, kristall: 130, pilz: 150, stein: 40, saeule: 100 };
 let karte = KARTEN[0];
 try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || karte; } catch (e) { /* egal */ }
 let WAENDE = [];
+const GEGENUEBER = { n: 's', s: 'n', w: 'o', o: 'w' };
+function spiegelX(r) { return { ...r, x: WELT_B - r.x - r.w, rampe: r.rampe && 'wo'.includes(r.rampe) ? GEGENUEBER[r.rampe] : r.rampe }; }
+function spiegelY(r) { return { ...r, y: WELT_H - r.y - r.h, rampe: r.rampe && 'ns'.includes(r.rampe) ? GEGENUEBER[r.rampe] : r.rampe }; }
 function waendeVon(k) {
-  const liste = [...k.mitte];
-  for (const r of k.links) liste.push(r, { ...r, x: WELT_B - r.x - r.w });
+  const liste = [];
+  const dazu = r => {
+    r = { unten: 0, oben: STANDARD_HOEHE[r.art] || 110, ...r };
+    if (r.rampe) {   // Rampen werden für die Sicht in Stufen geteilt
+      r.teile = [];
+      const n = 6;
+      for (let i = 0; i < n; i++) {
+        const t = { unten: 0, oben: r.oben * (i + 1) / n };
+        if (r.rampe === 'n') Object.assign(t, { x: r.x, w: r.w, y: r.y + r.h - (i + 1) * r.h / n, h: r.h / n });
+        if (r.rampe === 's') Object.assign(t, { x: r.x, w: r.w, y: r.y + i * r.h / n, h: r.h / n });
+        if (r.rampe === 'w') Object.assign(t, { y: r.y, h: r.h, x: r.x + r.w - (i + 1) * r.w / n, w: r.w / n });
+        if (r.rampe === 'o') Object.assign(t, { y: r.y, h: r.h, x: r.x + i * r.w / n, w: r.w / n });
+        r.teile.push(t);
+      }
+    }
+    liste.push(r);
+  };
+  for (const r of k.mitte) { dazu(r); if (r.auchUnten) dazu(spiegelY(r)); }
+  for (const r of k.links) {
+    dazu(r); dazu(spiegelX(r));
+    if (r.auchUnten) { dazu(spiegelY(r)); dazu(spiegelX(spiegelY(r))); }
+  }
   return liste;
+}
+
+// ===== Höhen: Wie hoch ist ein Block an einer Stelle? =====
+const innen = (b, x, y) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+function obenBei(b, x, y) {
+  if (!b.rampe) return b.oben;
+  const px = Math.max(b.x, Math.min(b.x + b.w, x)), py = Math.max(b.y, Math.min(b.y + b.h, y));
+  let t;
+  if (b.rampe === 'n') t = (b.y + b.h - py) / b.h;
+  else if (b.rampe === 's') t = (py - b.y) / b.h;
+  else if (b.rampe === 'w') t = (b.x + b.w - px) / b.w;
+  else t = (px - b.x) / b.w;
+  return b.oben * t;
+}
+// Auf welcher Höhe steht man an (x, y), wenn man gerade auf Höhe z ist? (Man kann kleine Stufen hochlaufen)
+function standHoehe(x, y, z) {
+  let beste = 0;
+  for (const b of WAENDE) {
+    if (!innen(b, x, y)) continue;
+    const t = obenBei(b, x, y);
+    if (t <= z + STUFE && t > beste) beste = t;
+  }
+  return beste;
+}
+// Stört der Block einen Mech, der auf Höhe z steht und so hoch ist?
+function blockiert(b, x, y, z, hoehe) {
+  return obenBei(b, x, y) > z + STUFE && b.unten < z + hoehe;
+}
+// Ist an dieser Stelle (mit Höhe h) etwas Festes? (für Kugeln)
+function imFesten(x, y, h) {
+  if (h <= 0) return true;
+  for (const b of WAENDE) if (innen(b, x, y) && h >= b.unten && h <= obenBei(b, x, y)) return true;
+  return false;
 }
 
 // ===== Hilfsfunktionen =====
@@ -181,62 +254,102 @@ function uhr(s) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-// Trifft die Linie von (x1,y1) nach (x2,y2) das Rechteck? ("rand" macht das Rechteck dicker)
-function linieTrifft(x1, y1, x2, y2, r, rand = 0) {
-  const rx = r.x - rand, ry = r.y - rand, rw = r.w + 2 * rand, rh = r.h + 2 * rand;
-  const dx = x2 - x1, dy = y2 - y1;
-  const p = [-dx, dx, -dy, dy], q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
+// Trifft die Linie von a nach b (mit Höhe z) den Block? (Kästchen-Test in 3D)
+function linieTrifft3D(a, b, r) {
+  const d = [b.x - a.x, b.y - a.y, b.z - a.z];
+  const start = [a.x, a.y, a.z], min = [r.x, r.y, r.unten], max = [r.x + r.w, r.y + r.h, r.oben];
   let t0 = 0, t1 = 1;
-  for (let i = 0; i < 4; i++) {
-    if (p[i] === 0) { if (q[i] < 0) return false; continue; }
-    const t = q[i] / p[i];
-    if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
-    else { if (t < t0) return false; if (t < t1) t1 = t; }
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(d[i]) < 1e-9) { if (start[i] < min[i] || start[i] > max[i]) return false; continue; }
+    let ta = (min[i] - start[i]) / d[i], tb = (max[i] - start[i]) / d[i];
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+    if (t0 > t1) return false;
   }
   return true;
 }
-function sichtFrei(a, b, rand = 0) {
-  for (const r of WAENDE) if (linieTrifft(a.x, a.y, b.x, b.y, r, rand)) return false;
+function sichtFrei3D(a, b) {
+  for (const r of WAENDE) {
+    if (r.teile) { for (const t of r.teile) if (linieTrifft3D(a, b, t)) return false; }
+    else if (linieTrifft3D(a, b, r)) return false;
+  }
   return true;
 }
-const inWand = (x, y) => WAENDE.some(r => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h);
+const auge = m => ({ x: m.x, y: m.y, z: m.z + 55 * m.typ.groesse });
+const sicht = (a, b) => sichtFrei3D(auge(a), auge(b));   // Kann Mech a Mech b sehen?
 
 // ===== Wegfinden für die Bots (A*-Algorithmus) =====
-// Die Arena wird in Kästchen aufgeteilt. Die Bots suchen den kürzesten Weg durch die freien Kästchen.
+// Die Arena wird in Kästchen aufgeteilt. In jedem Kästchen kann es mehrere "Knoten" geben:
+// einen unten auf dem Boden und einen oben auf einer Plattform oder Brücke.
+// Die Bots suchen den kürzesten Weg von Knoten zu Knoten (Rampen hoch, unter Brücken durch ...).
 const ZELLE = 40, GX = WELT_B / ZELLE, GY = WELT_H / ZELLE;
-const frei = new Uint8Array(GX * GY);
-function baueGitter() {   // Welche Kästchen sind frei? (Muss bei jeder Karte neu gemacht werden)
+const BOT_HOEHE = 95;   // So viel Platz nach oben braucht ein Mech (auch der große Koloss)
+let knoten = [], zellenKnoten = [], nachbarn = [];
+function platzFrei(x, y, z, radius) {
+  if (x < MECH_RADIUS || y < MECH_RADIUS || x > WELT_B - MECH_RADIUS || y > WELT_H - MECH_RADIUS) return false;
+  for (const b of WAENDE) {
+    const cx = Math.max(b.x, Math.min(b.x + b.w, x)), cy = Math.max(b.y, Math.min(b.y + b.h, y));
+    if ((x - cx) ** 2 + (y - cy) ** 2 < radius * radius && blockiert(b, cx, cy, z, BOT_HOEHE)) return false;
+  }
+  return true;
+}
+function baueGitter() {   // Muss bei jeder Karte neu gemacht werden
+  knoten = []; zellenKnoten = []; nachbarn = [];
   for (let gy = 0; gy < GY; gy++) {
     for (let gx = 0; gx < GX; gx++) {
       const x = gx * ZELLE + ZELLE / 2, y = gy * ZELLE + ZELLE / 2;
-      const rand = MECH_RADIUS + 2;
-      const blockiert = WAENDE.some(r => x > r.x - rand && x < r.x + r.w + rand && y > r.y - rand && y < r.y + r.h + rand);
-      const amRand = x < MECH_RADIUS || y < MECH_RADIUS || x > WELT_B - MECH_RADIUS || y > WELT_H - MECH_RADIUS;
-      frei[gy * GX + gx] = blockiert || amRand ? 0 : 1;
+      const liste = [];
+      const hoehen = new Set([0]);
+      for (const b of WAENDE) if (innen(b, x, y)) hoehen.add(Math.round(obenBei(b, x, y)));
+      for (const z of hoehen) {
+        if (Math.abs(standHoehe(x, y, z) - z) > 1) continue;   // Kann man da stehen?
+        if (!platzFrei(x, y, z, MECH_RADIUS + 2)) continue;   // Ist genug Platz?
+        liste.push(knoten.length);
+        knoten.push({ x, y, z, gx, gy });
+      }
+      zellenKnoten.push(liste);
     }
+  }
+  const NACH = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
+  const passend = (gx, gy, z) => gx >= 0 && gy >= 0 && gx < GX && gy < GY && zellenKnoten[gy * GX + gx].some(n => Math.abs(knoten[n].z - z) <= STUFE);
+  for (const k of knoten) {
+    const liste = [];
+    for (const [ox, oy, kosten] of NACH) {
+      const nx = k.gx + ox, ny = k.gy + oy;
+      if (nx < 0 || ny < 0 || nx >= GX || ny >= GY) continue;
+      if (ox && oy && (!passend(k.gx + ox, k.gy, k.z) || !passend(k.gx, k.gy + oy, k.z))) continue;   // nicht um Ecken schneiden
+      for (const n of zellenKnoten[ny * GX + nx]) if (Math.abs(knoten[n].z - k.z) <= STUFE) liste.push([n, kosten]);
+    }
+    nachbarn.push(liste);
   }
 }
-const NACHBARN = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
-function zelleBei(x, y) {
+// Der Knoten, der am besten zu einer Stelle passt
+function knotenBei(x, y, z = 0) {
   const gx = begrenzt(Math.floor(x / ZELLE), 0, GX - 1), gy = begrenzt(Math.floor(y / ZELLE), 0, GY - 1);
-  if (frei[gy * GX + gx]) return gy * GX + gx;
-  // Nächstes freies Kästchen suchen
-  for (let r = 1; r < 6; r++) {
+  let beste = -1, besteD = 1e9;
+  for (let r = 0; r < 6; r++) {
     for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
+      if (Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue;
       const nx = gx + ox, ny = gy + oy;
-      if (nx >= 0 && ny >= 0 && nx < GX && ny < GY && frei[ny * GX + nx]) return ny * GX + nx;
+      if (nx < 0 || ny < 0 || nx >= GX || ny >= GY) continue;
+      for (const n of zellenKnoten[ny * GX + nx]) {
+        const k = knoten[n];
+        const d = Math.hypot(k.x - x, k.y - y) + Math.abs(k.z - z) * 3;
+        if (d < besteD) { besteD = d; beste = n; }
+      }
     }
+    if (beste >= 0) return beste;
   }
-  return -1;
+  return beste;
 }
 function wegFinden(von, nach) {
-  const s = zelleBei(von.x, von.y), z = zelleBei(nach.x, nach.y);
+  const s = knotenBei(von.x, von.y, von.z || 0), z = knotenBei(nach.x, nach.y, nach.z || 0);
   if (s < 0 || z < 0) return [];
-  const N = GX * GY;
+  const N = knoten.length;
   const g = new Float32Array(N).fill(1e9), f = new Float32Array(N).fill(1e9);
   const vor = new Int32Array(N).fill(-1), zu = new Uint8Array(N), istOffen = new Uint8Array(N);
-  const zx = z % GX, zy = (z / GX) | 0;
-  const schaetzung = c => { const dx = Math.abs(c % GX - zx), dy = Math.abs(((c / GX) | 0) - zy); return Math.max(dx, dy) + 0.414 * Math.min(dx, dy); };
+  const ziel = knoten[z];
+  const schaetzung = n => Math.hypot(knoten[n].x - ziel.x, knoten[n].y - ziel.y) / ZELLE;
   const offen = [s];
   g[s] = 0; f[s] = schaetzung(s); istOffen[s] = 1;
   while (offen.length) {
@@ -246,14 +359,9 @@ function wegFinden(von, nach) {
     offen[bi] = offen[offen.length - 1]; offen.pop(); istOffen[c] = 0;
     if (c === z) break;
     zu[c] = 1;
-    const cx = c % GX, cy = (c / GX) | 0;
-    for (const [ox, oy, k] of NACHBARN) {
-      const nx = cx + ox, ny = cy + oy;
-      if (nx < 0 || ny < 0 || nx >= GX || ny >= GY) continue;
-      const n = ny * GX + nx;
-      if (!frei[n] || zu[n]) continue;
-      if (ox && oy && (!frei[cy * GX + nx] || !frei[ny * GX + cx])) continue;   // nicht um Ecken schneiden
-      const ng = g[c] + k;
+    for (const [n, kosten] of nachbarn[c]) {
+      if (zu[n]) continue;
+      const ng = g[c] + kosten;
       if (ng < g[n]) {
         g[n] = ng; f[n] = ng + schaetzung(n); vor[n] = c;
         if (!istOffen[n]) { offen.push(n); istOffen[n] = 1; }
@@ -262,10 +370,20 @@ function wegFinden(von, nach) {
   }
   if (z !== s && vor[z] < 0) return [];
   const weg = [];
-  for (let c = z; c !== s && c >= 0; c = vor[c]) weg.push({ x: (c % GX) * ZELLE + ZELLE / 2, y: ((c / GX) | 0) * ZELLE + ZELLE / 2 });
+  for (let c = z; c !== s && c >= 0; c = vor[c]) weg.push({ x: knoten[c].x, y: knoten[c].y, z: knoten[c].z });
   weg.reverse();
-  if (weg.length && !inWand(nach.x, nach.y) && sichtFrei(weg[weg.length - 1], nach, MECH_RADIUS - 2)) weg.push({ x: nach.x, y: nach.y });
   return weg;
+}
+// Kann der Mech auf seiner Höhe geradeaus zu p laufen? (ohne Rampe, ohne runterzufallen, ohne Hindernis)
+function kannDirekt(m, p) {
+  if (Math.abs(p.z - m.z) > 8) return false;
+  const d = dist(m, p), schritte = Math.ceil(d / 15);
+  for (let i = 1; i <= schritte; i++) {
+    const x = m.x + (p.x - m.x) * i / schritte, y = m.y + (p.y - m.y) * i / schritte;
+    if (Math.abs(standHoehe(x, y, m.z) - m.z) > 8) return false;
+    if (!platzFrei(x, y, m.z, MECH_RADIUS - 6)) return false;
+  }
+  return true;
 }
 
 // ===== Sound (wird direkt im Browser erzeugt) =====
@@ -355,7 +473,7 @@ function zeigeNachricht(t, dauer = 2.5, farbe = '#ffd166') { nachricht = { text:
 function neuerMech(team, nr, istSpieler, typ) {
   return {
     team, nr, istSpieler, typ, name: NAMEN[team][nr],
-    x: 0, y: 0, vx: 0, vy: 0, leben: typ.leben, tot: false, neustart: 0, schutz: 0,
+    x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, leben: typ.leben, zielHoch: 0, tot: false, neustart: 0, schutz: 0,
     zielWinkel: team === 'blau' ? 0 : Math.PI, laufWinkel: 0, phase: 0, laeuft: false,
     mgPause: 0, raketePause: 1, boostPause: 0, boostZeit: 0, boostRichtung: 0,
     seitHit: 99, blitz: 0, lauf: 1, abschuesse: 0, tode: 0,
@@ -372,7 +490,7 @@ function spawnPunkt(m) {
 }
 function spawnen(m) {
   const p = spawnPunkt(m);
-  m.x = p.x; m.y = p.y;
+  m.x = p.x; m.y = p.y; m.z = standHoehe(p.x, p.y, 0); m.vz = 0;
   m.leben = m.typ.leben; m.tot = false; m.schutz = SCHUTZ_ZEIT;
   m.zielWinkel = m.team === 'blau' ? 0 : Math.PI;
   m.laufWinkel = m.zielWinkel;
@@ -438,7 +556,7 @@ function bewege(m, dx, dy, dt) {
   if (m.boostZeit > 0) {   // Boost: schnell in eine Richtung!
     dx = Math.cos(m.boostRichtung); dy = Math.sin(m.boostRichtung);
     tempo = BOOST_TEMPO;
-    if (Math.random() < 0.8) partikel.push({ x: m.x - dx * 25, y: m.y - dy * 25, h: 30, vh: 20, vx: -dx * 60 + (Math.random() - 0.5) * 60, vy: -dy * 60 + (Math.random() - 0.5) * 60, t: 0.35, max: 0.35, farbe: zufall(['#ffd166', '#ff9f43', '#ffffff']) });
+    if (Math.random() < 0.8) partikel.push({ x: m.x - dx * 25, y: m.y - dy * 25, h: m.z + 30, vh: 20, vx: -dx * 60 + (Math.random() - 0.5) * 60, vy: -dy * 60 + (Math.random() - 0.5) * 60, t: 0.35, max: 0.35, farbe: zufall(['#ffd166', '#ff9f43', '#ffffff']) });
   }
   const l = Math.hypot(dx, dy);
   m.laeuft = l > 0.1;
@@ -455,14 +573,32 @@ function bewege(m, dx, dy, dt) {
     }
   }
   kollision(m);
+  hoeheAnpassen(m, dt);
   m.vx = (m.x - altX) / dt; m.vy = (m.y - altY) / dt;
 }
 
+// Rampe hoch? Runterfallen? Hier wird die Höhe vom Mech berechnet
+function hoeheAnpassen(m, dt) {
+  const boden = standHoehe(m.x, m.y, m.z);
+  if (boden >= m.z) { m.z = boden; m.vz = 0; return; }   // Rampe hoch oder kleine Stufe
+  m.vz -= 900 * dt;                                       // Fallen!
+  m.z += m.vz * dt;
+  if (m.z <= boden) {
+    if (m.vz < -250) {   // Gelandet: RUMMS
+      if (m.istSpieler) { wackeln = Math.max(wackeln, 6); sound.schritt(1.5); }
+      else sound.schritt(lautBei(m));
+    }
+    m.z = boden; m.vz = 0;
+  }
+}
+
 function kollision(m) {
+  const hoehe = MECH_HOEHE * m.typ.groesse;
   for (const r of WAENDE) {
     const cx = begrenzt(m.x, r.x, r.x + r.w), cy = begrenzt(m.y, r.y, r.y + r.h);
     const dx = m.x - cx, dy = m.y - cy, d = Math.hypot(dx, dy);
     if (d >= MECH_RADIUS) continue;
+    if (!blockiert(r, cx, cy, m.z, hoehe)) continue;   // Drüber (z. B. auf der Plattform) oder drunter (unter der Brücke)
     if (d > 0) {
       m.x = cx + dx / d * MECH_RADIUS;
       m.y = cy + dy / d * MECH_RADIUS;
@@ -482,7 +618,7 @@ function mechsSchieben() {   // Mechs können nicht ineinander laufen
     for (let j = i + 1; j < lebende.length; j++) {
       const a = lebende[i], b = lebende[j];
       const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-      if (d > 0 && d < MECH_RADIUS * 2) {
+      if (d > 0 && d < MECH_RADIUS * 2 && Math.abs(a.z - b.z) < MECH_HOEHE) {
         const p = (MECH_RADIUS * 2 - d) / 2;
         a.x -= dx / d * p; a.y -= dy / d * p;
         b.x += dx / d * p; b.y += dy / d * p;
@@ -509,13 +645,16 @@ function feuern(m) {
   if (!mg.strahl) m.lauf = -m.lauf;   // Abwechselnd links und rechts schießen (die Railgun hat nur ein Rohr)
   const seite = mg.strahl ? 0.4 : m.lauf;
   const w = m.zielWinkel + (Math.random() - 0.5) * 2 * mg.streuung;
+  const hoch = m.zielHoch + (Math.random() - 0.5) * 2 * mg.streuung * 0.5;   // nach oben oder unten zielen
   const cos = Math.cos(m.zielWinkel), sin = Math.sin(m.zielWinkel);
   const x = m.x + cos * 40 * gr - sin * 13 * gr * seite, y = m.y + sin * 40 * gr + cos * 13 * gr * seite;
-  schuesse.push({ art: mg.strahl ? 'strahl' : 'kugel', x, y, h: 50 * gr, vx: Math.cos(w) * mg.tempo, vy: Math.sin(w) * mg.tempo, rest: mg.weite, schaden: mg.schaden, team: m.team, von: m });
+  const h = m.z + (m.istSpieler ? AUGEN_HOEHE - 8 : 52) * gr;
+  const flach = Math.cos(hoch) * mg.tempo;
+  schuesse.push({ art: mg.strahl ? 'strahl' : 'kugel', x, y, h, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(hoch) * mg.tempo, rest: mg.weite, schaden: mg.schaden, team: m.team, von: m });
   const laut = m.istSpieler ? 1 : lautBei(m) * 0.6;
   if (mg.strahl) sound.railgun(laut); else sound.mg(laut);
   if (m.istSpieler) { rueckstoss = mg.strahl ? 10 : 3; muendung = mg.strahl ? 0.1 : 0.05; }
-  else partikel.push({ x, y, h: 52 * gr, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
+  else partikel.push({ x, y, h, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
 }
 
 // ☄️ Artillerie: Ziel anvisieren ... und dann regnet es Raketen!
@@ -557,13 +696,14 @@ function salvenRakete(m, ziel) {
   const x = m.x - Math.cos(m.zielWinkel) * 8, y = m.y - Math.sin(m.zielWinkel) * 8;
   const weite = Math.hypot(zx - x, zy - y);
   const dauer = 0.6 + weite / mg.tempo;
+  const zh = standHoehe(zx, zy, 1e6);   // landet z. B. auf der Brücke, wenn sie drüber ist
   schuesse.push({
-    art: 'salve', bogen: true, x, y, sx: x, sy: y, zx, zy, h: 100 * gr, startH: 100 * gr,
+    art: 'salve', bogen: true, x, y, sx: x, sy: y, zx, zy, zh, h: m.z + 100 * gr, startH: m.z + 100 * gr,
     k: 0, dauer, scheitel: 220 + weite * 0.3,
     vx: 0, vy: 0, rest: 1e9, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m,
   });
   m.salve.laengste = Math.max(m.salve.laengste, dauer + 0.1);
-  partikel.push({ x, y, h: 100 * gr, vh: 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 0.8, max: 0.8, farbe: '#999999', rauch: true });
+  partikel.push({ x, y, h: m.z + 100 * gr, vh: 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 0.8, max: 0.8, farbe: '#999999', rauch: true });
   sound.salve(m.istSpieler ? 1 : lautBei(m));
   if (m.istSpieler) { rueckstoss = 4; muendung = 0.06; }
 }
@@ -575,30 +715,32 @@ function rakete(m) {
   for (let i = 0; i < r.anzahl; i++) {   // Feuersturm: mehrere Raketen im Fächer
     const w = m.zielWinkel + (i - (r.anzahl - 1) / 2) * 0.12;
     const x = m.x + Math.cos(w) * 30, y = m.y + Math.sin(w) * 30;
-    schuesse.push({ art: 'rakete', x, y, h: 62 * m.typ.groesse, vx: Math.cos(w) * RAKETE_TEMPO, vy: Math.sin(w) * RAKETE_TEMPO, rest: RAKETE_WEITE, schaden: r.schaden, radius: r.radius, team: m.team, von: m });
+    const flach = Math.cos(m.zielHoch) * RAKETE_TEMPO;
+    schuesse.push({ art: 'rakete', x, y, h: m.z + 62 * m.typ.groesse, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(m.zielHoch) * RAKETE_TEMPO, rest: RAKETE_WEITE, schaden: r.schaden, radius: r.radius, team: m.team, von: m });
   }
   sound.rakete(m.istSpieler ? 1 : lautBei(m));
   if (m.istSpieler) rueckstoss = 8;
 }
 
-function explosion(x, y, team, von, radius = 85, schadenMax = 40) {
+function explosion(x, y, team, von, radius = 85, schadenMax = 40, h = 30) {
   const menge = Math.min(1, radius / 85);
   for (let i = 0; i < 30 * menge; i++) {
     const a = Math.random() * Math.PI * 2, v = 50 + Math.random() * 200;
-    partikel.push({ x, y, h: 30, vh: 50 + Math.random() * 250, g: 400, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.6, max: 0.6, farbe: zufall(['#ffd166', '#ff9f43', '#ff5e3a', '#ffffff']) });
+    partikel.push({ x, y, h, vh: 50 + Math.random() * 250, g: 400, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.6, max: 0.6, farbe: zufall(['#ffd166', '#ff9f43', '#ff5e3a', '#ffffff']) });
   }
   for (let i = 0; i < 10 * menge; i++) {
-    partikel.push({ x: x + (Math.random() - 0.5) * 40, y: y + (Math.random() - 0.5) * 40, h: 20 + Math.random() * 30, vh: 30 + Math.random() * 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 1.4, max: 1.4, farbe: zufall(['#555555', '#444444', '#666666']), rauch: true });
+    partikel.push({ x: x + (Math.random() - 0.5) * 40, y: y + (Math.random() - 0.5) * 40, h: h - 10 + Math.random() * 30, vh: 30 + Math.random() * 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 1.4, max: 1.4, farbe: zufall(['#555555', '#444444', '#666666']), rauch: true });
   }
-  partikel.push({ x, y, h: 40, vh: 0, vx: 0, vy: 0, t: 0.35, max: 0.35, kugel: radius, farbe: '#ffb347' });
+  partikel.push({ x, y, h: h + 10, vh: 0, vx: 0, vy: 0, t: 0.35, max: 0.35, kugel: radius, farbe: '#ffb347' });
   sound.boom(Math.max(0.15, lautBei({ x, y })) * menge);
   if (spieler && dist({ x, y }, spieler) < 400) wackeln = Math.max(wackeln, 8);
   if (team === null) return;
   for (const m of mechs) {
     if (m.tot || m.team === team) continue;
-    const d = dist(m, { x, y });
+    const mitte = { x: m.x, y: m.y, z: m.z + 35 * m.typ.groesse };
+    const d = Math.hypot(mitte.x - x, mitte.y - y, mitte.z - h);
     const groesse = radius + MECH_RADIUS * m.typ.groesse;
-    if (d < groesse && sichtFrei({ x, y }, m)) {
+    if (d < groesse && sichtFrei3D({ x, y, z: h }, mitte)) {
       schaden(m, schadenMax * (1 - 0.5 * d / groesse), von);
     }
   }
@@ -632,11 +774,11 @@ function zerstoert(m, von) {
   m.neustart = NEUSTART_ZEIT;
   m.tode++;
   m.zerstoertVon = von;
-  m.wrack = { x: m.x, y: m.y };
-  explosion(m.x, m.y, null, null);
+  m.wrack = { x: m.x, y: m.y, z: m.z };
+  explosion(m.x, m.y, null, null, 85, 0, m.z + 30);
   for (let i = 0; i < 8; i++) {   // Schrottteile fliegen weg
     const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 160;
-    partikel.push({ x: m.x, y: m.y, h: 40, vh: 150 + Math.random() * 200, g: 600, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.2, max: 1.2, farbe: TEAMS[m.team].dunkel, rauch: true });
+    partikel.push({ x: m.x, y: m.y, h: m.z + 40, vh: 150 + Math.random() * 200, g: 600, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.2, max: 1.2, farbe: TEAMS[m.team].dunkel, rauch: true });
   }
   if (von) {
     von.abschuesse++;
@@ -655,34 +797,37 @@ function updateSchuesse(dt) {
       const ax = s.x, ay = s.y, ah = s.h;
       s.x = s.sx + (s.zx - s.sx) * k;
       s.y = s.sy + (s.zy - s.sy) * k;
-      s.h = s.startH * (1 - k) + 4 * s.scheitel * k * (1 - k);
+      s.h = s.startH * (1 - k) + s.zh * k + 4 * s.scheitel * k * (1 - k);
       s.dx = s.x - ax; s.dy = s.y - ay; s.dh = s.h - ah;   // Flugrichtung (damit die Rakete richtig zeigt)
       if (Math.random() < 0.6) partikel.push({ x: s.x, y: s.y, h: s.h, vh: 5, vx: 0, vy: 0, t: 0.5, max: 0.5, farbe: '#b9a7d6', rauch: true });
       if (k > 0.6 && zeit - letzterPfiff > 1 && spieler && dist({ x: s.zx, y: s.zy }, spieler) < 300) { letzterPfiff = zeit; sound.pfeifen(); }   // Fiiiiuuu ... gleich knallt's!
-      if (k >= 1) { s.weg = true; explosion(s.zx, s.zy, s.team, s.von, s.radius, s.schaden); }
+      if (k >= 1) { s.weg = true; explosion(s.zx, s.zy, s.team, s.von, s.radius, s.schaden, s.zh + 5); }
       continue;
     }
     const schritte = 3;
     for (let i = 0; i < schritte && !s.weg; i++) {
       s.x += s.vx * dt / schritte;
       s.y += s.vy * dt / schritte;
-      s.rest -= Math.hypot(s.vx, s.vy) * dt / schritte;
-      if (inWand(s.x, s.y) || s.x < 0 || s.y < 0 || s.x > WELT_B || s.y > WELT_H) {
+      s.h += (s.vh || 0) * dt / schritte;
+      s.rest -= Math.hypot(s.vx, s.vy, s.vh || 0) * dt / schritte;
+      if (imFesten(s.x, s.y, s.h) || s.x < 0 || s.y < 0 || s.x > WELT_B || s.y > WELT_H) {
         s.weg = true;
-        if (s.art === 'rakete') explosion(s.x - s.vx * 0.02, s.y - s.vy * 0.02, s.team, s.von, s.radius, s.schaden);
-        else funken(s.x - s.vx * 0.01, s.y - s.vy * 0.01, s.h, '#ffe08a');
+        const zx = s.x - s.vx * 0.02, zy = s.y - s.vy * 0.02, zh = Math.max(2, s.h - (s.vh || 0) * 0.02);
+        if (s.art === 'rakete') explosion(zx, zy, s.team, s.von, s.radius, s.schaden, zh);
+        else funken(zx, zy, zh, '#ffe08a');
         break;
       }
       for (const m of mechs) {
         if (m.tot || m.team === s.team || dist(m, s) > MECH_RADIUS * m.typ.groesse) continue;
+        if (s.h < m.z - 5 || s.h > m.z + 80 * m.typ.groesse) continue;   // drüber oder drunter vorbei
         s.weg = true;
-        if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden);
+        if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
         else { schaden(m, s.schaden, s.von); funken(s.x, s.y, s.h, m.schutz > 0 ? '#93c5fd' : '#ffffff'); }
         break;
       }
       if (!s.weg && s.rest <= 0) {
         s.weg = true;
-        if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden);
+        if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
       }
     }
     if (s.art === 'rakete' && !s.weg) {   // Rauchspur
@@ -708,6 +853,7 @@ function updateSpieler(dt) {
   if ((tasten['shift'] || tasten[' ']) && (dx || dy)) boosten(m, Math.atan2(dy, dx));
   bewege(m, dx, dy, dt);
   m.zielWinkel = blick.links;
+  m.zielHoch = blick.hoch;   // Kugeln fliegen dahin, wo du hinschaust (auch hoch und runter)
   if (m.typ.mg.salve) {   // Artillerie: Je höher du schaust, desto weiter weg ist das Ziel
     const mg = m.typ.mg;
     m.zielWeite = mg.minWeite + (blick.hoch + 0.5) / 0.9 * (mg.weite - mg.minWeite);
@@ -725,6 +871,14 @@ function botZiel(m) {
     const gegner = mechs.filter(o => !o.tot && o.team !== m.team).sort((a, b) => dist(a, m) - dist(b, m))[0];
     return gegner || { x: WELT_B / 2, y: WELT_H / 2 };
   }
+  // Scharfschützen und Artillerie stellen sich manchmal auf eine Plattform oder einen Hügel
+  if ((m.typ.mg.strahl || m.typ.mg.salve) && m.seed > 4) {
+    const hoch = WAENDE.filter(b => (b.art === 'plattform' || b.art === 'huegel') && (b.x + b.w / 2 < WELT_B / 2) === (m.team === 'blau'));
+    if (hoch.length) {
+      const b = hoch[Math.floor(m.seed) % hoch.length];
+      return { x: b.x + b.w / 2, y: b.y + b.h / 2, z: b.oben };
+    }
+  }
   const z = modus === 'punkt' ? ziele[0] : ziele[aktivesZiel];
   let x = z.x + m.versatz.x * z.r, y = z.y + m.versatz.y * z.r;
   // Verteidiger bleiben eher auf ihrer Seite vom Punkt
@@ -741,7 +895,7 @@ function botDenken(m, dt) {
     for (const o of mechs) {
       if (o.tot || o.team === m.team) continue;
       const d = dist(m, o);
-      const sichtbar = sichtFrei(m, o) || (m.typ.mg.salve && mechs.some(f => !f.tot && f.team === m.team && f !== m && dist(f, o) < 700 && sichtFrei(f, o)));
+      const sichtbar = sicht(m, o) || (m.typ.mg.salve && mechs.some(f => !f.tot && f.team === m.team && f !== m && dist(f, o) < 700 && sicht(f, o)));
       if (d < besterD && sichtbar) { bester = o; besterD = d; }
     }
     if (bester !== m.gegner) m.reaktion = 0.35 + Math.random() * 0.25;   // Bots brauchen kurz, bis sie reagieren
@@ -756,7 +910,7 @@ function botDenken(m, dt) {
     m.weg = wegFinden(m, ziel);
     m.wegZeit = 0.8 + Math.random() * 0.6;
   }
-  while (m.weg.length > 1 && sichtFrei(m, m.weg[1], MECH_RADIUS - 6)) m.weg.shift();   // Abkürzen, wenn frei
+  for (let i = 0; i < 3 && m.weg.length > 1 && kannDirekt(m, m.weg[1]); i++) m.weg.shift();   // Abkürzen, wenn frei
   if (m.weg.length && dist(m, m.weg[0]) < 18) m.weg.shift();
 
   let dx = 0, dy = 0;
@@ -781,6 +935,7 @@ function botDenken(m, dt) {
     const vorne = { x: g.x + g.vx * flug, y: g.y + g.vy * flug };   // Da wird der Gegner gleich sein
     const zielW = Math.atan2(vorne.y - m.y, vorne.x - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * BOT_UNGENAU;
     m.zielWeite = dist(m, vorne);
+    m.zielHoch = Math.atan2((g.z + 40 * g.typ.groesse) - (m.z + 52 * m.typ.groesse), Math.max(1, dist(m, vorne)));   // hoch oder runter zielen
     m.zielWinkel = drehe(m.zielWinkel, zielW, dt * 7);
     m.reaktion -= dt;
     if (m.reaktion <= 0 && Math.abs(winkelDiff(m.zielWinkel, zielW)) < 0.25) {
@@ -791,6 +946,7 @@ function botDenken(m, dt) {
     if (m.seitHit < 0.05 && Math.random() < 0.25) boosten(m, Math.atan2(gx, -gy) + (Math.random() < 0.5 ? 0 : Math.PI));
   } else if (dx || dy) {
     m.zielWinkel = drehe(m.zielWinkel, Math.atan2(dy, dx), dt * 5);
+    m.zielHoch = 0;
   }
 
   // Raketenhagel von Gegnern? Schnell raus aus dem Kreis! (Aber nur, wenn der Bot ihn bemerkt hat)
