@@ -381,6 +381,7 @@ function spawnen(m) {
 
 function neuesSpiel(id) {
   modus = id;
+  ladeKarte(karte);
   // Alte 3D-Sachen aufräumen
   for (const m of mechs) if (m.g3) szene.remove(m.g3.gruppe);
   for (const s of schussMeshes) szene.remove(s.mesh);
@@ -909,16 +910,14 @@ addEventListener('resize', groesseAnpassen);
 groesseAnpassen();
 
 const szene = new THREE.Scene();
-const HIMMEL = '#8fa3c0';
-szene.background = new THREE.Color(HIMMEL);
-szene.fog = new THREE.Fog(HIMMEL, 700, 2600);
 
-const kamera = new THREE.PerspectiveCamera(SICHTFELD, W / H, 1, 5000);
+const kamera = new THREE.PerspectiveCamera(SICHTFELD, W / H, 1, 6000);
 kamera.rotation.order = 'YXZ';
 szene.add(kamera);
 
-// Licht: Himmel + Sonne mit Schatten
-szene.add(new THREE.HemisphereLight('#dfe8ff', '#4a4a55', 1.1));
+// Licht: Himmel + Sonne mit Schatten (die Farben ändern sich je nach Karte)
+const himmelsLicht = new THREE.HemisphereLight('#dfe8ff', '#4a4a55', 1.1);
+szene.add(himmelsLicht);
 const sonne = new THREE.DirectionalLight('#fff4e0', 1.6);
 sonne.position.set(WELT_B / 2 - 600, 900, WELT_H / 2 - 400);
 sonne.target.position.set(WELT_B / 2, 0, WELT_H / 2);
@@ -938,6 +937,40 @@ function malTextur(b, h, malen) {
   t.anisotropy = 4;
   return t;
 }
+const kreisTextur = malTextur(64, 64, (g) => {
+  const v = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  v.addColorStop(0, 'rgba(255,255,255,1)'); v.addColorStop(0.5, 'rgba(255,255,255,0.8)'); v.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = v; g.fillRect(0, 0, 64, 64);
+});
+
+// Zufall, der jedes Mal gleich ist (damit die Pflanzen immer am selben Platz stehen)
+function zufallsGenerator(start) {
+  let z = start;
+  return () => { z = (z * 16807) % 2147483647; return (z - 1) / 2147483646; };
+}
+
+// Alles, was zur Karte gehört, kommt in diese Gruppe. Beim Kartenwechsel wird sie weggeworfen.
+let kartenGruppe = null;
+let kartenAnimation = null;   // Was sich auf der Karte bewegt (z. B. schwebende Sporen)
+function baueKarte3D(k) {
+  if (kartenGruppe) {
+    szene.remove(kartenGruppe);
+    kartenGruppe.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  }
+  kartenGruppe = new THREE.Group();
+  szene.add(kartenGruppe);
+  kartenAnimation = null;
+  if (k.id === 'planet') bauePlanet(kartenGruppe); else baueFabrik(kartenGruppe);
+  // Basen (farbiger Boden) gibt es überall
+  for (const [team, x] of [['blau', 150], ['rot', WELT_B - 150]]) {
+    const basis = new THREE.Mesh(new THREE.PlaneGeometry(300, WELT_H), new THREE.MeshBasicMaterial({ color: TEAMS[team].farbe, transparent: true, opacity: 0.18, depthWrite: false }));
+    basis.rotation.x = -Math.PI / 2;
+    basis.position.set(x, 0.5, WELT_H / 2);
+    kartenGruppe.add(basis);
+  }
+}
+
+// ===== Karte 1: 🏭 Stahlfabrik =====
 const bodenTextur = malTextur(256, 256, (g, b, h) => {
   g.fillStyle = '#4d5360'; g.fillRect(0, 0, b, h);
   g.strokeStyle = '#3a3f4a'; g.lineWidth = 6; g.strokeRect(0, 0, b, h);
@@ -964,70 +997,265 @@ const streifenTextur = malTextur(128, 32, (g, b, h) => {
   g.fillStyle = '#ffd166';
   for (let x = -h; x < b; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 16, h); g.lineTo(x + 16 + h, 0); g.lineTo(x + h, 0); g.fill(); }
 });
-const kreisTextur = malTextur(64, 64, (g) => {
-  const v = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  v.addColorStop(0, 'rgba(255,255,255,1)'); v.addColorStop(0.5, 'rgba(255,255,255,0.8)'); v.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = v; g.fillRect(0, 0, 64, 64);
-});
-
-// Boden
-const boden = new THREE.Mesh(new THREE.PlaneGeometry(WELT_B, WELT_H), new THREE.MeshStandardMaterial({ map: bodenTextur, roughness: 0.9, metalness: 0.1 }));
-boden.rotation.x = -Math.PI / 2;
-boden.position.set(WELT_B / 2, 0, WELT_H / 2);
-boden.receiveShadow = true;
-szene.add(boden);
-// Draußen: weiter Boden bis zum Horizont
-const aussen = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#5d6470', roughness: 1 }));
-aussen.rotation.x = -Math.PI / 2;
-aussen.position.set(WELT_B / 2, -1, WELT_H / 2);
-szene.add(aussen);
-// Basen (farbiger Boden)
-for (const [team, x] of [['blau', 150], ['rot', WELT_B - 150]]) {
-  const basis = new THREE.Mesh(new THREE.PlaneGeometry(300, WELT_H), new THREE.MeshBasicMaterial({ color: TEAMS[team].farbe, transparent: true, opacity: 0.18, depthWrite: false }));
-  basis.rotation.x = -Math.PI / 2;
-  basis.position.set(x, 0.5, WELT_H / 2);
-  szene.add(basis);
-}
-
-// Wände und Kisten
 const wandMat = new THREE.MeshStandardMaterial({ map: wandTextur, roughness: 0.6, metalness: 0.4 });
 const kistenMat = new THREE.MeshStandardMaterial({ map: kistenTextur, roughness: 0.8 });
 const kanteMat = new THREE.LineBasicMaterial({ color: '#2a2f3a' });
-for (const r of WAENDE) {
-  const hoehe = r.kiste ? 40 : WAND_HOEHE;
-  const geo = new THREE.BoxGeometry(r.w, hoehe, r.h);
-  const wand = new THREE.Mesh(geo, r.kiste ? kistenMat : wandMat);
-  wand.position.set(r.x + r.w / 2, hoehe / 2, r.y + r.h / 2);
-  wand.castShadow = wand.receiveShadow = true;
-  szene.add(wand);
-  const kanten = new THREE.LineSegments(new THREE.EdgesGeometry(geo), kanteMat);
-  kanten.position.copy(wand.position);
-  szene.add(kanten);
-  if (!r.kiste) {   // Gelb-schwarzer Warnstreifen oben drauf
+
+function baueFabrik(g) {
+  const HIMMEL = '#8fa3c0';
+  szene.background = new THREE.Color(HIMMEL);
+  szene.fog = new THREE.Fog(HIMMEL, 700, 2600);
+  himmelsLicht.color.set('#dfe8ff'); himmelsLicht.groundColor.set('#4a4a55'); himmelsLicht.intensity = 1.1;
+  sonne.color.set('#fff4e0'); sonne.intensity = 1.6;
+  // Boden
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(WELT_B, WELT_H), new THREE.MeshStandardMaterial({ map: bodenTextur, roughness: 0.9, metalness: 0.1 }));
+  boden.rotation.x = -Math.PI / 2;
+  boden.position.set(WELT_B / 2, 0, WELT_H / 2);
+  boden.receiveShadow = true;
+  g.add(boden);
+  const aussen = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#5d6470', roughness: 1 }));
+  aussen.rotation.x = -Math.PI / 2;
+  aussen.position.set(WELT_B / 2, -1, WELT_H / 2);
+  g.add(aussen);
+  // Wände und Kisten
+  for (const r of WAENDE) {
+    const kiste = r.art === 'kiste';
+    const hoehe = kiste ? 40 : WAND_HOEHE;
+    const geo = new THREE.BoxGeometry(r.w, hoehe, r.h);
+    const wand = new THREE.Mesh(geo, kiste ? kistenMat : wandMat);
+    wand.position.set(r.x + r.w / 2, hoehe / 2, r.y + r.h / 2);
+    wand.castShadow = wand.receiveShadow = true;
+    g.add(wand);
+    const kanten = new THREE.LineSegments(new THREE.EdgesGeometry(geo), kanteMat);
+    kanten.position.copy(wand.position);
+    g.add(kanten);
+    if (!kiste) {   // Gelb-schwarzer Warnstreifen oben drauf
+      const st = streifenTextur.clone();
+      st.repeat.set(Math.max(r.w, r.h) / 64, 1);
+      const streifen = new THREE.Mesh(new THREE.BoxGeometry(r.w + 2, 10, r.h + 2), new THREE.MeshStandardMaterial({ map: st }));
+      streifen.position.set(r.x + r.w / 2, hoehe - 5, r.y + r.h / 2);
+      g.add(streifen);
+    }
+  }
+  // Rand der Arena: niedrige Mauer mit Warnstreifen
+  for (const [x, y, b, t] of [[WELT_B / 2, -20, WELT_B + 80, 40], [WELT_B / 2, WELT_H + 20, WELT_B + 80, 40], [-20, WELT_H / 2, 40, WELT_H], [WELT_B + 20, WELT_H / 2, 40, WELT_H]]) {
     const st = streifenTextur.clone();
-    st.repeat.set(Math.max(r.w, r.h) / 64, 1);
-    const streifen = new THREE.Mesh(new THREE.BoxGeometry(r.w + 2, 10, r.h + 2), new THREE.MeshStandardMaterial({ map: st }));
-    streifen.position.set(r.x + r.w / 2, hoehe - 5, r.y + r.h / 2);
-    szene.add(streifen);
+    st.repeat.set(Math.max(b, t) / 64, 2);
+    const mauer = new THREE.Mesh(new THREE.BoxGeometry(b, 60, t), new THREE.MeshStandardMaterial({ map: st }));
+    mauer.position.set(x, 30, y);
+    mauer.receiveShadow = true;
+    g.add(mauer);
+  }
+  // Große Fabriktürme draußen
+  for (let i = 0; i < 14; i++) {
+    const a = i / 14 * Math.PI * 2;
+    const h = 300 + (i * 137) % 400;
+    const turm = new THREE.Mesh(new THREE.BoxGeometry(160, h, 160), new THREE.MeshStandardMaterial({ color: '#6b7385', roughness: 0.8 }));
+    turm.position.set(WELT_B / 2 + Math.cos(a) * 2100, h / 2, WELT_H / 2 + Math.sin(a) * 1500);
+    g.add(turm);
   }
 }
-// Rand der Arena: niedrige Mauer mit Warnstreifen
-for (const [x, y, b, t] of [[WELT_B / 2, -20, WELT_B + 80, 40], [WELT_B / 2, WELT_H + 20, WELT_B + 80, 40], [-20, WELT_H / 2, 40, WELT_H], [WELT_B + 20, WELT_H / 2, 40, WELT_H]]) {
-  const st = streifenTextur.clone();
-  st.repeat.set(Math.max(b, t) / 64, 2);
-  const mauer = new THREE.Mesh(new THREE.BoxGeometry(b, 60, t), new THREE.MeshStandardMaterial({ map: st }));
-  mauer.position.set(x, 30, y);
-  mauer.receiveShadow = true;
-  szene.add(mauer);
+
+// ===== Karte 2: 🪐 Planet Xyloria =====
+const alienBodenTextur = malTextur(256, 256, (g, b, h) => {
+  g.fillStyle = '#3f2d5c'; g.fillRect(0, 0, b, h);
+  const z = zufallsGenerator(7);
+  for (let i = 0; i < 60; i++) {   // Flecken
+    g.fillStyle = z() < 0.5 ? 'rgba(90,60,130,0.6)' : 'rgba(40,30,70,0.6)';
+    g.beginPath(); g.ellipse(z() * b, z() * h, 6 + z() * 22, 4 + z() * 14, z() * 3, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 25; i++) {   // kleine leuchtende Punkte
+    g.fillStyle = z() < 0.5 ? '#5eead4' : '#f0abfc';
+    g.beginPath(); g.arc(z() * b, z() * h, 1.5 + z() * 1.5, 0, 7); g.fill();
+  }
+});
+alienBodenTextur.repeat.set(WELT_B / 220, WELT_H / 220);
+const felsTextur = malTextur(128, 128, (g, b, h) => {
+  g.fillStyle = '#5a4876'; g.fillRect(0, 0, b, h);
+  const z = zufallsGenerator(3);
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = z() < 0.5 ? 'rgba(40,28,60,0.5)' : 'rgba(120,100,150,0.4)';
+    g.beginPath(); g.arc(z() * b, z() * h, 3 + z() * 12, 0, 7); g.fill();
+  }
+  g.strokeStyle = 'rgba(30,20,45,0.8)'; g.lineWidth = 2;
+  for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(z() * b, z() * h); g.lineTo(z() * b, z() * h); g.stroke(); }   // Risse
+});
+const felsMat = new THREE.MeshStandardMaterial({ map: felsTextur, roughness: 0.95, flatShading: true });
+const kristallMats = ['#5eead4', '#f472b6', '#a78bfa'].map(f => new THREE.MeshStandardMaterial({ color: f, emissive: f, emissiveIntensity: 0.55, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.9, flatShading: true }));
+const stielMat = new THREE.MeshStandardMaterial({ color: '#e9d5ff', roughness: 0.7 });
+const hutMat = new THREE.MeshStandardMaterial({ color: '#9333ea', emissive: '#7e22ce', emissiveIntensity: 0.5, roughness: 0.6, side: THREE.DoubleSide });
+const punktMat = new THREE.MeshBasicMaterial({ color: '#f0abfc' });
+const leuchtMats = ['#5eead4', '#f0abfc', '#fde047', '#86efac'].map(f => new THREE.MeshStandardMaterial({ color: f, emissive: f, emissiveIntensity: 0.9 }));
+const grasMat = new THREE.MeshStandardMaterial({ color: '#2dd4bf', emissive: '#0f766e', emissiveIntensity: 0.6, flatShading: true });
+
+function fels(g, x, z, b, h, t, drehen = 0) {
+  const f = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), felsMat);
+  f.scale.set(b, h, t);
+  f.position.set(x, h * 0.55, z);
+  f.rotation.y = drehen;
+  f.castShadow = f.receiveShadow = true;
+  g.add(f);
+  return f;
 }
-// Ein paar große Türme draußen, damit es nach Fabrik aussieht
-for (let i = 0; i < 14; i++) {
-  const a = i / 14 * Math.PI * 2;
-  const h = 300 + (i * 137) % 400;
-  const turm = new THREE.Mesh(new THREE.BoxGeometry(160, h, 160), new THREE.MeshStandardMaterial({ color: '#6b7385', roughness: 0.8 }));
-  turm.position.set(WELT_B / 2 + Math.cos(a) * 2100, h / 2, WELT_H / 2 + Math.sin(a) * 1500);
-  szene.add(turm);
+function kristalle(g, r, z, nr) {   // Ein Haufen leuchtender Kristalle
+  const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
+  const anzahl = 3 + Math.floor(z() * 3);
+  for (let i = 0; i < anzahl; i++) {
+    const hoehe = 60 + z() * 90;
+    const k = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), kristallMats[(nr + i) % kristallMats.length]);
+    k.scale.set(14 + z() * 12, hoehe, 14 + z() * 12);
+    k.position.set(cx + (z() - 0.5) * r.w * 0.7, hoehe * 0.6, cz + (z() - 0.5) * r.h * 0.7);
+    k.rotation.set((z() - 0.5) * 0.5, z() * 3, (z() - 0.5) * 0.5);
+    k.castShadow = true;
+    g.add(k);
+  }
+  fels(g, cx, cz, r.w * 0.55, 18, r.h * 0.55);   // Steinboden drunter
 }
+function riesenPilz(g, x, z, stielR, hoehe, hutR) {
+  const stiel = new THREE.Mesh(new THREE.CylinderGeometry(stielR * 0.8, stielR, hoehe, 12), stielMat);
+  stiel.position.set(x, hoehe / 2, z);
+  stiel.castShadow = true;
+  g.add(stiel);
+  const hut = new THREE.Mesh(new THREE.SphereGeometry(hutR, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2.2), hutMat);
+  hut.scale.y = 0.55;
+  hut.position.set(x, hoehe - 6, z);
+  hut.castShadow = true;
+  g.add(hut);
+  for (let i = 0; i < 9; i++) {   // leuchtende Punkte auf dem Hut
+    const a = i / 9 * Math.PI * 2, r = hutR * 0.6;
+    const p = new THREE.Mesh(new THREE.SphereGeometry(hutR * 0.08, 8, 6), punktMat);
+    p.position.set(x + Math.cos(a) * r, hoehe - 6 + hutR * 0.42, z + Math.sin(a) * r);
+    g.add(p);
+  }
+}
+function leuchtPflanze(g, x, z, zufall) {   // Kleine Pflanze mit leuchtender Kugel
+  const h = 14 + zufall() * 22;
+  const stiel = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, h, 5), grasMat);
+  stiel.position.set(x, h / 2, z);
+  stiel.rotation.z = (zufall() - 0.5) * 0.4;
+  const kugel = new THREE.Mesh(new THREE.SphereGeometry(3 + zufall() * 3, 8, 6), leuchtMats[Math.floor(zufall() * leuchtMats.length)]);
+  kugel.position.set(x, h + 2, z);
+  g.add(stiel, kugel);
+}
+function grasBuschel(g, x, z, zufall) {   // Spitze Alien-Gräser
+  for (let i = 0; i < 4; i++) {
+    const h = 10 + zufall() * 16;
+    const halm = new THREE.Mesh(new THREE.ConeGeometry(2, h, 4), grasMat);
+    halm.position.set(x + (zufall() - 0.5) * 14, h / 2, z + (zufall() - 0.5) * 14);
+    halm.rotation.set((zufall() - 0.5) * 0.6, 0, (zufall() - 0.5) * 0.6);
+    g.add(halm);
+  }
+}
+
+function bauePlanet(g) {
+  const HIMMEL = '#2a1846';
+  szene.background = new THREE.Color(HIMMEL);
+  szene.fog = new THREE.Fog('#3b2363', 500, 2400);
+  himmelsLicht.color.set('#c4b5fd'); himmelsLicht.groundColor.set('#134e4a'); himmelsLicht.intensity = 1.2;
+  sonne.color.set('#a5f3fc'); sonne.intensity = 1.3;
+  const z = zufallsGenerator(42);
+
+  // Boden
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(WELT_B, WELT_H), new THREE.MeshStandardMaterial({ map: alienBodenTextur, roughness: 1 }));
+  boden.rotation.x = -Math.PI / 2;
+  boden.position.set(WELT_B / 2, 0, WELT_H / 2);
+  boden.receiveShadow = true;
+  g.add(boden);
+  const aussen = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#3a2754', roughness: 1 }));
+  aussen.rotation.x = -Math.PI / 2;
+  aussen.position.set(WELT_B / 2, -1, WELT_H / 2);
+  g.add(aussen);
+
+  // Hindernisse
+  WAENDE.forEach((r, nr) => {
+    const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
+    if (r.art === 'fels') {
+      fels(g, cx, cz, r.w * 0.62, 95, r.h * 0.62, z());
+      fels(g, cx + (z() - 0.5) * r.w * 0.4, cz + (z() - 0.5) * r.h * 0.4, r.w * 0.4, 130, r.h * 0.4, z());   // Spitze oben drauf
+    } else if (r.art === 'kristall') {
+      kristalle(g, r, z, nr);
+    } else if (r.art === 'pilz') {
+      riesenPilz(g, cx, cz, r.w / 2, 150, 120);
+    } else {
+      fels(g, cx, cz, r.w * 0.6, 40, r.h * 0.6, z());
+    }
+  });
+
+  // Rand der Arena: eine Reihe Felsen
+  for (let x = 0; x <= WELT_B; x += 110) {
+    for (const y of [-45, WELT_H + 45]) fels(g, x, y, 50 + z() * 30, 50 + z() * 60, 40 + z() * 20, z() * 3);
+  }
+  for (let y = 0; y <= WELT_H; y += 110) {
+    for (const x of [-45, WELT_B + 45]) fels(g, x, y, 40 + z() * 20, 50 + z() * 60, 50 + z() * 30, z() * 3);
+  }
+
+  // Pflanzen in der Arena (aber nicht in Felsen)
+  for (let i = 0; i < 170; i++) {
+    const x = z() * WELT_B, y = z() * WELT_H;
+    if (WAENDE.some(r => x > r.x - 20 && x < r.x + r.w + 20 && y > r.y - 20 && y < r.y + r.h + 20)) continue;
+    if (z() < 0.45) leuchtPflanze(g, x, y, z); else grasBuschel(g, x, y, z);
+  }
+
+  // Draußen: riesige Pilze und Felsnadeln
+  for (let i = 0; i < 18; i++) {
+    const a = i / 18 * Math.PI * 2 + z() * 0.2;
+    const x = WELT_B / 2 + Math.cos(a) * (1800 + z() * 500), y = WELT_H / 2 + Math.sin(a) * (1200 + z() * 400);
+    if (i % 2) riesenPilz(g, x, y, 30 + z() * 20, 300 + z() * 300, 200 + z() * 120);
+    else {
+      const nadel = new THREE.Mesh(new THREE.ConeGeometry(70 + z() * 50, 400 + z() * 500, 6), felsMat);
+      nadel.position.set(x, 200, y);
+      g.add(nadel);
+    }
+  }
+
+  // Am Himmel: ein großer Planet mit Ring und ein kleiner Mond
+  const planet = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 24), new THREE.MeshBasicMaterial({ color: '#f472b6', fog: false }));
+  planet.position.set(WELT_B / 2 + 2600, 1500, WELT_H / 2 - 3200);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(650, 900, 64), new THREE.MeshBasicMaterial({ color: '#fbcfe8', side: THREE.DoubleSide, transparent: true, opacity: 0.6, fog: false }));
+  ring.position.copy(planet.position);
+  ring.rotation.set(1.2, 0.3, 0.2);
+  const mond = new THREE.Mesh(new THREE.SphereGeometry(140, 24, 16), new THREE.MeshBasicMaterial({ color: '#a5f3fc', fog: false }));
+  mond.position.set(WELT_B / 2 - 2500, 1300, WELT_H / 2 - 2800);
+  g.add(planet, ring, mond);
+  // Sterne
+  const sternPos = [];
+  for (let i = 0; i < 400; i++) {
+    const a = z() * Math.PI * 2, b = 0.15 + z() * 1.2;
+    sternPos.push(WELT_B / 2 + Math.cos(a) * Math.cos(b) * 4500, Math.sin(b) * 4500, WELT_H / 2 + Math.sin(a) * Math.cos(b) * 4500);
+  }
+  const sternGeo = new THREE.BufferGeometry();
+  sternGeo.setAttribute('position', new THREE.Float32BufferAttribute(sternPos, 3));
+  g.add(new THREE.Points(sternGeo, new THREE.PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false })));
+
+  // Schwebende, leuchtende Sporen
+  const ANZ = 300, sporenPos = new Float32Array(ANZ * 3), basis = [];
+  for (let i = 0; i < ANZ; i++) basis.push({ x: z() * WELT_B, y: 20 + z() * 160, z: z() * WELT_H, p: z() * 6 });
+  const sporenGeo = new THREE.BufferGeometry();
+  sporenGeo.setAttribute('position', new THREE.BufferAttribute(sporenPos, 3));
+  const sporen = new THREE.Points(sporenGeo, new THREE.PointsMaterial({ color: '#a7f3d0', size: 5, map: kreisTextur, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sporen.frustumCulled = false;
+  g.add(sporen);
+  kartenAnimation = () => {
+    basis.forEach((b, i) => {
+      sporenPos[i * 3] = b.x + Math.sin(zeit * 0.3 + b.p) * 30;
+      sporenPos[i * 3 + 1] = b.y + Math.sin(zeit * 0.7 + b.p) * 15;
+      sporenPos[i * 3 + 2] = b.z + Math.cos(zeit * 0.25 + b.p) * 30;
+    });
+    sporenGeo.attributes.position.needsUpdate = true;
+    ring.rotation.z += 0.0005;
+  };
+}
+
+// Karte laden: Hindernisse, Wege für die Bots und die 3D-Welt
+let geladeneKarte = null;
+function ladeKarte(k) {
+  if (geladeneKarte === k) return;
+  geladeneKarte = k;
+  WAENDE = waendeVon(k);
+  baueGitter();
+  baueKarte3D(k);
+}
+ladeKarte(karte);
 
 // ----- Ein Mech aus Klötzen -----
 const metall = farbe => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.5, metalness: 0.5 });
@@ -1072,7 +1300,20 @@ function baueMech(m) {
   const visier = new THREE.Mesh(new THREE.BoxGeometry(3, 6, 16), new THREE.MeshBasicMaterial({ color: T.hell }));
   visier.position.set(24.5, 16, 0);
   torso.add(visier);
-  if (typ.mg.strahl) {
+  if (typ.mg.granate) {
+    // ☄️ Donnerhagel: ein dicker Mörser auf dem Rücken, schräg nach oben
+    torso.add(klotz(24, 14, 22, teamDunkel, -6, 28, 10));
+    const moerser = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 46, 12), dunkelMat);
+    moerser.rotation.z = -0.75;   // schräg nach vorne oben
+    moerser.position.set(6, 46, 10);
+    moerser.castShadow = true;
+    torso.add(moerser);
+    const muendung = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 8.5, 4, 12), akzentMat);
+    muendung.rotation.z = -0.75;
+    muendung.position.set(21, 61, 10);
+    torso.add(muendung);
+    torso.add(klotz(10, 8, 30, grauMat, 14, 2, 0));   // kleine Stütze vorne
+  } else if (typ.mg.strahl) {
     // 🎯 Adlerauge: eine lange Railgun mit Zielfernrohr
     torso.add(klotz(22, 12, 10, grauMat, 12, 4, 21));
     torso.add(rohr(4, 64, dunkelMat, 52, 4, 21));
@@ -1205,6 +1446,8 @@ const kugelGeo = new THREE.BoxGeometry(26, 2.5, 2.5);
 const kugelMat = { blau: new THREE.MeshBasicMaterial({ color: '#bfdbfe' }), rot: new THREE.MeshBasicMaterial({ color: '#fecaca' }) };
 const strahlGeo = new THREE.BoxGeometry(90, 3, 3);
 const strahlMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
+const granatenGeo = new THREE.SphereGeometry(7, 12, 8);
+const granatenMat = new THREE.MeshStandardMaterial({ color: '#3b2f4a', emissive: '#c084fc', emissiveIntensity: 0.7 });
 const raketenGeo = new THREE.BoxGeometry(18, 6, 6);
 const raketenMat = new THREE.MeshStandardMaterial({ color: '#dddddd', emissive: '#ff9f43', emissiveIntensity: 0.4 });
 let schussMeshes = [];
@@ -1213,6 +1456,7 @@ function zeigeSchuesse() {
     if (!s.mesh) {
       if (s.art === 'kugel') s.mesh = new THREE.Mesh(kugelGeo, kugelMat[s.team]);
       else if (s.art === 'strahl') s.mesh = new THREE.Mesh(strahlGeo, strahlMat);
+      else if (s.art === 'granate') s.mesh = new THREE.Mesh(granatenGeo, granatenMat);
       else s.mesh = new THREE.Mesh(raketenGeo, raketenMat);
       s.mesh.rotation.y = -Math.atan2(s.vy, s.vx);
       szene.add(s.mesh);
@@ -1287,6 +1531,24 @@ muendungsBlitz.scale.set(14, 14, 1);
 function baueWaffen(typ) {
   while (waffen.children.length) waffen.remove(waffen.children[0]);
   const mat = metall(TEAMS.blau.farbe), akzent = metall(typ.akzent);
+  if (typ.mg.granate) {   // ☄️ Ein dicker Mörser rechts, schräg nach oben
+    const halter = new THREE.Mesh(new THREE.BoxGeometry(12, 9, 18), mat);
+    halter.position.set(16, -16, -24);
+    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 30, 12), dunkelMat);
+    rohr.rotation.x = Math.PI / 2 + 0.45;
+    rohr.position.set(16, -8, -40);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 3, 12), akzent);
+    ring.rotation.x = Math.PI / 2 + 0.45;
+    ring.position.set(16, -2.5, -52);
+    waffen.add(halter, rohr, ring);
+    blitzMat.color.set('#c084fc');
+    waffen.add(muendungsBlitz);
+    waffen.userData.muendungZ = -56;
+    waffen.userData.muendungY = 0;
+    waffen.traverse(o => { o.renderOrder = 10; });
+    return;
+  }
+  waffen.userData.muendungY = -13;
   const laenge = typ.mg.strahl ? 46 : 24;
   for (const s of typ.mg.strahl ? [1] : [-1, 1]) {   // Railgun: nur ein langes Rohr rechts
     const halter = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 16), mat);
@@ -1312,8 +1574,21 @@ function baueWaffen(typ) {
 }
 baueWaffen(meinMech);
 
+// ----- Zielring: Hier landet deine Granate -----
+const zielRing = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48), new THREE.MeshBasicMaterial({ color: '#c084fc', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+zielRing.rotation.x = -Math.PI / 2;
+szene.add(zielRing);
+
 // ----- Kamera und Zeichnen der 3D-Welt -----
 function zeichne3D() {
+  if (kartenAnimation) kartenAnimation();
+  zielRing.visible = !spieler.tot && !!spieler.typ.mg.granate && zustand === 'spiel';
+  if (zielRing.visible) {
+    const p = landePunkt(spieler);
+    zielRing.position.set(p.x, 2, p.y);
+    zielRing.scale.setScalar(spieler.typ.mg.radius * (0.9 + Math.sin(zeit * 6) * 0.06));
+    zielRing.material.opacity = spieler.mgPause > 0 ? 0.3 : 0.85;
+  }
   for (const m of mechs) zeigeMech(m);
   zeigeZiele();
   zeigeSchuesse();
@@ -1326,7 +1601,7 @@ function zeichne3D() {
     waffen.visible = true;
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
     muendungsBlitz.visible = muendung > 0;
-    muendungsBlitz.position.set(m.typ.mg.strahl ? 15 : m.lauf * 15, -13, waffen.userData.muendungZ);
+    muendungsBlitz.position.set(m.typ.mg.strahl || m.typ.mg.granate ? 15 : m.lauf * 15, waffen.userData.muendungY, waffen.userData.muendungZ);
   } else {
     // Zerstört: Die Kamera fliegt hoch und schaut auf dein Wrack
     const w = m.wrack;
@@ -1534,6 +1809,13 @@ function zeichneHUD() {
     }
   }
 
+  // ----- Artillerie: Wie weit fliegt die Granate? -----
+  if (zustand === 'spiel' && !m.tot && m.typ.mg.granate) {
+    const weite = Math.round(dist(m, landePunkt(m)) / 10);
+    text(`☄️ ${weite} m`, W / 2 + 30, H / 2 + 34, 15, m.typ.akzent, 'left');
+    if (m.mgPause > 0) balken(W / 2 - 25, H / 2 + 26, 50, 5, 1 - m.mgPause / m.typ.mg.pause, m.typ.akzent);
+  }
+
   // ----- Fadenkreuz in der Mitte -----
   if (zustand === 'spiel' && !m.tot) {
     const t = trefferAnzeige > 0;
@@ -1591,7 +1873,8 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
   ctx.restore();
   ctx.rotate(zielWinkel);
   ctx.fillStyle = '#4b5060'; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
-  if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
+  if (typ.mg.granate) { rr(-6, 8, 44, 16, 6); ctx.fill(); ctx.stroke(); ctx.fillStyle = typ.akzent; kreis(38, 16, 7); ctx.fill(); }   // dicker Mörser
+  else if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
   else { rr(8, -13, 34, 7, 2); ctx.fill(); ctx.stroke(); rr(8, 6, 34, 7, 2); ctx.fill(); ctx.stroke(); }
   for (const s of typ.rakete.anzahl > 1 ? [-1, 1] : [-1]) {   // Raketenwerfer
     ctx.fillStyle = T.dunkel; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
@@ -1609,6 +1892,9 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
   ctx.restore();
 }
 
+function kartenKnoepfe() {
+  return KARTEN.map((k, i) => ({ k, x: W / 2 - KARTEN.length * 105 + i * 210 + 5, y: 510, w: 200, h: 48 }));
+}
 function zeichneTitel() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#14161c'); g.addColorStop(1, '#2b3140');
@@ -1639,6 +1925,14 @@ function zeichneTitel() {
 
   text('🎮 WASD: Laufen  ·  Maus: Umschauen  ·  Linksklick: MG  ·  Rechtsklick / Q: Rakete  ·  Shift: Boost  ·  Esc: Pause', W / 2, 455, 13, '#c9c3ff', 'center', false);
   text(`Du (blau) + 3 Computer-Mechs gegen ${TEAM_GROESSE} Gegner (rot)  ·  ${MECH_TYPEN.length} verschiedene Mechs!`, W / 2, 478, 13, '#8a8fb0', 'center', false);
+  text('Karte:', W / 2, 498, 13, '#8a8fb0', 'center', false);
+  for (const b of kartenKnoepfe()) {
+    const an = b.k === karte, hover = imRechteck(maus, b);
+    ctx.fillStyle = an ? '#3a4256' : 'rgba(30,34,46,0.9)';
+    rr(b.x, b.y, b.w, b.h, 12); ctx.fill();
+    ctx.strokeStyle = an ? '#ffd166' : (hover ? '#8a8fb0' : '#4a5266'); ctx.lineWidth = an ? 3 : 2; ctx.stroke();
+    text(`${b.k.emoji} ${b.k.name}`, b.x + b.w / 2, b.y + b.h / 2, 17, an ? '#ffd166' : '#fff', 'center', false);
+  }
   if (!renderer) text('⚠️ 3D geht auf diesem Computer leider nicht (kein WebGL).', W / 2, 580, 16, '#ff6b6b');
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 20, 14, '#fff', 'center', false);
 }
@@ -1647,7 +1941,8 @@ function zeichneTitel() {
 let gewaehlterModus = 'punkt';
 const ZURUECK_KNOPF = { x: 30, y: 540, w: 150, h: 40 };
 function mechKarten() {
-  return MECH_TYPEN.map((t, i) => ({ t, x: 30 + i * 182, y: 105, w: 172, h: 415 }));
+  const b = Math.floor((900 - (MECH_TYPEN.length - 1) * 10) / MECH_TYPEN.length);
+  return MECH_TYPEN.map((t, i) => ({ t, x: 30 + i * (b + 10), y: 105, w: b, h: 415 }));
 }
 function zeichneAuswahl() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -1655,7 +1950,7 @@ function zeichneAuswahl() {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   const modusInfo = MODI.find(x => x.id === gewaehlterModus);
   text('Wähle deinen Mech!', W / 2, 45, 38, '#ffd166');
-  text(`Spielmodus: ${modusInfo.emoji} ${modusInfo.name}`, W / 2, 82, 16, '#c9c3ff', 'center', false);
+  text(`Spielmodus: ${modusInfo.emoji} ${modusInfo.name}  ·  Karte: ${karte.emoji} ${karte.name}`, W / 2, 82, 16, '#c9c3ff', 'center', false);
 
   for (const k of mechKarten()) {
     const t = k.t, hover = imRechteck(maus, k), meiner = t === meinMech;
@@ -1664,7 +1959,7 @@ function zeichneAuswahl() {
     ctx.strokeStyle = hover ? '#ffd166' : (meiner ? t.akzent : '#4a5266'); ctx.lineWidth = hover || meiner ? 4 : 2; ctx.stroke();
     const mx = k.x + k.w / 2;
     // Der Mech dreht sich langsam
-    zeichneMech2D('blau', mx - 8, k.y + 85, 1.25, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, hover ? zeit * 8 : 0, t);
+    zeichneMech2D('blau', mx - 8, k.y + 85, 1.1, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, hover ? zeit * 8 : 0, t);
     text(t.emoji, k.x + 22, k.y + 24, 22, '#fff', 'center', false);
     if (meiner) text('✓', k.x + k.w - 20, k.y + 24, 20, t.akzent, 'center', false);
     text(t.name, mx, k.y + 165, 20, t.akzent);
@@ -1672,14 +1967,13 @@ function zeichneAuswahl() {
     // Sterne für die Werte
     [['❤️', 'Leben', t.sterne.leben], ['💨', 'Tempo', t.sterne.tempo], ['💥', 'Schaden', t.sterne.schaden], ['🎯', 'Weite', t.sterne.weite]].forEach(([e, name, n], i) => {
       const y = k.y + 280 + i * 30;
-      text(e, k.x + 20, y, 14, '#fff', 'center', false);
-      text(name, k.x + 34, y, 12, '#c9c3ff', 'left', false);
+      text(e, k.x + 18, y, 14, '#fff', 'center', false);
       for (let j = 0; j < 5; j++) {
         ctx.fillStyle = j < n ? t.akzent : 'rgba(255,255,255,0.12)';
-        rr(k.x + 96 + j * 14, y - 5, 11, 10, 3); ctx.fill();
+        rr(k.x + 36 + j * 18, y - 6, 14, 12, 3); ctx.fill();
       }
     });
-    text(t.rakete.anzahl > 1 ? `🚀 ${t.rakete.anzahl} Raketen` : (t.mg.strahl ? '⚡ Railgun' : '🔫 Doppel-MG'), mx, k.y + 395, 13, '#fff', 'center', false);
+    text(t.mg.granate ? '☄️ Granaten' : (t.rakete.anzahl > 1 ? `🚀 ${t.rakete.anzahl} Raketen` : (t.mg.strahl ? '⚡ Railgun' : '🔫 Doppel-MG')), mx, k.y + 395, 13, '#fff', 'center', false);
   }
   const zh = imRechteck(maus, ZURUECK_KNOPF);
   ctx.fillStyle = zh ? '#3a4256' : 'rgba(30,34,46,0.92)';
@@ -1774,6 +2068,10 @@ canvas.addEventListener('pointerdown', e => {
   if (!mausGefangen) { const p = punkt(e); maus.x = p.x; maus.y = p.y; }
   if (zustand === 'titel') {
     for (const k of modusKarten()) if (imRechteck(maus, k)) { gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
+    for (const b of kartenKnoepfe()) if (imRechteck(maus, b)) {
+      karte = b.k;
+      try { localStorage.setItem('kaempfer-karte', karte.id); } catch (e) { /* egal */ }
+    }
     return;
   }
   if (zustand === 'auswahl') {
