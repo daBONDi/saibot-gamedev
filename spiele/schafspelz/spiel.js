@@ -25,6 +25,11 @@ function entwicklerRolle() {
   if (!ENTWICKLER) return null;
   try { return new URLSearchParams(location.search).get('rolle'); } catch (e) { return null; }
 }
+// Fress-Animation aussuchen mit:  ?rolle=schaf&tod=klavier   (banane, niesen, kitzeln, klavier)
+function entwicklerTod() {
+  if (!ENTWICKLER) return null;
+  try { return new URLSearchParams(location.search).get('tod'); } catch (e) { return null; }
+}
 const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
 const SABOTAGE_PAUSE = 5;             // Sekunden zwischen zwei Sabotagen
 const GATTER_ZEIT = 45;               // So viele Sekunden hat die Herde, um das Gatter zu schließen
@@ -354,6 +359,24 @@ const sound = {
   bonk() { ton(650, 0, 0.08, 'square', 0.15, 200); ton(160, 0.02, 0.25, 'sine', 0.35, 60); },
   // Jauuul! (Wolf fliegt)
   jaul() { wackelTon([[0, 900], [0.6, 450]], 0, 0.6, 'sine', 0.2, 8, 30); },
+  // ===== Sounds für die Fress-Cutscene =====
+  // Wuiiiii! (Ausrutschen, wie eine Lotusflöte)
+  rutsch() { ton(300, 0, 0.6, 'sine', 0.2, 1400); },
+  // HATSCHI!
+  hatschi() { ton(500, 0, 0.12, 'sawtooth', 0.1, 900); ton(1200, 0.5, 0.35, 'sawtooth', 0.25, 80); ton(160, 0.5, 0.4, 'square', 0.15, 40); },
+  // Hihihi! (Kichern)
+  kichern() { for (let i = 0; i < 6; i++) wackelTon([[0, 700 + (i % 2) * 120], [0.12, 650]], i * 0.18, 0.14, 'sawtooth', 0.1, 30, 50); },
+  // POFF! (Platzen)
+  poff() { ton(900, 0, 0.08, 'square', 0.15, 200); ton(120, 0, 0.35, 'sine', 0.35, 40); },
+  // Fiiiiiuuuu ... (etwas fällt vom Himmel)
+  pfeifen() { ton(1600, 0, 0.8, 'sine', 0.15, 400); },
+  // KRAWUMM! (Klavier kracht)
+  krach() {
+    ton(70, 0, 0.6, 'square', 0.3, 30);
+    ['C3', 'D#3', 'F#3', 'A3', 'C4', 'D#4'].forEach((n, i) => ton(hz(n), 0.01 * i, 1.2, 'triangle', 0.08));
+  },
+  // Huuuuu! (Geist)
+  huuu() { wackelTon([[0, 350], [0.8, 520], [1.6, 380]], 0, 1.6, 'sine', 0.15, 4, 25); },
   // Bim-Bam der Glocke
   glocke() {
     [0, 0.5].forEach((st, i) => {
@@ -768,9 +791,14 @@ function fressen(opfer, w) {
   }
 
   if (opfer.rolle === 'angsthase') angsthaseSchreit(opfer, haufen);   // Zuletzt, damit man die Nachricht sieht!
-  if (opfer.istSpieler) {   // 👻 Du wirst ein Geist und das Spiel geht weiter!
+  if (opfer.istSpieler) {   // 🎬 Lustige Fress-Animation, danach bist du ein Geist!
     miniSpiel = null; zielModus = false; klickZiel = null;
-    zeigeNachricht('👻 Der Wolf hat dich erwischt! Jetzt bist du ein Geist. Schau zu, ob die Herde den Wolf findet!', 5);
+    joystickLos();
+    if (Math.random() < 0.6) planeGrube(w, 350);
+    const test = entwicklerTod();
+    zustand = 'cutscene';
+    cutscene = { t: 0, art: 'gefressen', wolf: w, variante: FRESS_ARTEN.includes(test) ? test : zufall(FRESS_ARTEN) };
+    return;
   }
   if (!w.istSpieler && Math.random() < 0.6) planeGrube(w, 350);   // Schnell weg durch eine Grube!
   pruefeWolfSieg();
@@ -1383,6 +1411,11 @@ function weiterNachAbstimmung() {
 function endeCutscene() {
   const c = cutscene;
   cutscene = null;
+  if (c.art === 'gefressen') {   // Weiter geht's als Geist!
+    zustand = 'spiel';
+    if (!pruefeWolfSieg()) zeigeNachricht('👻 Jetzt bist du ein Geist. Schau zu, ob die Herde den Wolf findet!', 4);
+    return;
+  }
   if (c.art === 'hirte') {
     const w = c.raus;
     w.lebt = false; w.erledigt = w.gesamt;
@@ -1400,6 +1433,17 @@ function updateCutscene(dt) {
   const c = cutscene, vorher = c.t;
   c.t += dt;
   const ab = z => vorher < z && c.t >= z;
+  if (c.art === 'gefressen') {
+    const v = c.variante;
+    if (ab(0.1)) sound.trippel();
+    if (v === 'banane') { if (ab(2.0)) sound.rutsch(); if (ab(3.4)) ton(1800, 0, 0.4, 'sine', 0.12); }
+    if (v === 'niesen' && ab(1.3)) sound.hatschi();
+    if (v === 'kitzeln') { if (ab(1.0)) sound.kichern(); if (ab(2.1)) sound.kichern(); if (ab(3.0)) sound.poff(); }
+    if (v === 'klavier') { if (ab(1.5)) sound.pfeifen(); if (ab(2.3)) sound.krach(); }
+    if (ab(3.7)) sound.huuu();
+    if (c.t > 8) endeCutscene();
+    return;
+  }
   if (c.art === 'hirte') {
     if (ab(1.15)) sound.bonk();
     if (ab(1.3)) sound.jaul();
@@ -1513,7 +1557,188 @@ function zeichneHirtenCutscene() {
   if (t > 1.5) text('Klicken zum Weiterspielen', W - 120, H - 18, 13, 'rgba(255,255,255,0.7)', 'center', false);
 }
 
+// ===== 🎬 Fress-Cutscene: Der Wolf erwischt dich auf dumme Art! =====
+const FRESS_ARTEN = ['banane', 'niesen', 'kitzeln', 'klavier'];
+const FRESS_TITEL = {
+  banane:  'Auf der Banane ausgerutscht! 🍌',
+  niesen:  'Weggeniest! 🤧',
+  kitzeln: 'Kaputtgekitzelt! 🪶',
+  klavier: 'Plattgemacht! 🎹',
+};
+
+// Ein Wolf im Schafspelz: Schafkörper mit Wolfskopf
+function zeichneWolfFigur(x, y, w, richtung, phase, laeuft, groesse) {
+  zeichneSchafKoerper(x, y, w.farbe, richtung, phase, laeuft, groesse);
+  text('🐺', x + richtung * 22 * groesse, y - 9 * groesse, 26 * groesse, '#fff', 'center', false);
+}
+
+function zeichneFressCutscene() {
+  const c = cutscene, t = c.t, w = c.wolf, v = c.variante;
+  // Himmel und Wiese
+  const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
+  const g = ctx.createLinearGradient(0, 0, 0, 380);
+  g.addColorStop(0, himmel[0]); g.addColorStop(1, himmel[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,220,120,0.8)'; ellipse(820, 120, 45, 45); ctx.fill();
+  ctx.fillStyle = KARTE.boden;
+  ctx.beginPath(); ctx.moveTo(0, 380); ctx.quadraticCurveTo(480, 330, 960, 370); ctx.lineTo(960, 600); ctx.lineTo(0, 600); ctx.fill();
+
+  const SX = 580, SY = 500, GR = 1.6;   // Wo du stehst und wie groß
+  const farbe = spieler.farbe;
+
+  // Der Wolf schleicht heran
+  const wx = 130 + Math.min(1, t / 0.9) * (v === 'kitzeln' ? 330 : 250), wy = SY;
+  const wolfLaeuft = t < 0.9;
+
+  // ----- Du (das Schaf) -----
+  let schafWeg = false;   // Ist das Schaf schon weg?
+  if (v === 'banane') {
+    // Banane fliegt vor deine Füße
+    const bk = begrenzt((t - 0.9) / 0.5, 0, 1);
+    const bx = wx + 40 + bk * (SX - 70 - wx - 40), by = SY + 15 - Math.sin(bk * Math.PI) * 120;
+    if (t > 0.9 && t < 2.1) text('🍌', bx, by, 34, '#fff', 'center', false);
+    if (t >= 2.1) text('🍌', SX - 70, SY + 15, 34, '#fff', 'center', false);
+    if (t < 2.0) {
+      const k = begrenzt((t - 1.4) / 0.6, 0, 1);   // Du läufst los ... genau auf die Banane!
+      zeichneSchafKoerper(SX - k * 70, SY, farbe, -1, t * 12, k > 0 && k < 1, GR);
+    } else if (t < 3.5) {
+      const k = (t - 2.0) / 1.5;   // WUIII! Hoch in den Himmel
+      ctx.save();
+      ctx.translate(SX - 70 + k * 150, SY - k * 560 + Math.sin(k * Math.PI) * -60);
+      ctx.rotate(k * 14);
+      zeichneSchafKoerper(0, 0, farbe, -1, 0, false, GR * (1 - k * 0.7));
+      ctx.restore();
+      if (t < 2.8) text('WUIIIIII!', SX, SY - 140, 34, '#ffd166');
+    } else {
+      schafWeg = true;
+      const blink = 1 + Math.sin(t * 20) * 0.3;
+      if (t < 4.5) text('✨', SX + 80, 40, 40 * blink, '#fff', 'center', false);
+    }
+  } else if (v === 'niesen') {
+    if (t < 1.3) {
+      zeichneSchafKoerper(SX, SY, farbe, -1, 0, false, GR);
+    } else {
+      const k = Math.min(1, (t - 1.3) / 1.2);   // Weggepustet!
+      ctx.save();
+      ctx.translate(SX + k * 600, SY - Math.sin(k * Math.PI) * 180);
+      ctx.rotate(k * 10);
+      zeichneSchafKoerper(0, 0, farbe, -1, 0, false, GR);
+      ctx.restore();
+      schafWeg = k >= 1;
+      // Wind-Striche
+      if (t < 2.4) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        for (let i = 0; i < 6; i++) {
+          const lx = wx + 80 + ((t * 900 + i * 90) % 500), ly = SY - 80 + i * 25;
+          ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 60, ly); ctx.stroke();
+        }
+      }
+      // Wollflocken fliegen
+      for (let i = 0; i < 12; i++) {
+        const kk = t - 1.3;
+        if (kk > 2.5) break;
+        ctx.fillStyle = farbe;
+        ellipse(SX + kk * (200 + i * 40), SY - 30 + Math.sin(i * 1.7) * 60 + kk * kk * 30, 8, 8); ctx.fill();
+      }
+    }
+  } else if (v === 'kitzeln') {
+    if (t < 3.0) {
+      const k = begrenzt((t - 1.0) / 2.0, 0, 1);   // Du wirst vor Lachen immer dicker!
+      const wackeln = t > 1.0 ? Math.sin(t * 40) * 4 * (0.5 + k) : 0;
+      zeichneSchafKoerper(SX + wackeln, SY - k * 20, farbe, -1, 0, false, GR * (1 + k * 0.7));
+      if (t > 1.0 && t < 1.8) text('Hihi!', SX + 60, SY - 110, 24, '#fff');
+      if (t > 1.6 && t < 2.4) text('HAHAHA!', SX - 20, SY - 150, 30, '#fff');
+      if (t > 2.2) text('HÖR AUF! 😂', SX + 30, SY - 190, 34, '#ffd166');
+    } else {
+      schafWeg = true;
+      const kk = t - 3.0;   // POFF!
+      if (kk < 1.5) {
+        for (let i = 0; i < 18; i++) {
+          const a = i / 18 * Math.PI * 2;
+          ctx.fillStyle = farbe;
+          ellipse(SX + Math.cos(a) * kk * 260, SY - 30 + Math.sin(a) * kk * 200 + kk * kk * 120, 10, 10); ctx.fill();
+        }
+      }
+      if (kk < 0.8) text('POFF!', SX, SY - 60, 70 * Math.min(1.2, kk * 8), '#ff6b6b');
+    }
+  } else if (v === 'klavier') {
+    if (t < 2.3) {
+      zeichneSchafKoerper(SX, SY, farbe, -1, 0, false, GR);
+      if (t > 1.0) text('❓', SX - 20, SY - 80, 34, '#fff', 'center', false);
+      // Schatten wird größer
+      if (t > 1.5) {
+        const k = (t - 1.5) / 0.8;
+        ctx.fillStyle = `rgba(0,0,0,${0.15 + k * 0.25})`;
+        ellipse(SX, SY + 30, 30 + k * 60, 8 + k * 10); ctx.fill();
+        text('🎹', SX, -60 + k * (SY - 10 + 60), 120, '#fff', 'center', false);
+      }
+    } else {
+      // Plattgedrückt unter dem Klavier
+      ctx.save();
+      ctx.translate(SX, SY + 25); ctx.scale(1.4, 0.25);
+      zeichneSchafKoerper(0, 0, farbe, -1, 0, false, GR);
+      ctx.restore();
+      const huepf = t < 2.6 ? Math.sin((t - 2.3) / 0.3 * Math.PI) * 20 : 0;
+      text('🎹', SX, SY - 35 - huepf, 120, '#fff', 'center', false);
+      if (t < 3.1) text('KRAWUMM!', SX, SY - 170, 60 * Math.min(1.2, (t - 2.3) * 8), '#ff6b6b');
+      if (t > 3.0) text('😵', SX + 95, SY + 15, 26, '#fff', 'center', false);
+    }
+  }
+
+  // ----- Der Wolf -----
+  if (v === 'niesen' && t > 0.9 && t < 1.3) {
+    // Ha ... haaa ... (lehnt sich zurück)
+    ctx.save(); ctx.translate(wx, wy); ctx.rotate(-(t - 0.9) * 0.8);
+    zeichneWolfFigur(0, 0, w, 1, 0, false, GR);
+    ctx.restore();
+  } else {
+    zeichneWolfFigur(wx, wy, w, 1, t * 12, wolfLaeuft, GR);
+  }
+  text(`${w.name} 🐺`, wx, wy - 75, 18, '#ff6b6b');
+  // Was der Wolf sagt oder macht
+  if (v === 'banane' && t > 0.5 && t < 1.5) text('Hehe ... 😏', wx, wy - 105, 22, '#fff');
+  if (v === 'niesen') {
+    if (t > 0.6 && t < 1.0) text('Ha ...', wx + 20, wy - 110, 22, '#fff');
+    if (t > 0.9 && t < 1.3) text('Haaa ...', wx + 30, wy - 125, 28, '#fff');
+    if (t > 1.3 && t < 2.3) text('HATSCHI!!!', wx + 120, wy - 140, 50 * Math.min(1.2, (t - 1.3) * 8), '#ffd166');
+  }
+  if (v === 'kitzeln' && t > 0.9 && t < 3.0) {   // Feder kitzelt
+    const fx = wx + 75 + Math.sin(t * 25) * 15, fy = wy - 20 + Math.cos(t * 30) * 12;
+    ctx.save(); ctx.translate(fx, fy); ctx.rotate(Math.sin(t * 25) * 0.6);
+    text('🪶', 0, 0, 44, '#fff', 'center', false);
+    ctx.restore();
+    text('Kille kille! 😈', wx, wy - 105, 20, '#fff');
+  }
+  if (v === 'klavier' && t > 0.6 && t < 2.0) text('Guck mal, da oben! ☝️', wx + 20, wy - 110, 22, '#fff');
+  if (t > 3.5) text(v === 'klavier' ? 'Ups! 🤭' : 'Hihi! 😋', wx, wy - 105, 24, '#fff');
+
+  // ----- Du wirst ein Geist und schwebst nach oben -----
+  if (t > 3.5) {
+    const k = t - 3.5;
+    const gx = (v === 'niesen' ? 700 : SX) + Math.sin(k * 3) * 15, gy = SY - 20 - k * 45;
+    ctx.globalAlpha = Math.min(0.55, k);
+    zeichneSchafKoerper(gx, gy, '#e8ecff', -1, 0, false, GR, true);
+    ctx.globalAlpha = Math.min(1, k * 2);
+    text('👻', gx, gy - 60, 34, '#fff', 'center', false);
+    if (k > 0.3 && k < 2.5) text('Huuuuu!', gx + 80, gy - 40, 22, '#e0e0ff');
+    ctx.globalAlpha = 1;
+  }
+
+  // Text oben
+  if (t > 3.8) {
+    const zeile = FRESS_TITEL[v];
+    text([...zeile].slice(0, Math.floor((t - 3.8) * 25)).join(''), W / 2, 70, 38, '#ff6b6b');
+  }
+  if (t > 5) {
+    ctx.globalAlpha = Math.min(1, (t - 5) * 2);
+    text('Jetzt bist du ein Geist! 👻', W / 2, 120, 24, '#ffd166');
+    ctx.globalAlpha = 1;
+  }
+  if (t > 1.5) text('Klicken zum Weiterspielen', W - 120, H - 18, 13, 'rgba(255,255,255,0.7)', 'center', false);
+}
+
 function zeichneCutscene() {
+  if (cutscene.art === 'gefressen') { zeichneFressCutscene(); return; }
   if (cutscene.art === 'hirte') { zeichneHirtenCutscene(); return; }
   const c = cutscene, t = c.t, r = c.raus;
   const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
