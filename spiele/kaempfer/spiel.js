@@ -59,7 +59,7 @@ const PUNKT_ZIEL = 100;       // Punkt halten: So viele Punkte zum Sieg
 const ABSCHUSS_ZIEL = 20;     // Team-Kampf: So viele Abschüsse zum Sieg
 const ANGRIFF_ZEIT = 150;     // Angriff: Startzeit in Sekunden
 const ANGRIFF_BONUS = 90;     // Angriff: Extra-Zeit, wenn Punkt A erobert ist
-const EROBERN_TEMPO = 6;      // Angriff: So schnell wird ein Punkt erobert (Prozent pro Sekunde)
+const EROBERN_TEMPO = 4;      // Angriff: So schnell wird ein Punkt erobert (Prozent pro Sekunde)
 
 // ===== Die Arena =====
 // Wände auf der linken Seite. Die rechte Seite wird automatisch gespiegelt!
@@ -303,7 +303,7 @@ function spawnPunkt(m) {
   let x = m.team === 'blau' ? 130 : WELT_B - 130;
   // Angreifer starten weiter vorne, wenn Punkt A erobert ist
   if ((modus === 'angriff' || modus === 'verteidigung') && m.team === angreifer && aktivesZiel === 1) x = m.team === 'blau' ? 720 : WELT_B - 720;
-  return { x, y: 700 + (m.nr - (TEAM_GROESSE - 1) / 2) * 120 };
+  return { x, y: 700 + (m.nr - (TEAM_GROESSE - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
 }
 function spawnen(m) {
   const p = spawnPunkt(m);
