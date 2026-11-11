@@ -548,7 +548,7 @@ function botZiel(m) {
   const z = modus === 'punkt' ? ziele[0] : ziele[aktivesZiel];
   let x = z.x + m.versatz.x * z.r, y = z.y + m.versatz.y * z.r;
   // Verteidiger bleiben eher auf ihrer Seite vom Punkt
-  if ((modus === 'angriff' || modus === 'verteidigung') && m.team === verteidiger) x += (m.team === 'blau' ? -1 : 1) * 70;
+  if ((modus === 'angriff' || modus === 'verteidigung') && m.team === verteidiger) x += (m.team === 'blau' ? -1 : 1) * 30;
   return { x, y };
 }
 
@@ -656,6 +656,7 @@ function updateModus(dt) {
     const a = zaehleIn(angreifer, z), v = zaehleIn(verteidiger, z);
     z.umkaempft = a > 0 && v > 0;
     if (a > 0 && v === 0) z.fortschritt += dt * (EROBERN_TEMPO + 2 * Math.min(3, a - 1));
+    else if (a === 0) z.fortschritt = Math.max(0, z.fortschritt - dt * 2);   // Ohne Angreifer geht es langsam zurück
     if (z.fortschritt >= 100) {
       z.fortschritt = 100; z.erobert = true;
       const gut = angreifer === spieler.team;
