@@ -63,6 +63,11 @@ const MECH_TYPEN = [
     mg: { pause: 0.13, schaden: 5, tempo: 900, weite: 600, streuung: 0.06 },
     rakete: { pause: 4.5, schaden: 32, radius: 80, anzahl: 3 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 3 } },
+  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie! Granaten fliegen im Bogen über Wände. Hoch schauen = weiter!',
+    leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5,
+    mg: { granate: true, pause: 1.6, schaden: 45, radius: 95, tempo: 520, weite: 1100, minWeite: 180, streuung: 0.03 },
+    rakete: { pause: 5, schaden: 35, radius: 80, anzahl: 1 },
+    sterne: { leben: 3, tempo: 2, schaden: 5, weite: 5 } },
 ];
 let meinMech = MECH_TYPEN[0];   // Den Mech, den du ausgesucht hast
 try { meinMech = MECH_TYPEN.find(t => t.id === localStorage.getItem('kaempfer-mech')) || meinMech; } catch (e) { /* egal */ }
@@ -87,20 +92,46 @@ const ANGRIFF_ZEIT = 150;     // Angriff: Startzeit in Sekunden
 const ANGRIFF_BONUS = 90;     // Angriff: Extra-Zeit, wenn Punkt A erobert ist
 const EROBERN_TEMPO = 4;      // Angriff: So schnell wird ein Punkt erobert (Prozent pro Sekunde)
 
-// ===== Die Arena =====
-// Wände auf der linken Seite. Die rechte Seite wird automatisch gespiegelt!
-const WAENDE_LINKS = [
-  { x: 320, y: 250, w: 40, h: 250 }, { x: 320, y: 900, w: 40, h: 250 },
-  { x: 430, y: 620, w: 120, h: 160 },
-  { x: 600, y: 120, w: 60, h: 250 }, { x: 600, y: 1030, w: 60, h: 250 },
-  { x: 820, y: 380, w: 200, h: 50 }, { x: 820, y: 970, w: 200, h: 50 },
-  { x: 960, y: 600, w: 50, h: 200 },
-  { x: 1000, y: 100, w: 60, h: 160 }, { x: 1000, y: 1140, w: 60, h: 160 },
-  { x: 1100, y: 560, w: 40, h: 40, kiste: true }, { x: 1100, y: 800, w: 40, h: 40, kiste: true },   // Kisten am Punkt
+// ===== Die Karten =====
+// Jede Karte hat Hindernisse. "links" sind die auf der linken Seite, die rechte Seite wird automatisch gespiegelt!
+// "art" sagt, wie ein Hindernis aussieht: wand, kiste (Fabrik) oder fels, kristall, pilz, stein (Planet)
+// Wichtig: Die Mitte (1200, 700) und die Punkte A und B müssen frei bleiben!
+const KARTEN = [
+  {
+    id: 'fabrik', name: 'Stahlfabrik', emoji: '🏭',
+    links: [
+      { x: 320, y: 250, w: 40, h: 250, art: 'wand' }, { x: 320, y: 900, w: 40, h: 250, art: 'wand' },
+      { x: 430, y: 620, w: 120, h: 160, art: 'wand' },
+      { x: 600, y: 120, w: 60, h: 250, art: 'wand' }, { x: 600, y: 1030, w: 60, h: 250, art: 'wand' },
+      { x: 820, y: 380, w: 200, h: 50, art: 'wand' }, { x: 820, y: 970, w: 200, h: 50, art: 'wand' },
+      { x: 960, y: 600, w: 50, h: 200, art: 'wand' },
+      { x: 1000, y: 100, w: 60, h: 160, art: 'wand' }, { x: 1000, y: 1140, w: 60, h: 160, art: 'wand' },
+      { x: 1100, y: 560, w: 40, h: 40, art: 'kiste' }, { x: 1100, y: 800, w: 40, h: 40, art: 'kiste' },
+    ],
+    mitte: [{ x: 1170, y: 200, w: 60, h: 220, art: 'wand' }, { x: 1170, y: 980, w: 60, h: 220, art: 'wand' }],
+  },
+  {
+    id: 'planet', name: 'Planet Xyloria', emoji: '🪐',
+    links: [
+      { x: 330, y: 300, w: 70, h: 160, art: 'fels' }, { x: 330, y: 940, w: 70, h: 160, art: 'fels' },
+      { x: 470, y: 640, w: 90, h: 120, art: 'fels' },
+      { x: 640, y: 180, w: 80, h: 80, art: 'kristall' }, { x: 640, y: 1140, w: 80, h: 80, art: 'kristall' },
+      { x: 820, y: 420, w: 180, h: 60, art: 'fels' }, { x: 820, y: 920, w: 180, h: 60, art: 'fels' },
+      { x: 990, y: 640, w: 40, h: 40, art: 'pilz' },
+      { x: 1000, y: 150, w: 70, h: 120, art: 'kristall' }, { x: 1000, y: 1130, w: 70, h: 120, art: 'kristall' },
+      { x: 1110, y: 590, w: 36, h: 36, art: 'stein' }, { x: 1110, y: 775, w: 36, h: 36, art: 'stein' },
+    ],
+    mitte: [{ x: 1160, y: 250, w: 80, h: 160, art: 'kristall' }, { x: 1160, y: 990, w: 80, h: 160, art: 'kristall' }],
+  },
 ];
-const WAENDE_MITTE = [{ x: 1170, y: 200, w: 60, h: 220 }, { x: 1170, y: 980, w: 60, h: 220 }];
-const WAENDE = [...WAENDE_MITTE];
-for (const r of WAENDE_LINKS) WAENDE.push(r, { ...r, x: WELT_B - r.x - r.w });
+let karte = KARTEN[0];
+try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || karte; } catch (e) { /* egal */ }
+let WAENDE = [];
+function waendeVon(k) {
+  const liste = [...k.mitte];
+  for (const r of k.links) liste.push(r, { ...r, x: WELT_B - r.x - r.w });
+  return liste;
+}
 
 // ===== Hilfsfunktionen =====
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -173,13 +204,15 @@ const inWand = (x, y) => WAENDE.some(r => x > r.x && x < r.x + r.w && y > r.y &&
 // Die Arena wird in Kästchen aufgeteilt. Die Bots suchen den kürzesten Weg durch die freien Kästchen.
 const ZELLE = 40, GX = WELT_B / ZELLE, GY = WELT_H / ZELLE;
 const frei = new Uint8Array(GX * GY);
-for (let gy = 0; gy < GY; gy++) {
-  for (let gx = 0; gx < GX; gx++) {
-    const x = gx * ZELLE + ZELLE / 2, y = gy * ZELLE + ZELLE / 2;
-    const rand = MECH_RADIUS + 2;
-    const blockiert = WAENDE.some(r => x > r.x - rand && x < r.x + r.w + rand && y > r.y - rand && y < r.y + r.h + rand);
-    const amRand = x < MECH_RADIUS || y < MECH_RADIUS || x > WELT_B - MECH_RADIUS || y > WELT_H - MECH_RADIUS;
-    frei[gy * GX + gx] = blockiert || amRand ? 0 : 1;
+function baueGitter() {   // Welche Kästchen sind frei? (Muss bei jeder Karte neu gemacht werden)
+  for (let gy = 0; gy < GY; gy++) {
+    for (let gx = 0; gx < GX; gx++) {
+      const x = gx * ZELLE + ZELLE / 2, y = gy * ZELLE + ZELLE / 2;
+      const rand = MECH_RADIUS + 2;
+      const blockiert = WAENDE.some(r => x > r.x - rand && x < r.x + r.w + rand && y > r.y - rand && y < r.y + r.h + rand);
+      const amRand = x < MECH_RADIUS || y < MECH_RADIUS || x > WELT_B - MECH_RADIUS || y > WELT_H - MECH_RADIUS;
+      frei[gy * GX + gx] = blockiert || amRand ? 0 : 1;
+    }
   }
 }
 const NACHBARN = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
@@ -277,6 +310,8 @@ const sound = {
     ton(700, 0, 0.05, 'square', 0.035 * laut, 200);
     rauschen(0, 0.06, 0.08 * laut, 3000);
   },
+  moerser(laut = 1) { ton(110, 0, 0.35, 'square', 0.15 * laut, 45); rauschen(0, 0.45, 0.3 * laut, 1500); },
+  pfeifen(laut = 1) { ton(1400, 0, 0.9, 'sine', 0.05 * laut, 500); },
   railgun(laut = 1) { ton(1800, 0, 0.35, 'sawtooth', 0.08 * laut, 120); ton(3000, 0, 0.1, 'square', 0.04 * laut, 800); rauschen(0, 0.3, 0.15 * laut, 5000); },
   rakete(laut = 1) { ton(180, 0, 0.45, 'sawtooth', 0.07 * laut, 700); rauschen(0, 0.4, 0.12 * laut, 2500); },
   boom(laut = 1) { rauschen(0, 0.8, 0.45 * laut, 900); ton(90, 0, 0.6, 'sine', 0.35 * laut, 30); },
@@ -466,6 +501,7 @@ function feuern(m) {
   if (m.mgPause > 0 || m.tot) return;
   const mg = m.typ.mg, gr = m.typ.groesse;
   m.mgPause = mg.pause * (m.istSpieler ? 1 : BOT_FEUER_LANGSAMER);
+  if (mg.granate) { granateFeuern(m); return; }
   if (!mg.strahl) m.lauf = -m.lauf;   // Abwechselnd links und rechts schießen (die Railgun hat nur ein Rohr)
   const seite = mg.strahl ? 0.4 : m.lauf;
   const w = m.zielWinkel + (Math.random() - 0.5) * 2 * mg.streuung;
@@ -476,6 +512,32 @@ function feuern(m) {
   if (mg.strahl) sound.railgun(laut); else sound.mg(laut);
   if (m.istSpieler) { rueckstoss = mg.strahl ? 10 : 3; muendung = mg.strahl ? 0.1 : 0.05; }
   else partikel.push({ x, y, h: 52 * gr, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
+}
+
+// ☄️ Artillerie: Die Granate fliegt im hohen Bogen und explodiert, wo sie landet
+function landePunkt(m) {
+  const mg = m.typ.mg;
+  const weite = begrenzt(m.zielWeite || 500, mg.minWeite, mg.weite);
+  return {
+    x: begrenzt(m.x + Math.cos(m.zielWinkel) * weite, 10, WELT_B - 10),
+    y: begrenzt(m.y + Math.sin(m.zielWinkel) * weite, 10, WELT_H - 10),
+  };
+}
+function granateFeuern(m) {
+  const mg = m.typ.mg, gr = m.typ.groesse;
+  const ziel = landePunkt(m);
+  ziel.x += (Math.random() - 0.5) * 2 * mg.streuung * 300;   // ein bisschen ungenau
+  ziel.y += (Math.random() - 0.5) * 2 * mg.streuung * 300;
+  const weite = dist(m, ziel);
+  const x = m.x + Math.cos(m.zielWinkel) * 20, y = m.y + Math.sin(m.zielWinkel) * 20;
+  schuesse.push({
+    art: 'granate', x, y, sx: x, sy: y, zx: ziel.x, zy: ziel.y, h: 85 * gr, startH: 85 * gr,
+    k: 0, dauer: Math.max(0.5, weite / mg.tempo), scheitel: 120 + weite * 0.35,
+    vx: 0, vy: 0, rest: 1e9, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m,
+  });
+  sound.moerser(m.istSpieler ? 1 : lautBei(m));
+  if (m.istSpieler) { rueckstoss = 14; muendung = 0.12; wackeln = Math.max(wackeln, 3); }
+  else partikel.push({ x, y, h: 90 * gr, vh: 60, vx: 0, vy: 0, t: 0.6, max: 0.6, farbe: '#888888', rauch: true });
 }
 
 function rakete(m) {
@@ -557,6 +619,17 @@ function zerstoert(m, von) {
 
 function updateSchuesse(dt) {
   for (const s of schuesse) {
+    if (s.art === 'granate') {   // Fliegt im Bogen über alles drüber
+      s.k += dt / s.dauer;
+      const k = Math.min(1, s.k);
+      s.x = s.sx + (s.zx - s.sx) * k;
+      s.y = s.sy + (s.zy - s.sy) * k;
+      s.h = s.startH * (1 - k) + 4 * s.scheitel * k * (1 - k);
+      if (Math.random() < 0.7) partikel.push({ x: s.x, y: s.y, h: s.h, vh: 5, vx: 0, vy: 0, t: 0.5, max: 0.5, farbe: '#b9a7d6', rauch: true });
+      if (!s.pfiff && k > 0.6 && spieler && dist({ x: s.zx, y: s.zy }, spieler) < 300) { s.pfiff = true; sound.pfeifen(); }   // Fiiiiuuu ... gleich knallt's!
+      if (k >= 1) { s.weg = true; explosion(s.zx, s.zy, s.team, s.von, s.radius, s.schaden); }
+      continue;
+    }
     const schritte = 3;
     for (let i = 0; i < schritte && !s.weg; i++) {
       s.x += s.vx * dt / schritte;
@@ -603,6 +676,10 @@ function updateSpieler(dt) {
   if ((tasten['shift'] || tasten[' ']) && (dx || dy)) boosten(m, Math.atan2(dy, dx));
   bewege(m, dx, dy, dt);
   m.zielWinkel = blick.links;
+  if (m.typ.mg.granate) {   // Artillerie: Je höher du schaust, desto weiter fliegt die Granate
+    const mg = m.typ.mg;
+    m.zielWeite = mg.minWeite + (blick.hoch + 0.5) / 0.9 * (mg.weite - mg.minWeite);
+  }
   if (maus.links) feuern(m);
   if (maus.rechts || tasten['q'] || tasten['e']) rakete(m);
 }
@@ -632,7 +709,8 @@ function botDenken(m, dt) {
     for (const o of mechs) {
       if (o.tot || o.team === m.team) continue;
       const d = dist(m, o);
-      if (d < besterD && sichtFrei(m, o)) { bester = o; besterD = d; }
+      const sichtbar = sichtFrei(m, o) || (m.typ.mg.granate && mechs.some(f => !f.tot && f.team === m.team && f !== m && dist(f, o) < 700 && sichtFrei(f, o)));
+      if (d < besterD && sichtbar) { bester = o; besterD = d; }
     }
     if (bester !== m.gegner) m.reaktion = 0.35 + Math.random() * 0.25;   // Bots brauchen kurz, bis sie reagieren
     m.gegner = bester;
@@ -663,11 +741,13 @@ function botDenken(m, dt) {
     // Hin und her ausweichen
     const seite = Math.sin(zeit * 1.3 + m.seed) > 0 ? 1 : -1;
     dx += -gy * seite * 0.7; dy += gx * seite * 0.7;
-    const abstand = m.typ.mg.strahl ? 450 : 220;   // Scharfschützen bleiben lieber weit weg
+    const abstand = m.typ.mg.strahl || m.typ.mg.granate ? 450 : 220;   // Scharfschützen und Artillerie bleiben lieber weit weg
     if (d < abstand) { dx -= gx * 0.8; dy -= gy * 0.8; }   // Nicht zu nah ran
     // Zielen (mit Vorhalten, damit sie bewegte Ziele treffen)
     const flug = d / m.typ.mg.tempo;
-    const zielW = Math.atan2(g.y + g.vy * flug - m.y, g.x + g.vx * flug - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * BOT_UNGENAU;
+    const vorne = { x: g.x + g.vx * flug, y: g.y + g.vy * flug };   // Da wird der Gegner gleich sein
+    const zielW = Math.atan2(vorne.y - m.y, vorne.x - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * BOT_UNGENAU;
+    m.zielWeite = dist(m, vorne);
     m.zielWinkel = drehe(m.zielWinkel, zielW, dt * 7);
     m.reaktion -= dt;
     if (m.reaktion <= 0 && Math.abs(winkelDiff(m.zielWinkel, zielW)) < 0.25) {
