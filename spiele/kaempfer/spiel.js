@@ -203,7 +203,7 @@ function blockiert(b, x, y, z, hoehe) {
 // Ist an dieser Stelle (mit Höhe h) etwas Festes? (für Kugeln)
 function imFesten(x, y, h) {
   if (h <= 0) return true;
-  for (const b of WAENDE) if (innen(b, x, y) && h >= b.unten && h <= obenBei(b, x, y)) return true;
+  for (const b of WAENDE) if (b.art !== 'gelaender' && innen(b, x, y) && h >= b.unten && h <= obenBei(b, x, y)) return true;   // durchs Geländer kann man durchschießen
   return false;
 }
 
@@ -270,6 +270,7 @@ function linieTrifft3D(a, b, r) {
 }
 function sichtFrei3D(a, b) {
   for (const r of WAENDE) {
+    if (r.art === 'gelaender') continue;   // durchs Geländer kann man durchschauen
     if (r.teile) { for (const t of r.teile) if (linieTrifft3D(a, b, t)) return false; }
     else if (linieTrifft3D(a, b, r)) return false;
   }
