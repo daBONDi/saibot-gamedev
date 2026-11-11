@@ -9,6 +9,7 @@ const W = canvas.width, H = canvas.height;
 // ===== Einstellungen (hier kannst du rumprobieren!) =====
 const WELT_B = 1800, WELT_H = 1300;   // Größe vom Bauernhof
 const SICHT = 290;                    // Wie weit du sehen kannst
+const SICHT_WOLF = 420;               // Wie weit du siehst, wenn du der Wolf bist 🐺
 const TEMPO_SPIELER = 170;            // Wie schnell du läufst
 const TEMPO_SCHAF = 105;              // Wie schnell die anderen Schafe laufen
 const TEMPO_WOLF = 135;               // Wie schnell der Wolf jagt
@@ -848,7 +849,9 @@ function repariert(wer) {
 function updateSabotage(dt) {
   if (sabotagePause > 0) sabotagePause -= dt;
   // Sicht wird langsam kleiner oder größer
-  const zielSicht = sabotage && sabotage.art === 'nebel' && !spielerIstWolf ? 130 : SICHT;
+  let zielSicht = SICHT;
+  if (spielerIstWolf) zielSicht = SICHT_WOLF;                      // Wölfe sehen weiter
+  else if (sabotage && sabotage.art === 'nebel') zielSicht = 130;  // Im Nebel sieht man fast nichts
   sicht += (zielSicht - sicht) * Math.min(1, dt * 2);
   if (!sabotage) return;
 
@@ -2435,6 +2438,19 @@ function zeichneDunkel() {
   g.addColorStop(1, `rgba(${farbe},${nebel ? 0.92 : 0.75})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+
+  // 🐺 Als Wolf siehst du einen Kreis: So weit sieht ein Schaf!
+  if (spielerIstWolf) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 10]);           // gestrichelte Linie
+    ctx.lineDashOffset = -zeit * 20;     // die Striche wandern langsam im Kreis
+    ctx.beginPath();
+    ctx.arc(sx, sy, SICHT, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 // Schnee, Pfeil zur Sabotage und roter Rand
