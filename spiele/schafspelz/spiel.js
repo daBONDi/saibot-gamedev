@@ -768,7 +768,10 @@ function fressen(opfer, w) {
   }
 
   if (opfer.rolle === 'angsthase') angsthaseSchreit(opfer, haufen);   // Zuletzt, damit man die Nachricht sieht!
-  if (opfer.istSpieler) { beende('wolf', 'Der Wolf hat dich erwischt!'); return; }
+  if (opfer.istSpieler) {   // 👻 Du wirst ein Geist und das Spiel geht weiter!
+    miniSpiel = null; zielModus = false; klickZiel = null;
+    zeigeNachricht('👻 Der Wolf hat dich erwischt! Jetzt bist du ein Geist. Schau zu, ob die Herde den Wolf findet!', 5);
+  }
   if (!w.istSpieler && Math.random() < 0.6) planeGrube(w, 350);   // Schnell weg durch eine Grube!
   pruefeWolfSieg();
 }
@@ -850,7 +853,8 @@ function updateSabotage(dt) {
   if (sabotagePause > 0) sabotagePause -= dt;
   // Sicht wird langsam kleiner oder größer
   let zielSicht = SICHT;
-  if (spielerIstWolf) zielSicht = SICHT_WOLF;                      // Wölfe sehen weiter
+  if (!spieler.lebt) zielSicht = 2500;                             // Geister sehen alles 👻
+  else if (spielerIstWolf) zielSicht = SICHT_WOLF;                      // Wölfe sehen weiter
   else if (sabotage && sabotage.art === 'nebel') zielSicht = 130;  // Im Nebel sieht man fast nichts
   sicht += (zielSicht - sicht) * Math.min(1, dt * 2);
   if (!sabotage) return;
@@ -951,6 +955,7 @@ function grubenKlick(p) {
 
 // ===== Aktion (E / Leertaste / Knopf) =====
 function moeglicheAktion() {
+  if (!spieler.lebt) return null;   // Geister können nichts anfassen
   if (spieler.inGrube != null) return null;
   if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
     return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => repariert(spieler) };
@@ -1000,7 +1005,7 @@ function starteTreffen(melder, fund) {
       continue;
     }
     const teile = [];
-    if (s === melder && fund) teile.push(`Ich hab Wolle von ${fund.opfer.name} ${fund.ort.bei} gefunden! 😱`);
+    if (s === melder && fund) teile.push(fund.opfer.istSpieler ? `Ich hab DEINE Wolle ${fund.ort.bei} gefunden! 😱` : `Ich hab Wolle von ${fund.opfer.name} ${fund.ort.bei} gefunden! 😱`);
     if (!s.istWolf && s.verdacht && s.verdacht.wer.lebt) {
       const v = s.verdacht;
       if (v.grube) {
@@ -1046,6 +1051,7 @@ function starteTreffen(melder, fund) {
   let grund;
   if (!fund) grund = melder.istSpieler ? 'Du hast die Glocke geläutet!' : `${melder.name} ist zur Glocke gerannt und hat geläutet! 🔔`;
   else if (melder.istSpieler) grund = `Du hast Wolle von ${fund.opfer.name} gefunden!`;
+  else if (fund.opfer.istSpieler) grund = `${melder.name} hat deine Wolle gefunden! 👻`;
   else grund = `${melder.name} hat Wolle von ${fund.opfer.name} gefunden!`;
 
   wolle = [];
@@ -1055,7 +1061,7 @@ function starteTreffen(melder, fund) {
 function abstimmen(wahl) {
   const t = treffen;
   const stimmen = new Map();
-  stimmen.set(spieler, wahl);
+  if (spieler.lebt) stimmen.set(spieler, wahl);   // Geister dürfen nicht abstimmen
 
   for (const s of t.lebende) {
     if (s.istSpieler) continue;
@@ -1145,7 +1151,9 @@ const WEITER_KNOPF = { x: W / 2 - 80, y: 510, w: 160, h: 44 };
 const imRechteck = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
 function klickTreffen(p) {
-  if (treffen.phase === 'waehlen') {
+  if (treffen.phase === 'waehlen' && !spieler.lebt) {   // Geist: nur zuschauen
+    if (imRechteck(p, SKIP_KNOPF)) abstimmen(null);
+  } else if (treffen.phase === 'waehlen') {
     for (const k of kartenRechtecke()) {
       if (!k.s.istSpieler && imRechteck(p, k)) { abstimmen(k.s); return; }
     }
@@ -1163,6 +1171,7 @@ function naechstesSchaf(max) {
 
 // Was kann deine Rolle gerade machen?
 function rollenAktion() {
+  if (!spieler.lebt) return null;   // Geister haben keine Fähigkeit mehr
   const z = naechstesSchaf(70);
   switch (spieler.rolle) {
     case 'spuernase': return {
@@ -1279,7 +1288,7 @@ function hirtenKlick(p) {
 }
 
 function nutzeFaehigkeit() {
-  if (zustand !== 'spiel' || miniSpiel) return;
+  if (zustand !== 'spiel' || miniSpiel || !spieler.lebt) return;
   if (spieler.rolle === 'schaefer') {
     if (spieler.faehigkeit > 0) { zeigeNachricht(`Noch ${Math.ceil(spieler.faehigkeit)} Sekunden warten ...`, 1.5); return; }
     const ziele = stabZiele(spieler).sort((a, b) => dist(a, spieler) - dist(b, spieler));
@@ -1994,6 +2003,7 @@ function zeichneSchafKoerper(x, y, farbe, richtung, phase, laeuft, groesse = 1) 
 }
 
 function zeichneSchaf(s) {
+  if (s.istSpieler && !s.lebt) { zeichneGeist(s); return; }
   if (s.inGrube != null) {   // Versteckt in der Grube
     if (s.istSpieler) text('👀', s.x, s.y, 20, '#fff', 'center', false);
     return;
@@ -2035,6 +2045,16 @@ function zeichneSchaf(s) {
   if (spieler.rolle === 'spuernase' && s.geruch) symbol += s.geruch === 'wolf' ? '🐺' : '✅';
   if (s.beschuetztVonDir && s.geschuetzt) symbol += '🛡️';
   if (symbol) text(symbol, s.x, s.y - 52, 16, '#fff', 'center', false);
+}
+
+// 👻 Du als Geist: durchsichtig und schwebend
+function zeichneGeist(s) {
+  const schweben = Math.sin(zeit * 3) * 6;
+  ctx.globalAlpha = 0.45;
+  zeichneSchafKoerper(s.x, s.y - 12 + schweben, '#e8ecff', s.richtung, s.phase, s.laeuft);
+  ctx.globalAlpha = 1;
+  text('👻', s.x, s.y - 58 + schweben, 22, '#fff', 'center', false);
+  text('Du', s.x, s.y - 40 + schweben, 13, '#e0e0ff');
 }
 
 // ===== Animationen der Effekte =====
@@ -2520,7 +2540,13 @@ function zeichneHUD() {
   ctx.fillStyle = '#333'; ctx.fillRect(26, 42, 276, 18);
   ctx.fillStyle = '#4ade80'; ctx.fillRect(26, 42, 276 * fortschritt(), 18);
 
-  if (spielerIstWolf) {
+  if (!spieler.lebt) {
+    ctx.fillStyle = 'rgba(60,60,90,0.85)';
+    rundesRechteck(14, 80, 300, 96, 10); ctx.fill();
+    text('👻 Du bist ein Geist!', 26, 98, 16, '#e0e0ff', 'left', false);
+    text('Niemand kann dich sehen.', 26, 122, 13, '#fff', 'left', false);
+    text('Schau zu, ob die Herde gewinnt!', 26, 150, 14, '#ffd166', 'left', false);
+  } else if (spielerIstWolf) {
     ctx.fillStyle = 'rgba(70,10,20,0.85)';
     rundesRechteck(14, 80, 300, 96, 10); ctx.fill();
     text('🐺 Du bist der Wolf!', 26, 98, 16, '#ff6b6b', 'left', false);
@@ -2580,7 +2606,7 @@ function zeichneHUD() {
   }
 
   // Deine Rolle (unten links)
-  if (zustand === 'spiel' && !miniSpiel && !touchModus) {
+  if (zustand === 'spiel' && !miniSpiel && !touchModus && spieler.lebt) {
     const r = ROLLEN[spieler.rolle];
     const a = rollenAktion();
     const bereit = a && spieler.faehigkeit <= 0 && a.moeglich;
@@ -2718,7 +2744,7 @@ function zeichneTreffen() {
 
   for (const k of kartenRechtecke()) {
     const s = k.s;
-    const hover = treffen.phase === 'waehlen' && !s.istSpieler && imRechteck(maus, k);
+    const hover = treffen.phase === 'waehlen' && spieler.lebt && !s.istSpieler && imRechteck(maus, k);
     const istRaus = treffen.phase === 'ergebnis' && treffen.raus === s;
     ctx.fillStyle = hover ? '#4a3f8a' : '#3a3170';
     rundesRechteck(k.x, k.y, k.w, k.h, 12); ctx.fill();
@@ -2749,7 +2775,10 @@ function zeichneTreffen() {
     }
   }
 
-  if (treffen.phase === 'waehlen') {
+  if (treffen.phase === 'waehlen' && !spieler.lebt) {
+    text('👻 Du bist ein Geist und darfst nicht abstimmen.', W / 2, 432, 15, '#c9c3ff', 'center', false);
+    zeichneKnopf(SKIP_KNOPF, 'Zuschauen ▶', '#c9c3ff');
+  } else if (treffen.phase === 'waehlen') {
     text('Wähle das Schaf, das du für den Wolf hältst!', W / 2, 432, 15, '#ffd166', 'center', false);
     zeichneKnopf(SKIP_KNOPF, 'Überspringen ⏭', '#c9c3ff');
   } else {
