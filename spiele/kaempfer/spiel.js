@@ -61,11 +61,11 @@ const MECH_TYPEN = [
   { id: 'feuer', name: 'Feuersturm', emoji: '🔥', akzent: '#fb923c', text: 'Raketen-Profi: schießt 3 Raketen auf einmal!',
     leben: 110, tempo: 150, groesse: 1.1, boostPause: 3,
     mg: { pause: 0.13, schaden: 5, tempo: 900, weite: 600, streuung: 0.06 },
-    rakete: { pause: 4.5, schaden: 32, radius: 80, anzahl: 3 },
+    rakete: { pause: 4.5, schaden: 28, radius: 80, anzahl: 3 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 3 } },
   { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie! Granaten fliegen im Bogen über Wände. Hoch schauen = weiter!',
     leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5,
-    mg: { granate: true, pause: 1.6, schaden: 45, radius: 95, tempo: 520, weite: 1100, minWeite: 180, streuung: 0.03 },
+    mg: { granate: true, pause: 1.8, schaden: 38, radius: 95, tempo: 520, weite: 1100, minWeite: 180, streuung: 0.03 },
     rakete: { pause: 5, schaden: 35, radius: 80, anzahl: 1 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 5 } },
 ];
@@ -1138,7 +1138,7 @@ function leuchtPflanze(g, x, z, zufall) {   // Kleine Pflanze mit leuchtender Ku
   g.add(stiel, kugel);
 }
 function grasBuschel(g, x, z, zufall) {   // Spitze Alien-Gräser
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     const h = 10 + zufall() * 16;
     const halm = new THREE.Mesh(new THREE.ConeGeometry(2, h, 4), grasMat);
     halm.position.set(x + (zufall() - 0.5) * 14, h / 2, z + (zufall() - 0.5) * 14);
@@ -1190,7 +1190,7 @@ function bauePlanet(g) {
   }
 
   // Pflanzen in der Arena (aber nicht in Felsen)
-  for (let i = 0; i < 170; i++) {
+  for (let i = 0; i < 110; i++) {
     const x = z() * WELT_B, y = z() * WELT_H;
     if (WAENDE.some(r => x > r.x - 20 && x < r.x + r.w + 20 && y > r.y - 20 && y < r.y + r.h + 20)) continue;
     if (z() < 0.45) leuchtPflanze(g, x, y, z); else grasBuschel(g, x, y, z);
