@@ -1195,9 +1195,80 @@ const streifenTextur = malTextur(128, 32, (g, b, h) => {
   g.fillStyle = '#ffd166';
   for (let x = -h; x < b; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 16, h); g.lineTo(x + 16 + h, 0); g.lineTo(x + h, 0); g.fill(); }
 });
+const gitterTextur = malTextur(128, 128, (g, b, h) => {   // Gitter-Boden für Brücken und Plattformen
+  g.fillStyle = '#3a3f4a'; g.fillRect(0, 0, b, h);
+  g.strokeStyle = '#6b7385'; g.lineWidth = 4;
+  for (let i = 0; i <= b; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(b, i); g.stroke(); }
+});
+const rampenTextur = malTextur(128, 128, (g, b, h) => {   // Rampe mit Rillen, damit man nicht rutscht
+  g.fillStyle = '#5b6375'; g.fillRect(0, 0, b, h);
+  g.fillStyle = '#7a8296';
+  for (let i = 0; i < h; i += 16) g.fillRect(0, i, b, 6);
+});
 const wandMat = new THREE.MeshStandardMaterial({ map: wandTextur, roughness: 0.6, metalness: 0.4 });
 const kistenMat = new THREE.MeshStandardMaterial({ map: kistenTextur, roughness: 0.8 });
 const kanteMat = new THREE.LineBasicMaterial({ color: '#2a2f3a' });
+
+// Eine schräge Rampe (ein Kasten, dessen Oberseite schräg ist)
+function rampenGeo(r) {
+  const geo = new THREE.BoxGeometry(r.w, 1, r.h);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) <= 0) { pos.setY(i, 0); continue; }
+    pos.setY(i, Math.max(2, obenBei(r, r.x + r.w / 2 + pos.getX(i), r.y + r.h / 2 + pos.getZ(i))));
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+function kasten(g, r, mat, unten, oben, schatten = true) {
+  const geo = new THREE.BoxGeometry(r.w, oben - unten, r.h);
+  const k = new THREE.Mesh(geo, mat);
+  k.position.set(r.x + r.w / 2, (unten + oben) / 2, r.y + r.h / 2);
+  k.castShadow = schatten; k.receiveShadow = true;
+  g.add(k);
+  return k;
+}
+function warnstreifen(g, r, hoehe) {
+  const st = streifenTextur.clone();
+  st.repeat.set(Math.max(r.w, r.h) / 64, 1);
+  kasten(g, { x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 }, new THREE.MeshStandardMaterial({ map: st }), hoehe - 10, hoehe, false);
+}
+function baueFabrikBlock(g, r) {
+  if (r.art === 'rampe') {
+    const t = rampenTextur.clone();
+    t.repeat.set(1, Math.max(r.w, r.h) / 64);
+    if (r.rampe === 'w' || r.rampe === 'o') t.rotation = Math.PI / 2;
+    const m = new THREE.Mesh(rampenGeo(r), new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, metalness: 0.3 }));
+    m.position.set(r.x + r.w / 2, 0, r.y + r.h / 2);
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+    return;
+  }
+  if (r.art === 'steg' || r.art === 'plattform') {
+    const t = gitterTextur.clone();
+    t.repeat.set(r.w / 64, r.h / 64);
+    if (r.art === 'plattform') kasten(g, r, wandMat, 0, r.oben - 4);          // Unterbau
+    kasten(g, r, new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, metalness: 0.5 }), r.art === 'steg' ? r.unten : r.oben - 4, r.oben);
+    if (r.art === 'plattform') warnstreifen(g, r, r.oben - 4);
+    return;
+  }
+  if (r.art === 'gelaender') {
+    const mat = new THREE.MeshStandardMaterial({ color: '#ffd166', roughness: 0.5, metalness: 0.4 });
+    kasten(g, { x: r.x, y: r.y + r.h / 2 - 2, w: r.w, h: 4 }, mat, r.oben - 6, r.oben, false);   // Handlauf
+    const lang = r.w > r.h;
+    for (let i = 0; i <= (lang ? r.w : r.h); i += 40) {   // Pfosten
+      const px = lang ? r.x + i : r.x + r.w / 2, py = lang ? r.y + r.h / 2 : r.y + i;
+      kasten(g, { x: px - 2, y: py - 2, w: 4, h: 4 }, mat, r.unten, r.oben, false);
+    }
+    return;
+  }
+  const kiste = r.art === 'kiste';
+  const wand = kasten(g, r, kiste ? kistenMat : wandMat, r.unten, r.oben);
+  const kanten = new THREE.LineSegments(new THREE.EdgesGeometry(wand.geometry), kanteMat);
+  kanten.position.copy(wand.position);
+  g.add(kanten);
+  if (!kiste) warnstreifen(g, r, r.oben);
+}
 
 function baueFabrik(g) {
   const HIMMEL = '#8fa3c0';
@@ -1215,26 +1286,8 @@ function baueFabrik(g) {
   aussen.rotation.x = -Math.PI / 2;
   aussen.position.set(WELT_B / 2, -1, WELT_H / 2);
   g.add(aussen);
-  // Wände und Kisten
-  for (const r of WAENDE) {
-    const kiste = r.art === 'kiste';
-    const hoehe = kiste ? 40 : WAND_HOEHE;
-    const geo = new THREE.BoxGeometry(r.w, hoehe, r.h);
-    const wand = new THREE.Mesh(geo, kiste ? kistenMat : wandMat);
-    wand.position.set(r.x + r.w / 2, hoehe / 2, r.y + r.h / 2);
-    wand.castShadow = wand.receiveShadow = true;
-    g.add(wand);
-    const kanten = new THREE.LineSegments(new THREE.EdgesGeometry(geo), kanteMat);
-    kanten.position.copy(wand.position);
-    g.add(kanten);
-    if (!kiste) {   // Gelb-schwarzer Warnstreifen oben drauf
-      const st = streifenTextur.clone();
-      st.repeat.set(Math.max(r.w, r.h) / 64, 1);
-      const streifen = new THREE.Mesh(new THREE.BoxGeometry(r.w + 2, 10, r.h + 2), new THREE.MeshStandardMaterial({ map: st }));
-      streifen.position.set(r.x + r.w / 2, hoehe - 5, r.y + r.h / 2);
-      g.add(streifen);
-    }
-  }
+  // Wände, Kisten, Plattformen, Rampen, Brücken ...
+  for (const r of WAENDE) baueFabrikBlock(g, r);
   // Rand der Arena: niedrige Mauer mit Warnstreifen
   for (const [x, y, b, t] of [[WELT_B / 2, -20, WELT_B + 80, 40], [WELT_B / 2, WELT_H + 20, WELT_B + 80, 40], [-20, WELT_H / 2, 40, WELT_H], [WELT_B + 20, WELT_H / 2, 40, WELT_H]]) {
     const st = streifenTextur.clone();
@@ -1326,13 +1379,13 @@ function riesenPilz(g, x, z, stielR, hoehe, hutR) {
     g.add(p);
   }
 }
-function leuchtPflanze(g, x, z, zufall) {   // Kleine Pflanze mit leuchtender Kugel
+function leuchtPflanze(g, x, z, zufall, boden = 0) {   // Kleine Pflanze mit leuchtender Kugel
   const h = 14 + zufall() * 22;
   const stiel = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, h, 5), grasMat);
-  stiel.position.set(x, h / 2, z);
+  stiel.position.set(x, boden + h / 2, z);
   stiel.rotation.z = (zufall() - 0.5) * 0.4;
   const kugel = new THREE.Mesh(new THREE.SphereGeometry(3 + zufall() * 3, 8, 6), leuchtMats[Math.floor(zufall() * leuchtMats.length)]);
-  kugel.position.set(x, h + 2, z);
+  kugel.position.set(x, boden + h + 2, z);
   g.add(stiel, kugel);
 }
 function grasBuschel(g, x, z, zufall) {   // Spitze Alien-Gräser
@@ -1364,7 +1417,7 @@ function bauePlanet(g) {
   aussen.position.set(WELT_B / 2, -1, WELT_H / 2);
   g.add(aussen);
 
-  // Hindernisse
+  // Hindernisse, Hügel und Hänge
   WAENDE.forEach((r, nr) => {
     const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
     if (r.art === 'fels') {
@@ -1374,6 +1427,17 @@ function bauePlanet(g) {
       kristalle(g, r, z, nr);
     } else if (r.art === 'pilz') {
       riesenPilz(g, cx, cz, r.w / 2, 150, 120);
+    } else if (r.art === 'huegel') {
+      const t = alienBodenTextur.clone();
+      t.repeat.set(r.w / 220, r.h / 220);
+      kasten(g, r, felsMat, 0, r.oben - 3);
+      kasten(g, r, new THREE.MeshStandardMaterial({ map: t, roughness: 1 }), r.oben - 3, r.oben);   // Boden oben drauf
+      for (let i = 0; i < 6; i++) leuchtPflanze(g, r.x + 20 + z() * (r.w - 40), r.y + 20 + z() * (r.h - 40), z, r.oben);
+    } else if (r.art === 'hang') {
+      const m = new THREE.Mesh(rampenGeo(r), felsMat);
+      m.position.set(cx, 0, cz);
+      m.castShadow = m.receiveShadow = true;
+      g.add(m);
     } else {
       fels(g, cx, cz, r.w * 0.6, 40, r.h * 0.6, z());
     }
@@ -1563,7 +1627,7 @@ function zeigeMech(m) {
   const g = m.g3;
   g.gruppe.visible = !m.tot && !m.istSpieler;   // Dich selbst siehst du nicht, du sitzt ja drin!
   if (!g.gruppe.visible) return;
-  g.gruppe.position.set(m.x, 0, m.y);
+  g.gruppe.position.set(m.x, m.z, m.y);
   g.beine.rotation.y = -m.laufWinkel;
   g.torso.rotation.y = -m.zielWinkel;
   [-1, 1].forEach((s, i) => {
@@ -1641,13 +1705,14 @@ function zeigeZiele() {
 }
 
 // ----- Schüsse -----
-const kugelGeo = new THREE.BoxGeometry(26, 2.5, 2.5);
+// Alle Schüsse zeigen in z-Richtung, damit sie mit lookAt in Flugrichtung gedreht werden können
+const kugelGeo = new THREE.BoxGeometry(2.5, 2.5, 26);
 const kugelMat = { blau: new THREE.MeshBasicMaterial({ color: '#bfdbfe' }), rot: new THREE.MeshBasicMaterial({ color: '#fecaca' }) };
-const strahlGeo = new THREE.BoxGeometry(90, 3, 3);
+const strahlGeo = new THREE.BoxGeometry(3, 3, 90);
 const strahlMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
 const salvenGeo = new THREE.CylinderGeometry(2.5, 3.5, 20, 8).rotateX(Math.PI / 2);   // zeigt nach vorne (z)
 const salvenMat = new THREE.MeshStandardMaterial({ color: '#e5e7eb', emissive: '#c084fc', emissiveIntensity: 0.6 });
-const raketenGeo = new THREE.BoxGeometry(18, 6, 6);
+const raketenGeo = new THREE.BoxGeometry(6, 6, 18);
 const raketenMat = new THREE.MeshStandardMaterial({ color: '#dddddd', emissive: '#ff9f43', emissiveIntensity: 0.4 });
 let schussMeshes = [];
 function zeigeSchuesse() {
@@ -1657,12 +1722,12 @@ function zeigeSchuesse() {
       else if (s.art === 'strahl') s.mesh = new THREE.Mesh(strahlGeo, strahlMat);
       else if (s.art === 'salve') s.mesh = new THREE.Mesh(salvenGeo, salvenMat);
       else s.mesh = new THREE.Mesh(raketenGeo, raketenMat);
-      s.mesh.rotation.y = -Math.atan2(s.vy, s.vx);
       szene.add(s.mesh);
       schussMeshes.push(s);
     }
     s.mesh.position.set(s.x, s.h, s.y);
-    if (s.bogen && s.dx !== undefined) s.mesh.lookAt(s.x + s.dx, s.h + s.dh, s.y + s.dy);   // Rakete zeigt in Flugrichtung
+    if (s.bogen) { if (s.dx !== undefined) s.mesh.lookAt(s.x + s.dx, s.h + s.dh, s.y + s.dy); }   // Rakete zeigt in Flugrichtung
+    else s.mesh.lookAt(s.x + s.vx, s.h + (s.vh || 0), s.y + s.vy);
   }
   schussMeshes = schussMeshes.filter(s => {
     if (s.weg) { szene.remove(s.mesh); return false; }
@@ -1798,7 +1863,7 @@ function zeigeSalvenKreise() {
       szene.add(k);
       salvenKreise.set(m, k);
     }
-    k.position.set(m.salve.ziel.x, 2.5, m.salve.ziel.y);
+    k.position.set(m.salve.ziel.x, standHoehe(m.salve.ziel.x, m.salve.ziel.y, 1e6) + 2.5, m.salve.ziel.y);
     k.scale.setScalar(m.typ.mg.streuRadius + m.typ.mg.radius * 0.5);
     k.userData.rand.material.opacity = 0.5 + Math.abs(Math.sin(zeit * 8)) * 0.5;   // blinkt
   }
@@ -1816,7 +1881,7 @@ function zeichne3D() {
   zielRing.visible = !spieler.tot && !!spieler.typ.mg.salve && !spieler.salve && zustand === 'spiel';
   if (zielRing.visible) {
     const p = landePunkt(spieler);
-    zielRing.position.set(p.x, 2, p.y);
+    zielRing.position.set(p.x, standHoehe(p.x, p.y, 1e6) + 2, p.y);
     zielRing.scale.setScalar(spieler.typ.mg.streuRadius + spieler.typ.mg.radius * 0.5);
     zielRing.material.opacity = spieler.mgPause > 0 ? 0.25 : 0.85;
   }
@@ -1827,7 +1892,7 @@ function zeichne3D() {
   const m = spieler;
   if (!m.tot) {
     const wippen = m.laeuft ? Math.abs(Math.sin(m.phase)) * 2.5 : 0;   // Cockpit wackelt beim Laufen
-    kamera.position.set(m.x + (Math.random() - 0.5) * wackeln, AUGEN_HOEHE * m.typ.groesse + wippen + (Math.random() - 0.5) * wackeln, m.y);
+    kamera.position.set(m.x + (Math.random() - 0.5) * wackeln, m.z + AUGEN_HOEHE * m.typ.groesse + wippen + (Math.random() - 0.5) * wackeln, m.y);
     kamera.rotation.set(blick.hoch, -blick.links - Math.PI / 2, 0);
     waffen.visible = true;
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
@@ -1837,8 +1902,8 @@ function zeichne3D() {
     // Zerstört: Die Kamera fliegt hoch und schaut auf dein Wrack
     const w = m.wrack;
     const k = Math.min(1, (NEUSTART_ZEIT - m.neustart) / 1.5);
-    kamera.position.set(w.x - Math.cos(blick.links) * 160 * k, AUGEN_HOEHE + 200 * k, w.y - Math.sin(blick.links) * 160 * k);
-    kamera.lookAt(w.x, 0, w.y);
+    kamera.position.set(w.x - Math.cos(blick.links) * 160 * k, w.z + AUGEN_HOEHE + 200 * k, w.y - Math.sin(blick.links) * 160 * k);
+    kamera.lookAt(w.x, w.z, w.y);
     waffen.visible = false;
   }
   kamera.updateMatrixWorld();
@@ -1866,8 +1931,8 @@ function zeichneNamen() {
     if (m.tot || m.istSpieler) continue;
     const freund = m.team === spieler.team;
     const d = dist(m, spieler);
-    if (!freund && (d > 900 || !sichtFrei(spieler, m))) continue;   // Gegner nur, wenn du sie siehst
-    const p = aufBildschirm(m.x, 100 * m.typ.groesse, m.y);
+    if (!freund && (d > 900 || !sicht(spieler, m))) continue;   // Gegner nur, wenn du sie siehst
+    const p = aufBildschirm(m.x, m.z + 100 * m.typ.groesse, m.y);
     if (!p.vorne || p.x < -50 || p.x > W + 50 || p.y < -50 || p.y > H + 50) continue;
     const T = TEAMS[m.team];
     const s = begrenzt(1.4 - d / 1200, 0.6, 1.2);
@@ -1986,15 +2051,17 @@ function zeichneHUD() {
   // ----- Unten rechts: Mini-Karte -----
   const mk = 0.075, mx = W - 12 - WELT_B * mk, my = H - 12 - WELT_H * mk;
   ctx.fillStyle = 'rgba(15,17,24,0.85)'; ctx.fillRect(mx - 3, my - 3, WELT_B * mk + 6, WELT_H * mk + 6);
-  ctx.fillStyle = '#737d93';
-  for (const r of WAENDE) ctx.fillRect(mx + r.x * mk, my + r.y * mk, Math.max(2, r.w * mk), Math.max(2, r.h * mk));
+  for (const r of WAENDE) {   // Wände grau, Plattformen und Brücken hell, Rampen dazwischen
+    ctx.fillStyle = ['plattform', 'huegel', 'steg'].includes(r.art) ? '#4b5a7a' : (r.rampe ? '#3d4863' : (r.art === 'gelaender' ? '#ffd166' : '#737d93'));
+    ctx.fillRect(mx + r.x * mk, my + r.y * mk, Math.max(1, r.w * mk), Math.max(1, r.h * mk));
+  }
   ziele.forEach((z, i) => {
     if (modus !== 'punkt' && i !== aktivesZiel) return;
     ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.5; kreis(mx + z.x * mk, my + z.y * mk, z.r * mk); ctx.stroke();
   });
   for (const o of mechs) {
     if (o.tot || o.istSpieler) continue;
-    if (o.team !== spieler.team && !sichtFrei(spieler, o)) continue;   // Gegner nur, wenn du sie siehst
+    if (o.team !== spieler.team && !sicht(spieler, o)) continue;   // Gegner nur, wenn du sie siehst
     ctx.fillStyle = TEAMS[o.team].farbe;
     kreis(mx + o.x * mk, my + o.y * mk, 3); ctx.fill();
   }
