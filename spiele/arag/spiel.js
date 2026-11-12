@@ -655,7 +655,7 @@ function neuerSchatz(typ, x, y, z) {
 }
 // Aua! Ein Schatz ist irgendwo angestoßen
 function stoss(s, e) {
-  if (spielZeit < 1.5 || s.kaputt || zustand !== 'spiel') return;   // Am Anfang fällt alles noch kurz hin
+  if (spielZeit < 3 || s.kaputt || zustand !== 'spiel') return;   // Am Anfang fällt alles noch kurz hin
   const tempo = Math.abs(e.contact.getImpactVelocityAlongNormal());
   if (tempo < STOSS_GRENZE || zeit - s.letzterStoss < 0.2) return;
   s.letzterStoss = zeit;
@@ -1118,6 +1118,7 @@ function zeichne3D() {
     strahl.material.opacity = 0.5 + Math.sin(zeit * 30) * 0.2;
   }
   if (renderer) renderer.render(szene, kamera);
+  else szene.updateMatrixWorld();   // Ohne 3D trotzdem alle Positionen aktualisieren
 }
 function aufBildschirm(v) {
   const p = v.clone().project(kamera);
