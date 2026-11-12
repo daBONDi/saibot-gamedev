@@ -29,6 +29,8 @@ const MAUS_EMPFINDLICH = 0.0025;      // Wie schnell du dich mit der Maus drehst
 const AUGEN_HOEHE = 64;               // Wie hoch das Cockpit ist
 const SICHTFELD = 75;                 // Wie viel du siehst (in Grad)
 const WAND_HOEHE = 110;               // Wie hoch die Wände sind
+const KO_WUCHT = 230;                 // K.o.: So weit wird das Wrack weggeschleudert
+const KO_HOCH = 520;                  // K.o.: So hoch fliegt das Wrack
 
 // ===== Die Mechs =====
 // Jeder Mech hat eigene Werte. Hier kannst du sie ändern oder neue Mechs erfinden!
@@ -830,7 +832,17 @@ function zerstoert(m, von) {
   m.neustart = NEUSTART_ZEIT;
   m.tode++;
   m.zerstoertVon = von;
-  m.wrack = { x: m.x, y: m.y, z: m.z };
+  // 💥 Das Wrack wird durch die Luft geschleudert – weg von dem, der dich zerstört hat!
+  const wegRichtung = von ? Math.atan2(m.y - von.y, m.x - von.x) : Math.random() * Math.PI * 2;
+  const wucht = KO_WUCHT * (0.8 + Math.random() * 0.4);
+  m.wrack = {
+    x: m.x, y: m.y, z: m.z,
+    vx: Math.cos(wegRichtung) * wucht, vy: Math.sin(wegRichtung) * wucht, vz: KO_HOCH * (0.85 + Math.random() * 0.3),
+    rx: 0, ry: -m.laufWinkel, rz: 0,                                                         // wie es gerade gedreht ist
+    dx: (Math.random() - 0.5) * 12, dy: (Math.random() - 0.5) * 6, dz: (Math.random() - 0.5) * 12,   // wie schnell es sich dreht
+    zielX: (Math.random() < 0.5 ? -1 : 1) * 1.45,   // so liegt es am Ende auf der Seite
+    huepfer: 0, liegt: false, liegtK: 0, rauchT: 0,
+  };
   explosion(m.x, m.y, null, null, 85, 0, m.z + 30);
   for (let i = 0; i < 8; i++) {   // Schrottteile fliegen weg
     const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 160;
@@ -893,6 +905,55 @@ function updateSchuesse(dt) {
   schuesse = schuesse.filter(s => !s.weg);
 }
 
+// ===== K.o.: Das Wrack fliegt, hüpft und brennt =====
+function updateWrack(m, dt) {
+  const w = m.wrack;
+  if (!w.liegt) {
+    // Fliegen: Schwerkraft zieht nach unten, dabei dreht es sich wild
+    w.vz -= 900 * dt;
+    const nx = w.x + w.vx * dt, ny = w.y + w.vy * dt;
+    const draussen = nx < 30 || ny < 30 || nx > WELT_B - 30 || ny > WELT_H - 30;
+    if (draussen || imFesten(nx, ny, w.z + 30)) { w.vx *= -0.4; w.vy *= -0.4; sound.treffer(); }   // Gegen die Wand geknallt!
+    else { w.x = nx; w.y = ny; }
+    w.z += w.vz * dt;
+    w.rx += w.dx * dt; w.ry += w.dy * dt; w.rz += w.dz * dt;
+    // Rauchspur in der Luft
+    if (Math.random() < 0.7) partikel.push({ x: w.x, y: w.y, h: w.z + 40, vh: 10, vx: 0, vy: 0, t: 0.9, max: 0.9, farbe: '#555555', rauch: true });
+    const boden = standHoehe(w.x, w.y, w.z + STUFE);
+    if (w.z <= boden && w.vz < 0) {   // Aufprall!
+      w.z = boden;
+      const laut = lautBei(w);
+      if (w.vz < -200 && w.huepfer < 2) {   // Noch mal hochhüpfen
+        w.vz = -w.vz * 0.35; w.vx *= 0.5; w.vy *= 0.5;
+        w.dx *= 0.5; w.dy *= 0.5; w.dz *= 0.5;
+        w.huepfer++;
+        if (m.istSpieler) wackeln = Math.max(wackeln, 3);
+      } else {   // Liegen bleiben
+        w.liegt = true;
+        w.vx = w.vy = w.vz = 0;
+      }
+      sound.boom(laut * 0.5);
+      for (let i = 0; i < 12; i++) {   // Staubwolke
+        const a = Math.random() * Math.PI * 2, v = 40 + Math.random() * 80;
+        partikel.push({ x: w.x, y: w.y, h: boden + 10, vh: 30 + Math.random() * 40, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1, max: 1, farbe: '#8a7f70', rauch: true });
+      }
+    }
+  } else {
+    // Liegt am Boden: Langsam auf die Seite kippen ...
+    const k = Math.min(1, dt * 6);
+    w.rx += (w.zielX - w.rx) * k;
+    w.rz += (0 - w.rz) * k;
+    w.liegtK = Math.min(1, w.liegtK + dt * 3);
+    // ... und brennen und qualmen
+    w.rauchT -= dt;
+    if (w.rauchT <= 0) {
+      w.rauchT = 0.07;
+      partikel.push({ x: w.x + (Math.random() - 0.5) * 30, y: w.y + (Math.random() - 0.5) * 30, h: w.z + 25, vh: 50 + Math.random() * 30, vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20, t: 1.4, max: 1.4, farbe: '#3a3a3a', rauch: true });
+      if (Math.random() < 0.6) partikel.push({ x: w.x + (Math.random() - 0.5) * 25, y: w.y + (Math.random() - 0.5) * 25, h: w.z + 20, vh: 60, vx: 0, vy: 0, t: 0.4, max: 0.4, farbe: zufall(['#ff9f43', '#ffd166', '#ff6b35']) });
+    }
+  }
+}
+
 // ===== Dein Mech =====
 function updateSpieler(dt) {
   const m = spieler;
@@ -905,8 +966,10 @@ function updateSpieler(dt) {
   if (tasten['s'] || tasten['arrowdown']) vor -= 1;
   if (tasten['d'] || tasten['arrowright']) seite += 1;
   if (tasten['a'] || tasten['arrowleft']) seite -= 1;
+  vor += touch.vor; seite += touch.seite;   // Joystick auf dem Handy
   const dx = vx * vor + rx * seite, dy = vy * vor + ry * seite;
   if ((tasten['shift'] || tasten[' ']) && (dx || dy)) boosten(m, Math.atan2(dy, dx));
+  if (touch.boost) boosten(m, (dx || dy) ? Math.atan2(dy, dx) : blick.links);   // Handy: ohne Richtung geht's nach vorne
   bewege(m, dx, dy, dt);
   m.zielWinkel = blick.links;
   m.zielHoch = blick.hoch;   // Kugeln fliegen dahin, wo du hinschaust (auch hoch und runter)
@@ -915,7 +978,7 @@ function updateSpieler(dt) {
     m.zielWeite = mg.minWeite + (blick.hoch + 0.5) / 0.9 * (mg.weite - mg.minWeite);
   }
   if (maus.links) feuern(m);
-  if (maus.rechts || tasten['q'] || tasten['e']) rakete(m);
+  if (maus.rechts || tasten['q'] || tasten['e'] || touch.rakete) rakete(m);
 }
 
 // ===== Die Computer-Mechs (Bots) =====
@@ -1130,6 +1193,7 @@ function update(dt) {
     m.schutz -= dt; m.blitz -= dt; m.seitHit += dt;
     if (m.tot) {
       m.neustart -= dt;
+      if (m.wrack) updateWrack(m, dt);
       if (m.neustart <= 0) spawnen(m);
       continue;
     }
@@ -1773,9 +1837,41 @@ function baueMech(m) {
   return { gruppe, beine, torso, huefte, knie, fuesse, duesen, dueseMat, koerperMat, raketenLicht, schild };
 }
 
+const wrackMitte = new THREE.Vector3(), wrackDreh = new THREE.Vector3();
+function zeigeWrack(m, g) {
+  const w = m.wrack, gr = m.typ.groesse;
+  g.istWrack = true;
+  g.gruppe.rotation.set(w.rx, w.ry, w.rz);
+  // Der Mech dreht sich um seine Mitte (nicht um die Füße). Liegt er, ist die Mitte näher am Boden.
+  const mitteH = (45 - 27 * w.liegtK) * gr;
+  wrackDreh.set(0, 45 * gr, 0).applyEuler(g.gruppe.rotation);
+  const sinken = Math.max(0, 0.8 - m.neustart) * 90;   // Kurz vor dem Neustart versinkt das Wrack im Boden
+  wrackMitte.set(w.x, w.z + mitteH - sinken, w.y);
+  g.gruppe.position.set(wrackMitte.x - wrackDreh.x, wrackMitte.y - wrackDreh.y, wrackMitte.z - wrackDreh.z);
+  // Verbrannt: dunkel und ohne Lichter
+  g.koerperMat.color.set('#3b2f2b');
+  g.koerperMat.emissive.set('#000000');
+  g.raketenLicht.color.set('#222222');
+  for (const d of g.duesen) d.scale.set(0.01, 1, 1);
+  g.schild.visible = false;
+  // Schlappe Beine
+  g.huefte.forEach((h, i) => { h.rotation.z = 0.6 + i * 0.3; });
+  g.knie.forEach((k, i) => { k.rotation.z = -1 + i * 0.4; });
+  g.torso.position.y = 47;
+}
 function zeigeMech(m) {
   const g = m.g3;
-  g.gruppe.visible = !m.tot && !m.istSpieler;   // Dich selbst siehst du nicht, du sitzt ja drin!
+  if (m.tot) {   // K.o.: Das Wrack fliegt (auch deins – du siehst es von oben!)
+    g.gruppe.visible = !!m.wrack;
+    if (m.wrack) zeigeWrack(m, g);
+    return;
+  }
+  if (g.istWrack) {   // Wieder da: alles zurücksetzen
+    g.istWrack = false;
+    g.gruppe.rotation.set(0, 0, 0);
+    g.koerperMat.color.set(TEAMS[m.team].farbe);
+  }
+  g.gruppe.visible = !m.istSpieler;   // Dich selbst siehst du nicht, du sitzt ja drin!
   if (!g.gruppe.visible) return;
   g.gruppe.position.set(m.x, m.z, m.y);
   g.beine.rotation.y = -m.laufWinkel;
@@ -2187,11 +2283,11 @@ function zeichneHUD() {
   const rBereit = m.raketePause <= 0;
   text('🚀', 32, H - 44, 16, '#fff', 'center', false);
   balken(50, H - 50, 100, 12, rBereit ? 1 : 1 - m.raketePause / m.typ.rakete.pause, rBereit ? '#ffd166' : '#8a8f9e');
-  text(rBereit ? 'Rechtsklick' : '', 100, H - 30, 10, '#c9c3ff', 'center', false);
+  text(rBereit && !touchModus ? 'Rechtsklick' : '', 100, H - 30, 10, '#c9c3ff', 'center', false);
   const bBereit = m.boostPause <= 0;
   text('💨', 170, H - 44, 16, '#fff', 'center', false);
   balken(186, H - 50, 100, 12, bBereit ? 1 : 1 - m.boostPause / m.typ.boostPause, bBereit ? '#6fe3ff' : '#8a8f9e');
-  text(bBereit ? 'Shift' : '', 236, H - 30, 10, '#c9c3ff', 'center', false);
+  text(bBereit && !touchModus ? 'Shift' : '', 236, H - 30, 10, '#c9c3ff', 'center', false);
 
   // ----- Oben rechts: Wer hat wen zerstört? -----
   killfeed.forEach((k, i) => {
@@ -2207,7 +2303,8 @@ function zeichneHUD() {
   });
 
   // ----- Unten rechts: Mini-Karte -----
-  const mk = 0.075, mx = W - 12 - WELT_B * mk, my = H - 12 - WELT_H * mk;
+  const mk = 0.075;
+  const mx = touchModus ? 12 : W - 12 - WELT_B * mk, my = touchModus ? 12 : H - 12 - WELT_H * mk;   // Auf dem Handy oben links, damit unten Platz für die Knöpfe ist
   ctx.fillStyle = 'rgba(15,17,24,0.85)'; ctx.fillRect(mx - 3, my - 3, WELT_B * mk + 6, WELT_H * mk + 6);
   for (const r of WAENDE) {   // Wände grau, Plattformen und Brücken hell, Rampen dazwischen
     ctx.fillStyle = ['plattform', 'huegel', 'steg'].includes(r.art) ? '#4b5a7a' : (r.rampe ? '#3d4863' : (r.art === 'gelaender' ? '#ffd166' : '#737d93'));
@@ -2274,7 +2371,7 @@ function zeichneHUD() {
       if (m.mgPause > 0) {
         balken(W / 2 - 25, H / 2 + 50, 50, 5, 1 - m.mgPause / m.typ.mg.pause, m.typ.akzent);
         text(`Nachladen ${Math.ceil(m.mgPause)} s`, W / 2, H / 2 + 64, 11, '#c9c3ff', 'center', false);
-      } else text('Linksklick: anvisieren!', W / 2, H / 2 + 58, 12, '#fff', 'center', false);
+      } else text(touchModus ? 'Feuer-Knopf: anvisieren!' : 'Linksklick: anvisieren!', W / 2, H / 2 + 58, 12, '#fff', 'center', false);
     }
   }
 
@@ -2300,10 +2397,20 @@ function zeichneHUD() {
 
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 20, 14, '#fff', 'center', false);
 
+  if (zustand === 'spiel' && touchModus && !pause) zeichneTouch();
+
   if (pause && zustand === 'spiel') {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
     text('⏸️ PAUSE', W / 2, H / 2 - 30, 50, '#ffd166');
-    text('Klicken: Weiterspielen  ·  Enter: Zurück zum Menü', W / 2, H / 2 + 30, 18, '#fff');
+    text(touchModus ? 'Tippen: Weiterspielen' : 'Klicken: Weiterspielen  ·  Enter: Zurück zum Menü', W / 2, H / 2 + 30, 18, '#fff');
+    const b = MENUE_KNOPF;
+    ctx.fillStyle = '#ffd166'; rr(b.x, b.y, b.w, b.h, 12); ctx.fill();
+    text('🏠 Zum Menü', b.x + b.w / 2, b.y + b.h / 2 + 1, 18, '#1b1f3a', 'center', false);
+  }
+  if (touchModus && innerHeight > innerWidth) {   // Handy hochkant? Dann ist alles winzig!
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, W, H);
+    text('📱↪️', W / 2, H / 2 - 40, 70, '#fff', 'center', false);
+    text('Dreh dein Handy quer!', W / 2, H / 2 + 40, 40, '#ffd166');
   }
 }
 
@@ -2532,7 +2639,10 @@ function punkt(e) {
 }
 canvas.addEventListener('pointerdown', e => {
   tonStart();
+  if (e.pointerType === 'touch') touchModus = true;
   if (!mausGefangen) { const p = punkt(e); maus.x = p.x; maus.y = p.y; }
+  if (zustand === 'spiel' && pause && imRechteck(punkt(e), MENUE_KNOPF)) { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); return; }
+  if (e.pointerType === 'touch' && zustand === 'spiel') { touchRunter(e); return; }
   if (zustand === 'titel') {
     for (const k of modusKarten()) if (imRechteck(maus, k)) { gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
     for (const b of kartenKnoepfe()) if (imRechteck(maus, b)) {
@@ -2553,17 +2663,115 @@ canvas.addEventListener('pointerdown', e => {
   if (e.button === 2) maus.rechts = true;
 });
 addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') { touchBewegt(e); return; }
   if (zustand === 'spiel' && !pause && (mausGefangen || e.buttons)) {
     blick.links += (e.movementX || 0) * MAUS_EMPFINDLICH;
     blick.hoch = begrenzt(blick.hoch - (e.movementY || 0) * MAUS_EMPFINDLICH, -0.5, 0.4);
   }
   if (!mausGefangen) { const p = punkt(e); maus.x = p.x; maus.y = p.y; }
 });
+addEventListener('pointercancel', e => touchHoch(e));
 addEventListener('pointerup', e => {
+  if (e.pointerType === 'touch') { touchHoch(e); return; }
   if (e.button === 0) maus.links = false;
   if (e.button === 2) maus.rechts = false;
 });
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // Kein Menü bei Rechtsklick
+
+// ===== Handy & Tablet: Touch-Steuerung =====
+// Linke Seite: Finger hinlegen und ziehen = Joystick zum Laufen
+// Rechte Seite: Wischen = Umschauen
+// Knöpfe rechts: Feuer (gedrückt halten, dabei kann man auch zielen!), Rakete, Boost. Oben: Pause
+let touchModus = false;   // Wird an, sobald jemand mit dem Finger tippt
+const touch = { vor: 0, seite: 0, boost: false, rakete: false, stick: null };
+const TOUCH_EMPFINDLICH = 0.006;   // Wie schnell du dich beim Wischen drehst
+const STICK_RADIUS = 65;           // Wie weit man den Joystick ziehen kann
+const TOUCH_KNOEPFE = {
+  feuer:  { x: 855, y: 465, r: 62 },
+  rakete: { x: 725, y: 535, r: 42 },
+  boost:  { x: 880, y: 330, r: 42 },
+  pause:  { x: 222, y: 36,  r: 24 },
+};
+const MENUE_KNOPF = { x: W / 2 - 90, y: H / 2 + 65, w: 180, h: 46 };
+const finger = new Map();   // Welcher Finger macht gerade was?
+function knopfBei(p) {
+  for (const [name, k] of Object.entries(TOUCH_KNOEPFE)) if (Math.hypot(p.x - k.x, p.y - k.y) < k.r + 12) return name;
+  return null;
+}
+function touchRunter(e) {
+  const p = punkt(e);
+  if (pause) { pause = false; return; }
+  const knopf = knopfBei(p);
+  if (knopf === 'pause') { pause = true; return; }
+  if (knopf === 'feuer') maus.links = true;
+  if (knopf === 'rakete') touch.rakete = true;
+  if (knopf === 'boost') touch.boost = true;
+  if (knopf) { finger.set(e.pointerId, { art: knopf, lx: p.x, ly: p.y }); return; }
+  if (p.x < W * 0.45 && !touch.stick) {   // Joystick
+    touch.stick = { x: p.x, y: p.y, kx: p.x, ky: p.y };
+    finger.set(e.pointerId, { art: 'stick' });
+  } else finger.set(e.pointerId, { art: 'blick', lx: p.x, ly: p.y });   // Umschauen
+}
+function touchBewegt(e) {
+  const f = finger.get(e.pointerId);
+  if (!f || zustand !== 'spiel' || pause) return;
+  const p = punkt(e);
+  if (f.art === 'stick') {
+    const s = touch.stick;
+    let dx = p.x - s.x, dy = p.y - s.y;
+    const l = Math.hypot(dx, dy);
+    if (l > STICK_RADIUS) { dx *= STICK_RADIUS / l; dy *= STICK_RADIUS / l; }
+    s.kx = s.x + dx; s.ky = s.y + dy;
+    const tot = l < 12;   // Ein bisschen Spielraum in der Mitte
+    touch.seite = tot ? 0 : dx / STICK_RADIUS;
+    touch.vor = tot ? 0 : -dy / STICK_RADIUS;
+  } else if (f.art === 'blick' || f.art === 'feuer') {
+    blick.links += (p.x - f.lx) * TOUCH_EMPFINDLICH;
+    blick.hoch = begrenzt(blick.hoch - (p.y - f.ly) * TOUCH_EMPFINDLICH, -0.5, 0.4);
+    f.lx = p.x; f.ly = p.y;
+  }
+}
+function touchHoch(e) {
+  const f = finger.get(e.pointerId);
+  if (!f) return;
+  finger.delete(e.pointerId);
+  if (f.art === 'stick') { touch.stick = null; touch.vor = touch.seite = 0; }
+  if (f.art === 'feuer') maus.links = false;
+  if (f.art === 'rakete') touch.rakete = false;
+  if (f.art === 'boost') touch.boost = false;
+}
+function zeichneTouch() {
+  const m = spieler;
+  if (m.tot) return;
+  // Joystick
+  const s = touch.stick || { x: 150, y: 400, kx: 150, ky: 400 };
+  ctx.globalAlpha = touch.stick ? 0.8 : 0.35;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+  kreis(s.x, s.y, STICK_RADIUS); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  kreis(s.kx, s.ky, 28); ctx.fill();
+  ctx.globalAlpha = 1;
+  // Knöpfe (mit Lade-Ring, wenn sie noch nicht bereit sind)
+  const gedrueckt = name => [...finger.values()].some(f => f.art === name);
+  const knopf = (name, emoji, laden, farbe) => {
+    const k = TOUCH_KNOEPFE[name];
+    ctx.fillStyle = gedrueckt(name) ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.35)';
+    kreis(k.x, k.y, k.r); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3; ctx.stroke();
+    if (laden < 1) {
+      ctx.strokeStyle = farbe; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(k.x, k.y, k.r - 4, -Math.PI / 2, -Math.PI / 2 + laden * Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = laden < 1 ? 0.45 : 1;
+    text(emoji, k.x, k.y + 2, k.r * 0.75, '#fff', 'center', false);
+    ctx.globalAlpha = 1;
+  };
+  const mg = m.typ.mg;
+  knopf('feuer', mg.salve ? '☄️' : mg.strahl ? '🎯' : '🔫', mg.salve || mg.strahl ? Math.max(0, 1 - m.mgPause / mg.pause) : 1, m.typ.akzent);
+  knopf('rakete', '🚀', Math.max(0, 1 - m.raketePause / m.typ.rakete.pause), '#ffd166');
+  knopf('boost', '💨', Math.max(0, 1 - m.boostPause / m.typ.boostPause), '#6fe3ff');
+  knopf('pause', '⏸️', 1, '#fff');
+}
 
 // ===== Spielschleife =====
 let letzte = performance.now();
