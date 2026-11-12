@@ -46,7 +46,7 @@ const MECH_TYPEN = [
     rakete: { pause: 4, schaden: 40, radius: 85, anzahl: 1 },
     sterne: { leben: 3, tempo: 3, schaden: 3, weite: 3 } },
   { id: 'blitz', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell und boostet ständig, hält aber wenig aus.',
-    leben: 80, tempo: 230, groesse: 0.85, boostPause: 1.2,
+    leben: 80, tempo: 290, groesse: 0.85, boostPause: 1.2,
     mg: { pause: 0.075, schaden: 5, tempo: 950, weite: 550, streuung: 0.07 },
     rakete: { pause: 5, schaden: 30, radius: 70, anzahl: 1 },
     sterne: { leben: 1, tempo: 5, schaden: 2, weite: 2 } },
@@ -65,8 +65,8 @@ const MECH_TYPEN = [
     mg: { pause: 0.13, schaden: 5, tempo: 900, weite: 600, streuung: 0.06 },
     rakete: { pause: 4.5, schaden: 28, radius: 80, anzahl: 3 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 3 } },
-  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie! Ziel anvisieren, dann regnen 10 Raketen runter. Hoch schauen = weiter!',
-    leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5,
+  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie mit 2 Werfern an den Armen! Ziel anvisieren, dann regnen 10 Raketen runter. Kein Boost!',
+    leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5, keinBoost: true,   // keinBoost: kann nicht boosten
     // salve: Erst anvisieren (zielZeit), dann fliegen "anzahl" Raketen im Bogen und landen im Kreis (streuRadius) ums Ziel
     mg: { salve: true, pause: 5.5, zielZeit: 0.5, anzahl: 10, abstand: 0.1, schaden: 18, radius: 60, streuRadius: 110, tempo: 750, weite: 1100, minWeite: 180 },
     rakete: { pause: 5, schaden: 35, radius: 80, anzahl: 1 },
@@ -79,6 +79,55 @@ const TEAMS = {
   blau: { name: 'Team Blau', farbe: '#3b82f6', dunkel: '#1e3a8a', hell: '#93c5fd' },
   rot:  { name: 'Team Rot',  farbe: '#ef4444', dunkel: '#7f1d1d', hell: '#fca5a5' },
 };
+// ===== Mech-Teile =====
+// Jeder Mech besteht aus 6 Teilen, die man einzeln kaputt schießen kann!
+// anteil: wie viel aushält im Vergleich zu "leben" vom Mech (1 = so viel wie leben)
+// K.o. ist man, wenn die Mitte ODER das Visier ODER beide Beine kaputt sind.
+const TEILE = {
+  visier: { name: 'Visier',       anteil: 0.4 },
+  mitte:  { name: 'Mitte',        anteil: 1.0 },
+  armL:   { name: 'Linker Arm',   anteil: 0.5 },
+  armR:   { name: 'Rechter Arm',  anteil: 0.5 },
+  beinL:  { name: 'Linkes Bein',  anteil: 0.6 },
+  beinR:  { name: 'Rechtes Bein', anteil: 0.6 },
+};
+// Eine Explosion trifft alle Teile ein bisschen (so viel vom Schaden bekommt jedes Teil)
+const EXPLOSION_VERTEILUNG = { mitte: 0.6, visier: 0.15, armL: 0.3, armR: 0.3, beinL: 0.35, beinR: 0.35 };
+const BEIN_AB_TEMPO = 0.55;   // Mit nur einem Bein humpelt man: so viel vom Tempo bleibt übrig
+function neueTeile(typ) {
+  const t = {};
+  for (const [id, info] of Object.entries(TEILE)) t[id] = { hp: typ.leben * info.anteil, max: typ.leben * info.anteil };
+  return t;
+}
+const hat = (m, teil) => m.teile[teil].hp > 0;   // Ist das Teil noch dran?
+function teilAnteil(m, teil) { return Math.max(0, m.teile[teil].hp / m.teile[teil].max); }
+// Wie gut geht es dem Mech? 1 = super, 0 = K.o. (zählt nur, was für K.o. wichtig ist)
+function gesundheit(m) {
+  return Math.min(teilAnteil(m, 'mitte'), teilAnteil(m, 'visier'), Math.max(teilAnteil(m, 'beinL'), teilAnteil(m, 'beinR')));
+}
+// Welches Teil trifft eine Kugel an der Stelle x, y in der Höhe h?
+function trefferTeil(m, x, y, h) {
+  const gr = m.typ.groesse, dx = x - m.x, dy = y - m.y, hoehe = (h - m.z) / gr;
+  if (hoehe < 40) {   // Unten: die Beine (die zeigen in Laufrichtung)
+    const seite = -Math.sin(m.laufWinkel) * dx + Math.cos(m.laufWinkel) * dy;
+    return seite >= 0 ? 'beinR' : 'beinL';
+  }
+  // Oben: Arme an den Seiten, Visier vorne oben, sonst die Mitte (der Oberkörper zeigt in Zielrichtung)
+  const seite = (-Math.sin(m.zielWinkel) * dx + Math.cos(m.zielWinkel) * dy) / gr;
+  const vorne = (Math.cos(m.zielWinkel) * dx + Math.sin(m.zielWinkel) * dy) / gr;
+  if (Math.abs(seite) > 13) return seite > 0 ? 'armR' : 'armL';
+  if (hoehe > 62 && vorne > 0 && Math.abs(seite) < 9) return 'visier';
+  return 'mitte';
+}
+// Wo ungefähr ist ein Teil? (für Funken und Trümmer)
+function teilPos(m, teil) {
+  const gr = m.typ.groesse;
+  const w = teil.startsWith('bein') ? m.laufWinkel : m.zielWinkel;
+  const seite = { armL: -22, armR: 22, beinL: -19, beinR: 19 }[teil] || 0;
+  const h = { visier: 72, mitte: 60, armL: 56, armR: 56, beinL: 22, beinR: 22 }[teil];
+  return { x: m.x - Math.sin(w) * seite * gr, y: m.y + Math.cos(w) * seite * gr, h: m.z + h * gr };
+}
+
 const NAMEN = { blau: ['DU', 'Blitz', 'Titan', 'Funke'], rot: ['Kralle', 'Donner', 'Rost', 'Viper'] };
 const anderes = team => team === 'blau' ? 'rot' : 'blau';
 
@@ -531,7 +580,7 @@ function zeigeNachricht(t, dauer = 2.5, farbe = '#ffd166') { nachricht = { text:
 function neuerMech(team, nr, istSpieler, typ) {
   return {
     team, nr, istSpieler, typ, name: NAMEN[team][nr],
-    x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, leben: typ.leben, zielHoch: 0, tot: false, neustart: 0, schutz: 0,
+    x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, teile: neueTeile(typ), zielHoch: 0, tot: false, totZeit: 0, neustart: 0, schutz: 0,
     zielWinkel: team === 'blau' ? 0 : Math.PI, laufWinkel: 0, phase: 0, laeuft: false,
     mgPause: 0, raketePause: 1, boostPause: 0, boostZeit: 0, boostRichtung: 0,
     seitHit: 99, blitz: 0, lauf: 1, abschuesse: 0, tode: 0,
@@ -549,7 +598,7 @@ function spawnPunkt(m) {
 function spawnen(m) {
   const p = spawnPunkt(m);
   m.x = p.x; m.y = p.y; m.z = standHoehe(p.x, p.y, 0); m.vz = 0;
-  m.leben = m.typ.leben; m.tot = false; m.schutz = SCHUTZ_ZEIT;
+  m.teile = neueTeile(m.typ); m.tot = false; m.schutz = SCHUTZ_ZEIT; m.koGrund = null;
   m.zielWinkel = m.team === 'blau' ? 0 : Math.PI;
   m.laufWinkel = m.zielWinkel;
   m.weg = []; m.wegZeit = 0; m.gegner = null; m.boostZeit = 0; m.seitHit = 99;
@@ -566,6 +615,8 @@ function neuesSpiel(id) {
   for (const s of schussMeshes) szene.remove(s.mesh);
   for (const p of explosionsKugeln) szene.remove(p.mesh);
   schussMeshes = []; explosionsKugeln = [];
+  for (const t of truemmer) szene.remove(t.obj);
+  truemmer = [];
   mechs = []; schuesse = []; partikel = []; killfeed = []; trefferRichtungen = [];
   nachricht = null; ende = null; pause = false; verlaengerung = false;
   punkte = { blau: 0, rot: 0 };
@@ -611,6 +662,7 @@ function beende(sieger, grund) {
 // ===== Bewegung =====
 function bewege(m, dx, dy, dt) {
   let tempo = m.typ.tempo;
+  if (!hat(m, 'beinL') || !hat(m, 'beinR')) tempo *= BEIN_AB_TEMPO;   // Humpeln mit einem Bein
   if (m.boostZeit > 0) {   // Boost: schnell in eine Richtung!
     dx = Math.cos(m.boostRichtung); dy = Math.sin(m.boostRichtung);
     tempo = BOOST_TEMPO;
@@ -687,7 +739,8 @@ function mechsSchieben() {   // Mechs können nicht ineinander laufen
 }
 
 function boosten(m, richtung) {
-  if (m.boostPause > 0 || m.tot) return;
+  if (m.boostPause > 0 || m.tot || m.typ.keinBoost) return;
+  if (!hat(m, 'beinL') || !hat(m, 'beinR')) return;   // Mit einem Bein kann man nicht boosten
   m.boostZeit = BOOST_DAUER;
   m.boostPause = m.typ.boostPause;
   m.boostRichtung = richtung;
@@ -698,9 +751,16 @@ function boosten(m, richtung) {
 function feuern(m) {
   if (m.mgPause > 0 || m.tot) return;
   const mg = m.typ.mg, gr = m.typ.groesse;
+  const arme = (hat(m, 'armL') ? 1 : 0) + (hat(m, 'armR') ? 1 : 0);
+  if (arme === 0) return;                          // Keine Arme mehr = keine Waffe mehr!
+  if (mg.strahl && !hat(m, 'armR')) return;        // Die Railgun hängt am rechten Arm
   m.mgPause = mg.pause * (m.istSpieler || mg.salve ? 1 : BOT_FEUER_LANGSAMER);   // Der Raketenhagel lädt bei Bots nicht langsamer
   if (mg.salve) { if (!m.salve) salveStarten(m); return; }
-  if (!mg.strahl) m.lauf = -m.lauf;   // Abwechselnd links und rechts schießen (die Railgun hat nur ein Rohr)
+  if (!mg.strahl) {
+    m.lauf = -m.lauf;   // Abwechselnd links und rechts schießen (die Railgun hat nur ein Rohr)
+    if (!hat(m, m.lauf > 0 ? 'armR' : 'armL')) m.lauf = -m.lauf;   // Arm ab? Dann mit dem anderen
+    if (arme === 1) m.mgPause *= 2;                                 // Nur ein Gewehr = halb so schnell
+  }
   const seite = mg.strahl ? 0.4 : m.lauf;
   const w = m.zielWinkel + (Math.random() - 0.5) * 2 * mg.streuung;
   const hoch = m.zielHoch + (Math.random() - 0.5) * 2 * mg.streuung * 0.5;   // nach oben oder unten zielen
@@ -726,7 +786,8 @@ function landePunkt(m) {
 }
 function salveStarten(m) {
   const mg = m.typ.mg;
-  m.salve = { ziel: landePunkt(m), warten: mg.zielZeit, rest: mg.anzahl, timer: 0, laengste: 0, bemerkt: new Map() };
+  const arme = (hat(m, 'armL') ? 1 : 0) + (hat(m, 'armR') ? 1 : 0);   // Pro Arm ein Werfer = halbe Salve pro Arm
+  m.salve = { ziel: landePunkt(m), warten: mg.zielZeit, rest: Math.round(mg.anzahl * arme / 2), timer: 0, laengste: 0, bemerkt: new Map() };
   if (m.istSpieler) { sound.anvisieren(); zeigeNachricht('🎯 Ziel erfasst!', 1.2, m.typ.akzent); }
   else if (spieler && !spieler.tot && m.team !== spieler.team && dist(m.salve.ziel, spieler) < mg.streuRadius + 150) {
     sound.warnung(); zeigeNachricht('⚠️ Raketenhagel! Lauf weg!', 1.5, '#ff6b6b');
@@ -751,17 +812,21 @@ function salvenRakete(m, ziel) {
   const mg = m.typ.mg, gr = m.typ.groesse;
   const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * mg.streuRadius;   // irgendwo im Kreis
   const zx = begrenzt(ziel.x + Math.cos(a) * r, 10, WELT_B - 10), zy = begrenzt(ziel.y + Math.sin(a) * r, 10, WELT_H - 10);
-  const x = m.x - Math.cos(m.zielWinkel) * 8, y = m.y - Math.sin(m.zielWinkel) * 8;
+  // Abwechselnd aus dem linken und rechten Arm (wenn der noch dran ist)
+  let seite = m.salve.rest % 2 ? 1 : -1;
+  if (!hat(m, seite > 0 ? 'armR' : 'armL')) seite = -seite;
+  const cos = Math.cos(m.zielWinkel), sin = Math.sin(m.zielWinkel);
+  const x = m.x + cos * 14 * gr - sin * 25 * gr * seite, y = m.y + sin * 14 * gr + cos * 25 * gr * seite;
   const weite = Math.hypot(zx - x, zy - y);
   const dauer = 0.6 + weite / mg.tempo;
   const zh = standHoehe(zx, zy, 1e6);   // landet z. B. auf der Brücke, wenn sie drüber ist
   schuesse.push({
-    art: 'salve', bogen: true, x, y, sx: x, sy: y, zx, zy, zh, h: m.z + 100 * gr, startH: m.z + 100 * gr,
+    art: 'salve', bogen: true, x, y, sx: x, sy: y, zx, zy, zh, h: m.z + 70 * gr, startH: m.z + 70 * gr,
     k: 0, dauer, scheitel: 220 + weite * 0.3,
     vx: 0, vy: 0, rest: 1e9, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m,
   });
   m.salve.laengste = Math.max(m.salve.laengste, dauer + 0.1);
-  partikel.push({ x, y, h: m.z + 100 * gr, vh: 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 0.8, max: 0.8, farbe: '#999999', rauch: true });
+  partikel.push({ x, y, h: m.z + 70 * gr, vh: 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 0.8, max: 0.8, farbe: '#999999', rauch: true });
   sound.salve(m.istSpieler ? 1 : lautBei(m));
   if (m.istSpieler) { rueckstoss = 4; muendung = 0.06; }
 }
@@ -799,7 +864,7 @@ function explosion(x, y, team, von, radius = 85, schadenMax = 40, h = 30) {
     const d = Math.hypot(mitte.x - x, mitte.y - y, mitte.z - h);
     const groesse = radius + MECH_RADIUS * m.typ.groesse;
     if (d < groesse && sichtFrei3D({ x, y, z: h }, mitte)) {
-      schaden(m, schadenMax * (1 - 0.5 * d / groesse), von);
+      schaden(m, schadenMax * (1 - 0.5 * d / groesse), von, 'explosion');
     }
   }
 }
@@ -811,9 +876,11 @@ function funken(x, y, h, farbe) {
   }
 }
 
-function schaden(m, menge, von) {
+// teil: welches Teil getroffen wurde ('explosion' = alle ein bisschen)
+function schaden(m, menge, von, teil = 'mitte') {
   if (m.tot || m.schutz > 0 || zustand !== 'spiel') return;
-  m.leben -= menge;
+  if (teil === 'explosion') for (const [id, f] of Object.entries(EXPLOSION_VERTEILUNG)) teilSchaden(m, id, menge * f, von);
+  else teilSchaden(m, teil, menge, von);
   m.blitz = 0.08;
   m.seitHit = 0;
   if (m.istSpieler) {
@@ -822,12 +889,38 @@ function schaden(m, menge, von) {
     if (von) trefferRichtungen.push({ von: { x: von.x, y: von.y }, t: 1 });
   }
   if (von && von.istSpieler) { trefferAnzeige = 0.12; sound.treffer(); }
-  if (m.leben <= 0) zerstoert(m, von);
+  // K.o.? Mitte kaputt, Visier kaputt oder beide Beine weg!
+  if (!hat(m, 'mitte')) m.koGrund = 'Mitte zerstört';
+  else if (!hat(m, 'visier')) m.koGrund = 'Visier zerschossen';
+  else if (!hat(m, 'beinL') && !hat(m, 'beinR')) m.koGrund = 'Beide Beine ab';
+  if (m.koGrund) zerstoert(m, von);
+}
+function teilSchaden(m, id, menge, von) {
+  const t = m.teile[id];
+  if (t.hp <= 0) {   // Schon ab? Dann fliegt die Kugel weiter in die Mitte (bei Beinen einfach vorbei)
+    if (id.startsWith('arm')) teilSchaden(m, 'mitte', menge * 0.5, von);
+    return;
+  }
+  t.hp -= menge;
+  if (t.hp <= 0) { t.hp = 0; teilAb(m, id, von); }
+}
+function teilAb(m, id, von) {
+  const p = teilPos(m, id);
+  funken(p.x, p.y, p.h, '#ffd166');
+  for (let i = 0; i < 12; i++) {   // Funkenregen und Rauch
+    const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 140;
+    partikel.push({ x: p.x, y: p.y, h: p.h, vh: 80 + Math.random() * 150, g: 500, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.7, max: 0.7, farbe: zufall(['#ffd166', '#ff9f43', '#ffffff']) });
+  }
+  sound.boom((m.istSpieler ? 1 : lautBei(m)) * 0.4);
+  if (id.startsWith('bein')) m.boostZeit = 0;
+  if (id === 'mitte' || id === 'visier') return;   // Das gibt gleich sowieso K.o.
+  if (m.istSpieler) zeigeNachricht(`⚠️ ${TEILE[id].name} ab!`, 2, '#ff6b6b');
+  else if (von && von.istSpieler) zeigeNachricht(`💥 ${TEILE[id].name} abgeschossen!`, 1.5, '#4ade80');
 }
 
 function zerstoert(m, von) {
   m.tot = true;
-  m.leben = 0;
+  m.totZeit = 0;
   m.salve = null;
   m.neustart = NEUSTART_ZEIT;
   m.tode++;
@@ -890,7 +983,7 @@ function updateSchuesse(dt) {
         if (s.h < m.z - 5 || s.h > m.z + 80 * m.typ.groesse) continue;   // drüber oder drunter vorbei
         s.weg = true;
         if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
-        else { schaden(m, s.schaden, s.von); funken(s.x, s.y, s.h, m.schutz > 0 ? '#93c5fd' : '#ffffff'); }
+        else { schaden(m, s.schaden, s.von, trefferTeil(m, s.x, s.y, s.h)); funken(s.x, s.y, s.h, m.schutz > 0 ? '#93c5fd' : '#ffffff'); }
         break;
       }
       if (!s.weg && s.rest <= 0) {
@@ -1192,18 +1285,21 @@ function update(dt) {
     m.mgPause -= dt; m.raketePause -= dt; m.boostPause -= dt; m.boostZeit -= dt;
     m.schutz -= dt; m.blitz -= dt; m.seitHit += dt;
     if (m.tot) {
-      m.neustart -= dt;
+      m.neustart -= dt; m.totZeit += dt;
       if (m.wrack) updateWrack(m, dt);
       if (m.neustart <= 0) spawnen(m);
       continue;
     }
-    if (m.seitHit > HEILEN_NACH) m.leben = Math.min(m.typ.leben, m.leben + HEILEN_TEMPO * dt);
+    if (m.seitHit > HEILEN_NACH) {   // Heilen: Nur Teile, die noch dran sind!
+      for (const t of Object.values(m.teile)) if (t.hp > 0) t.hp = Math.min(t.max, t.hp + HEILEN_TEMPO * dt * t.max / m.typ.leben);
+    }
     if (m.salve) updateSalve(m, dt);
   }
   updateSpieler(dt);
   for (const m of mechs) if (!m.istSpieler && !m.tot) botDenken(m, dt);
   mechsSchieben();
   updateSchuesse(dt);
+  updateTruemmer(dt);
   updateModus(dt);
 }
 
@@ -1720,92 +1816,76 @@ function baueMech(m) {
   visier.position.set(23.5, 22, 0);
   torso.add(visier);
   for (const s of [-1, 1]) torso.add(klotz(2, 2, 2, akzentLeucht, 23, 16, s * 8));   // kleine Lampen
-  // Schultern
+  // ===== Arme (eigene Gruppen, damit man sie abschießen kann!) =====
+  // Links ist -z, rechts ist +z
+  const arme = { armL: new THREE.Group(), armR: new THREE.Group() };
+  torso.add(arme.armL, arme.armR);
+  const arm = s => arme[s < 0 ? 'armL' : 'armR'];
   const schulterGross = typ.id === 'koloss' ? 1.35 : typ.id === 'blitz' ? 0.8 : 1;
   for (const s of [-1, 1]) {
-    torso.add(gelenk(6, 6, grauMat, 0, 16, s * 19));
-    torso.add(schraeg(klotz(20 * schulterGross, 9 * schulterGross, 12 * schulterGross, koerperMat, 0, 22, s * 22), 0.12));
-    torso.add(schraeg(klotz(20 * schulterGross, 2, 12.5 * schulterGross, akzentMat, 0, 22 + 4.5 * schulterGross, s * 22), 0.12));
+    arm(s).add(gelenk(6, 6, grauMat, 0, 16, s * 19));
+    arm(s).add(schraeg(klotz(20 * schulterGross, 9 * schulterGross, 12 * schulterGross, koerperMat, 0, 22, s * 22), 0.12));
+    arm(s).add(schraeg(klotz(20 * schulterGross, 2, 12.5 * schulterGross, akzentMat, 0, 22 + 4.5 * schulterGross, s * 22), 0.12));
   }
-  // Rücken: Antrieb mit zwei Düsen (leuchten beim Boosten)
-  torso.add(klotz(10, 18, 22, grauMat, -22, 14, 0));
-  const duesen = [];
-  for (const s of [-1, 1]) {
-    const d = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 6, 10), dunkelMat);
-    d.rotation.z = Math.PI / 2; d.position.set(-29, 10, s * 6); d.castShadow = true;
-    torso.add(d);
-    const flamme = new THREE.Group();   // Die Flamme wächst von der Düse aus nach hinten
-    flamme.position.set(-32, 10, s * 6);
-    const kegel = new THREE.Mesh(new THREE.ConeGeometry(3.5, 14, 10), dueseMat);
-    kegel.rotation.z = Math.PI / 2; kegel.position.x = -7;
-    flamme.add(kegel);
-    torso.add(flamme);
-    duesen.push(flamme);
-  }
-  for (const y of [9, 13, 17]) torso.add(klotz(1, 1.5, 16, dunkelMat, -27.5, y + 4, 0));   // Lüftungsschlitze
-
-  // ===== Waffen =====
   if (typ.mg.salve) {
-    // ☄️ Donnerhagel: ein großer Raketenwerfer mit 9 Rohren auf dem Rücken, schräg nach oben
-    const werfer = new THREE.Group();
-    werfer.position.set(-6, 40, 0);
-    werfer.rotation.z = 0.45;
-    werfer.add(klotz(26, 24, 32, teamDunkel, 0, 0, 0));
-    werfer.add(klotz(27, 3, 33, akzentMat, 0, 10, 0));
-    for (const z of [-17, 17]) werfer.add(klotz(22, 20, 2, grauMat, 0, 0, z));   // Seitenplatten
-    for (const y of [-7, 0, 7]) for (const z of [-10, 0, 10]) {
-      const loch = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 2, 8), akzentLeucht);
-      loch.rotation.z = Math.PI / 2;
-      loch.position.set(13.5, y, z);
-      werfer.add(loch);
-    }
-    torso.add(werfer);
-    torso.add(klotz(8, 10, 8, grauMat, -6, 30, 0));   // Halterung
-    for (const s of [-1, 1]) {   // kleine Arme mit kurzen Kanonen
-      torso.add(klotz(14, 8, 8, grauMat, 10, 8, s * 22));
-      torso.add(rohr(2.5, 14, dunkelMat, 22, 8, s * 22));
+    // ☄️ Donnerhagel: an jedem Arm ein Raketenwerfer, schräg nach oben
+    for (const s of [-1, 1]) {
+      arm(s).add(klotz(12, 10, 8, grauMat, 4, 8, s * 22));          // Oberarm
+      const werfer = new THREE.Group();
+      werfer.position.set(12, 12, s * 25);
+      werfer.rotation.z = 0.5;
+      werfer.add(klotz(24, 16, 14, teamDunkel, 0, 0, 0));
+      werfer.add(klotz(24.5, 2.5, 14.5, akzentMat, 0, 8, 0));
+      for (const y of [-4, 4]) for (const z of [-4, 0, 4]) {
+        const loch = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 2, 8), akzentLeucht);
+        loch.rotation.z = Math.PI / 2;
+        loch.position.set(12.5, y, z);
+        werfer.add(loch);
+      }
+      werfer.traverse(o => { o.castShadow = true; });
+      arm(s).add(werfer);
     }
   } else if (typ.mg.strahl) {
-    // 🎯 Adlerauge: eine lange Railgun mit zwei Schienen und leuchtendem Kern
-    const z = 22;
-    torso.add(klotz(22, 12, 10, grauMat, 10, 8, z));
-    for (const y of [3, 13]) torso.add(klotz(60, 3, 6, dunkelMat, 48, y, z));     // die zwei Schienen
-    torso.add(klotz(58, 2, 2, akzentLeucht, 48, 8, z));                           // leuchtender Kern
-    for (const x of [30, 46, 62]) torso.add(klotz(3, 14, 8, akzentMat, x, 8, z)); // Klammern
-    torso.add(rohr(3, 12, stahlMat, 12, 19, z));                                  // Zielfernrohr
-    torso.add(klotz(1, 4, 4, akzentLeucht, 18.5, 19, z));
-    // Kleiner Arm auf der anderen Seite
-    torso.add(klotz(12, 8, 8, grauMat, 8, 8, -22));
+    // 🎯 Adlerauge: eine lange Railgun mit zwei Schienen und leuchtendem Kern (rechter Arm)
+    const z = 22, r = arm(1);
+    r.add(klotz(22, 12, 10, grauMat, 10, 8, z));
+    for (const y of [3, 13]) r.add(klotz(60, 3, 6, dunkelMat, 48, y, z));     // die zwei Schienen
+    r.add(klotz(58, 2, 2, akzentLeucht, 48, 8, z));                           // leuchtender Kern
+    for (const x of [30, 46, 62]) r.add(klotz(3, 14, 8, akzentMat, x, 8, z)); // Klammern
+    r.add(rohr(3, 12, stahlMat, 12, 19, z));                                  // Zielfernrohr
+    r.add(klotz(1, 4, 4, akzentLeucht, 18.5, 19, z));
+    arm(-1).add(klotz(12, 8, 8, grauMat, 8, 8, -22));                          // Kleiner Arm links
   } else {
     // Zwei Maschinengewehre mit je drei Läufen (wie eine Gatling)
     for (const s of [-1, 1]) {
-      torso.add(klotz(10, 10, 8, grauMat, 4, 8, s * 22));            // Oberarm
-      torso.add(klotz(16, 11, 11, teamDunkel, 14, 6, s * 22));       // Waffengehäuse
-      torso.add(klotz(16, 2, 11.5, akzentMat, 14, 11, s * 22));
+      const a = arm(s);
+      a.add(klotz(10, 10, 8, grauMat, 4, 8, s * 22));            // Oberarm
+      a.add(klotz(16, 11, 11, teamDunkel, 14, 6, s * 22));       // Waffengehäuse
+      a.add(klotz(16, 2, 11.5, akzentMat, 14, 11, s * 22));
       for (let i = 0; i < 3; i++) {
         const w = i / 3 * Math.PI * 2;
-        torso.add(rohr(1.3, 22, dunkelMat, 32, 6 + Math.sin(w) * 2.6, s * 22 + Math.cos(w) * 2.6));
+        a.add(rohr(1.3, 22, dunkelMat, 32, 6 + Math.sin(w) * 2.6, s * 22 + Math.cos(w) * 2.6));
       }
-      torso.add(rohr(4, 3, grauMat, 40, 6, s * 22));                  // Mündung
+      a.add(rohr(4, 3, grauMat, 40, 6, s * 22));                  // Mündung
     }
   }
-  // Raketenwerfer auf der Schulter: Der Feuersturm hat zwei große, alle anderen einen
+  // Raketenwerfer oben auf dem Rücken: Der Feuersturm hat zwei große, alle anderen einen
   const raketenLicht = new THREE.MeshBasicMaterial({ color: '#ffd166' });
   const gross = typ.rakete.anzahl > 1;
   for (const s of gross ? [-1, 1] : [-1]) {
-    const y = gross ? 36 : 34, b = gross ? 16 : 12;
-    torso.add(klotz(22, b, 14, teamDunkel, -2, y, s * 18));
-    torso.add(klotz(22.5, 2, 14.5, akzentMat, -2, y + b / 2, s * 18));
+    const y = gross ? 36 : 34, b = gross ? 16 : 12, z = gross ? s * 9 : -8;
+    torso.add(klotz(22, b, 14, teamDunkel, -4, y, z));
+    torso.add(klotz(22.5, 2, 14.5, akzentMat, -4, y + b / 2, z));
     const lichter = gross ? [[-3.5, -3.5], [-3.5, 3.5], [3.5, -3.5], [3.5, 3.5]] : [[0, -3], [0, 3]];
     for (const [dy, dz] of lichter) {
       const l = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 2, 8), raketenLicht);
-      l.rotation.z = Math.PI / 2; l.position.set(9.5, y + dy, s * 18 + dz);
+      l.rotation.z = Math.PI / 2; l.position.set(7.5, y + dy, z + dz);
       torso.add(l);
     }
   }
   // Besonderheiten der Mechs
   if (typ.id === 'koloss') {   // 🛡️ Dicke Panzerplatten an den Seiten und ein Rammschild vorne
-    for (const s of [-1, 1]) torso.add(klotz(30, 22, 5, koerperMat, -2, 12, s * 19.5));
+    for (const s of [-1, 1]) torso.add(klotz(30, 22, 5, koerperMat, -2, 12, s * 17.5));
     torso.add(schraeg(klotz(5, 14, 30, teamDunkel, 19, 3, 0), -0.2));
   }
   if (typ.id === 'blitz') {    // ⚡ Flossen hinten, damit er schnell aussieht
@@ -1822,7 +1902,7 @@ function baueMech(m) {
     for (const s of [-1, 1]) torso.add(klotz(1, 6, 8, leucht('#ff6a00'), 12.6, 0, s * 7));
   }
   // Antenne mit leuchtender Spitze
-  const antZ = gross ? 0 : typ.mg.salve ? 21 : 12;
+  const antZ = gross ? 0 : 10;
   const antenne = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 22, 4), grauMat);
   antenne.position.set(-14, 38, antZ);
   torso.add(antenne);
@@ -1834,7 +1914,9 @@ function baueMech(m) {
   schild.position.y = 44;
   gruppe.add(schild);
   gruppe.scale.setScalar(typ.groesse);
-  return { gruppe, beine, torso, huefte, knie, fuesse, duesen, dueseMat, koerperMat, raketenLicht, schild };
+  // Welche 3D-Gruppe gehört zu welchem Teil? (zum Abschießen)
+  const teile = { armL: arme.armL, armR: arme.armR, beinL: huefte[0], beinR: huefte[1], visier };
+  return { gruppe, beine, torso, huefte, knie, fuesse, duesen, dueseMat, koerperMat, raketenLicht, schild, teile };
 }
 
 const wrackMitte = new THREE.Vector3(), wrackDreh = new THREE.Vector3();
@@ -1859,6 +1941,32 @@ function zeigeWrack(m, g) {
   g.knie.forEach((k, i) => { k.rotation.z = -1 + i * 0.4; });
   g.torso.position.y = 47;
 }
+// ----- Trümmer: abgeschossene Arme und Beine fliegen durch die Gegend -----
+let truemmer = [];
+function truemmerAbwerfen(m, obj) {
+  obj.updateWorldMatrix(true, true);
+  const kopie = obj.clone();
+  obj.matrixWorld.decompose(kopie.position, kopie.quaternion, kopie.scale);
+  szene.add(kopie);
+  const a = Math.random() * Math.PI * 2;
+  truemmer.push({ obj: kopie, vx: Math.cos(a) * 120, vy: 200 + Math.random() * 150, vz: Math.sin(a) * 120,
+    dreh: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12), t: 4 });
+}
+function updateTruemmer(dt) {
+  for (const t of truemmer) {
+    t.t -= dt;
+    const o = t.obj;
+    if (o.position.y > 5) {   // Fliegt noch
+      t.vy -= 900 * dt;
+      o.position.x += t.vx * dt; o.position.y += t.vy * dt; o.position.z += t.vz * dt;
+      o.rotation.x += t.dreh.x * dt; o.rotation.y += t.dreh.y * dt; o.rotation.z += t.dreh.z * dt;
+      if (Math.random() < 0.5) partikel.push({ x: o.position.x, y: o.position.z, h: o.position.y, vh: 10, vx: 0, vy: 0, t: 0.6, max: 0.6, farbe: '#555555', rauch: true });
+    } else if (t.vy < 0) { t.vy = 0; o.position.y = 5; }   // Liegt am Boden
+    if (t.t < 1) o.position.y -= dt * 30;                   // Versinkt langsam
+    if (t.t <= 0) szene.remove(o);
+  }
+  truemmer = truemmer.filter(t => t.t > 0);
+}
 function zeigeMech(m) {
   const g = m.g3;
   if (m.tot) {   // K.o.: Das Wrack fliegt (auch deins – du siehst es von oben!)
@@ -1873,6 +1981,11 @@ function zeigeMech(m) {
   }
   g.gruppe.visible = !m.istSpieler;   // Dich selbst siehst du nicht, du sitzt ja drin!
   if (!g.gruppe.visible) return;
+  for (const [id, obj] of Object.entries(g.teile)) {
+    const dran = hat(m, id);
+    if (!dran && obj.visible) truemmerAbwerfen(m, obj);   // Gerade abgeschossen: Es fliegt weg!
+    obj.visible = dran;
+  }
   g.gruppe.position.set(m.x, m.z, m.y);
   g.beine.rotation.y = -m.laufWinkel;
   g.torso.rotation.y = -m.zielWinkel;
@@ -2050,18 +2163,21 @@ muendungsBlitz.scale.set(14, 14, 1);
 function baueWaffen(typ) {
   while (waffen.children.length) waffen.remove(waffen.children[0]);
   const mat = metall(TEAMS.blau.farbe), akzent = metall(typ.akzent);
-  if (typ.mg.salve) {   // ☄️ Raketenwerfer rechts, schräg nach oben
-    const werfer = new THREE.Group();
-    werfer.position.set(17, -14, -34);
-    werfer.rotation.x = 0.35;
-    werfer.add(new THREE.Mesh(new THREE.BoxGeometry(18, 14, 26), mat));
-    for (const x of [-5, 0, 5]) for (const y of [-3.5, 3.5]) {
-      const loch = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 1.5, 8), akzent);
-      loch.rotation.x = Math.PI / 2;
-      loch.position.set(x, y, -13.2);
-      werfer.add(loch);
+  if (typ.mg.salve) {   // ☄️ Zwei Raketenwerfer, links und rechts, schräg nach oben
+    for (const s of [-1, 1]) {
+      const werfer = new THREE.Group();
+      werfer.position.set(s * 18, -14, -34);
+      werfer.rotation.x = 0.35;
+      werfer.add(new THREE.Mesh(new THREE.BoxGeometry(14, 12, 26), mat));
+      for (const x of [-3.5, 3.5]) for (const y of [-3, 3]) {
+        const loch = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 1.5, 8), akzent);
+        loch.rotation.x = Math.PI / 2;
+        loch.position.set(x, y, -13.2);
+        werfer.add(loch);
+      }
+      werfer.userData.teil = s < 0 ? 'armL' : 'armR';
+      waffen.add(werfer);
     }
-    waffen.add(werfer);
     blitzMat.color.set('#ffb347');
     waffen.add(muendungsBlitz);
     waffen.userData.muendungZ = -50;
@@ -2079,12 +2195,14 @@ function baueWaffen(typ) {
     const lauf = new THREE.Mesh(new THREE.CylinderGeometry(typ.mg.strahl ? 2.4 : 1.8, 2.2, laenge, 10), dunkelMat);
     lauf.rotation.x = Math.PI / 2;
     lauf.position.set(s * 15, -13, -30 - laenge / 2);
+    for (const o of [halter, streifen, lauf]) o.userData.teil = s < 0 ? 'armL' : 'armR';
     waffen.add(halter, streifen, lauf);
   }
   if (typ.mg.strahl) {
     for (const z of [-40, -52, -64]) {   // leuchtende Ringe an der Railgun
       const ring = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 1.5, 12), akzent);
       ring.rotation.x = Math.PI / 2; ring.position.set(15, -13, z);
+      ring.userData.teil = 'armR';
       waffen.add(ring);
     }
   }
@@ -2149,13 +2267,14 @@ function zeichne3D() {
     kamera.position.set(m.x + (Math.random() - 0.5) * wackeln, m.z + AUGEN_HOEHE * m.typ.groesse + wippen + (Math.random() - 0.5) * wackeln, m.y);
     kamera.rotation.set(blick.hoch, -blick.links - Math.PI / 2, 0);
     waffen.visible = true;
+    for (const o of waffen.children) if (o.userData.teil) o.visible = hat(m, o.userData.teil);   // Arm ab = Waffe weg
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
     muendungsBlitz.visible = muendung > 0;
     muendungsBlitz.position.set(m.typ.mg.strahl ? 15 : (m.typ.mg.salve ? 17 : m.lauf * 15), waffen.userData.muendungY, waffen.userData.muendungZ);
   } else {
     // Zerstört: Die Kamera fliegt hoch und schaut auf dein Wrack
     const w = m.wrack;
-    const k = Math.min(1, (NEUSTART_ZEIT - m.neustart) / 1.5);
+    const k = Math.min(1, m.totZeit / 1.5);
     kamera.position.set(w.x - Math.cos(blick.links) * 160 * k, w.z + AUGEN_HOEHE + 200 * k, w.y - Math.sin(blick.links) * 160 * k);
     kamera.lookAt(w.x, w.z, w.y);
     waffen.visible = false;
@@ -2193,8 +2312,9 @@ function zeichneNamen() {
     text(`${m.typ.emoji} ${m.name}`, p.x, p.y - 12 * s, 13 * s, T.hell);
     const b = 50 * s;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(p.x - b / 2 - 1, p.y - 2, b + 2, 6);
-    ctx.fillStyle = m.leben > 35 ? (freund ? '#4ade80' : '#ff6b6b') : '#ffd166';
-    ctx.fillRect(p.x - b / 2, p.y - 1, b * m.leben / m.typ.leben, 4);
+    const gesund = gesundheit(m);
+    ctx.fillStyle = gesund > 0.35 ? (freund ? '#4ade80' : '#ff6b6b') : '#ffd166';
+    ctx.fillRect(p.x - b / 2, p.y - 1, b * gesund, 4);
   }
 }
 
@@ -2229,7 +2349,7 @@ function zeichneCockpit() {
   ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, H - 60); ctx.lineTo(60, H); ctx.fill();
   ctx.beginPath(); ctx.moveTo(W, H); ctx.lineTo(W, H - 60); ctx.lineTo(W - 60, H); ctx.fill();
   // Rote Ränder, wenn du wenig Leben hast
-  if (spieler.leben < 35 && !spieler.tot) {
+  if (gesundheit(spieler) < 0.35 && !spieler.tot) {
     const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.8);
     g.addColorStop(0, 'rgba(255,0,0,0)');
     g.addColorStop(1, `rgba(255,0,0,${0.25 + Math.sin(zeit * 6) * 0.1})`);
@@ -2237,6 +2357,36 @@ function zeichneCockpit() {
   }
 }
 
+// Dein Mech von hinten: Jedes Teil hat eine Farbe (grün = gut, gelb = angeschlagen, rot = fast kaputt, grau = ab!)
+function zeichneMechTeile(m, x, y, s) {
+  const teile = {   // [links, oben, breite, höhe] – von hinten gesehen, also links = links
+    visier: [-11, 0, 22, 14],
+    mitte:  [-20, 17, 40, 40],
+    armL:   [-37, 17, 14, 38],
+    armR:   [23, 17, 14, 38],
+    beinL:  [-18, 60, 15, 42],
+    beinR:  [3, 60, 15, 42],
+  };
+  for (const [id, [lx, ly, b, h]] of Object.entries(teile)) {
+    const a = teilAnteil(m, id);
+    const px = x + lx * s, py = y + ly * s, pb = b * s, ph = h * s;
+    const getroffen = m.seitHit < 0.15 && a > 0;
+    ctx.fillStyle = a <= 0 ? 'rgba(60,64,76,0.6)' : getroffen ? '#ffffff' : a > 0.6 ? '#4ade80' : a > 0.3 ? '#ffd166' : '#ff6b6b';
+    rr(px, py, pb, ph, 4 * s); ctx.fill();
+    // Wichtige Teile (die K.o. machen) bekommen einen weißen Rand
+    const wichtig = id === 'mitte' || id === 'visier';
+    ctx.strokeStyle = a <= 0 ? '#ff6b6b' : wichtig ? '#ffffff' : 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = wichtig ? 2 : 1.5; ctx.stroke();
+    if (a <= 0) {   // Kaputt: rotes X
+      ctx.beginPath();
+      ctx.moveTo(px + 3, py + 3); ctx.lineTo(px + pb - 3, py + ph - 3);
+      ctx.moveTo(px + pb - 3, py + 3); ctx.lineTo(px + 3, py + ph - 3);
+      ctx.stroke();
+    } else if (pb > 20 && ph > 20) {
+      text(`${Math.ceil(a * 100)}`, px + pb / 2, py + ph / 2 + 1, 11 * s, '#1b1f3a', 'center', false);
+    }
+  }
+}
 function zeichneHUD() {
   zeichneCockpit();
   zeichneNamen();
@@ -2275,19 +2425,24 @@ function zeichneHUD() {
   // ----- Unten links: Dein Mech -----
   const m = spieler;
   ctx.fillStyle = 'rgba(15,17,24,0.85)';
-  rr(12, H - 92, 290, 80, 12); ctx.fill();
-  text(`${m.typ.emoji} ${m.typ.name}`, 22, H - 106, 16, m.typ.akzent, 'left');
-  text('❤️', 32, H - 72, 18, '#fff', 'center', false);
-  balken(50, H - 80, 236, 16, m.leben / m.typ.leben, m.leben > 35 ? '#4ade80' : '#ff6b6b');
-  text(`${Math.ceil(m.leben)}`, 168, H - 72, 13, '#fff');
+  rr(12, H - 150, 290, 138, 12); ctx.fill();
+  text(`${m.typ.emoji} ${m.typ.name}`, 22, H - 164, 16, m.typ.akzent, 'left');
+  zeichneMechTeile(m, 66, H - 140, 1.2);
   const rBereit = m.raketePause <= 0;
-  text('🚀', 32, H - 44, 16, '#fff', 'center', false);
-  balken(50, H - 50, 100, 12, rBereit ? 1 : 1 - m.raketePause / m.typ.rakete.pause, rBereit ? '#ffd166' : '#8a8f9e');
-  text(rBereit && !touchModus ? 'Rechtsklick' : '', 100, H - 30, 10, '#c9c3ff', 'center', false);
-  const bBereit = m.boostPause <= 0;
-  text('💨', 170, H - 44, 16, '#fff', 'center', false);
-  balken(186, H - 50, 100, 12, bBereit ? 1 : 1 - m.boostPause / m.typ.boostPause, bBereit ? '#6fe3ff' : '#8a8f9e');
-  text(bBereit && !touchModus ? 'Shift' : '', 236, H - 30, 10, '#c9c3ff', 'center', false);
+  text('🚀', 140, H - 122, 16, '#fff', 'center', false);
+  balken(158, H - 128, 128, 12, rBereit ? 1 : 1 - m.raketePause / m.typ.rakete.pause, rBereit ? '#ffd166' : '#8a8f9e');
+  text(rBereit && !touchModus ? 'Rechtsklick' : '', 222, H - 106, 10, '#c9c3ff', 'center', false);
+  text('💨', 140, H - 84, 16, '#fff', 'center', false);
+  const humpelt = !hat(m, 'beinL') || !hat(m, 'beinR');
+  if (m.typ.keinBoost) text('kein Boost', 222, H - 84, 12, '#8a8f9e', 'center', false);
+  else if (humpelt) text('Bein ab!', 222, H - 84, 12, '#ff6b6b', 'center', false);
+  else {
+    const bBereit = m.boostPause <= 0;
+    balken(158, H - 90, 128, 12, bBereit ? 1 : 1 - m.boostPause / m.typ.boostPause, bBereit ? '#6fe3ff' : '#8a8f9e');
+    text(bBereit && !touchModus ? 'Shift' : '', 222, H - 68, 10, '#c9c3ff', 'center', false);
+  }
+  text('K.o., wenn Mitte, Visier', 222, H - 44, 11, '#c9c3ff', 'center', false);
+  text('oder beide Beine kaputt!', 222, H - 29, 11, '#c9c3ff', 'center', false);
 
   // ----- Oben rechts: Wer hat wen zerstört? -----
   killfeed.forEach((k, i) => {
@@ -2346,7 +2501,8 @@ function zeichneHUD() {
   if (m.tot && zustand === 'spiel') {
     ctx.fillStyle = 'rgba(80,0,0,0.3)'; ctx.fillRect(0, 0, W, H);
     text('💥 ZERSTÖRT! 💥', W / 2, H / 2 - 40, 48, '#ff6b6b');
-    if (m.zerstoertVon) text(`von ${m.zerstoertVon.name}`, W / 2, H / 2 + 5, 20, TEAMS[m.zerstoertVon.team].hell);
+    if (m.zerstoertVon) text(`von ${m.zerstoertVon.name}${m.koGrund ? ' · ' + m.koGrund : ''}`, W / 2, H / 2 + 5, 20, TEAMS[m.zerstoertVon.team].hell);
+    else if (m.koGrund) text(m.koGrund, W / 2, H / 2 + 5, 20, '#fff');
     text(`Neustart in ${Math.ceil(m.neustart)} ...`, W / 2, H / 2 + 45, 22, '#fff');
   }
 
@@ -2442,10 +2598,12 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
   ctx.restore();
   ctx.rotate(zielWinkel);
   ctx.fillStyle = '#4b5060'; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
-  if (typ.mg.salve) {   // Raketenwerfer mit 9 Rohren
-    ctx.fillStyle = T.dunkel; rr(-22, 2, 28, 26, 4); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = typ.akzent;
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { kreis(-16 + i * 8, 8 + j * 7, 2.5); ctx.fill(); }
+  if (typ.mg.salve) {   // Zwei Raketenwerfer an den Armen
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = T.dunkel; rr(4, s > 0 ? 14 : -28, 26, 14, 4); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = typ.akzent;
+      for (let i = 0; i < 3; i++) { kreis(10 + i * 8, s > 0 ? 21 : -21, 2.3); ctx.fill(); }
+    }
     ctx.fillStyle = '#4b5060';
   }
   else if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
@@ -2744,7 +2902,7 @@ function zeichneTouch() {
   const m = spieler;
   if (m.tot) return;
   // Joystick
-  const s = touch.stick || { x: 150, y: 400, kx: 150, ky: 400 };
+  const s = touch.stick || { x: 150, y: 350, kx: 150, ky: 350 };
   ctx.globalAlpha = touch.stick ? 0.8 : 0.35;
   ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
   kreis(s.x, s.y, STICK_RADIUS); ctx.fill(); ctx.stroke();
