@@ -17,6 +17,7 @@ const TEAM_GROESSE = 4;               // So viele Mechs pro Team
 const MECH_RADIUS = 26;               // Wie dick ein Mech ist (zum Laufen)
 const BOOST_TEMPO = 560;              // Wie schnell der Boost ist
 const BOOST_DAUER = 0.25;             // Wie lange der Boost dauert (Sekunden)
+const BOOST_AN = false;               // Boost an oder aus? (true = an, false = aus)
 const RAKETE_TEMPO = 480;
 const RAKETE_WEITE = 750;
 const NEUSTART_ZEIT = 5;              // Sekunden, bis ein zerstörter Mech wiederkommt
@@ -45,7 +46,7 @@ const MECH_TYPEN = [
     mg: { pause: 0.11, schaden: 6, tempo: 900, weite: 650, streuung: 0.05 },
     rakete: { pause: 4, schaden: 40, radius: 85, anzahl: 1 },
     sterne: { leben: 3, tempo: 3, schaden: 3, weite: 3 } },
-  { id: 'blitz', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell und boostet ständig, hält aber wenig aus.',
+  { id: 'blitz', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell, hält aber wenig aus.',
     leben: 80, tempo: 290, groesse: 0.85, boostPause: 1.2,
     mg: { pause: 0.075, schaden: 5, tempo: 950, weite: 550, streuung: 0.07 },
     rakete: { pause: 5, schaden: 30, radius: 70, anzahl: 1 },
@@ -65,7 +66,7 @@ const MECH_TYPEN = [
     mg: { pause: 0.13, schaden: 5, tempo: 900, weite: 600, streuung: 0.06 },
     rakete: { pause: 4.5, schaden: 28, radius: 80, anzahl: 3 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 3 } },
-  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie mit 2 Werfern an den Armen! Ziel anvisieren, dann regnen 10 Raketen runter. Kein Boost!',
+  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie mit 2 Werfern an den Armen! Ziel anvisieren, dann regnen 10 Raketen runter. Hoch schauen = weiter!',
     leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5, keinBoost: true,   // keinBoost: kann nicht boosten
     // salve: Erst anvisieren (zielZeit), dann fliegen "anzahl" Raketen im Bogen und landen im Kreis (streuRadius) ums Ziel
     mg: { salve: true, pause: 5.5, zielZeit: 0.5, anzahl: 10, abstand: 0.1, schaden: 18, radius: 60, streuRadius: 110, tempo: 750, weite: 1100, minWeite: 180 },
@@ -794,7 +795,7 @@ function mechsSchieben() {   // Mechs können nicht ineinander laufen
 }
 
 function boosten(m, richtung) {
-  if (m.boostPause > 0 || m.tot || m.typ.keinBoost) return;
+  if (!BOOST_AN || m.boostPause > 0 || m.tot || m.typ.keinBoost) return;
   if (!hat(m, 'beinL') || !hat(m, 'beinR')) return;   // Mit einem Bein kann man nicht boosten
   m.boostZeit = BOOST_DAUER;
   m.boostPause = m.typ.boostPause;
@@ -2584,9 +2585,10 @@ function zeichneHUD() {
   text('🚀', 140, H - 122, 16, '#fff', 'center', false);
   balken(158, H - 128, 128, 12, rBereit ? 1 : 1 - m.raketePause / m.typ.rakete.pause, rBereit ? '#ffd166' : '#8a8f9e');
   text(rBereit && !touchModus ? 'Rechtsklick' : '', 222, H - 106, 10, '#c9c3ff', 'center', false);
-  text('💨', 140, H - 84, 16, '#fff', 'center', false);
   const humpelt = !hat(m, 'beinL') || !hat(m, 'beinR');
-  if (m.typ.keinBoost) text('kein Boost', 222, H - 84, 12, '#8a8f9e', 'center', false);
+  if (BOOST_AN) text('💨', 140, H - 84, 16, '#fff', 'center', false);
+  if (!BOOST_AN) { if (humpelt) text('🦵 Bein ab – du humpelst!', 222, H - 84, 12, '#ff6b6b', 'center', false); }
+  else if (m.typ.keinBoost) text('kein Boost', 222, H - 84, 12, '#8a8f9e', 'center', false);
   else if (humpelt) text('Bein ab!', 222, H - 84, 12, '#ff6b6b', 'center', false);
   else {
     const bBereit = m.boostPause <= 0;
@@ -2814,7 +2816,7 @@ function zeichneTitel() {
     umbrechen(k.m.text, k.x + 16, k.y + 62, k.w - 32, 17, 13, '#c9c3ff');
   }
 
-  text('🎮 WASD: Laufen  ·  Maus: Umschauen  ·  Linksklick: MG  ·  Rechtsklick / Q: Rakete  ·  Shift: Boost  ·  Esc: Pause', W / 2, 455, 13, '#c9c3ff', 'center', false);
+  text(`🎮 WASD: Laufen  ·  Maus: Umschauen  ·  Linksklick: MG  ·  Rechtsklick / Q: Rakete${BOOST_AN ? '  ·  Shift: Boost' : ''}  ·  Esc: Pause`, W / 2, 455, 13, '#c9c3ff', 'center', false);
   text(`Du (blau) + 3 Computer-Mechs gegen ${TEAM_GROESSE} Gegner (rot)  ·  ${MECH_TYPEN.length} verschiedene Mechs!`, W / 2, 478, 13, '#8a8fb0', 'center', false);
   text('Karte:', W / 2, 498, 13, '#8a8fb0', 'center', false);
   for (const b of kartenKnoepfe()) {
@@ -3012,7 +3014,7 @@ const TOUCH_KNOEPFE = {
 const MENUE_KNOPF = { x: W / 2 - 90, y: H / 2 + 65, w: 180, h: 46 };
 const finger = new Map();   // Welcher Finger macht gerade was?
 function knopfBei(p) {
-  for (const [name, k] of Object.entries(TOUCH_KNOEPFE)) if (Math.hypot(p.x - k.x, p.y - k.y) < k.r + 12) return name;
+  for (const [name, k] of Object.entries(TOUCH_KNOEPFE)) if ((name !== 'boost' || BOOST_AN) && Math.hypot(p.x - k.x, p.y - k.y) < k.r + 12) return name;
   return null;
 }
 function touchRunter(e) {
@@ -3086,7 +3088,7 @@ function zeichneTouch() {
   const mg = m.typ.mg;
   knopf('feuer', mg.salve ? '☄️' : mg.strahl ? '🎯' : '🔫', mg.salve || mg.strahl ? Math.max(0, 1 - m.mgPause / mg.pause) : 1, m.typ.akzent);
   knopf('rakete', '🚀', Math.max(0, 1 - m.raketePause / m.typ.rakete.pause), '#ffd166');
-  knopf('boost', '💨', Math.max(0, 1 - m.boostPause / m.typ.boostPause), '#6fe3ff');
+  if (BOOST_AN) knopf('boost', '💨', Math.max(0, 1 - m.boostPause / m.typ.boostPause), '#6fe3ff');
   knopf('pause', '⏸️', 1, '#fff');
 }
 
