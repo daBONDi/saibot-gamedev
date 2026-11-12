@@ -604,7 +604,8 @@ function bodenHoeheBei(x, z, y) {
     if (e > 0 && haus.treppen.some(t => t.e + 1 === e && imLoch(t, x, z))) continue;   // Da ist ein Loch
     pruefe(e * ETAGE_HOEHE);
   }
-  for (const t of haus.treppen) if (aufRampe(t, x, z)) pruefe(rampenHoehe(t, x));
+  // Auf der Rampe? Dann die Rampe nehmen, wenn sie nah genug ist (sonst läuft man unten durch)
+  for (const t of haus.treppen) if (aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - y) < 0.6) return rampenHoehe(t, x);
   return beste;
 }
 // Wohin muss jemand (Monster oder Helfer) jetzt laufen, um zum Ziel zu kommen? (durch Türen und über Treppen!)
@@ -920,6 +921,8 @@ function baueTreppe(t) {
   const laenge = Math.hypot(lauf, ETAGE_HOEHE), dicke = 0.15;
   const q = new CANNON.Quaternion(); q.setFromEuler(0, 0, winkel);
   festerKoerper((x1 + x2) / 2 + Math.sin(winkel) * dicke / 2, t.basis + ETAGE_HOEHE / 2 - Math.cos(winkel) * dicke / 2, zm, laenge, dicke, breite, q);
+  // Festes Geländer an der offenen Seite (damit niemand seitlich runterfällt)
+  festerKoerper((x1 + x2) / 2 - Math.sin(winkel) * 0.5, t.basis + ETAGE_HOEHE / 2 + Math.cos(winkel) * 0.5, z2 + 0.04, laenge, 1.0, 0.08, q);
   // Unter der Treppe ist es fest (sonst könnte man in die Stufen hineinlaufen)
   festerKoerper(x1 + 3.6, t.basis + 0.5, zm, 2.0, 1.0, breite);
   festerKoerper((x1 + 4.6 + x2) / 2, t.basis + 1.0, zm, x2 - x1 - 4.6, 2.0, breite);
