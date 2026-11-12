@@ -2571,8 +2571,10 @@ function schleife(jetzt) {
   const dt = Math.min(0.05, (jetzt - letzte) / 1000);
   letzte = jetzt;
   zeit += dt;
-  update(dt);
-  zeichne();
+  // Wenn irgendwo ein Fehler passiert, soll das Spiel nicht einfrieren, sondern einfach weiterlaufen.
+  // Der Fehler steht dann in der Browser-Konsole (F12), damit man ihn finden kann.
+  try { update(dt); } catch (e) { console.error('Fehler in update:', e); }
+  try { zeichne(); } catch (e) { console.error('Fehler beim Zeichnen:', e); }
   requestAnimationFrame(schleife);
 }
 requestAnimationFrame(schleife);
