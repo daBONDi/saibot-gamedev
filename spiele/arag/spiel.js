@@ -2,6 +2,7 @@
 // Du bist ein kleiner Aufräum-Roboter. Im dunklen Spukhaus liegen wertvolle Schätze herum.
 // Hol sie mit deinem Greifstrahl und bring sie zum Transporter – aber vorsichtig!
 // Jeder Stoß kostet Geld, und in den Gängen lauern Monster ...
+// Zum Glück hast du Kollegen: Die Helfer-Bots tragen auch Schätze zum Transporter.
 //
 // So ist das Spiel aufgebaut:
 //   - Three.js zeichnet die 3D-Welt.
@@ -17,10 +18,12 @@ const W = canvas.width, H = canvas.height;
 // ===== Einstellungen (hier kannst du rumprobieren!) =====
 const RAUM = 10;                 // Ein Raum ist 10 x 10 Meter groß
 const WAND_HOEHE = 3.2;          // So hoch sind die Wände
-const TUER_BREITE = 2.2;         // So breit sind die Türen
+const TUER_BREITE = 2.2;         // So breit sind normale Türen
+const DURCHGANG_BREITE = 5.5;    // So breit sind große offene Durchgänge
 const TUER_HOEHE = 2.4;          // So hoch sind die Türen
 const LAUF_TEMPO = 4;            // Normal laufen (Meter pro Sekunde)
 const RENN_TEMPO = 6.5;          // Rennen mit Shift
+const DUCK_TEMPO = 2;            // Geduckt laufen mit C
 const AUSDAUER_MAX = 100;        // So lange kannst du rennen
 const SPRUNG = 5;                // Wie hoch du springst
 const GREIF_WEITE = 3.5;         // So weit reicht dein Greifstrahl
@@ -28,8 +31,23 @@ const WURF_KRAFT = 12;           // So fest wirfst du
 const STOSS_GRENZE = 3;          // Ab diesem Aufprall-Tempo bekommt ein Schatz Kratzer
 const KAPUTT_BEI = 0.15;         // Fällt der Wert unter 15 %, geht der Schatz kaputt!
 const MAUS_EMPFINDLICH = 0.0022; // Wie schnell du dich mit der Maus drehst
-const AUGEN_HOEHE = 0.85;        // So weit über der Körpermitte ist die Kamera
 const KOERPER_RADIUS = 0.45;     // So dick ist dein Roboter
+const DUCK_RADIUS = 0.28;        // So klein bist du geduckt (passt unter Tische!)
+const AUGEN_HOEHE = 0.85;        // So weit über der Körpermitte ist die Kamera
+const DUCK_AUGEN = 0.35;         // ... und geduckt
+const DUCK_SICHT = 0.55;         // Geduckt sehen dich Monster nur aus so viel der normalen Entfernung
+const MAX_LAMPEN = 12;           // So viele Lichter gibt es höchstens (mehr wird langsam)
+
+// ===== Die Helfer-Bots =====
+const HELFER_ANZAHL = 2;         // So viele Kollegen helfen dir (0 bis 3)
+const HELFER = [
+  { name: 'Bolzen', farbe: '#ffb347' },
+  { name: 'Funke', farbe: '#ff6fb5' },
+  { name: 'Schraubi', farbe: '#6fa8ff' },
+];
+const HELFER_TEMPO = 3.2;        // So schnell laufen die Helfer
+const HELFER_TRAGE_TEMPO = 2.2;  // ... und so schnell, wenn sie was tragen
+const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn ein Monster ihn erwischt
 
 // ===== Die Schätze =====
 // wert: [von, bis] in Euro      zerbrechlich: wie leicht er Kratzer bekommt (1 = normal, 2 = superleicht)
@@ -50,11 +68,13 @@ const SCHAETZE = [
 // Jedes Level hat ein größeres Haus, ein höheres Ziel und mehr Monster
 function levelDaten(n) {
   return {
-    breit: Math.min(6, 3 + Math.floor(n / 2)),        // Räume nebeneinander
-    tief: Math.min(4, 3 + Math.floor((n - 1) / 3)),    // Räume hintereinander
-    ziel: 2000 + (n - 1) * 1500,                       // So viel Geld musst du abliefern
+    breit: Math.min(7, 4 + Math.floor((n - 1) / 2)),   // Räume nebeneinander
+    tief: Math.min(5, 3 + Math.floor(n / 2)),          // Räume hintereinander
+    ziel: 3000 + (n - 1) * 2000,                       // So viel Geld musst du abliefern
     geister: 1 + Math.floor((n - 1) / 2),              // 👻 Staubgeister
+    krabbler: 1 + Math.floor((n - 1) / 2),             // 🕷️ Krabbler
     lauscher: n >= 2 ? 1 + Math.floor((n - 2) / 3) : 0, // 👂 Lauscher (ab Level 2)
+    starrer: n >= 3 ? 1 + Math.floor((n - 3) / 3) : 0,  // 🗿 Starrer (ab Level 3)
   };
 }
 
@@ -64,6 +84,7 @@ const zufallGanz = (a, b) => Math.floor(zufall(a, b + 1));
 const auswahl = arr => arr[Math.floor(Math.random() * arr.length)];
 const begrenzt = (v, a, b) => Math.max(a, Math.min(b, v));
 const abstand2D = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+const mischen = arr => arr.map(x => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 function gewichtetWaehlen(liste) {
   let summe = 0;
   for (const t of liste) summe += t.haeufig;
@@ -159,6 +180,8 @@ const sound = {
   stoss(laut = 1) { if (!spiele('stoss', 0.6 * laut, zufall(0.85, 1.15))) ton(200, 0, 0.1, 'square', 0.1 * laut, 80); },
   geist() { if (!spiele('geist', 0.6, 0.8)) ton(300, 0, 0.8, 'sine', 0.1, 150); },
   lauscher() { if (!spiele('lauscher', 0.7, 0.7)) ton(120, 0, 0.6, 'sawtooth', 0.1, 60); },
+  krabbler() { if (!spiele('geist', 0.5, 2.2)) ton(900, 0, 0.3, 'square', 0.06, 1400); },
+  knirsch() { if (!spiele('stoss', 0.8, 0.45)) ton(70, 0, 0.4, 'sawtooth', 0.12, 40); },   // Stein schabt über den Boden ...
   autsch() { if (!spiele('autsch', 0.8, 0.8)) ton(150, 0, 0.3, 'sawtooth', 0.15, 60); },
   strahl() { if (!spiele('strahl', 0.25, 1.4)) ton(600, 0, 0.15, 'sine', 0.05, 900); },
   abgabe() { if (!spiele('abgabe', 0.5)) ton(880, 0, 0.2, 'square', 0.08, 1320); },
@@ -166,6 +189,7 @@ const sound = {
   herz(laut) { ton(55, 0, 0.12, 'sine', 0.3 * laut); ton(50, 0.16, 0.12, 'sine', 0.22 * laut); },
   schritt() { ton(90, 0, 0.06, 'sine', 0.05, 50); },
   sprung() { ton(300, 0, 0.15, 'sine', 0.05, 500); },
+  ducken() { ton(200, 0, 0.08, 'sine', 0.04, 140); },
   piep() { ton(660, 0, 0.1, 'square', 0.06); },
 };
 
@@ -219,18 +243,37 @@ function malTextur(b, h, malen, wiederholen = true) {
   t.anisotropy = 4;
   return t;
 }
-const holzTextur = malTextur(256, 256, (g, b, h) => {   // Holzdielen
-  for (let i = 0; i < 4; i++) {
-    g.fillStyle = ['#5a3d2b', '#4e3424', '#634431', '#553a29'][i];
-    g.fillRect(0, i * 64, b, 64);
-    g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 3;
-    g.beginPath(); g.moveTo(0, i * 64); g.lineTo(b, i * 64); g.stroke();
-    const fuge = (i * 97) % b;
-    g.beginPath(); g.moveTo(fuge, i * 64); g.lineTo(fuge, i * 64 + 64); g.stroke();
-    g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1;
-    for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(0, i * 64 + 10 + k * 11); g.lineTo(b, i * 64 + 8 + k * 11); g.stroke(); }
-  }
-});
+// --- Böden ---
+const BOEDEN = {
+  holz: malTextur(256, 256, (g, b) => {   // Holzdielen
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle = ['#5a3d2b', '#4e3424', '#634431', '#553a29'][i];
+      g.fillRect(0, i * 64, b, 64);
+      g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(0, i * 64); g.lineTo(b, i * 64); g.stroke();
+      const fuge = (i * 97) % b;
+      g.beginPath(); g.moveTo(fuge, i * 64); g.lineTo(fuge, i * 64 + 64); g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1;
+      for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(0, i * 64 + 10 + k * 11); g.lineTo(b, i * 64 + 8 + k * 11); g.stroke(); }
+    }
+  }),
+  fliesen: malTextur(128, 128, (g) => {   // Schachbrett-Fliesen
+    for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++) {
+      g.fillStyle = (x + y) % 2 ? '#2b2b30' : '#b9b5aa'; g.fillRect(x * 64, y * 64, 64, 64);
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 2; g.strokeRect(0, 0, 128, 128); g.strokeRect(0, 0, 64, 64); g.strokeRect(64, 64, 64, 64);
+  }),
+  teppich: malTextur(128, 128, (g) => {   // Teppichboden
+    g.fillStyle = '#4a1f2a'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(255,200,150,0.08)';
+    for (let x = 0; x < 128; x += 16) for (let y = 0; y < 128; y += 16) if ((x + y) % 32 === 0) g.fillRect(x + 4, y + 4, 8, 8);
+  }),
+  beton: malTextur(128, 128, (g) => {   // Beton
+    g.fillStyle = '#4a4c50'; g.fillRect(0, 0, 128, 128);
+    for (let k = 0; k < 400; k++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},0.06)`; g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2); }
+    g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 2; g.strokeRect(0, 0, 128, 128);
+  }),
+};
 const TAPETEN = ['#6b4f4f', '#4f5d6b', '#5d6b4f', '#6b604f', '#584f6b', '#4f6b66'].map(farbe => malTextur(128, 128, (g, b, h) => {
   g.fillStyle = farbe; g.fillRect(0, 0, b, h);
   g.fillStyle = 'rgba(255,255,255,0.07)';
@@ -243,11 +286,61 @@ const deckenTextur = malTextur(64, 64, (g, b, h) => {
   g.fillStyle = '#2a2622'; g.fillRect(0, 0, b, h);
   g.strokeStyle = '#1f1c19'; g.lineWidth = 2; g.strokeRect(0, 0, b, h);
 });
+// --- Deko-Texturen ---
+const buecherTextur = malTextur(256, 64, (g) => {   // Buchrücken in vielen Farben
+  let x = 0;
+  while (x < 256) {
+    const b = zufallGanz(6, 14), h = zufallGanz(40, 62);
+    g.fillStyle = auswahl(['#7f1d1d', '#1e3a8a', '#14532d', '#713f12', '#4c1d95', '#334155', '#9a3412']);
+    g.fillRect(x, 64 - h, b, h);
+    g.fillStyle = 'rgba(255,215,120,0.6)'; g.fillRect(x + 1, 64 - h + 6, b - 2, 2);
+    x += b + 1;
+  }
+});
+const teppichTextur = malTextur(256, 192, (g) => {   // Ein schöner alter Teppich
+  g.fillStyle = '#5b1a1a'; g.fillRect(0, 0, 256, 192);
+  g.strokeStyle = '#c9a14a'; g.lineWidth = 6; g.strokeRect(10, 10, 236, 172);
+  g.lineWidth = 2; g.strokeRect(22, 22, 212, 148);
+  g.fillStyle = '#1e3a5f'; g.beginPath(); g.ellipse(128, 96, 60, 40, 0, 0, 7); g.fill();
+  g.strokeStyle = '#c9a14a'; g.beginPath(); g.ellipse(128, 96, 60, 40, 0, 0, 7); g.stroke();
+  g.fillStyle = '#c9a14a';
+  for (const [x, y] of [[40, 40], [216, 40], [40, 152], [216, 152]]) { g.beginPath(); g.arc(x, y, 8, 0, 7); g.fill(); }
+}, false);
+const netzTextur = malTextur(128, 128, (g) => {   // Spinnennetz
+  g.strokeStyle = 'rgba(230,230,230,0.55)'; g.lineWidth = 1;
+  for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI / 2; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * 128, Math.sin(a) * 128); g.stroke(); }
+  for (let r = 15; r < 128; r += 15) { g.beginPath(); g.arc(0, 0, r, 0, Math.PI / 2); g.stroke(); }
+}, false);
+const fensterTextur = malTextur(128, 128, (g) => {   // Ein Fenster mit Mondschein
+  const v = g.createLinearGradient(0, 0, 0, 128);
+  v.addColorStop(0, '#1d2b4f'); v.addColorStop(1, '#0b1020');
+  g.fillStyle = v; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#e8f0ff'; g.beginPath(); g.arc(88, 34, 13, 0, 7); g.fill();
+  g.fillStyle = '#1d2b4f'; g.beginPath(); g.arc(82, 30, 12, 0, 7); g.fill();   // Mondsichel
+  g.fillStyle = 'rgba(255,255,255,0.7)';
+  for (let k = 0; k < 14; k++) g.fillRect(Math.random() * 128, Math.random() * 70, 1.5, 1.5);
+  g.fillStyle = '#0b0b0b'; g.fillRect(0, 100, 128, 28);   // Schwarze Bäume
+  for (let x = 0; x < 128; x += 20) { g.beginPath(); g.moveTo(x, 100); g.lineTo(x + 10, 70 - Math.random() * 20); g.lineTo(x + 20, 100); g.fill(); }
+  g.strokeStyle = '#2d1f14'; g.lineWidth = 8; g.strokeRect(0, 0, 128, 128);
+  g.beginPath(); g.moveTo(64, 0); g.lineTo(64, 128); g.moveTo(0, 64); g.lineTo(128, 64); g.stroke();
+}, false);
+
+// --- Materialien ---
 const holzMat = new THREE.MeshStandardMaterial({ color: '#6b4a32', roughness: 0.8 });
 const dunkelHolzMat = new THREE.MeshStandardMaterial({ color: '#3d2a1d', roughness: 0.8 });
-const stoffMat = new THREE.MeshStandardMaterial({ color: '#5b2a3a', roughness: 1 });
+const hellHolzMat = new THREE.MeshStandardMaterial({ color: '#8a6a48', roughness: 0.7 });
+const STOFFE = ['#5b2a3a', '#2a3b5b', '#3b5b2a', '#5b4a2a', '#4a2a5b'].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+const steinMat = new THREE.MeshStandardMaterial({ color: '#6b6560', roughness: 0.95 });
+const marmorMat = new THREE.MeshStandardMaterial({ color: '#d8d4cc', roughness: 0.3 });
+const schwarzMat = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.9 });
+const weissMat = new THREE.MeshStandardMaterial({ color: '#e9e6df', roughness: 0.6 });
+const tuchMat = new THREE.MeshStandardMaterial({ color: '#cfcac0', roughness: 1 });   // Weiße Tücher über alten Möbeln
+const kistenMat = new THREE.MeshStandardMaterial({ color: '#9a7448', roughness: 0.9 });
+const metallGrauMat = new THREE.MeshStandardMaterial({ color: '#5f646d', metalness: 0.6, roughness: 0.5 });
 const goldMat = new THREE.MeshStandardMaterial({ color: '#d4a537', metalness: 0.9, roughness: 0.3, emissive: '#3a2a05' });
 const metallMat = new THREE.MeshStandardMaterial({ color: '#b8c0cc', metalness: 0.9, roughness: 0.35, emissive: '#111418' });
+const feuerMat = new THREE.MeshBasicMaterial({ color: '#ff8a2a' });
+const buecherMat = new THREE.MeshStandardMaterial({ map: buecherTextur, roughness: 0.9 });
 
 // Schrift als Bild (z. B. für das Transporter-Schild)
 function schildMesh(t, b, h, farbe = '#7cf5c6') {
@@ -258,6 +351,16 @@ function schildMesh(t, b, h, farbe = '#7cf5c6') {
     g.fillStyle = farbe; g.fillText(t, 256, 68);
   }, false);
   return new THREE.Mesh(new THREE.PlaneGeometry(b, h), new THREE.MeshBasicMaterial({ map: tex }));
+}
+function namensSchild(t, farbe) {   // Ein Namensschild, das immer zu dir schaut
+  const tex = malTextur(256, 64, (g) => {
+    g.font = 'bold 40px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.8)'; g.strokeText(t, 128, 34);
+    g.fillStyle = farbe; g.fillText(t, 128, 34);
+  }, false);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  s.scale.set(0.9, 0.225, 1);
+  return s;
 }
 
 // =====================================================================
@@ -271,7 +374,8 @@ welt.defaultContactMaterial.friction = 0.4;
 welt.defaultContactMaterial.restitution = 0.15;
 welt.addContactMaterial(new CANNON.ContactMaterial(spielerMat, standardMat, { friction: 0, restitution: 0 }));
 // Gruppen: Wer stößt mit wem zusammen?
-const G_WAND = 1, G_SPIELER = 2, G_SCHATZ = 4;
+const G_WAND = 1, G_SPIELER = 2, G_SCHATZ = 4, G_HELFER = 8;
+const SCHATZ_MASKE = G_WAND | G_SPIELER | G_SCHATZ | G_HELFER;
 
 // Boden und Decke (unendlich große Flächen)
 const bodenKoerper = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: standardMat, collisionFilterGroup: G_WAND });
@@ -281,10 +385,11 @@ deckenKoerper.quaternion.setFromEuler(Math.PI / 2, 0, 0);
 deckenKoerper.position.y = WAND_HOEHE;
 welt.addBody(bodenKoerper); welt.addBody(deckenKoerper);
 
-// Dein Roboter: eine Kugel, die nicht umkippen kann
+// Dein Roboter: eine Kugel, die nicht umkippen kann (geduckt wird sie kleiner)
+const spielerForm = new CANNON.Sphere(KOERPER_RADIUS);
 const spielerKoerper = new CANNON.Body({
-  mass: 60, shape: new CANNON.Sphere(KOERPER_RADIUS), material: spielerMat, fixedRotation: true,
-  collisionFilterGroup: G_SPIELER, collisionFilterMask: G_WAND | G_SCHATZ,
+  mass: 60, shape: spielerForm, material: spielerMat, fixedRotation: true,
+  collisionFilterGroup: G_SPIELER, collisionFilterMask: G_WAND | G_SCHATZ | G_HELFER,
 });
 spielerKoerper.allowSleep = false;
 welt.addBody(spielerKoerper);
@@ -301,9 +406,11 @@ try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /
 let haus = null;            // Das aktuelle Haus
 let schaetze = [];          // Alle Schätze im Haus
 let monster = [];           // Alle Monster
+let helfer = [];            // Deine Helfer-Bots
 let gegriffen = null, halteAbstand = 2.2, schwebend = null;
 let nachricht = null, schwebeTexte = [], splitter = [];
 let energie = 100, ausdauer = AUSDAUER_MAX, schadenBlitz = 0, schrittZeit = 0, herzZeit = 0, wackeln = 0;
+let geduckt = false;
 let blick = { links: 0, hoch: 0 };
 let amBoden = false, kaputtGrund = '', levelErgebnis = null;
 const tasten = {};
@@ -313,11 +420,22 @@ function schwebeText(x, y, z, t, farbe) { schwebeTexte.push({ p: new THREE.Vecto
 // =====================================================================
 // ===== Das Spukhaus bauen =====
 // =====================================================================
-// Das Haus ist ein Gitter aus Räumen. Zwischen manchen Räumen gibt es Türen.
-// Es wird jedes Level neu und zufällig gebaut!
+// Das Haus ist ein Gitter aus Räumen. Zwischen manchen Räumen gibt es Türen (oder große Durchgänge).
+// Jeder Raum hat ein Thema mit passenden Möbeln. Es wird jedes Level neu und zufällig gebaut!
+//
+// Damit Monster und Helfer immer durchkommen, bleibt in jedem Raum ein Kreuz in der Mitte frei
+// (von Tür zu Tür). Die Möbel stehen in den vier Vierteln (Ecken) des Raumes.
+const RAUM_ARTEN = [
+  { id: 'wohnzimmer',   name: 'Wohnzimmer',    emoji: '🛋️', boden: 'holz',    haeufig: 3,   ecken: ['sofa', 'kamin', 'sessel', 'regal', 'standuhr'], teppich: true },
+  { id: 'bibliothek',   name: 'Bibliothek',    emoji: '📚', boden: 'holz',    haeufig: 2,   ecken: ['regal', 'regal', 'regal', 'lesen', 'kamin'], teppich: true },
+  { id: 'kueche',       name: 'Küche',         emoji: '🍳', boden: 'fliesen', haeufig: 1.5, ecken: ['kueche', 'kueche', 'kuechentisch', 'vorrat'] },
+  { id: 'schlafzimmer', name: 'Schlafzimmer',  emoji: '🛏️', boden: 'teppich', haeufig: 2,   ecken: ['bett', 'schrank', 'kommode', 'sessel'] },
+  { id: 'esszimmer',    name: 'Esszimmer',     emoji: '🍽️', boden: 'holz',    haeufig: 1.5, ecken: ['esstisch', 'esstisch', 'anrichte', 'standuhr', 'kamin'], kronleuchter: true },
+  { id: 'abstellraum',  name: 'Abstellkammer', emoji: '📦', boden: 'beton',   haeufig: 1.2, ecken: ['kisten', 'kisten', 'metallregal', 'zugedeckt', 'zugedeckt'] },
+];
 const hausGruppe = new THREE.Group();
 szene.add(hausGruppe);
-let wandKoerper = [], wandMeshes = [];
+let wandKoerper = [], sichtBlocker = [];   // sichtBlocker: Dadurch kann man nicht durchsehen (Wände, große Möbel)
 
 function raumVon(x, z) {   // In welchem Raum ist dieser Punkt?
   return {
@@ -326,7 +444,8 @@ function raumVon(x, z) {   // In welchem Raum ist dieser Punkt?
   };
 }
 const raumNr = (i, j) => j * haus.breit + i;
-const verbunden = (a, b) => haus.tueren.has(a < b ? `${a}-${b}` : `${b}-${a}`);
+const tuerSchluessel = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`;
+const verbunden = (a, b) => haus.tueren.has(tuerSchluessel(a, b));
 function tuerPunkt(a, b) {   // Die Mitte der Tür zwischen Raum a und b
   const ai = a % haus.breit, aj = Math.floor(a / haus.breit), bi = b % haus.breit, bj = Math.floor(b / haus.breit);
   if (aj === bj) return { x: Math.max(ai, bi) * RAUM, z: aj * RAUM + RAUM / 2 };
@@ -362,21 +481,38 @@ function raumAbstand(a, b) {   // Wie viele Türen liegen dazwischen?
   }
   return tiefe.get(b) ?? 99;
 }
+// Wohin muss jemand (Monster oder Helfer) jetzt laufen, um zum Ziel zu kommen? (durch die Türen!)
+function wegPunkt(von, ziel) {
+  const a = raumVon(von.x, von.z), b = raumVon(ziel.x, ziel.z);
+  const ra = raumNr(a.i, a.j), rb = raumNr(b.i, b.j);
+  if (ra === rb) return ziel;
+  const n = naechsterRaum(ra, rb);
+  if (n === ra) return ziel;
+  const t = tuerPunkt(ra, n);
+  if (abstand2D(von.x, von.z, t.x, t.z) < 0.7) {   // An der Tür: durch in den nächsten Raum!
+    return { x: (n % haus.breit) * RAUM + RAUM / 2, z: Math.floor(n / haus.breit) * RAUM + RAUM / 2 };
+  }
+  return t;
+}
 
-// Ein fester Klotz (Wand, Möbel): sieht man UND stößt man dagegen
-function festerKlotz(x, y, z, b, h, t, mat, sichtBlock = true) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat);
-  mesh.position.set(x, y, z);
-  mesh.castShadow = mesh.receiveShadow = true;
-  hausGruppe.add(mesh);
+// Nur Physik (unsichtbar): Dagegen stößt man
+function festerKoerper(x, y, z, b, h, t) {
   const k = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(b / 2, h / 2, t / 2)), material: standardMat, collisionFilterGroup: G_WAND });
   k.position.set(x, y, z);
   welt.addBody(k);
   wandKoerper.push(k);
-  if (sichtBlock) wandMeshes.push(mesh);
+}
+// Ein fester Klotz (Wand): sieht man UND stößt man dagegen
+function festerKlotz(x, y, z, b, h, t, mat, sicht = true) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = mesh.receiveShadow = true;
+  hausGruppe.add(mesh);
+  festerKoerper(x, y, z, b, h, t);
+  if (sicht) sichtBlocker.push(mesh);
   return mesh;
 }
-// Ein Wandstück von (x1,z1) nach (x2,z2), auf Wunsch mit Tür in der Mitte
+// Ein Wandstück von (x1,z1) nach (x2,z2), auf Wunsch mit Tür (tuer = Breite der Tür, 0 = keine)
 function wandStueck(x1, z1, x2, z2, tuer, mat) {
   const D = 0.3, laenge = Math.hypot(x2 - x1, z2 - z1), entlangX = z1 === z2;
   const stueck = (von, bis, unten, oben) => {
@@ -386,15 +522,250 @@ function wandStueck(x1, z1, x2, z2, tuer, mat) {
     else festerKlotz(x1, (unten + oben) / 2, z1 + mitte, D, oben - unten, l, mat);
   };
   if (!tuer) { stueck(0, laenge, 0, WAND_HOEHE); return; }
-  const a = laenge / 2 - TUER_BREITE / 2, b = laenge / 2 + TUER_BREITE / 2;
+  const a = laenge / 2 - tuer / 2, b = laenge / 2 + tuer / 2;
   stueck(0, a, 0, WAND_HOEHE);
   stueck(b, laenge, 0, WAND_HOEHE);
   stueck(a, b, TUER_HOEHE, WAND_HOEHE);   // Über der Tür
-  // Türrahmen
-  for (const p of [a, b]) {
+  for (const p of [a, b]) {   // Türrahmen
     if (entlangX) festerKlotz(x1 + p, TUER_HOEHE / 2, z1, 0.12, TUER_HOEHE, D + 0.08, dunkelHolzMat, false);
     else festerKlotz(x1, TUER_HOEHE / 2, z1 + p, D + 0.08, TUER_HOEHE, 0.12, dunkelHolzMat, false);
   }
+}
+// Eine Lampe (es gibt nur MAX_LAMPEN, sonst wird das Spiel langsam)
+function lampeHinzu(x, y, z, farbe, staerke, weite, flackern) {
+  if (haus.lampen >= MAX_LAMPEN) return false;
+  haus.lampen++;
+  const licht = new THREE.PointLight(farbe, staerke, weite, 1);
+  licht.position.set(x, y, z);
+  licht.userData.flackern = flackern;
+  licht.userData.stark = staerke;
+  hausGruppe.add(licht);
+  return true;
+}
+
+// ----- Möbel bauen -----
+// Jedes Möbel wird "lokal" gebaut: Der Rücken ist bei z = 0 (an der Wand), vorne ist +z, die Breite geht entlang x.
+// Danach wird es an die richtige Stelle im Raum gedreht und geschoben.
+function neuesMoebel() {
+  const m = { g: new THREE.Group(), boxen: [], ablagen: [], blocker: [], lichter: [] };
+  // b, h, t = Breite, Höhe, Tiefe   x, y, z = Mitte
+  m.box = (b, h, t, x, y, z, mat, o = {}) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = o.schatten !== false;
+    mesh.receiveShadow = true;
+    m.g.add(mesh);
+    if (o.fest) m.boxen.push({ x, y, z, b, h, t });   // Dagegen stößt man
+    if (o.blockt) m.blocker.push(mesh);               // Dadurch sieht man nicht
+    return mesh;
+  };
+  m.teil = (geo, mat, x, y, z) => { const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x, y, z); m.g.add(mesh); return mesh; };
+  m.ablage = (x, z, b, t, y) => m.ablagen.push({ x, z, b, t, y });   // Hier können Schätze liegen
+  // Ein Tisch, unter den man geduckt kriechen kann (nur Platte und Beine sind fest)
+  m.tisch = (b, t, x, z, hoehe = 0.78, mat = holzMat) => {
+    m.box(b, 0.06, t, x, hoehe, z, mat, { fest: true, blockt: true });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) m.box(0.08, hoehe, 0.08, x + sx * (b / 2 - 0.08), hoehe / 2, z + sz * (t / 2 - 0.08), mat, { fest: true });
+    m.ablage(x, z, b - 0.25, t - 0.25, hoehe + 0.03);
+  };
+  m.stuhl = (x, z, dreh) => {
+    const s = new THREE.Group();
+    s.position.set(x, 0, z); s.rotation.y = dreh;
+    const teil = (b, h, t, px, py, pz) => { const k = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), dunkelHolzMat); k.position.set(px, py, pz); k.castShadow = true; s.add(k); };
+    teil(0.45, 0.05, 0.45, 0, 0.47, 0);
+    teil(0.45, 0.55, 0.05, 0, 0.75, -0.2);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) teil(0.05, 0.47, 0.05, sx * 0.19, 0.235, sz * 0.19);
+    m.g.add(s);
+    m.boxen.push({ x, y: 0.5, z, b: 0.45, h: 1.0, t: 0.45 });
+  };
+  m.sessel = (x, z, stoff) => {
+    m.box(0.85, 0.45, 0.8, x, 0.225, z + 0.4, stoff, { fest: true });
+    m.box(0.85, 0.6, 0.18, x, 0.75, z + 0.09, stoff, { fest: true });
+    for (const s of [-1, 1]) m.box(0.15, 0.25, 0.8, x + s * 0.42, 0.55, z + 0.4, stoff);
+  };
+  return m;
+}
+const MOEBEL = {
+  sofa() {   // Sofa mit Couchtisch davor
+    const m = neuesMoebel(), stoff = auswahl(STOFFE);
+    m.box(2.2, 0.45, 0.9, 0, 0.225, 0.45, stoff, { fest: true });
+    m.box(2.2, 0.55, 0.2, 0, 0.72, 0.1, stoff, { fest: true });
+    for (const s of [-1, 1]) m.box(0.2, 0.3, 0.9, s * 1.0, 0.6, 0.45, stoff);
+    for (const s of [-0.5, 0.5]) m.box(0.9, 0.12, 0.6, s, 0.5, 0.5, stoff, { schatten: false });   // Kissen
+    m.box(1.2, 0.42, 0.6, 0, 0.21, 1.6, dunkelHolzMat, { fest: true });                         // Couchtisch
+    m.ablage(0, 1.6, 0.9, 0.4, 0.45);
+    return m;
+  },
+  kamin() {   // Kamin mit flackerndem Feuer
+    const m = neuesMoebel();
+    m.box(1.8, 1.3, 0.55, 0, 0.65, 0.275, steinMat, { fest: true, blockt: true });
+    m.box(0.9, 0.7, 0.05, 0, 0.4, 0.56, schwarzMat, { schatten: false });
+    m.box(2.0, 0.08, 0.7, 0, 1.34, 0.35, dunkelHolzMat, { fest: true });   // Kaminsims
+    m.ablage(0, 0.4, 1.6, 0.4, 1.4);
+    for (const x of [-0.18, 0, 0.18]) {
+      const f = m.teil(new THREE.ConeGeometry(0.12, 0.4, 6), feuerMat, x, 0.25, 0.45);
+      f.userData.feuer = true;
+    }
+    m.lichter.push({ x: 0, y: 0.6, z: 1.0, farbe: '#ff8a3d', staerke: 1.8, weite: 8, flackern: 'feuer' });
+    return m;
+  },
+  sessel() {   // Sessel, Beistelltisch und Stehlampe
+    const m = neuesMoebel();
+    m.sessel(-0.6, 0, auswahl(STOFFE));
+    m.box(0.5, 0.6, 0.5, 0.45, 0.3, 0.45, dunkelHolzMat, { fest: true });
+    m.ablage(0.45, 0.45, 0.3, 0.3, 0.63);
+    m.teil(new THREE.CylinderGeometry(0.02, 0.02, 1.5), metallGrauMat, 1.0, 0.75, 0.3);
+    m.teil(new THREE.ConeGeometry(0.22, 0.25, 12, 1, true), new THREE.MeshStandardMaterial({ color: '#e8d9b5', emissive: '#6b5a30', side: THREE.DoubleSide }), 1.0, 1.55, 0.3);
+    return m;
+  },
+  regal() {   // Bücherregal (bis fast an die Decke)
+    const m = neuesMoebel();
+    m.box(2.0, 2.4, 0.45, 0, 1.2, 0.225, dunkelHolzMat, { fest: true, blockt: true });
+    for (let k = 0; k < 4; k++) m.teil(new THREE.PlaneGeometry(1.8, 0.45), buecherMat, 0, 0.35 + k * 0.55, 0.455);
+    return m;
+  },
+  standuhr() {   // Große alte Standuhr
+    const m = neuesMoebel();
+    m.box(0.55, 2.1, 0.4, 0, 1.05, 0.2, dunkelHolzMat, { fest: true, blockt: true });
+    m.teil(new THREE.CircleGeometry(0.2, 20), weissMat, 0, 1.75, 0.405);
+    const pendel = m.teil(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 14), goldMat, 0, 0.9, 0.41);
+    pendel.rotation.x = Math.PI / 2;
+    pendel.userData.pendel = true;
+    return m;
+  },
+  lesen() {   // Leseecke: Sessel und runder Tisch
+    const m = neuesMoebel();
+    m.sessel(-0.7, 0.1, auswahl(STOFFE));
+    m.teil(new THREE.CylinderGeometry(0.45, 0.45, 0.05, 20), holzMat, 0.6, 0.72, 0.9).castShadow = true;
+    m.teil(new THREE.CylinderGeometry(0.06, 0.1, 0.72, 8), holzMat, 0.6, 0.36, 0.9);
+    m.boxen.push({ x: 0.6, y: 0.37, z: 0.9, b: 0.8, h: 0.74, t: 0.8 });
+    m.ablage(0.6, 0.9, 0.5, 0.5, 0.76);
+    return m;
+  },
+  kueche() {   // Küchenzeile mit Herd und Hängeschränken
+    const m = neuesMoebel();
+    m.box(3.2, 0.88, 0.65, 0, 0.44, 0.325, weissMat, { fest: true });
+    m.box(3.25, 0.05, 0.7, 0, 0.9, 0.35, marmorMat, { fest: true });
+    m.ablage(-0.6, 0.35, 1.8, 0.45, 0.93);
+    for (let k = 0; k < 4; k++) m.box(0.02, 0.6, 0.01, -1.2 + k * 0.8, 0.45, 0.655, schwarzMat, { schatten: false });   // Schranktüren
+    for (const [x, z] of [[1.0, 0.22], [1.3, 0.22], [1.0, 0.48], [1.3, 0.48]]) m.teil(new THREE.CylinderGeometry(0.1, 0.1, 0.02, 16), schwarzMat, x, 0.935, z);   // Herdplatten
+    m.box(3.2, 0.6, 0.35, 0, 1.9, 0.175, weissMat, { blockt: true });   // Hängeschränke
+    return m;
+  },
+  kuechentisch() {   // Küchentisch mit Stühlen (frei im Raum)
+    const m = neuesMoebel();
+    m.tisch(1.4, 0.9, 0, 0, 0.78, hellHolzMat);
+    m.stuhl(-0.4, -0.75, 0); m.stuhl(0.4, -0.75, 0); m.stuhl(-0.4, 0.75, Math.PI); m.stuhl(0.4, 0.75, Math.PI);
+    m.mitte = true;
+    return m;
+  },
+  vorrat() {   // Vorratsschrank
+    const m = neuesMoebel();
+    m.box(1.2, 2.1, 0.55, 0, 1.05, 0.275, hellHolzMat, { fest: true, blockt: true });
+    m.box(0.02, 1.9, 0.01, 0, 1.05, 0.555, schwarzMat, { schatten: false });
+    return m;
+  },
+  bett() {   // Bett mit Nachttisch
+    const m = neuesMoebel(), decke = auswahl(STOFFE);
+    m.box(1.6, 0.4, 2.1, -0.4, 0.2, 1.05, dunkelHolzMat, { fest: true });
+    m.box(1.5, 0.2, 2.0, -0.4, 0.5, 1.05, weissMat, { fest: true });
+    m.box(1.55, 0.08, 1.4, -0.4, 0.62, 1.35, decke, { schatten: false });
+    m.box(0.6, 0.12, 0.35, -0.75, 0.66, 0.3, weissMat, { schatten: false });
+    m.box(0.6, 0.12, 0.35, -0.05, 0.66, 0.3, weissMat, { schatten: false });
+    m.box(1.6, 1.1, 0.08, -0.4, 0.55, 0.04, dunkelHolzMat, { fest: true });   // Kopfteil
+    m.box(0.5, 0.6, 0.45, 0.8, 0.3, 0.25, dunkelHolzMat, { fest: true });     // Nachttisch
+    m.ablage(0.8, 0.25, 0.3, 0.25, 0.63);
+    return m;
+  },
+  schrank() {   // Kleiderschrank
+    const m = neuesMoebel();
+    m.box(1.6, 2.2, 0.6, 0, 1.1, 0.3, dunkelHolzMat, { fest: true, blockt: true });
+    m.box(0.02, 2.0, 0.01, 0, 1.1, 0.605, schwarzMat, { schatten: false });
+    for (const s of [-1, 1]) m.box(0.04, 0.15, 0.03, s * 0.08, 1.1, 0.62, goldMat, { schatten: false });
+    return m;
+  },
+  kommode() {   // Kommode mit Spiegel
+    const m = neuesMoebel();
+    m.box(1.4, 0.9, 0.5, 0, 0.45, 0.25, holzMat, { fest: true });
+    for (let k = 0; k < 3; k++) m.box(1.3, 0.02, 0.01, 0, 0.2 + k * 0.25, 0.505, schwarzMat, { schatten: false });
+    m.ablage(0, 0.25, 1.1, 0.3, 0.93);
+    m.box(0.9, 0.8, 0.04, 0, 1.6, 0.03, new THREE.MeshStandardMaterial({ color: '#9fb4c7', metalness: 0.9, roughness: 0.05 }), { schatten: false });
+    return m;
+  },
+  esstisch() {   // Langer Esstisch mit 6 Stühlen (frei im Raum)
+    const m = neuesMoebel();
+    m.tisch(2.2, 1.0, 0, 0, 0.78, dunkelHolzMat);
+    for (const x of [-0.7, 0, 0.7]) { m.stuhl(x, -0.8, 0); m.stuhl(x, 0.8, Math.PI); }
+    m.teil(new THREE.CylinderGeometry(0.03, 0.05, 0.25), goldMat, 0, 0.93, 0);   // Kerzenständer
+    m.teil(new THREE.ConeGeometry(0.025, 0.06, 6), feuerMat, 0, 1.08, 0);
+    m.mitte = true;
+    return m;
+  },
+  anrichte() {   // Anrichte (Sideboard)
+    const m = neuesMoebel();
+    m.box(1.8, 0.9, 0.5, 0, 0.45, 0.25, dunkelHolzMat, { fest: true });
+    m.ablage(0, 0.25, 1.5, 0.3, 0.93);
+    for (const x of [-0.45, 0.45]) m.box(0.8, 0.7, 0.01, x, 0.45, 0.505, holzMat, { schatten: false });
+    return m;
+  },
+  kisten() {   // Ein Stapel alter Kisten
+    const m = neuesMoebel();
+    let x = -1.2;
+    while (x < 0.7) {
+      const g = zufall(0.6, 0.9);
+      m.box(g, g, g, x + g / 2, g / 2, g / 2 + 0.05, kistenMat, { fest: true, blockt: g > 0.8 });
+      if (Math.random() < 0.5) { const k = g * 0.7; m.box(k, k, k, x + g / 2, g + k / 2, g / 2 + 0.05, kistenMat, { fest: true }); }
+      else m.ablage(x + g / 2, g / 2 + 0.05, g - 0.2, g - 0.2, g + 0.02);
+      x += g + 0.1;
+    }
+    return m;
+  },
+  metallregal() {   // Metallregal mit Kartons
+    const m = neuesMoebel();
+    m.box(1.8, 2.0, 0.5, 0, 1.0, 0.25, metallGrauMat, { fest: true, blockt: true });
+    for (let k = 0; k < 3; k++) for (let n = 0; n < 3; n++) if (Math.random() < 0.7) m.box(0.45, 0.35, 0.4, -0.6 + n * 0.6, 0.38 + k * 0.62, 0.28, kistenMat, { schatten: false });
+    return m;
+  },
+  zugedeckt() {   // Alte Möbel unter weißen Tüchern (gruselig!)
+    const m = neuesMoebel();
+    m.box(1.4, 1.0, 0.8, -0.4, 0.5, 0.45, tuchMat, { fest: true });
+    m.box(0.8, 1.5, 0.6, 0.8, 0.75, 0.35, tuchMat, { fest: true, blockt: true });
+    return m;
+  },
+};
+
+// Stellt ein Möbel an seinen Platz im Raum: px, pz = Position, winkel = Drehung (nur 0, 90, 180, 270 Grad)
+function platziere(R, m, px, pz, winkel) {
+  m.g.position.set(px, 0, pz);
+  m.g.rotation.y = winkel;
+  hausGruppe.add(m.g);
+  const c = Math.round(Math.cos(winkel)), s = Math.round(Math.sin(winkel)), quer = s !== 0;
+  const nachWelt = (lx, lz) => ({ x: px + lx * c + lz * s, z: pz - lx * s + lz * c });
+  for (const k of m.boxen) {
+    const w = nachWelt(k.x, k.z), b = quer ? k.t : k.b, t = quer ? k.b : k.t;
+    festerKoerper(w.x, k.y, w.z, b, k.h, t);
+    R.belegt.push([w.x - b / 2, w.z - t / 2, w.x + b / 2, w.z + t / 2]);
+  }
+  for (const a of m.ablagen) { const w = nachWelt(a.x, a.z); R.ablagen.push({ x: w.x, z: w.z, b: quer ? a.t : a.b, t: quer ? a.b : a.t, y: a.y }); }
+  sichtBlocker.push(...m.blocker);
+  for (const l of m.lichter) { const w = nachWelt(l.x, l.z); lampeHinzu(w.x, l.y, w.z, l.farbe, l.staerke, l.weite, l.flackern); }
+  m.g.traverse(o => { if (o.userData.feuer || o.userData.pendel) haus.bewegteDeko.push(o); });
+}
+// Stellt ein Möbel mit dem Rücken an eine Wand im Viertel q (0 bis 3) des Raumes
+function inViertel(R, q, m) {
+  const qx = q % 2, qz = q >> 1;
+  if (m.mitte) {   // Frei stehend: in die Mitte vom Viertel
+    platziere(R, m, R.x0 + (qx ? 7.95 : 2.05), R.z0 + (qz ? 7.95 : 2.05), auswahl([0, Math.PI / 2]));
+    return;
+  }
+  // Nicht vor einen großen Durchgang stellen!
+  const seiten = [qz === 0 ? 'n' : 's', qx === 0 ? 'w' : 'o'].filter(sd => (R.tuer[sd] || 0) <= TUER_BREITE);
+  if (!seiten.length) return;
+  const seite = auswahl(seiten);
+  const a = qx === 0 ? 2.05 : 7.95, b = qz === 0 ? 2.05 : 7.95;   // Mitte vom Viertel entlang der Wand
+  if (seite === 'n') platziere(R, m, R.x0 + a, R.z0 + 0.15, 0);
+  if (seite === 's') platziere(R, m, R.x0 + a, R.z0 + RAUM - 0.15, Math.PI);
+  if (seite === 'w') platziere(R, m, R.x0 + 0.15, R.z0 + b, Math.PI / 2);
+  if (seite === 'o') platziere(R, m, R.x0 + RAUM - 0.15, R.z0 + b, -Math.PI / 2);
 }
 
 function hausAufraeumen() {
@@ -406,20 +777,21 @@ function hausAufraeumen() {
   for (const k of wandKoerper) welt.removeBody(k);
   for (const s of schaetze) { welt.removeBody(s.body); szene.remove(s.mesh); }
   for (const m of monster) szene.remove(m.mesh);
+  for (const h of helfer) { welt.removeBody(h.body); szene.remove(h.mesh); szene.remove(h.strahl); }
   for (const s of splitter) szene.remove(s.mesh);
-  wandKoerper = []; wandMeshes = []; schaetze = []; monster = []; splitter = []; schwebeTexte = [];
+  wandKoerper = []; sichtBlocker = []; schaetze = []; monster = []; helfer = []; splitter = []; schwebeTexte = [];
   gegriffen = null; schwebend = null;
 }
 
 function baueHaus() {
   hausAufraeumen();
   ld = levelDaten(level);
-  haus = { breit: ld.breit, tief: ld.tief, tueren: new Set(), ablagen: [], hindernisse: [] };
+  haus = { breit: ld.breit, tief: ld.tief, tueren: new Map(), lampen: 0, raeume: [], bewegteDeko: [] };
   const anzahl = haus.breit * haus.tief;
   haus.start = raumNr(0, Math.floor(haus.tief / 2));
   // 1. Türen: Erst ein Weg zu jedem Raum (wie ein Labyrinth), dann noch ein paar Abkürzungen
   const besucht = new Set([haus.start]), stapel = [haus.start];
-  const verbinde = (a, b) => haus.tueren.add(a < b ? `${a}-${b}` : `${b}-${a}`);
+  const verbinde = (a, b) => haus.tueren.set(tuerSchluessel(a, b), Math.random() < 0.2 ? DURCHGANG_BREITE : TUER_BREITE);
   while (stapel.length) {
     const r = stapel[stapel.length - 1];
     const frei = nachbarn(r).filter(n => !besucht.has(n));
@@ -427,49 +799,43 @@ function baueHaus() {
     const n = auswahl(frei);
     verbinde(r, n); besucht.add(n); stapel.push(n);
   }
-  for (let r = 0; r < anzahl; r++) for (const n of nachbarn(r)) if (n > r && Math.random() < 0.3) verbinde(r, n);
+  for (let r = 0; r < anzahl; r++) for (const n of nachbarn(r)) if (n > r && !verbunden(r, n) && Math.random() < 0.3) verbinde(r, n);
 
-  // 2. Boden und Decke
+  // 2. Räume mit Thema, jeder mit eigenem Boden
+  for (let r = 0; r < anzahl; r++) {
+    const art = r === haus.start ? { id: 'garage', name: 'Garage', emoji: '🚚', boden: 'beton', ecken: [] } : gewichtetWaehlen(RAUM_ARTEN);
+    const R = { nr: r, art, x0: (r % haus.breit) * RAUM, z0: Math.floor(r / haus.breit) * RAUM, belegt: [], ablagen: [], tuer: {} };
+    // Wie breit sind die Türen an jeder Seite? (0 = keine Tür)
+    const i = r % haus.breit, j = Math.floor(r / haus.breit);
+    const breite = n => haus.tueren.get(tuerSchluessel(r, n)) || 0;
+    R.tuer = { n: j > 0 ? breite(r - haus.breit) : 0, s: j < haus.tief - 1 ? breite(r + haus.breit) : 0, w: i > 0 ? breite(r - 1) : 0, o: i < haus.breit - 1 ? breite(r + 1) : 0 };
+    haus.raeume.push(R);
+    const t = BOEDEN[art.boden].clone(); t.needsUpdate = true;
+    t.repeat.set(art.boden === 'holz' ? 3.3 : 5, art.boden === 'holz' ? 3.3 : 5);
+    const boden = new THREE.Mesh(new THREE.PlaneGeometry(RAUM, RAUM), new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 }));
+    boden.rotation.x = -Math.PI / 2; boden.position.set(R.x0 + RAUM / 2, 0, R.z0 + RAUM / 2); boden.receiveShadow = true;
+    hausGruppe.add(boden);
+  }
   const B = haus.breit * RAUM, T = haus.tief * RAUM;
-  const boden = holzTextur.clone(); boden.needsUpdate = true; boden.repeat.set(B / 3, T / 3);
-  const bodenMesh = new THREE.Mesh(new THREE.PlaneGeometry(B, T), new THREE.MeshStandardMaterial({ map: boden, roughness: 0.85 }));
-  bodenMesh.rotation.x = -Math.PI / 2; bodenMesh.position.set(B / 2, 0, T / 2); bodenMesh.receiveShadow = true;
   const decke = deckenTextur.clone(); decke.needsUpdate = true; decke.repeat.set(B / 2, T / 2);
   const deckenMesh = new THREE.Mesh(new THREE.PlaneGeometry(B, T), new THREE.MeshStandardMaterial({ map: decke, roughness: 1 }));
   deckenMesh.rotation.x = Math.PI / 2; deckenMesh.position.set(B / 2, WAND_HOEHE, T / 2);
-  hausGruppe.add(bodenMesh, deckenMesh);
+  hausGruppe.add(deckenMesh);
 
   // 3. Wände (mit Türen, wo Räume verbunden sind)
   const tapete = () => new THREE.MeshStandardMaterial({ map: auswahl(TAPETEN), roughness: 0.9 });
   for (let j = 0; j <= haus.tief; j++) for (let i = 0; i < haus.breit; i++) {   // Wände entlang x
-    const tuer = j > 0 && j < haus.tief && verbunden(raumNr(i, j - 1), raumNr(i, j));
+    const tuer = j > 0 && j < haus.tief ? haus.tueren.get(tuerSchluessel(raumNr(i, j - 1), raumNr(i, j))) || 0 : 0;
     wandStueck(i * RAUM, j * RAUM, (i + 1) * RAUM, j * RAUM, tuer, tapete());
   }
   for (let i = 0; i <= haus.breit; i++) for (let j = 0; j < haus.tief; j++) {   // Wände entlang z
-    const tuer = i > 0 && i < haus.breit && verbunden(raumNr(i - 1, j), raumNr(i, j));
+    const tuer = i > 0 && i < haus.breit ? haus.tueren.get(tuerSchluessel(raumNr(i - 1, j), raumNr(i, j))) || 0 : 0;
     wandStueck(i * RAUM, j * RAUM, i * RAUM, (j + 1) * RAUM, tuer, tapete());
   }
 
-  // 4. Lampen (nicht in jedem Raum – manche Räume sind stockdunkel!)
-  let lampen = 0;
-  for (let r = 0; r < anzahl; r++) {
-    if (r !== haus.start && (Math.random() < 0.45 || lampen >= 9)) continue;
-    lampen++;
-    const cx = (r % haus.breit) * RAUM + RAUM / 2, cz = Math.floor(r / haus.breit) * RAUM + RAUM / 2;
-    const licht = new THREE.PointLight(r === haus.start ? '#c8ffe8' : '#ffcf8a', r === haus.start ? 2.2 : 1.4, 11, 1);
-    licht.position.set(cx, WAND_HOEHE - 0.4, cz);
-    licht.userData.flackern = r !== haus.start && Math.random() < 0.4;
-    licht.userData.stark = licht.intensity;
-    const birne = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffe2b0' }));
-    birne.position.copy(licht.position);
-    const kabel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.3), dunkelHolzMat);
-    kabel.position.set(cx, WAND_HOEHE - 0.17, cz);
-    hausGruppe.add(licht, birne, kabel);
-  }
-
-  // 5. Der Transporter (Abgabe-Zone) im Startraum, an der linken Wand
-  const sj = Math.floor(haus.start / haus.breit) * RAUM;
-  haus.laster = { x1: 0.15, x2: 3.5, z1: sj + 3.0, z2: sj + 7.0 };
+  // 4. Der Transporter (Abgabe-Zone) im Startraum, an der linken Wand
+  const S = haus.raeume[haus.start];
+  haus.laster = { x1: 0.15, x2: 3.5, z1: S.z0 + 3.0, z2: S.z0 + 7.0 };
   const L = haus.laster;
   const zone = new THREE.Mesh(new THREE.PlaneGeometry(L.x2 - L.x1, L.z2 - L.z1), new THREE.MeshBasicMaterial({ color: '#1f8a64', transparent: true, opacity: 0.35 }));
   zone.rotation.x = -Math.PI / 2; zone.position.set((L.x1 + L.x2) / 2, 0.02, (L.z1 + L.z2) / 2);
@@ -480,74 +846,127 @@ function baueHaus() {
   const schild = schildMesh('🚚 ARAG-ABGABE', 2.6, 0.65);
   schild.position.set(0.17, 2.4, (L.z1 + L.z2) / 2); schild.rotation.y = Math.PI / 2;
   hausGruppe.add(schild);
+  lampeHinzu(S.x0 + RAUM / 2, WAND_HOEHE - 0.4, S.z0 + RAUM / 2, '#c8ffe8', 2.2, 11, false);
+  // Ein paar Kisten in der Garage (Deko)
+  for (const [x, z] of [[8.6, 1.2], [8.9, 2.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);
 
-  // 6. Möbel und Schätze in allen anderen Räumen
-  for (let r = 0; r < anzahl; r++) if (r !== haus.start) moebelUndSchaetze(r);
+  // 5. Möbel, Deko und Schätze in allen anderen Räumen
+  for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
+  for (const R of haus.raeume) wandDeko(R);
 
-  // 7. Monster in Räumen weit weg vom Start
+  // 6. Monster in Räumen weit weg vom Start
   const weit = [];
   for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
   if (!weit.length) for (let r = 0; r < anzahl; r++) if (r !== haus.start) weit.push(r);
   for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
+  for (let k = 0; k < ld.krabbler; k++) neuesMonster('krabbler', auswahl(weit));
   for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
+  for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
 
-  // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter
-  spielerKoerper.position.set(RAUM / 2, KOERPER_RADIUS + 0.05, sj + RAUM / 2);
+  // 7. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
+  ducken(false);
+  spielerKoerper.position.set(RAUM / 2, KOERPER_RADIUS + 0.05, S.z0 + RAUM / 2);
   spielerKoerper.velocity.set(0, 0, 0);
   blick.links = Math.PI / 2; blick.hoch = -0.1;
+  for (let k = 0; k < Math.min(HELFER_ANZAHL, HELFER.length); k++) neuerHelfer(HELFER[k], RAUM / 2 + 1.2, S.z0 + 3.5 + k * 3);
 }
 
-// Möbel in einen Raum stellen (an die Ecken, damit die Türen frei bleiben) und Schätze verteilen
-function moebelUndSchaetze(r) {
-  const x0 = (r % haus.breit) * RAUM, z0 = Math.floor(r / haus.breit) * RAUM;
-  const belegt = [];   // Wo schon was steht: [x1, z1, x2, z2]
-  const ablagen = [];  // Wo man Schätze draufstellen kann
-  const frei = (x1, z1, x2, z2) => belegt.every(b => x2 < b[0] || x1 > b[2] || z2 < b[1] || z1 > b[3]);
-  // Tische in der Nähe der Ecken
-  const ecken = [[2.6, 2.6], [7.4, 2.6], [2.6, 7.4], [7.4, 7.4]].sort(() => Math.random() - 0.5);
-  const tische = zufallGanz(1, 2);
-  for (let k = 0; k < tische; k++) {
-    const [ex, ez] = ecken[k], quer = Math.random() < 0.5;
-    const b = quer ? 1.8 : 1.0, t = quer ? 1.0 : 1.8, x = x0 + ex, z = z0 + ez;
-    festerKlotz(x, 0.39, z, b, 0.78, t, holzMat);
-    festerKlotz(x, 0.8, z, b + 0.1, 0.05, t + 0.1, dunkelHolzMat, false);   // Tischplatte
-    belegt.push([x - b / 2 - 0.4, z - t / 2 - 0.4, x + b / 2 + 0.4, z + t / 2 + 0.4]);
-    ablagen.push({ x, z, b: b - 0.3, t: t - 0.3, y: 0.83 });
+// Einen Raum einrichten: Lampe, Möbel in den Ecken, Teppich, Spinnweben, Schätze
+function raumEinrichten(R) {
+  const art = R.art, cx = R.x0 + RAUM / 2, cz = R.z0 + RAUM / 2;
+  // Möbel: 3 oder 4 Viertel bekommen etwas aus der Liste des Raumes
+  const viertel = mischen([0, 1, 2, 3]).slice(0, zufallGanz(3, 4));
+  const liste = mischen(art.ecken);
+  viertel.forEach((q, k) => inViertel(R, q, MOEBEL[liste[k % liste.length]]()));
+  // Teppich in der Mitte
+  if (art.teppich && Math.random() < 0.7) {
+    const t = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.2), new THREE.MeshStandardMaterial({ map: teppichTextur, roughness: 1 }));
+    t.rotation.x = -Math.PI / 2; t.rotation.z = auswahl([0, Math.PI / 2]); t.position.set(cx, 0.006, cz); t.receiveShadow = true;
+    hausGruppe.add(t);
   }
-  // Ein Schrank oder Sofa an einer Wand (in einer Ecke, wo noch nichts steht)
-  for (const [ex, ez] of ecken.slice(tische)) {
-    if (Math.random() < 0.5) continue;
-    const art = Math.random() < 0.5 ? 'schrank' : 'sofa';
-    const anWandX = ex < 5 ? 0.6 : RAUM - 0.6;   // Steht an der linken oder rechten Wand
-    const x = x0 + anWandX, z = z0 + (ez < 5 ? 1.8 : RAUM - 1.8);
-    if (art === 'schrank') {
-      festerKlotz(x, 1.0, z, 0.6, 2.0, 1.6, dunkelHolzMat);
-      for (const y of [0.5, 1.0, 1.5]) festerKlotz(x + (ex < 5 ? 0.31 : -0.31), y, z, 0.02, 0.04, 1.4, goldMat, false);
+  // Licht: Kronleuchter oder einfache Glühbirne (nicht überall – manche Räume sind stockdunkel!)
+  if (Math.random() < 0.55 && lampeHinzu(cx, WAND_HOEHE - 0.5, cz, art.kronleuchter ? '#ffd9a0' : '#ffcf8a', 1.4, 11, Math.random() < 0.4)) {
+    if (art.kronleuchter) {
+      const k = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 6, 20), goldMat);
+      ring.rotation.x = Math.PI / 2;
+      k.add(ring);
+      for (let n = 0; n < 6; n++) {
+        const a = n / 6 * Math.PI * 2;
+        const kerze = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), new THREE.MeshBasicMaterial({ color: '#ffe2b0' }));
+        kerze.position.set(Math.cos(a) * 0.45, 0.06, Math.sin(a) * 0.45);
+        k.add(kerze);
+      }
+      const kette = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.5), goldMat);
+      kette.position.y = 0.25;
+      k.add(kette);
+      k.position.set(cx, WAND_HOEHE - 0.6, cz);
+      hausGruppe.add(k);
     } else {
-      festerKlotz(x, 0.25, z, 0.9, 0.5, 2.0, stoffMat);
-      festerKlotz(x + (ex < 5 ? -0.3 : 0.3), 0.6, z, 0.3, 0.7, 2.0, stoffMat);
+      const birne = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffe2b0' }));
+      birne.position.set(cx, WAND_HOEHE - 0.5, cz);
+      hausGruppe.add(birne);
     }
-    belegt.push([x - 0.8, z - 1.4, x + 0.8, z + 1.4]);
   }
-  // Schätze: manche auf Tischen, manche auf dem Boden
-  const anzahl = zufallGanz(1, 3);
+  // Spinnweben in den oberen Ecken
+  for (const [ex, ez, dreh] of [[0.16, 0.16, 0], [RAUM - 0.16, 0.16, -Math.PI / 2], [RAUM - 0.16, RAUM - 0.16, Math.PI], [0.16, RAUM - 0.16, Math.PI / 2]]) {
+    if (Math.random() < 0.55) continue;
+    const netz = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: netzTextur, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    netz.position.set(R.x0 + ex, WAND_HOEHE - 0.45, R.z0 + ez);
+    netz.rotation.y = dreh + Math.PI / 4;
+    netz.translateZ(0.5);   // Schräg in die Ecke
+    hausGruppe.add(netz);
+  }
+  // Schätze: manche auf Möbeln, manche auf dem Boden
+  const anzahl = zufallGanz(2, 4);
+  const frei = (x1, z1, x2, z2) => R.belegt.every(b => x2 < b[0] || x1 > b[2] || z2 < b[1] || z1 > b[3]);
   for (let k = 0; k < anzahl; k++) {
     const typ = gewichtetWaehlen(SCHAETZE);
     const [sb, sh, st] = typ.groesse;
-    if (!typ.boden && ablagen.length && Math.random() < 0.6) {
-      const a = auswahl(ablagen);
-      neuerSchatz(typ, a.x + zufall(-a.b / 2, a.b / 2) * 0.6, a.y + sh / 2 + 0.03, a.z + zufall(-a.t / 2, a.t / 2) * 0.6);
+    if (!typ.boden && R.ablagen.length && Math.random() < 0.65) {
+      const a = auswahl(R.ablagen);
+      neuerSchatz(typ, a.x + zufall(-a.b / 2, a.b / 2) * 0.7, a.y + sh / 2 + 0.03, a.z + zufall(-a.t / 2, a.t / 2) * 0.7);
       continue;
     }
-    for (let versuch = 0; versuch < 20; versuch++) {
-      const x = x0 + zufall(1.2, RAUM - 1.2), z = z0 + zufall(1.2, RAUM - 1.2);
-      const g = Math.max(sb, st) / 2 + 0.2;
+    for (let versuch = 0; versuch < 25; versuch++) {
+      const x = R.x0 + zufall(0.9, RAUM - 0.9), z = R.z0 + zufall(0.9, RAUM - 0.9);
+      const g = Math.max(sb, st) / 2 + 0.15;
       if (!frei(x - g, z - g, x + g, z + g)) continue;
-      if (Math.abs(x - x0 - RAUM / 2) < 1.3 && Math.abs(z - z0 - RAUM / 2) < 1.3) continue;   // Mitte frei lassen
+      if (Math.abs(x - cx) < 1.3 + g || Math.abs(z - cz) < 1.3 + g) continue;   // Die Wege in der Mitte frei lassen
       neuerSchatz(typ, x, sh / 2 + 0.03, z);
-      belegt.push([x - g, z - g, x + g, z + g]);
+      R.belegt.push([x - g, z - g, x + g, z + g]);
       break;
     }
+  }
+}
+// Mitte jeder Wand: Ist da keine Tür, kommt ein Fenster (Außenwand) oder ein Bild (Innenwand) hin
+function wandDeko(R) {
+  const i = R.x0 / RAUM, j = R.z0 / RAUM, cx = R.x0 + RAUM / 2, cz = R.z0 + RAUM / 2;
+  const seiten = [
+    { aussen: j === 0, nachbar: j > 0 ? R.nr - haus.breit : -1, x: cx, z: R.z0 + 0.16, dreh: 0 },
+    { aussen: j === haus.tief - 1, nachbar: j < haus.tief - 1 ? R.nr + haus.breit : -1, x: cx, z: R.z0 + RAUM - 0.16, dreh: Math.PI },
+    { aussen: i === 0, nachbar: i > 0 ? R.nr - 1 : -1, x: R.x0 + 0.16, z: cz, dreh: Math.PI / 2 },
+    { aussen: i === haus.breit - 1, nachbar: i < haus.breit - 1 ? R.nr + 1 : -1, x: R.x0 + RAUM - 0.16, z: cz, dreh: -Math.PI / 2 },
+  ];
+  for (const s of seiten) {
+    if (s.nachbar >= 0 && verbunden(R.nr, s.nachbar)) continue;   // Da ist eine Tür
+    if (R.nr === haus.start && s.dreh === Math.PI / 2) continue;   // Da ist der Transporter
+    let deko;
+    if (s.aussen) {
+      deko = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), new THREE.MeshBasicMaterial({ map: fensterTextur }));
+      deko.position.set(s.x, 1.7, s.z);
+    } else {
+      if (Math.random() < 0.4) continue;
+      deko = new THREE.Group();
+      const b = zufall(0.7, 1.2), h = zufall(0.6, 0.9);
+      deko.add(new THREE.Mesh(new THREE.BoxGeometry(b + 0.1, h + 0.1, 0.04), goldMat));
+      const bild = new THREE.Mesh(new THREE.PlaneGeometry(b, h), new THREE.MeshBasicMaterial({ map: bildTextur() }));
+      bild.position.z = 0.025;
+      deko.add(bild);
+      deko.position.set(s.x, 1.65, s.z);
+    }
+    deko.rotation.y = s.dreh;
+    hausGruppe.add(deko);
   }
 }
 
@@ -641,13 +1060,13 @@ function neuerSchatz(typ, x, y, z) {
   const form = typ.rund ? new CANNON.Sphere(b / 2) : new CANNON.Box(new CANNON.Vec3(b / 2, h / 2, t / 2));
   const body = new CANNON.Body({
     mass: typ.masse, shape: form, material: standardMat, linearDamping: 0.05, angularDamping: 0.3,
-    collisionFilterGroup: G_SCHATZ, collisionFilterMask: G_WAND | G_SPIELER | G_SCHATZ,
+    collisionFilterGroup: G_SCHATZ, collisionFilterMask: SCHATZ_MASKE,
   });
   body.sleepSpeedLimit = 0.2;
   body.position.set(x, y, z);
   body.quaternion.setFromEuler(0, zufall(0, Math.PI * 2), 0);
   welt.addBody(body);
-  const s = { typ, mesh, body, wert: wertMax, wertMax, letzterStoss: 0, kaputt: false, zerbrechen: false, geworfen: 0 };
+  const s = { typ, mesh, body, wert: wertMax, wertMax, letzterStoss: 0, kaputt: false, zerbrechen: false, geworfen: 0, reserviert: null, getragenVon: null };
   mesh.traverse(o => { o.userData.schatz = s; });
   body.addEventListener('collide', e => stoss(s, e));
   schaetze.push(s);
@@ -664,6 +1083,7 @@ function stoss(s, e) {
   s.wert -= verlust;
   const p = s.body.position;
   schwebeText(p.x, p.y + 0.4, p.z, `-${euro(verlust)}`, '#ff6b6b');
+  if (s.getragenVon) schwebeText(p.x, p.y + 0.7, p.z, `Ups! (${s.getragenVon.name})`, s.getragenVon.farbe);
   sound.stoss(Math.min(1, tempo / 8) * lautBei(p));
   laerm(p.x, p.z, 2 + tempo);
   if (s.wert < s.wertMax * KAPUTT_BEI) s.zerbrechen = true;   // Kaputt machen wir nach dem Physik-Schritt
@@ -671,6 +1091,7 @@ function stoss(s, e) {
 function zerbrechen(s) {
   s.kaputt = true;
   if (gegriffen === s) loslassen();
+  for (const h of helfer) if (h.auftrag === s) helferLoslassen(h);
   const p = s.body.position;
   welt.removeBody(s.body);
   szene.remove(s.mesh);
@@ -700,11 +1121,15 @@ function lasterWert() {
 // =====================================================================
 // ===== Die Monster =====
 // =====================================================================
-// 👻 Staubgeist: schwebt herum. Sieht er dich, jagt er dich! Wirf was auf ihn, dann ist er kurz betäubt.
-// 👂 Lauscher: ist blind, hört aber alles! Lauter Krach (Rennen, Stöße, Zerbrechen) lockt ihn an. Steh still, dann findet er dich nicht.
+// 👻 Staubgeist: schwebt herum. Sieht er dich (oder einen Helfer), jagt er! Wirf was auf ihn, dann ist er kurz betäubt.
+// 🕷️ Krabbler: klein und superschnell, beißt aber nicht so fest. Sieht nicht so weit.
+// 👂 Lauscher: ist blind, hört aber alles! Lauter Krach lockt ihn an. Steh still oder duck dich, dann findet er dich nicht.
+// 🗿 Starrer: eine Steinstatue. Sie bewegt sich NUR, wenn du nicht hinschaust! Lass sie nicht aus den Augen ...
 const MONSTER_ARTEN = {
-  geist:    { name: 'Staubgeist', tempo: 1.6, jagdTempo: 3.3, schaden: 30, sicht: 14 },
-  lauscher: { name: 'Lauscher',   tempo: 1.0, jagdTempo: 4.6, schaden: 45, hoeren: 2.5 },
+  geist:    { name: 'Staubgeist', emoji: '👻', tempo: 1.6, jagdTempo: 3.3, schaden: 30, sicht: 14, augen: 1.3, pause: 2, betaeubbar: true },
+  krabbler: { name: 'Krabbler',   emoji: '🕷️', tempo: 2.4, jagdTempo: 5.4, schaden: 12, sicht: 10, augen: 0.4, pause: 1.2, betaeubbar: true },
+  lauscher: { name: 'Lauscher',   emoji: '👂', tempo: 1.0, jagdTempo: 4.6, schaden: 45, hoeren: 2.5, pause: 2, betaeubbar: true },
+  starrer:  { name: 'Starrer',    emoji: '🗿', tempo: 1.2, jagdTempo: 4.8, schaden: 50, pause: 3, betaeubbar: false },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
@@ -719,7 +1144,23 @@ function baueMonsterMesh(art) {
     const auge = new THREE.MeshBasicMaterial({ color: '#ff2a2a', fog: false });   // Die Augen sieht man auch im Nebel!
     for (const s of [-1, 1]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), auge); a.position.set(s * 0.13, 0.12, 0.38); g.add(a); }
     g.userData.auge = auge;
-  } else {
+  } else if (art === 'krabbler') {
+    const panzer = new THREE.MeshStandardMaterial({ color: '#3b1f1a', roughness: 0.5, metalness: 0.3 });
+    const koerper = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), panzer); koerper.scale.set(1, 0.55, 1.3); koerper.position.y = 0.3; g.add(koerper);
+    const kopf = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), panzer); kopf.position.set(0, 0.3, 0.36); g.add(kopf);
+    const auge = new THREE.MeshBasicMaterial({ color: '#7dff5a', fog: false });
+    for (const [x, y] of [[-0.06, 0.36], [0.06, 0.36], [-0.1, 0.31], [0.1, 0.31]]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), auge); a.position.set(x, y, 0.48); g.add(a); }
+    g.userData.beine = [];
+    for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {   // 8 Beine!
+      const bein = new THREE.Group();
+      bein.position.set(s * 0.2, 0.3, -0.2 + k * 0.15);
+      const teil = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.03, 0.03), panzer);
+      teil.position.x = s * 0.2; teil.rotation.z = s * -0.6;
+      bein.add(teil);
+      bein.userData.seite = s; bein.userData.nr = k;
+      g.add(bein); g.userData.beine.push(bein);
+    }
+  } else if (art === 'lauscher') {
     const haut = new THREE.MeshStandardMaterial({ color: '#2a2530', roughness: 0.9 });
     const ohrMat = new THREE.MeshStandardMaterial({ color: '#b06a8a', roughness: 0.6, emissive: '#000000' });
     const koerper = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, 1.6, 10), haut); koerper.position.y = 1.0; g.add(koerper);
@@ -737,6 +1178,20 @@ function baueMonsterMesh(art) {
     const mund = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.02), new THREE.MeshBasicMaterial({ color: '#000' }));
     mund.position.set(0, 1.9, 0.27); g.add(mund);
     g.userData.ohrMat = ohrMat;
+  } else {   // starrer
+    const stein = new THREE.MeshStandardMaterial({ color: '#8a8780', roughness: 1 });
+    const sockel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.2, 12), stein); sockel.position.y = 0.1; g.add(sockel);
+    const koerper = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, 1.3, 10), stein); koerper.position.y = 0.85; g.add(koerper);
+    const kopf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), stein); kopf.position.y = 1.7; g.add(kopf);
+    for (const s of [-1, 1]) {   // Arme nach vorne gestreckt ...
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.65), stein);
+      arm.position.set(s * 0.25, 1.35, 0.3); arm.rotation.x = -0.3;
+      g.add(arm);
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.14), stein);
+      hand.position.set(s * 0.25, 1.48, 0.62); g.add(hand);
+    }
+    const auge = new THREE.MeshBasicMaterial({ color: '#6fd3ff', fog: false, transparent: true, opacity: 0.5 });
+    for (const s of [-1, 1]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), auge); a.position.set(s * 0.07, 1.73, 0.18); g.add(a); }
   }
   g.traverse(o => { o.castShadow = true; });
   szene.add(g);
@@ -744,37 +1199,57 @@ function baueMonsterMesh(art) {
 }
 function neuesMonster(art, raum) {
   const i = raum % haus.breit, j = Math.floor(raum / haus.breit);
-  const m = {
+  monster.push({
     art, info: MONSTER_ARTEN[art], mesh: baueMonsterMesh(art),
-    x: i * RAUM + RAUM / 2 + zufall(-2, 2), z: j * RAUM + RAUM / 2 + zufall(-2, 2), winkel: 0,
-    modus: 'wandern', ziel: null, zielZeit: 0, angriffPause: 0, betaeubt: 0, siehtNicht: 0, sichtCheck: 0, lautZeit: 0, phase: zufall(0, 6),
-  };
-  monster.push(m);
+    x: i * RAUM + RAUM / 2 + zufall(-1, 1), z: j * RAUM + RAUM / 2 + zufall(-1, 1), winkel: 0,
+    modus: 'wandern', ziel: null, zielZeit: 0, angriffPause: 0, betaeubt: 0, siehtNicht: 0, sichtCheck: zufall(0, 0.2),
+    lautZeit: 0, phase: zufall(0, 6), laeuft: false, gesehen: false, bewegtSeit: 0,
+  });
 }
 // Jemand hat Krach gemacht! Monster in der Nähe hören das.
 function laerm(x, z, staerke) {
   for (const m of monster) {
-    if (m.betaeubt > 0) continue;
+    if (m.betaeubt > 0 || m.art === 'starrer') continue;
     const d = abstand2D(m.x, m.z, x, z);
     if (m.art === 'lauscher' && d < staerke * m.info.hoeren) {
       if (m.modus !== 'jagen' && zeit - m.lautZeit > 4) { m.lautZeit = zeit; sound.lauscher(); }
       m.modus = 'jagen'; m.ziel = { x, z }; m.zielZeit = 6;
-    } else if (m.art === 'geist' && m.modus === 'wandern' && d < staerke * 1.2) {
+    } else if (m.art !== 'lauscher' && m.modus === 'wandern' && d < staerke * 1.2) {
       m.modus = 'nachsehen'; m.ziel = { x, z }; m.zielZeit = 8;   // Was war das? Mal nachsehen ...
     }
   }
 }
 const sichtStrahl = new THREE.Raycaster();
-function siehtSpieler(m) {
-  const p = spielerKoerper.position;
-  const d = Math.hypot(m.x - p.x, m.z - p.z);
-  if (d > m.info.sicht) return false;
-  const von = new THREE.Vector3(m.x, 1.3, m.z), nach = new THREE.Vector3(p.x, p.y + AUGEN_HOEHE * 0.5, p.z);
+function freieSicht(von, nach) {   // Ist zwischen zwei Punkten keine Wand und kein großes Möbel?
   const richtung = nach.clone().sub(von);
   const l = richtung.length();
   sichtStrahl.set(von, richtung.normalize());
   sichtStrahl.far = l;
-  return sichtStrahl.intersectObjects(wandMeshes, false).length === 0;
+  return sichtStrahl.intersectObjects(sichtBlocker, false).length === 0;
+}
+// Wen kann das Monster gerade sehen? (Dich oder einen Helfer – den nächsten nimmt es)
+function sichtbaresOpfer(m) {
+  const von = new THREE.Vector3(m.x, m.info.augen, m.z);
+  let bestes = null, bestD = Infinity;
+  const p = spielerKoerper.position;
+  const reichweite = m.info.sicht * (geduckt ? DUCK_SICHT : 1);
+  const dS = abstand2D(m.x, m.z, p.x, p.z);
+  if (dS < reichweite && freieSicht(von, new THREE.Vector3(p.x, p.y + 0.2, p.z))) { bestes = { x: p.x, z: p.z, spieler: true }; bestD = dS; }
+  for (const h of helfer) {
+    if (h.kaputt > 0) continue;
+    const hp = h.body.position, d = abstand2D(m.x, m.z, hp.x, hp.z);
+    if (d < m.info.sicht && d < bestD && freieSicht(von, new THREE.Vector3(hp.x, hp.y + 0.3, hp.z))) { bestes = { x: hp.x, z: hp.z, helfer: h }; bestD = d; }
+  }
+  return bestes;
+}
+// Schaust du gerade auf den Starrer?
+function starrerGesehen(m) {
+  if (zustand !== 'spiel') return false;
+  const kopf = new THREE.Vector3(m.x, 1.2, m.z);
+  if (kopf.distanceTo(kamera.position) > 40) return false;
+  const p = kopf.clone().project(kamera);
+  if (p.z > 1 || Math.abs(p.x) > 1.1 || Math.abs(p.y) > 1.1) return false;   // Nicht im Bild
+  return freieSicht(kamera.position.clone(), kopf);
 }
 function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum)
   const r = raumVon(m.x, m.z), jetzt = raumNr(r.i, r.j);
@@ -783,78 +1258,91 @@ function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum)
   const i = raum % haus.breit, j = Math.floor(raum / haus.breit);
   return { x: i * RAUM + zufall(2, RAUM - 2), z: j * RAUM + zufall(2, RAUM - 2) };
 }
-// Wohin muss das Monster jetzt laufen, um zum Ziel zu kommen? (durch die Türen!)
-function wegPunkt(m, ziel) {
-  const a = raumVon(m.x, m.z), b = raumVon(ziel.x, ziel.z);
-  const ra = raumNr(a.i, a.j), rb = raumNr(b.i, b.j);
-  if (ra === rb) return ziel;
-  const n = naechsterRaum(ra, rb);
-  if (n === ra) return ziel;
-  const t = tuerPunkt(ra, n);
-  if (abstand2D(m.x, m.z, t.x, t.z) < 0.7) {   // An der Tür: durch in den nächsten Raum!
-    return { x: (n % haus.breit) * RAUM + RAUM / 2, z: Math.floor(n / haus.breit) * RAUM + RAUM / 2 };
-  }
-  return t;
-}
 function updateMonster(m, dt) {
   const p = spielerKoerper.position, info = m.info;
   m.phase += dt;
   m.angriffPause -= dt;
-  if (m.betaeubt > 0) { m.betaeubt -= dt; return; }
-  // Sehen (nur der Geist) – nicht jedes Bild, das spart Rechenzeit
-  if (m.art === 'geist') {
-    m.sichtCheck -= dt;
-    if (m.sichtCheck <= 0) {
-      m.sichtCheck = 0.2;
-      if (siehtSpieler(m)) {
-        if (m.modus !== 'jagen') { sound.geist(); zeigeNachricht('👻 Der Staubgeist hat dich gesehen! LAUF!', 2, '#ff6b6b'); }
-        m.modus = 'jagen'; m.siehtNicht = 0; m.ziel = { x: p.x, z: p.z }; m.zielZeit = 5;
-      } else if (m.modus === 'jagen') {
-        m.siehtNicht += 0.2;
-        if (m.siehtNicht > 4) { m.modus = 'wandern'; m.ziel = null; }   // Spur verloren
+  if (m.betaeubt > 0) { m.betaeubt -= dt; m.laeuft = false; return; }
+  let tempo;
+  if (m.art === 'starrer') {
+    // 🗿 Der Starrer friert ein, sobald du hinschaust
+    m.gesehen = starrerGesehen(m);
+    if (m.gesehen) {
+      if (m.bewegtSeit > 0.5 && abstand2D(m.x, m.z, p.x, p.z) < 9) sound.knirsch();   // Hat er sich gerade bewegt?!
+      m.bewegtSeit = 0; m.laeuft = false;
+      return;
+    }
+    m.bewegtSeit += dt;
+    m.ziel = { x: p.x, z: p.z };
+    tempo = abstand2D(m.x, m.z, p.x, p.z) < 22 ? info.jagdTempo : info.tempo;
+    m.modus = 'jagen';
+  } else {
+    // Sehen (nicht jedes Bild, das spart Rechenzeit)
+    if (info.sicht) {
+      m.sichtCheck -= dt;
+      if (m.sichtCheck <= 0) {
+        m.sichtCheck = 0.2;
+        const opfer = sichtbaresOpfer(m);
+        if (opfer) {
+          if (m.modus !== 'jagen' && opfer.spieler) {
+            if (m.art === 'geist') { sound.geist(); zeigeNachricht('👻 Der Staubgeist hat dich gesehen! LAUF!', 2, '#ff6b6b'); }
+            else { sound.krabbler(); zeigeNachricht('🕷️ Ein Krabbler kommt!', 2, '#ff6b6b'); }
+          }
+          m.modus = 'jagen'; m.siehtNicht = 0; m.ziel = { x: opfer.x, z: opfer.z }; m.zielZeit = 5;
+        } else if (m.modus === 'jagen') {
+          m.siehtNicht += 0.2;
+          if (m.siehtNicht > 4) { m.modus = 'wandern'; m.ziel = null; }   // Spur verloren
+        }
       }
     }
-  }
-  // Ziel aussuchen
-  m.zielZeit -= dt;
-  if (!m.ziel || m.zielZeit <= 0 || (m.modus === 'wandern' && abstand2D(m.x, m.z, m.ziel.x, m.ziel.z) < 0.5)) {
-    if (m.modus !== 'wandern' && m.zielZeit <= 0) m.modus = 'wandern';
-    if (m.modus === 'wandern') {
-      // Der Lauscher bleibt oft stehen und lauscht
-      m.ziel = m.art === 'lauscher' && Math.random() < 0.5 ? { x: m.x, z: m.z } : zufallsZiel(m);
-      m.zielZeit = zufall(4, 9);
+    // Ziel aussuchen
+    m.zielZeit -= dt;
+    if (!m.ziel || m.zielZeit <= 0 || (m.modus === 'wandern' && abstand2D(m.x, m.z, m.ziel.x, m.ziel.z) < 0.5)) {
+      if (m.modus !== 'wandern' && m.zielZeit <= 0) m.modus = 'wandern';
+      if (m.modus === 'wandern') {
+        m.ziel = m.art === 'lauscher' && Math.random() < 0.5 ? { x: m.x, z: m.z } : zufallsZiel(m);   // Der Lauscher bleibt oft stehen
+        m.zielZeit = zufall(4, 9);
+      }
     }
+    tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
   }
-  // Laufen
+  // Laufen (durch die Türen)
   const wp = wegPunkt(m, m.ziel);
   const dx = wp.x - m.x, dz = wp.z - m.z, d = Math.hypot(dx, dz);
-  const tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
   m.laeuft = d > 0.2;
   if (m.laeuft) {
     const schritt = Math.min(d, tempo * dt);
     m.x += dx / d * schritt; m.z += dz / d * schritt;
-    const zielWinkel = Math.atan2(dx, dz);
-    let diff = zielWinkel - m.winkel;
+    let diff = Math.atan2(dx, dz) - m.winkel;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    m.winkel += begrenzt(diff, -dt * 5, dt * 5);
+    m.winkel += begrenzt(diff, -dt * 6, dt * 6);
   } else if (m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) {
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
-  // Angriff!
-  const dSpieler = Math.hypot(m.x - p.x, m.z - p.z);
-  if (dSpieler < 1.0 && m.angriffPause <= 0 && p.y < 2) {
-    m.angriffPause = 2;
-    getroffen(info.schaden, `${m.art === 'geist' ? '👻' : '👂'} ${info.name}`);
+  // Angriff! Auf dich ...
+  const reichweite = m.art === 'krabbler' ? 0.8 : 1.0;
+  if (m.angriffPause <= 0 && abstand2D(m.x, m.z, p.x, p.z) < reichweite && p.y < 2) {
+    m.angriffPause = info.pause;
+    getroffen(info.schaden, `${info.emoji} ${info.name}`);
     const weg = new CANNON.Vec3(p.x - m.x, 0, p.z - m.z);
     weg.normalize();
     spielerKoerper.velocity.set(weg.x * 9, 3, weg.z * 9);   // Wegschubsen
   }
+  // ... oder auf einen Helfer
+  for (const h of helfer) {
+    const hp = h.body.position;
+    if (h.kaputt <= 0 && m.angriffPause <= 0 && abstand2D(m.x, m.z, hp.x, hp.z) < reichweite) {
+      m.angriffPause = info.pause;
+      helferKaputt(h, info);
+    }
+  }
   // Getroffen von einem geworfenen Schatz? Dann betäubt!
+  if (!info.betaeubbar) return;
   for (const s of schaetze) {
     if (s.geworfen <= 0) continue;
     const sp = s.body.position, v = s.body.velocity.length();
-    if (v > 4 && Math.hypot(sp.x - m.x, sp.z - m.z) < 0.8 && sp.y > 0.2 && sp.y < 2.4) {
+    if (v > 4 && abstand2D(sp.x, sp.z, m.x, m.z) < 0.8 && sp.y < 2.4) {
       m.betaeubt = 4; m.modus = 'wandern'; m.ziel = null;
       s.body.velocity.scale(-0.3, s.body.velocity);
       s.geworfen = 0;
@@ -876,11 +1364,194 @@ function zeigeMonster(m) {
       k.position.y += Math.sin(k.userData.kreisen * 1.3) * 0.003;
     });
     g.userData.auge.color.set(m.betaeubt > 0 ? '#555' : m.modus === 'jagen' ? '#ff2a2a' : '#aa3333');
-  } else {
+  } else if (m.art === 'krabbler') {
+    g.position.set(m.x, 0, m.z);
+    g.rotation.set(0, m.winkel, m.betaeubt > 0 ? Math.PI : 0);   // Betäubt: liegt auf dem Rücken!
+    if (m.betaeubt > 0) g.position.y = 0.55;
+    for (const b of g.userData.beine) b.rotation.y = m.laeuft ? Math.sin(m.phase * 25 + b.userData.nr * 1.5) * 0.4 * b.userData.seite : 0;
+  } else if (m.art === 'lauscher') {
     const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 14 : 6)) : 0;
     g.position.set(m.x, Math.abs(schritt) * 0.08, m.z);
     g.rotation.set(m.betaeubt > 0 ? 0.3 : 0, m.winkel, schritt * 0.05);
     g.userData.ohrMat.emissive.set(m.modus === 'jagen' ? '#7a1f5a' : '#000000');   // Ohren glühen, wenn er was gehört hat
+  } else {
+    g.position.set(m.x, 0, m.z);
+    g.rotation.set(0, m.winkel, 0);   // Eine Statue wackelt nicht ...
+  }
+}
+
+// =====================================================================
+// ===== Die Helfer-Bots =====
+// =====================================================================
+// Die Helfer suchen sich selbst Schätze, tragen sie zum Transporter und legen sie dort ab.
+// Monster können sie kurz kaputt machen – dann starten sie nach ein paar Sekunden neu.
+function baueHelferMesh(farbe) {
+  const g = new THREE.Group();
+  const blech = new THREE.MeshStandardMaterial({ color: '#d7dde6', metalness: 0.6, roughness: 0.35 });
+  const lack = new THREE.MeshStandardMaterial({ color: farbe, metalness: 0.4, roughness: 0.4 });
+  const leucht = new THREE.MeshBasicMaterial({ color: farbe });
+  const teil = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+  teil(new THREE.BoxGeometry(0.5, 0.45, 0.4), lack, 0, 0.45, 0);                        // Körper
+  teil(new THREE.BoxGeometry(0.42, 0.32, 0.36), blech, 0, 0.88, 0);                     // Kopf
+  teil(new THREE.BoxGeometry(0.34, 0.14, 0.02), new THREE.MeshBasicMaterial({ color: '#10141c' }), 0, 0.9, 0.185);   // Visier
+  for (const s of [-1, 1]) teil(new THREE.BoxGeometry(0.07, 0.05, 0.01), leucht, s * 0.08, 0.9, 0.198);               // Augen
+  teil(new THREE.CylinderGeometry(0.01, 0.01, 0.2), blech, 0, 1.13, 0);                 // Antenne
+  teil(new THREE.SphereGeometry(0.035, 8, 6), leucht, 0, 1.25, 0);
+  for (const s of [-1, 1]) {
+    teil(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 14), schwarzMat, s * 0.27, 0.13, 0).rotation.z = Math.PI / 2;   // Räder
+    const arm = teil(new THREE.BoxGeometry(0.07, 0.07, 0.35), blech, s * 0.3, 0.55, 0.15);
+    arm.userData.arm = true;
+  }
+  szene.add(g);
+  return g;
+}
+function neuerHelfer(info, x, z) {
+  const body = new CANNON.Body({
+    mass: 40, shape: new CANNON.Sphere(0.35), material: spielerMat, fixedRotation: true,
+    collisionFilterGroup: G_HELFER, collisionFilterMask: G_WAND | G_SCHATZ | G_SPIELER | G_HELFER,
+  });
+  body.allowSleep = false;
+  body.position.set(x, 0.4, z);
+  welt.addBody(body);
+  const mesh = baueHelferMesh(info.farbe);
+  const schild = namensSchild(`🤖 ${info.name}`, info.farbe);
+  schild.position.y = 1.5;
+  mesh.add(schild);
+  const strahlMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.02, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: info.farbe, transparent: true, opacity: 0.6 }));
+  strahlMesh.visible = false;
+  szene.add(strahlMesh);
+  helfer.push({ ...info, body, mesh, strahl: strahlMesh, auftrag: null, modus: 'suchen', kaputt: 0, denkZeit: 0, winkel: Math.PI / 2,
+    pruefZeit: 1, altX: x, altZ: z, ausweichen: 0, ausweichSeite: 1, abgeliefert: 0 });
+}
+function helferLoslassen(h) {
+  const s = h.auftrag;
+  if (s) {
+    s.reserviert = null;
+    if (s.getragenVon === h) { s.getragenVon = null; s.body.collisionFilterMask = SCHATZ_MASKE; }
+  }
+  h.auftrag = null;
+  h.modus = 'suchen';
+}
+function helferKaputt(h, info) {
+  helferLoslassen(h);
+  h.kaputt = HELFER_PAUSE;
+  const p = h.body.position;
+  schwebeText(p.x, p.y + 1.2, p.z, `💥 ${h.name} wurde erwischt!`, h.farbe);
+  for (let k = 0; k < 10; k++) {
+    const m = new THREE.Mesh(new THREE.TetrahedronGeometry(0.04), new THREE.MeshBasicMaterial({ color: '#ffd166' }));
+    m.position.set(p.x, p.y + 0.5, p.z);
+    szene.add(m);
+    splitter.push({ mesh: m, v: new THREE.Vector3(zufall(-3, 3), zufall(2, 5), zufall(-3, 3)), t: 0.8 });
+  }
+  sound.autsch();
+  if (abstand2D(p.x, p.z, spielerKoerper.position.x, spielerKoerper.position.z) < 15) zeigeNachricht(`${info.emoji} Der ${info.name} hat ${h.name} erwischt!`, 2, '#ffb347');
+}
+// Welcher Schatz lohnt sich? (wertvoll und nah)
+function waehleSchatz(h) {
+  const p = h.body.position;
+  let bester = null, punkte = 0;
+  for (const s of schaetze) {
+    if (s.kaputt || s.reserviert || s.getragenVon || gegriffen === s || imLaster(s) || s.body.position.y > 1.6) continue;
+    const d = abstand2D(p.x, p.z, s.body.position.x, s.body.position.z);
+    const wertung = s.wert / (d + 8);
+    if (wertung > punkte) { punkte = wertung; bester = s; }
+  }
+  return bester;
+}
+function updateHelfer(h, dt) {
+  const b = h.body, p = b.position, v = b.velocity;
+  const bremsen = () => { v.x *= 0.85; v.z *= 0.85; };
+  if (h.kaputt > 0) {
+    h.kaputt -= dt;
+    bremsen();
+    if (h.kaputt <= 0) schwebeText(p.x, p.y + 1.2, p.z, `🔧 ${h.name} ist wieder an!`, h.farbe);
+    return;
+  }
+  // Ist der Auftrag noch gültig?
+  const s = h.auftrag;
+  if (s && (s.kaputt || gegriffen === s || (h.modus === 'hinlaufen' && (imLaster(s) || s.getragenVon)))) helferLoslassen(h);
+  if (!h.auftrag) {
+    h.denkZeit -= dt;
+    if (h.denkZeit <= 0) {
+      h.denkZeit = 0.6;
+      const neu = waehleSchatz(h);
+      if (neu) { h.auftrag = neu; neu.reserviert = h; h.modus = 'hinlaufen'; }
+    }
+  }
+  // Wohin?
+  const L = haus.laster;
+  let ziel;
+  if (h.modus === 'hinlaufen') ziel = { x: h.auftrag.body.position.x, z: h.auftrag.body.position.z };
+  else if (h.modus === 'tragen') ziel = { x: (L.x1 + L.x2) / 2 + 0.3, z: (L.z1 + L.z2) / 2 };
+  else ziel = { x: RAUM / 2 + 1.5, z: (L.z1 + L.z2) / 2 + (h === helfer[0] ? -2 : 2) };   // Nichts zu tun: am Transporter warten
+  const zielD = abstand2D(p.x, p.z, ziel.x, ziel.z);
+  // Angekommen beim Schatz? Greifen!
+  if (h.modus === 'hinlaufen' && zielD < 1.3) {
+    h.modus = 'tragen';
+    h.auftrag.getragenVon = h;
+    h.auftrag.body.collisionFilterMask = G_WAND | G_SCHATZ | G_SPIELER;   // Stößt nicht an den eigenen Träger
+    h.auftrag.body.wakeUp();
+  }
+  // Im Transporter? Ablegen!
+  if (h.modus === 'tragen' && imLaster(h.auftrag)) {
+    h.abgeliefert++;
+    helferLoslassen(h);
+  }
+  // Laufen (durch die Türen), mit Ausweichen, falls er irgendwo festhängt
+  const wp = wegPunkt(p, ziel);
+  let dx = wp.x - p.x, dz = wp.z - p.z;
+  const d = Math.hypot(dx, dz);
+  let tempo = h.modus === 'tragen' ? HELFER_TRAGE_TEMPO * (1 - Math.min(0.5, h.auftrag.typ.masse / 60)) : HELFER_TEMPO;
+  if (d < 0.25 || (h.modus === 'suchen' && zielD < 0.6)) tempo = 0;
+  if (d > 0) { dx /= d; dz /= d; }
+  if (h.ausweichen > 0) {   // Seitlich ausweichen
+    h.ausweichen -= dt;
+    [dx, dz] = [-dz * h.ausweichSeite, dx * h.ausweichSeite];
+  }
+  const k = Math.min(1, dt * 8);
+  v.x += (dx * tempo - v.x) * k;
+  v.z += (dz * tempo - v.z) * k;
+  if (tempo > 0) {
+    let diff = Math.atan2(dx, dz) - h.winkel;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    h.winkel += begrenzt(diff, -dt * 6, dt * 6);
+  }
+  // Hängt er fest?
+  h.pruefZeit -= dt;
+  if (h.pruefZeit <= 0) {
+    if (tempo > 0 && abstand2D(p.x, p.z, h.altX, h.altZ) < 0.3) { h.ausweichen = 0.8; h.ausweichSeite = Math.random() < 0.5 ? 1 : -1; }
+    h.pruefZeit = 1; h.altX = p.x; h.altZ = p.z;
+  }
+  // Den Schatz vor sich her tragen (wie dein Greifstrahl)
+  if (h.modus === 'tragen') {
+    const sb = h.auftrag.body;
+    // Tief tragen, damit beim Ablegen nichts kaputtgeht
+    const zx = p.x + Math.sin(h.winkel) * 0.95, zz = p.z + Math.cos(h.winkel) * 0.95, zy = 0.4 + h.auftrag.typ.groesse[1] / 2;
+    const diff = new CANNON.Vec3(zx - sb.position.x, zy - sb.position.y, zz - sb.position.z);
+    if (diff.length() > 3) { helferLoslassen(h); return; }
+    diff.scale(8, diff);
+    const max = 6 / Math.sqrt(Math.max(1, h.auftrag.typ.masse / 3));
+    if (diff.length() > max) diff.scale(max / diff.length(), diff);
+    sb.velocity.copy(diff);
+    sb.angularVelocity.scale(0.8, sb.angularVelocity);
+    sb.wakeUp();
+  }
+}
+function zeigeHelfer(h) {
+  const p = h.body.position, g = h.mesh;
+  g.position.set(p.x, p.y - 0.4, p.z);
+  g.rotation.set(h.kaputt > 0 ? 1.3 : 0, h.winkel, 0);   // Kaputt: kippt um
+  if (h.kaputt > 0) g.position.y = 0.05;
+  g.children.forEach(o => { if (o.userData.arm) o.rotation.x = h.modus === 'tragen' ? -0.6 : 0; });
+  h.strahl.visible = h.modus === 'tragen' && h.kaputt <= 0;
+  if (h.strahl.visible) {
+    const von = new THREE.Vector3(p.x + Math.sin(h.winkel) * 0.35, 0.55, p.z + Math.cos(h.winkel) * 0.35);
+    const nach = new THREE.Vector3().copy(h.auftrag.body.position);
+    const r = nach.clone().sub(von);
+    h.strahl.position.copy(von).add(nach).multiplyScalar(0.5);
+    h.strahl.scale.set(1, r.length(), 1);
+    h.strahl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), r.normalize());
   }
 }
 
@@ -910,21 +1581,22 @@ const MITTE = new THREE.Vector2(0, 0);
 function schauAuf() {   // Auf welchen Schatz schaust du gerade?
   greifStrahl.setFromCamera(MITTE, kamera);
   greifStrahl.far = GREIF_WEITE;
-  const treffer = greifStrahl.intersectObjects([...schaetze.map(s => s.mesh), ...wandMeshes], true);
+  const treffer = greifStrahl.intersectObjects([...schaetze.map(s => s.mesh), ...sichtBlocker], true);
   if (!treffer.length) return null;
   return treffer[0].object.userData.schatz || null;
 }
 function greifen(s) {
+  if (s.getragenVon) helferLoslassen(s.getragenVon);   // Du nimmst ihn dem Helfer weg
   gegriffen = s;
   const p = s.body.position;
   halteAbstand = begrenzt(kamera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z)), 1.3, 3);
-  s.body.collisionFilterMask = G_WAND | G_SCHATZ;   // Was du hältst, stößt nicht an dich selbst
+  s.body.collisionFilterMask = G_WAND | G_SCHATZ | G_HELFER;   // Was du hältst, stößt nicht an dich selbst
   s.body.wakeUp();
   sound.strahl();
 }
 function loslassen() {
   if (!gegriffen) return;
-  gegriffen.body.collisionFilterMask = G_WAND | G_SPIELER | G_SCHATZ;
+  gegriffen.body.collisionFilterMask = SCHATZ_MASKE;
   gegriffen = null;
 }
 function werfen() {
@@ -969,6 +1641,27 @@ function getroffen(menge, von) {
     if (document.pointerLockElement) document.exitPointerLock();
   }
 }
+// Ducken: Der Roboter wird kleiner (passt unter Tische), leiser und schwerer zu sehen
+function ducken(an) {
+  if (an === geduckt) return;
+  geduckt = an;
+  spielerForm.radius = an ? DUCK_RADIUS : KOERPER_RADIUS;
+  spielerForm.updateBoundingSphereRadius();
+  spielerKoerper.updateBoundingRadius();
+  if (!an) spielerKoerper.position.y += KOERPER_RADIUS - DUCK_RADIUS;   // Beim Aufstehen nicht im Boden stecken
+  sound.ducken();
+}
+function kannAufstehen() {   // Ist über dir Platz? (Unter einem Tisch kannst du nicht aufstehen)
+  const p = spielerKoerper.position, ergebnis = new CANNON.RaycastResult();
+  const von = new CANNON.Vec3(p.x, p.y, p.z), nach = new CANNON.Vec3(p.x, p.y + KOERPER_RADIUS * 2 + 0.05, p.z);
+  for (const [ox, oz] of [[0, 0], [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25]]) {
+    von.set(p.x + ox, p.y, p.z + oz); nach.set(p.x + ox, p.y + KOERPER_RADIUS * 2 + 0.05, p.z + oz);
+    ergebnis.reset();
+    welt.raycastClosest(von, nach, { collisionFilterMask: G_WAND, skipBackfaces: true }, ergebnis);
+    if (ergebnis.hasHit && ergebnis.body !== deckenKoerper) return false;
+  }
+  return true;
+}
 // Ist der Roboter auf dem Boden? (für Springen)
 function pruefeBoden() {
   amBoden = false;
@@ -979,6 +1672,9 @@ function pruefeBoden() {
   }
 }
 function updateSpieler(dt) {
+  // Ducken mit C (aufstehen nur, wenn über dir Platz ist)
+  if (tasten['c'] && !geduckt) ducken(true);
+  if (!tasten['c'] && geduckt && kannAufstehen()) ducken(false);
   const vor = (tasten['w'] || tasten['arrowup'] ? 1 : 0) - (tasten['s'] || tasten['arrowdown'] ? 1 : 0);
   const seite = (tasten['d'] || tasten['arrowright'] ? 1 : 0) - (tasten['a'] || tasten['arrowleft'] ? 1 : 0);
   const sinY = Math.sin(blick.links), cosY = Math.cos(blick.links);
@@ -986,23 +1682,23 @@ function updateSpieler(dt) {
   const l = Math.hypot(dx, dz);
   const laeuft = l > 0;
   if (laeuft) { dx /= l; dz /= l; }
-  const rennt = laeuft && tasten['shift'] && ausdauer > 0;
+  const rennt = laeuft && tasten['shift'] && ausdauer > 0 && !geduckt;
   if (rennt) ausdauer = Math.max(0, ausdauer - 30 * dt);
   else ausdauer = Math.min(AUSDAUER_MAX, ausdauer + (laeuft ? 10 : 20) * dt);
-  let tempo = rennt ? RENN_TEMPO : LAUF_TEMPO;
+  let tempo = geduckt ? DUCK_TEMPO : rennt ? RENN_TEMPO : LAUF_TEMPO;
   if (gegriffen) tempo *= 1 - Math.min(0.55, gegriffen.typ.masse / 60);   // Schweres tragen macht langsam
   const v = spielerKoerper.velocity, k = Math.min(1, dt * (amBoden ? 12 : 3));
   v.x += (dx * tempo - v.x) * k;
   v.z += (dz * tempo - v.z) * k;
-  if (tasten[' '] && amBoden && v.y < 1) { v.y = SPRUNG; sound.sprung(); }
-  // Schritte: Rennen ist laut, Gehen ist leise
+  if (tasten[' '] && amBoden && v.y < 1 && !geduckt) { v.y = SPRUNG; sound.sprung(); }
+  // Schritte: Rennen ist laut, Gehen ist leise, geduckt hört dich fast niemand
   if (laeuft && amBoden) {
     schrittZeit -= dt * (rennt ? 1.6 : 1);
     if (schrittZeit <= 0) {
       schrittZeit = 0.45;
-      sound.schritt();
+      if (!geduckt) sound.schritt();
       const p = spielerKoerper.position;
-      laerm(p.x, p.z, rennt ? 4 : 1.2);
+      laerm(p.x, p.z, geduckt ? 0.3 : rennt ? 4 : 1.2);
     }
   }
 }
@@ -1018,6 +1714,7 @@ function update(dt) {
   spielZeit += dt;
 
   updateSpieler(dt);
+  for (const h of helfer) updateHelfer(h, dt);
   haltenPhysik();
   welt.step(1 / 60, dt, 3);
   pruefeBoden();
@@ -1025,20 +1722,25 @@ function update(dt) {
     if (s.zerbrechen && !s.kaputt) zerbrechen(s);
     s.geworfen -= dt;
   }
-  // Ist ein Schatz aus dem Haus gefallen? (sollte nicht passieren, aber sicher ist sicher)
+  // Ist etwas aus dem Haus gefallen? (sollte nicht passieren, aber sicher ist sicher)
   for (const s of schaetze) if (s.body.position.y < -2) { s.body.position.set(RAUM / 2, 1, haus.laster.z1 + 2); s.body.velocity.set(0, 0, 0); }
+  for (const h of helfer) if (h.body.position.y < -2) { h.body.position.set(RAUM / 2, 0.5, haus.laster.z1 + 2); h.body.velocity.set(0, 0, 0); }
+  if (spielerKoerper.position.y < -2) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
   for (const m of monster) updateMonster(m, dt);
 
   // Neue Schätze im Transporter?
   for (const s of schaetze) {
     const drin = imLaster(s);
-    if (drin && !s.warDrin) { sound.abgabe(); schwebeText(s.body.position.x, s.body.position.y + 0.6, s.body.position.z, `+${euro(s.wert)} 🚚`, '#7cf5c6'); }
+    if (drin && !s.warDrin) {
+      sound.abgabe();
+      const wer = s.getragenVon ? ` (${s.getragenVon.name})` : '';
+      schwebeText(s.body.position.x, s.body.position.y + 0.6, s.body.position.z, `+${euro(s.wert)} 🚚${wer}`, '#7cf5c6');
+    }
     s.warDrin = drin;
   }
   // Herzklopfen, wenn ein Monster dich jagt
-  const jaeger = monster.filter(m => m.modus === 'jagen' && m.betaeubt <= 0 && Math.hypot(m.x - spielerKoerper.position.x, m.z - spielerKoerper.position.z) < 12);
   herzZeit -= dt;
-  if (jaeger.length && herzZeit <= 0) { herzZeit = 0.7; sound.herz(0.8); }
+  if (gejagt() && herzZeit <= 0) { herzZeit = 0.7; sound.herz(0.8); }
   // Abfahren!
   if (tasten['e'] && spielerImLaster() && lasterWert() >= ld.ziel) levelGeschafft();
   // Splitter und Schwebetexte
@@ -1053,6 +1755,11 @@ function update(dt) {
   splitter = splitter.filter(sp => sp.t > 0);
   for (const t of schwebeTexte) { t.t -= dt; t.p.y += dt * 0.5; }
   schwebeTexte = schwebeTexte.filter(t => t.t > 0);
+}
+function gejagt() {
+  const p = spielerKoerper.position;
+  return monster.some(m => m.betaeubt <= 0 && abstand2D(m.x, m.z, p.x, p.z) < 12 &&
+    (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.modus === 'jagen'));
 }
 function spielerImLaster() {
   const p = spielerKoerper.position, L = haus.laster;
@@ -1081,7 +1788,7 @@ function starteLevel() {
 function levelGeschafft() {
   const wert = lasterWert();
   konto += wert;
-  levelErgebnis = { wert, kaputt: 0 };
+  levelErgebnis = { wert, helfer: helfer.map(h => `${h.name}: ${h.abgeliefert}`).join(' · ') };
   if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } }
   zustand = 'geschafft';
   loslassen();
@@ -1094,15 +1801,24 @@ function levelGeschafft() {
 // =====================================================================
 function zeichne3D() {
   const p = spielerKoerper.position;
-  const wippen = amBoden && Math.hypot(spielerKoerper.velocity.x, spielerKoerper.velocity.z) > 0.5 ? Math.sin(zeit * 11) * 0.03 : 0;
+  const wippen = amBoden && Math.hypot(spielerKoerper.velocity.x, spielerKoerper.velocity.z) > 0.5 ? Math.sin(zeit * 11) * (geduckt ? 0.015 : 0.03) : 0;
   const ruckeln = wackeln > 0 ? (Math.random() - 0.5) * 0.08 : 0;
-  kamera.position.set(p.x + ruckeln, p.y + AUGEN_HOEHE + wippen, p.z);
+  kamera.position.set(p.x + ruckeln, p.y + (geduckt ? DUCK_AUGEN : AUGEN_HOEHE) + wippen, p.z);
   kamera.rotation.set(blick.hoch, blick.links, 0);
   kamera.updateMatrixWorld();
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
   for (const m of monster) zeigeMonster(m);
-  // Flackernde Lampen
-  hausGruppe.children.forEach(o => { if (o.isPointLight && o.userData.flackern) o.intensity = Math.random() < 0.06 ? 0.1 : o.userData.stark; });
+  for (const h of helfer) zeigeHelfer(h);
+  // Flackernde Lampen, Kaminfeuer und Pendel
+  hausGruppe.children.forEach(o => {
+    if (!o.isPointLight || !o.userData.flackern) return;
+    if (o.userData.flackern === 'feuer') o.intensity = o.userData.stark * (0.75 + Math.random() * 0.35);
+    else o.intensity = Math.random() < 0.06 ? 0.1 : o.userData.stark;
+  });
+  for (const d of haus.bewegteDeko) {
+    if (d.userData.feuer) d.scale.y = 0.8 + Math.random() * 0.5;
+    if (d.userData.pendel) d.position.x = Math.sin(zeit * 2.5) * 0.12;
+  }
   // Greifstrahl
   greifer.position.y = -0.24 + wippen * 0.5;
   strahl.visible = !!gegriffen;
@@ -1133,6 +1849,10 @@ function zeichneHUD() {
     g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(255,0,0,${0.25 + Math.sin(zeit * 6) * 0.1})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  // Geduckt: dunkler Rand oben und unten
+  if (geduckt) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, 40); ctx.fillRect(0, H - 40, W, 40);
+  }
   // Schwebende Texte (z. B. "-120 €")
   for (const t of schwebeTexte) {
     const s = aufBildschirm(t.p);
@@ -1141,18 +1861,25 @@ function zeichneHUD() {
     text(t.text, s.x, s.y, 18, t.farbe);
     ctx.globalAlpha = 1;
   }
-  // Oben links: Level und Ziel
+  // Oben links: Level, Ziel und Raum
   const imLasterJetzt = lasterWert();
-  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 12, 280, 70, 12); ctx.fill();
+  const p = spielerKoerper.position;
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 12, 280, 92, 12); ctx.fill();
   text(`LEVEL ${level}`, 24, 30, 16, '#7cf5c6', 'left');
   text(`🚚 ${euro(imLasterJetzt)} / ${euro(ld.ziel)}`, 280, 30, 15, imLasterJetzt >= ld.ziel ? '#4ade80' : '#fff', 'right');
   balken(24, 50, 256, 14, imLasterJetzt / ld.ziel, imLasterJetzt >= ld.ziel ? '#4ade80' : '#7cf5c6');
-  // Oben rechts: Konto
-  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(W - 212, 12, 200, 40, 12); ctx.fill();
-  text(`💰 ${euro(konto)}`, W - 112, 32, 17, '#ffd166');
-  text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68, 13, '#fff', 'center', false);
+  const r = raumVon(p.x, p.z), raum = haus.raeume[raumNr(r.i, r.j)];
+  text(`📍 ${raum.art.emoji} ${raum.art.name}`, 24, 86, 13, '#c9c3ff', 'left', false);
+  // Oben rechts: Konto und Helfer
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(W - 232, 12, 220, 40 + helfer.length * 22, 12); ctx.fill();
+  text(`💰 ${euro(konto)}`, W - 122, 32, 17, '#ffd166');
+  helfer.forEach((h, k) => {
+    const was = h.kaputt > 0 ? `💤 kaputt (${Math.ceil(h.kaputt)} s)` : h.modus === 'tragen' ? `trägt ${h.auftrag.typ.emoji}` : h.modus === 'hinlaufen' ? `holt ${h.auftrag.typ.emoji}` : 'wartet';
+    text(`🤖 ${h.name}: ${was}`, W - 222, 60 + k * 22, 12, h.kaputt > 0 ? '#8a8f9e' : h.farbe, 'left', false);
+  });
+  text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68 + helfer.length * 22, 13, '#fff', 'center', false);
   // Oben Mitte: Pfeil zum Transporter
-  const p = spielerKoerper.position, L = haus.laster;
+  const L = haus.laster;
   const zx = (L.x1 + L.x2) / 2 - p.x, zz = (L.z1 + L.z2) / 2 - p.z;
   const vorne = zx * -Math.sin(blick.links) + zz * -Math.cos(blick.links);
   const rechts = zx * Math.cos(blick.links) + zz * -Math.sin(blick.links);
@@ -1168,6 +1895,7 @@ function zeichneHUD() {
   balken(48, H - 60, 200, 14, energie / 100, energie > 35 ? '#4ade80' : '#ff6b6b');
   text('⚡', 30, H - 26, 14, '#fff', 'center', false);
   balken(48, H - 32, 200, 10, ausdauer / AUSDAUER_MAX, '#ffd166');
+  if (geduckt) text('🦆 Geduckt – leise und schwer zu sehen', 272, H - 30, 13, '#c9c3ff', 'left');
   // Fadenkreuz
   ctx.strokeStyle = schwebend ? '#7cf5c6' : 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(W / 2, H / 2, schwebend || gegriffen ? 10 : 3, 0, 7); ctx.stroke();
@@ -1181,6 +1909,7 @@ function zeichneHUD() {
     balken(W / 2 - 90, H / 2 + 70, 180, 6, anteil, anteil > 0.6 ? '#4ade80' : anteil > 0.3 ? '#ffd166' : '#ff6b6b');
     text(gegriffen ? 'Loslassen: Maus los · Rechtsklick: werfen · Mausrad: näher/weiter' : 'Linksklick halten: greifen', W / 2, H / 2 + 100, 12, '#c9c3ff', 'center', true);
     if (s.typ.masse > 10 && !gegriffen) text('🏋️ Schwer!', W / 2, H / 2 + 118, 12, '#ffd166');
+    if (s.getragenVon && !gegriffen) text(`🤖 ${s.getragenVon.name} trägt das gerade`, W / 2, H / 2 + 118, 12, s.getragenVon.farbe);
   }
   // Abfahren?
   if (lasterWert() >= ld.ziel) {
@@ -1189,9 +1918,7 @@ function zeichneHUD() {
     text(da ? '✅ Ziel erreicht! Drück E zum Abfahren!' : '✅ Ziel erreicht! Geh zum Transporter und drück E', W / 2, H - 47, 16, '#4ade80');
   }
   // Ein Monster jagt dich!
-  if (monster.some(m => m.modus === 'jagen' && m.betaeubt <= 0 && Math.hypot(m.x - p.x, m.z - p.z) < 12)) {
-    text('⚠️ GEJAGT!', W / 2, 95, 20 + Math.sin(zeit * 10) * 2, '#ff6b6b');
-  }
+  if (gejagt()) text('⚠️ GEJAGT!', W / 2, 95, 20 + Math.sin(zeit * 10) * 2, '#ff6b6b');
   // Nachricht
   if (nachricht) {
     ctx.globalAlpha = Math.min(1, nachricht.t);
@@ -1205,19 +1932,19 @@ function zeichneHUD() {
   }
 }
 
-function zeichneRoboter(x, y, s) {   // Ein kleiner ARAG-Roboter fürs Titelbild
+function zeichneRoboter(x, y, s, farbe = '#7cf5c6') {   // Ein kleiner ARAG-Roboter fürs Titelbild
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-  const schweben = Math.sin(zeit * 2) * 4;
+  const schweben = Math.sin(zeit * 2 + x) * 4;
   ctx.translate(0, schweben);
-  ctx.fillStyle = '#7cf5c6'; ctx.beginPath(); ctx.arc(0, -62, 5, 0, 7); ctx.fill();   // Antenne
+  ctx.fillStyle = farbe; ctx.beginPath(); ctx.arc(0, -62, 5, 0, 7); ctx.fill();   // Antenne
   ctx.strokeStyle = '#d7dde6'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -57); ctx.lineTo(0, -44); ctx.stroke();
   ctx.fillStyle = '#d7dde6'; rr(-30, -45, 60, 44, 12); ctx.fill();                      // Kopf
   ctx.fillStyle = '#10141c'; rr(-22, -36, 44, 20, 8); ctx.fill();                        // Visier
-  ctx.fillStyle = '#7cf5c6';
-  const blinzeln = (zeit % 4) < 0.15 ? 2 : 7;
+  ctx.fillStyle = farbe;
+  const blinzeln = ((zeit + x / 100) % 4) < 0.15 ? 2 : 7;
   ctx.fillRect(-14, -26 - blinzeln / 2, 9, blinzeln); ctx.fillRect(5, -26 - blinzeln / 2, 9, blinzeln);
   ctx.fillStyle = '#b8c0cc'; rr(-24, 2, 48, 36, 10); ctx.fill();                        // Körper
-  ctx.fillStyle = '#7cf5c6'; ctx.fillRect(-16, 14, 32, 5);                                // Streifen
+  ctx.fillStyle = farbe; ctx.fillRect(-16, 14, 32, 5);                                    // Streifen
   ctx.fillStyle = '#5b6575'; ctx.beginPath(); ctx.arc(-14, 46, 8, 0, 7); ctx.arc(14, 46, 8, 0, 7); ctx.fill();   // Räder
   ctx.restore();
 }
@@ -1226,29 +1953,32 @@ function zeichneTitel() {
   const licht = ctx.createRadialGradient(W / 2, 250, 30, W / 2, 250, 420);
   licht.addColorStop(0, 'rgba(124,245,198,0.12)'); licht.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = licht; ctx.fillRect(0, 0, W, H);
-  text('ARAG', W / 2, 80, 84, '#7cf5c6');
-  text('Automatische Roboter AufräumGruppe', W / 2, 140, 20, '#c9c3ff', 'center', false);
-  zeichneRoboter(W / 2, 270, 1.6);
-  text('Hol die Schätze aus dem Spukhaus und bring sie zum Transporter 🚚', W / 2, 375, 17, '#fff', 'center', false);
-  text('Aber Vorsicht: Jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻👂', W / 2, 400, 15, '#ffb4b4', 'center', false);
-  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen', W / 2, 445, 13, '#c9c3ff', 'center', false);
-  text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren', W / 2, 466, 13, '#c9c3ff', 'center', false);
-  text('Tipp: Der Lauscher ist blind – bleib still stehen! Wirf Sachen auf den Staubgeist, dann ist er betäubt.', W / 2, 487, 12, '#8a8fb0', 'center', false);
+  text('ARAG', W / 2, 75, 84, '#7cf5c6');
+  text('Automatische Roboter AufräumGruppe', W / 2, 132, 20, '#c9c3ff', 'center', false);
+  zeichneRoboter(W / 2, 250, 1.5);
+  HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
+  text('Hol die Schätze aus dem Spukhaus und bring sie zum Transporter 🚚', W / 2, 355, 17, '#fff', 'center', false);
+  text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻🕷️👂🗿', W / 2, 380, 14, '#ffb4b4', 'center', false);
+  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!)', W / 2, 425, 13, '#c9c3ff', 'center', false);
+  text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren', W / 2, 446, 13, '#c9c3ff', 'center', false);
+  text('Tipps: Der Lauscher ist blind – duck dich! Den Starrer nicht aus den Augen lassen! Würfe betäuben Monster.', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
-  text('▶ Klicken zum Starten', W / 2, 535, 26 * puls, '#ffd166');
-  if (rekord > 0) text(`🏆 Rekord: ${euro(rekord)}`, W / 2, 575, 15, '#ffd166', 'center', false);
-  if (!renderer) text('⚠️ 3D geht auf diesem Computer leider nicht (kein WebGL).', W / 2, 590, 14, '#ff6b6b');
+  text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
+  if (rekord > 0) text(`🏆 Rekord: ${euro(rekord)}`, W / 2, 565, 15, '#ffd166', 'center', false);
+  if (!renderer) text('⚠️ 3D geht auf diesem Computer leider nicht (kein WebGL).', W / 2, 588, 14, '#ff6b6b');
 }
 function zeichneGeschafft() {
   ctx.fillStyle = 'rgba(5,8,10,0.88)'; ctx.fillRect(0, 0, W, H);
-  text(`✅ LEVEL ${level} GESCHAFFT!`, W / 2, 150, 46, '#4ade80');
-  zeichneRoboter(W / 2, 270, 1.1);
-  text(`Abgeliefert: ${euro(levelErgebnis.wert)}`, W / 2, 360, 24, '#fff');
-  text(`💰 Auf dem Konto: ${euro(konto)}`, W / 2, 400, 24, '#ffd166');
-  if (konto >= rekord) text('🏆 Neuer Rekord!', W / 2, 440, 20, '#ffd166');
+  text(`✅ LEVEL ${level} GESCHAFFT!`, W / 2, 140, 46, '#4ade80');
+  zeichneRoboter(W / 2, 250, 1.1);
+  text(`Abgeliefert: ${euro(levelErgebnis.wert)}`, W / 2, 345, 24, '#fff');
+  if (levelErgebnis.helfer) text(`🤖 Von deinen Helfern gebracht: ${levelErgebnis.helfer}`, W / 2, 378, 15, '#c9c3ff', 'center', false);
+  text(`💰 Auf dem Konto: ${euro(konto)}`, W / 2, 415, 24, '#ffd166');
+  if (konto >= rekord) text('🏆 Neuer Rekord!', W / 2, 452, 20, '#ffd166');
   const n = levelDaten(level + 1);
-  text(`Nächstes Level: größeres Haus, Ziel ${euro(n.ziel)}, ${n.geister} 👻 ${n.lauscher ? '+ ' + n.lauscher + ' 👂' : ''}`, W / 2, 485, 16, '#c9c3ff', 'center', false);
-  text('▶ Klicken für das nächste Level', W / 2, 540, 24, '#7cf5c6');
+  const monsterText = [`${n.geister} 👻`, `${n.krabbler} 🕷️`, n.lauscher ? `${n.lauscher} 👂` : '', n.starrer ? `${n.starrer} 🗿` : ''].filter(Boolean).join(' ');
+  text(`Nächstes Level: ${n.breit}×${n.tief} Räume, Ziel ${euro(n.ziel)}, Monster: ${monsterText}`, W / 2, 492, 16, '#c9c3ff', 'center', false);
+  text('▶ Klicken für das nächste Level', W / 2, 545, 24, '#7cf5c6');
 }
 function zeichneKaputt() {
   ctx.fillStyle = 'rgba(25,0,0,0.85)'; ctx.fillRect(0, 0, W, H);
