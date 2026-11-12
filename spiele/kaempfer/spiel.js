@@ -12,7 +12,7 @@ const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
 // ===== Einstellungen (hier kannst du rumprobieren!) =====
-const WELT_B = 2400, WELT_H = 1400;   // Größe der Arena
+let WELT_B = 2400, WELT_H = 1400;     // Größe der Arena (bei Knockout ist sie größer, siehe GROSSE_KARTE)
 const TEAM_GROESSE = 4;               // So viele Mechs pro Team
 const MECH_RADIUS = 26;               // Wie dick ein Mech ist (zum Laufen)
 const BOOST_TEMPO = 560;              // Wie schnell der Boost ist
@@ -137,7 +137,11 @@ const MODI = [
   { id: 'angriff',      emoji: '⚔️', name: 'Angriff',      text: 'Dein Team greift an: Erobere erst Punkt A, dann Punkt B, bevor die Zeit abläuft!' },
   { id: 'verteidigung', emoji: '🛡️', name: 'Verteidigung', text: 'Dein Team verteidigt: Halte die Angreifer von A und B fern, bis die Zeit abläuft!' },
   { id: 'team',         emoji: '💥', name: 'Team-Kampf',   text: 'Zerstöre die gegnerischen Mechs! Das erste Team mit 20 Abschüssen gewinnt.' },
+  { id: 'knockout',     emoji: '🥊', name: 'Knockout',     text: 'Kein Neustart! Haut alle Gegner K.o., um die Runde zu gewinnen. Wer zuerst 2 Runden hat, siegt. Große Karte!' },
 ];
+const KNOCKOUT_SIEGE = 2;     // Knockout: So viele Runden muss man gewinnen
+const KNOCKOUT_ZEIT = 150;    // Knockout: So lange dauert eine Runde (Sekunden)
+const GROSSE_KARTE = { b: 3600, h: 2000 };   // Knockout: So groß ist die Arena
 const PUNKT_ZIEL = 100;       // Punkt halten: So viele Punkte zum Sieg
 const ABSCHUSS_ZIEL = 20;     // Team-Kampf: So viele Abschüsse zum Sieg
 const ANGRIFF_ZEIT = 150;     // Angriff: Startzeit in Sekunden
@@ -174,6 +178,31 @@ const KARTEN = [
       { x: 1110, y: 125, w: 30, h: 30, art: 'saeule', oben: 100, auchUnten: true },
     ],
     mitte: [{ x: 1170, y: 260, w: 60, h: 160, art: 'wand', auchUnten: true }],
+    // Die große Version für Knockout (3600 x 2000, Mitte bei 1800 / 1000)
+    grossLinks: [
+      { x: 420, y: 300, w: 40, h: 300, art: 'wand', auchUnten: true },
+      { x: 520, y: 860, w: 130, h: 280, art: 'wand' },
+      { x: 700, y: 640, w: 50, h: 50, art: 'kiste', auchUnten: true },
+      { x: 760, y: 700, w: 40, h: 40, art: 'kiste', auchUnten: true },
+      { x: 740, y: 470, w: 220, h: 50, art: 'wand', auchUnten: true },
+      { x: 1000, y: 880, w: 40, h: 40, art: 'kiste' },
+      { x: 1040, y: 1080, w: 40, h: 40, art: 'kiste' },
+      // 1. Etage: Plattform mit Rampe, und eine lange Brücke über die ganze Mitte
+      { x: 1000, y: 60, w: 320, h: 220, art: 'plattform', oben: 110, auchUnten: true },
+      { x: 1000, y: 280, w: 120, h: 240, art: 'rampe', rampe: 'n', oben: 110, auchUnten: true },
+      { x: 1320, y: 120, w: 480, h: 100, art: 'steg', unten: 100, oben: 110, auchUnten: true },
+      { x: 1320, y: 120, w: 480, h: 6, art: 'gelaender', unten: 110, oben: 140, auchUnten: true },
+      { x: 1320, y: 214, w: 480, h: 6, art: 'gelaender', unten: 110, oben: 140, auchUnten: true },
+      { x: 1450, y: 155, w: 30, h: 30, art: 'saeule', oben: 100, auchUnten: true },
+      { x: 1650, y: 155, w: 30, h: 30, art: 'saeule', oben: 100, auchUnten: true },
+      { x: 1260, y: 680, w: 60, h: 230, art: 'wand', auchUnten: true },
+      { x: 1480, y: 560, w: 150, h: 40, art: 'wand', auchUnten: true },
+      { x: 1500, y: 960, w: 40, h: 80, art: 'kiste' },
+    ],
+    grossMitte: [
+      { x: 1760, y: 500, w: 80, h: 220, art: 'wand', auchUnten: true },
+      { x: 1770, y: 970, w: 60, h: 60, art: 'kiste' },
+    ],
   },
   {
     id: 'planet', name: 'Planet Xyloria', emoji: '🪐',
@@ -190,6 +219,26 @@ const KARTEN = [
       { x: 900, y: 40, w: 230, h: 150, art: 'hang', rampe: 'w', oben: 100, auchUnten: true },
     ],
     mitte: [{ x: 1160, y: 250, w: 80, h: 160, art: 'kristall', auchUnten: true }],
+    // Die große Version für Knockout (3600 x 2000, Mitte bei 1800 / 1000)
+    grossLinks: [
+      { x: 420, y: 300, w: 90, h: 260, art: 'fels', auchUnten: true },
+      { x: 520, y: 860, w: 120, h: 280, art: 'fels' },
+      { x: 720, y: 680, w: 40, h: 40, art: 'stein', auchUnten: true },
+      { x: 780, y: 740, w: 36, h: 36, art: 'stein', auchUnten: true },
+      { x: 920, y: 460, w: 70, h: 70, art: 'kristall', auchUnten: true },
+      { x: 1000, y: 900, w: 40, h: 40, art: 'pilz' },
+      // Großer Hügel mit zwei Hängen
+      { x: 1000, y: 60, w: 320, h: 240, art: 'huegel', oben: 100, auchUnten: true },
+      { x: 1000, y: 300, w: 140, h: 240, art: 'hang', rampe: 'n', oben: 100, auchUnten: true },
+      { x: 1320, y: 60, w: 220, h: 180, art: 'hang', rampe: 'w', oben: 100, auchUnten: true },
+      { x: 1260, y: 680, w: 70, h: 200, art: 'kristall', auchUnten: true },
+      { x: 1480, y: 560, w: 40, h: 40, art: 'pilz', auchUnten: true },
+      { x: 1520, y: 940, w: 80, h: 120, art: 'fels' },
+    ],
+    grossMitte: [
+      { x: 1760, y: 480, w: 80, h: 200, art: 'kristall', auchUnten: true },
+      { x: 1780, y: 980, w: 40, h: 40, art: 'stein' },
+    ],
   },
 ];
 const STANDARD_HOEHE = { wand: 110, kiste: 40, fels: 100, kristall: 130, pilz: 150, stein: 40, saeule: 100 };
@@ -334,7 +383,8 @@ const sicht = (a, b) => sichtFrei3D(auge(a), auge(b));   // Kann Mech a Mech b s
 // Die Arena wird in Kästchen aufgeteilt. In jedem Kästchen kann es mehrere "Knoten" geben:
 // einen unten auf dem Boden und einen oben auf einer Plattform oder Brücke.
 // Die Bots suchen den kürzesten Weg von Knoten zu Knoten (Rampen hoch, unter Brücken durch ...).
-const ZELLE = 40, GX = WELT_B / ZELLE, GY = WELT_H / ZELLE;
+const ZELLE = 40;
+let GX = WELT_B / ZELLE, GY = WELT_H / ZELLE;
 const BOT_HOEHE = 95;   // So viel Platz nach oben braucht ein Mech (auch der große Koloss)
 let knoten = [], zellenKnoten = [], nachbarn = [];
 function platzFrei(x, y, z, radius) {
@@ -346,6 +396,7 @@ function platzFrei(x, y, z, radius) {
   return true;
 }
 function baueGitter() {   // Muss bei jeder Karte neu gemacht werden
+  GX = WELT_B / ZELLE; GY = WELT_H / ZELLE;
   knoten = []; zellenKnoten = []; nachbarn = [];
   for (let gy = 0; gy < GY; gy++) {
     for (let gx = 0; gx < GX; gx++) {
@@ -568,6 +619,7 @@ let ziele = [], aktivesZiel = 0, angreifer = 'blau', verteidiger = 'rot';
 let punkte = { blau: 0, rot: 0 };
 let restZeit = 0, countdown = 0, verlaengerung = false;
 let nachricht = null, ende = null, pause = false;
+let runde = 1, rundePause = 0, zuschauen = null;   // Für Knockout
 let maus = { x: W / 2, y: H / 2, links: false, rechts: false };
 let blick = { links: 0, hoch: 0 };   // Wohin du schaust (Drehung und Neigung)
 let wackeln = 0, rueckstoss = 0, muendung = 0;
@@ -593,7 +645,7 @@ function spawnPunkt(m) {
   let x = m.team === 'blau' ? 130 : WELT_B - 130;
   // Angreifer starten weiter vorne, wenn Punkt A erobert ist
   if ((modus === 'angriff' || modus === 'verteidigung') && m.team === angreifer && aktivesZiel === 1) x = m.team === 'blau' ? 720 : WELT_B - 720;
-  return { x, y: 700 + (m.nr - (TEAM_GROESSE - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
+  return { x, y: WELT_H / 2 + (m.nr - (TEAM_GROESSE - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
 }
 function spawnen(m) {
   const p = spawnPunkt(m);
@@ -609,7 +661,7 @@ function spawnen(m) {
 
 function neuesSpiel(id) {
   modus = id;
-  ladeKarte(karte);
+  ladeKarte(karte, modus === 'knockout');   // Knockout hat eine große Karte
   // Alte 3D-Sachen aufräumen
   for (const m of mechs) if (m.g3) szene.remove(m.g3.gruppe);
   for (const s of schussMeshes) szene.remove(s.mesh);
@@ -626,6 +678,9 @@ function neuesSpiel(id) {
     restZeit = 300;
   } else if (modus === 'team') {
     restZeit = 300;
+  } else if (modus === 'knockout') {
+    restZeit = KNOCKOUT_ZEIT;
+    runde = 1; rundePause = 0; zuschauen = null;
   } else {
     angreifer = modus === 'angriff' ? 'blau' : 'rot';
     verteidiger = anderes(angreifer);
@@ -922,7 +977,7 @@ function zerstoert(m, von) {
   m.tot = true;
   m.totZeit = 0;
   m.salve = null;
-  m.neustart = NEUSTART_ZEIT;
+  m.neustart = modus === 'knockout' ? Infinity : NEUSTART_ZEIT;   // Knockout: Kein Neustart!
   m.tode++;
   m.zerstoertVon = von;
   // 💥 Das Wrack wird durch die Luft geschleudert – weg von dem, der dich zerstört hat!
@@ -1079,7 +1134,7 @@ function zaehleIn(team, z) { return mechs.filter(m => !m.tot && m.team === team 
 
 // Wohin will der Bot gerade?
 function botZiel(m) {
-  if (modus === 'team') {
+  if (modus === 'team' || modus === 'knockout') {
     const gegner = mechs.filter(o => !o.tot && o.team !== m.team).sort((a, b) => dist(a, m) - dist(b, m))[0];
     return gegner || { x: WELT_B / 2, y: WELT_H / 2 };
   }
@@ -1208,6 +1263,8 @@ function updateModus(dt) {
     else if (punkte.rot >= PUNKT_ZIEL) beende('rot', 'Team Rot hat den Punkt lange genug gehalten!');
     restZeit -= dt;
     if (restZeit <= 0) zeitUm(punkte.blau, punkte.rot);
+  } else if (modus === 'knockout') {
+    updateKnockout(dt);
   } else if (modus === 'team') {
     if (punkte.blau >= ABSCHUSS_ZIEL) beende('blau', `Team Blau hat zuerst ${ABSCHUSS_ZIEL} Mechs zerstört!`);
     else if (punkte.rot >= ABSCHUSS_ZIEL) beende('rot', `Team Rot hat zuerst ${ABSCHUSS_ZIEL} Mechs zerstört!`);
@@ -1246,6 +1303,48 @@ function updateModus(dt) {
     }
   }
 }
+// ----- Knockout -----
+const lebend = team => mechs.filter(m => m.team === team && !m.tot).length;
+function updateKnockout(dt) {
+  if (rundePause > 0) {   // Kurze Pause zwischen den Runden
+    rundePause -= dt;
+    if (rundePause <= 0) neueRunde();
+    return;
+  }
+  restZeit -= dt;
+  const b = lebend('blau'), r = lebend('rot');
+  if (b > 0 && r > 0 && restZeit > 0) return;
+  let sieger = null;
+  if (b === 0 && r > 0) sieger = 'rot';
+  else if (r === 0 && b > 0) sieger = 'blau';
+  else if (b !== r) sieger = b > r ? 'blau' : 'rot';   // Zeit um: Wer hat mehr Mechs übrig?
+  else {                                               // Gleich viele? Wer ist weniger kaputt?
+    const summe = team => mechs.filter(m => m.team === team && !m.tot).reduce((s, m) => s + gesundheit(m), 0);
+    const sb = summe('blau'), sr = summe('rot');
+    if (Math.abs(sb - sr) > 0.01) sieger = sb > sr ? 'blau' : 'rot';
+  }
+  rundeVorbei(sieger);
+}
+function rundeVorbei(sieger) {
+  if (sieger) punkte[sieger]++;
+  if (sieger && punkte[sieger] >= KNOCKOUT_SIEGE) {
+    beende(sieger, `${TEAMS[sieger].name} hat ${KNOCKOUT_SIEGE} Runden gewonnen!`);
+    return;
+  }
+  const gut = sieger === spieler.team;
+  if (!sieger) zeigeNachricht('🤝 Unentschieden! Keiner kriegt einen Punkt.', 3.5, '#fff');
+  else zeigeNachricht(gut ? `🏆 Runde ${runde} gewonnen!` : `💀 Runde ${runde} verloren!`, 3.5, gut ? '#4ade80' : '#ff6b6b');
+  if (sieger) sound.erobert(gut);
+  rundePause = 4;
+}
+function neueRunde() {
+  runde++;
+  for (const m of mechs) { spawnen(m); m.salve = null; m.mgPause = 0; m.raketePause = 1; m.boostPause = 0; }
+  restZeit = KNOCKOUT_ZEIT;
+  zuschauen = null;
+  countdown = 3.99;
+}
+
 function zeitUm(blau, rot) {
   if (blau > rot) beende('blau', 'Die Zeit ist um! Team Blau hat mehr Punkte.');
   else if (rot > blau) beende('rot', 'Die Zeit ist um! Team Rot hat mehr Punkte.');
@@ -1518,7 +1617,7 @@ function baueFabrik(g) {
     const a = i / 14 * Math.PI * 2;
     const h = 300 + (i * 137) % 400;
     const turm = new THREE.Mesh(new THREE.BoxGeometry(160, h, 160), new THREE.MeshStandardMaterial({ color: '#6b7385', roughness: 0.8 }));
-    turm.position.set(WELT_B / 2 + Math.cos(a) * 2100, h / 2, WELT_H / 2 + Math.sin(a) * 1500);
+    turm.position.set(WELT_B / 2 + Math.cos(a) * (WELT_B / 2 + 900), h / 2, WELT_H / 2 + Math.sin(a) * (WELT_H / 2 + 800));
     g.add(turm);
   }
 }
@@ -1677,7 +1776,7 @@ function bauePlanet(g) {
   // Draußen: riesige Pilze und Felsnadeln
   for (let i = 0; i < 18; i++) {
     const a = i / 18 * Math.PI * 2 + z() * 0.2;
-    const x = WELT_B / 2 + Math.cos(a) * (1800 + z() * 500), y = WELT_H / 2 + Math.sin(a) * (1200 + z() * 400);
+    const x = WELT_B / 2 + Math.cos(a) * (WELT_B / 2 + 600 + z() * 500), y = WELT_H / 2 + Math.sin(a) * (WELT_H / 2 + 500 + z() * 400);
     if (i % 2) riesenPilz(g, x, y, 30 + z() * 20, 300 + z() * 300, 200 + z() * 120);
     else {
       const nadel = new THREE.Mesh(new THREE.ConeGeometry(70 + z() * 50, 400 + z() * 500, 6), felsMat);
@@ -1726,10 +1825,20 @@ function bauePlanet(g) {
 
 // Karte laden: Hindernisse, Wege für die Bots und die 3D-Welt
 let geladeneKarte = null;
-function ladeKarte(k) {
-  if (geladeneKarte === k) return;
-  geladeneKarte = k;
-  WAENDE = waendeVon(k);
+function ladeKarte(k, gross = false) {
+  const schluessel = k.id + (gross ? '-gross' : '');
+  if (geladeneKarte === schluessel) return;
+  geladeneKarte = schluessel;
+  WELT_B = gross ? GROSSE_KARTE.b : 2400;
+  WELT_H = gross ? GROSSE_KARTE.h : 1400;
+  WAENDE = waendeVon(gross ? { links: k.grossLinks, mitte: k.grossMitte } : k);
+  // Boden-Muster, Sonne und Schatten an die Größe anpassen
+  bodenTextur.repeat.set(WELT_B / 100, WELT_H / 100);
+  alienBodenTextur.repeat.set(WELT_B / 220, WELT_H / 220);
+  sonne.position.set(WELT_B / 2 - 600, 900, WELT_H / 2 - 400);
+  sonne.target.position.set(WELT_B / 2, 0, WELT_H / 2);
+  Object.assign(sonne.shadow.camera, { left: -WELT_B / 2 - 200, right: WELT_B / 2 + 200, top: WELT_H / 2 + 300, bottom: -WELT_H / 2 - 300, far: 3500 });
+  sonne.shadow.camera.updateProjectionMatrix();
   baueGitter();
   baueKarte3D(k);
 }
@@ -2292,8 +2401,17 @@ function zeichne3D() {
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
     muendungsBlitz.visible = muendung > 0;
     muendungsBlitz.position.set(m.typ.mg.strahl ? 15 : (m.typ.mg.salve ? 17 : m.lauf * 15), waffen.userData.muendungY, waffen.userData.muendungZ);
+  } else if (modus === 'knockout' && m.totZeit > 3 && mechs.some(o => o.team === m.team && !o.tot)) {
+    // Knockout: Du bist raus – die Kamera fliegt hinter einem Teamkollegen her
+    if (!zuschauen || zuschauen.tot) zuschauen = mechs.find(o => o.team === m.team && !o.tot);
+    const o = zuschauen, gr = o.typ.groesse;
+    const ziel = new THREE.Vector3(o.x - Math.cos(o.zielWinkel) * 170 * gr, o.z + 120 * gr, o.y - Math.sin(o.zielWinkel) * 170 * gr);
+    kamera.position.lerp(ziel, 0.08);
+    kamera.lookAt(o.x + Math.cos(o.zielWinkel) * 80, o.z + 50 * gr, o.y + Math.sin(o.zielWinkel) * 80);
+    waffen.visible = false;
   } else {
     // Zerstört: Die Kamera fliegt hoch und schaut auf dein Wrack
+    if (modus === 'knockout') zuschauen = null;
     const w = m.wrack;
     const k = Math.min(1, m.totZeit / 1.5);
     kamera.position.set(w.x - Math.cos(blick.links) * 160 * k, w.z + AUGEN_HOEHE + 200 * k, w.y - Math.sin(blick.links) * 160 * k);
@@ -2341,7 +2459,7 @@ function zeichneNamen() {
 
 // Wo ist das Ziel? Zeichen über dem Punkt oder Pfeil am Rand
 function zeichneZielZeichen() {
-  if (modus === 'team' || spieler.tot) return;
+  if (modus === 'team' || modus === 'knockout' || spieler.tot) return;
   const z = modus === 'punkt' ? ziele[0] : ziele[aktivesZiel];
   const w = winkelDiff(blick.links, Math.atan2(z.y - spieler.y, z.x - spieler.x));
   const meter = Math.round(dist(z, spieler) / 10);
@@ -2426,6 +2544,19 @@ function zeichneHUD() {
     let status = z.besitzer ? `🚩 Punkt gehört ${TEAMS[z.besitzer].name}` : '🚩 Punkt ist frei';
     if (z.umkaempft) status = '⚔️ Punkt ist umkämpft!';
     text(status, W / 2, 55, 14, z.besitzer ? TEAMS[z.besitzer].hell : '#fff', 'center', false);
+  } else if (modus === 'knockout') {
+    text(`${punkte.blau}`, W / 2 - 172, 36, 30, TEAMS.blau.hell);
+    text(`${punkte.rot}`, W / 2 + 172, 36, 30, TEAMS.rot.hell);
+    text(`🥊 Runde ${runde}`, W / 2, 24, 17, '#ffd166');
+    text(`${uhr(Math.max(0, restZeit))} · ${KNOCKOUT_SIEGE} Siege gewinnen`, W / 2, 58, 12, '#c9c3ff', 'center', false);
+    for (const team of ['blau', 'rot']) {   // Ein Punkt pro Mech: voll = noch dabei, leer = K.o.
+      mechs.filter(o => o.team === team).forEach((o, i) => {
+        const x = team === 'blau' ? W / 2 - 136 + i * 22 : W / 2 + 70 + i * 22;
+        ctx.fillStyle = o.tot ? 'rgba(80,80,90,0.7)' : TEAMS[team].farbe;
+        kreis(x, 38, 8); ctx.fill();
+        ctx.strokeStyle = o.istSpieler ? '#ffd166' : 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+      });
+    }
   } else if (modus === 'team') {
     text(`${punkte.blau}`, W / 2 - 70, 34, 30, TEAMS.blau.hell);
     text(':', W / 2, 32, 26, '#fff');
@@ -2479,7 +2610,7 @@ function zeichneHUD() {
   });
 
   // ----- Unten rechts: Mini-Karte -----
-  const mk = 0.075;
+  const mk = 180 / WELT_B;   // Die Mini-Karte ist immer 180 breit
   const mx = touchModus ? 12 : W - 12 - WELT_B * mk, my = touchModus ? 12 : H - 12 - WELT_H * mk;   // Auf dem Handy oben links, damit unten Platz für die Knöpfe ist
   ctx.fillStyle = 'rgba(15,17,24,0.85)'; ctx.fillRect(mx - 3, my - 3, WELT_B * mk + 6, WELT_H * mk + 6);
   for (const r of WAENDE) {   // Wände grau, Plattformen und Brücken hell, Rampen dazwischen
@@ -2521,10 +2652,12 @@ function zeichneHUD() {
   // ----- Zerstört? -----
   if (m.tot && zustand === 'spiel') {
     ctx.fillStyle = 'rgba(80,0,0,0.3)'; ctx.fillRect(0, 0, W, H);
-    text('💥 ZERSTÖRT! 💥', W / 2, H / 2 - 40, 48, '#ff6b6b');
+    text(modus === 'knockout' ? '💥 DU BIST RAUS! 💥' : '💥 ZERSTÖRT! 💥', W / 2, H / 2 - 40, 48, '#ff6b6b');
     if (m.zerstoertVon) text(`von ${m.zerstoertVon.name}${m.koGrund ? ' · ' + m.koGrund : ''}`, W / 2, H / 2 + 5, 20, TEAMS[m.zerstoertVon.team].hell);
     else if (m.koGrund) text(m.koGrund, W / 2, H / 2 + 5, 20, '#fff');
-    text(`Neustart in ${Math.ceil(m.neustart)} ...`, W / 2, H / 2 + 45, 22, '#fff');
+    if (modus === 'knockout') {
+      text(zuschauen ? `👀 Du schaust ${zuschauen.name} zu` : 'Warte auf die nächste Runde ...', W / 2, H / 2 + 45, 22, '#fff');
+    } else text(`Neustart in ${Math.ceil(m.neustart)} ...`, W / 2, H / 2 + 45, 22, '#fff');
   }
 
   // ----- Countdown -----
@@ -2532,7 +2665,7 @@ function zeichneHUD() {
     const n = Math.ceil(countdown) - 1;
     const pop = 1 + (countdown % 1) * 0.5;
     const modusInfo = MODI.find(x => x.id === modus);
-    text(`${modusInfo.emoji} ${modusInfo.name}`, W / 2, H / 2 - 110, 34, '#ffd166');
+    text(`${modusInfo.emoji} ${modusInfo.name}${modus === 'knockout' ? ' · Runde ' + runde : ''}`, W / 2, H / 2 - 110, 34, '#ffd166');
     text(n > 0 ? String(n) : 'LOS!', W / 2, H / 2 - 20, 90 * pop, n > 0 ? '#fff' : '#4ade80');
     if (modus === 'angriff' || modus === 'verteidigung') {
       text(spieler.team === angreifer ? 'Dein Team greift an!' : 'Dein Team verteidigt!', W / 2, H / 2 + 60, 22, '#fff');
@@ -2592,8 +2725,13 @@ function zeichneHUD() {
 }
 
 // ===== Titelbild (2D) =====
-function modusKarten() {
-  return MODI.map((m, i) => ({ m, x: 60 + (i % 2) * 430, y: 160 + Math.floor(i / 2) * 135, w: 410, h: 120 }));
+function modusKarten() {   // 3 pro Reihe, die letzte Reihe wird in die Mitte gerückt
+  const b = 290, abst = 15, proReihe = 3;
+  return MODI.map((m, i) => {
+    const reihe = Math.floor(i / proReihe), inReihe = Math.min(proReihe, MODI.length - reihe * proReihe);
+    const start = (W - inReihe * b - (inReihe - 1) * abst) / 2;
+    return { m, x: start + (i % proReihe) * (b + abst), y: 145 + reihe * 142, w: b, h: 130 };
+  });
 }
 const imRechteck = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
@@ -2671,9 +2809,9 @@ function zeichneTitel() {
     ctx.fillStyle = hover ? '#3a4256' : 'rgba(30,34,46,0.9)';
     rr(k.x, k.y, k.w, k.h, 14); ctx.fill();
     ctx.strokeStyle = hover ? '#ffd166' : '#4a5266'; ctx.lineWidth = hover ? 4 : 2; ctx.stroke();
-    text(k.m.emoji, k.x + 42, k.y + 60, 40, '#fff', 'center', false);
-    text(k.m.name, k.x + 82, k.y + 30, 24, hover ? '#ffd166' : '#fff', 'left', false);
-    umbrechen(k.m.text, k.x + 82, k.y + 60, k.w - 100, 19, 14, '#c9c3ff');
+    text(k.m.emoji, k.x + 30, k.y + 30, 28, '#fff', 'center', false);
+    text(k.m.name, k.x + 56, k.y + 31, 21, hover ? '#ffd166' : '#fff', 'left', false);
+    umbrechen(k.m.text, k.x + 16, k.y + 62, k.w - 32, 17, 13, '#c9c3ff');
   }
 
   text('🎮 WASD: Laufen  ·  Maus: Umschauen  ·  Linksklick: MG  ·  Rechtsklick / Q: Rakete  ·  Shift: Boost  ·  Esc: Pause', W / 2, 455, 13, '#c9c3ff', 'center', false);
