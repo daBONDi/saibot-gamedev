@@ -1816,6 +1816,22 @@ function baueMech(m) {
   visier.position.set(23.5, 22, 0);
   torso.add(visier);
   for (const s of [-1, 1]) torso.add(klotz(2, 2, 2, akzentLeucht, 23, 16, s * 8));   // kleine Lampen
+  // Rücken: Antrieb mit zwei Düsen (leuchten beim Boosten)
+  torso.add(klotz(10, 18, 22, grauMat, -22, 14, 0));
+  const duesen = [];
+  for (const s of [-1, 1]) {
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 6, 10), dunkelMat);
+    d.rotation.z = Math.PI / 2; d.position.set(-29, 10, s * 6); d.castShadow = true;
+    torso.add(d);
+    const flamme = new THREE.Group();   // Die Flamme wächst von der Düse aus nach hinten
+    flamme.position.set(-32, 10, s * 6);
+    const kegel = new THREE.Mesh(new THREE.ConeGeometry(3.5, 14, 10), dueseMat);
+    kegel.rotation.z = Math.PI / 2; kegel.position.x = -7;
+    flamme.add(kegel);
+    torso.add(flamme);
+    duesen.push(flamme);
+  }
+  for (const y of [9, 13, 17]) torso.add(klotz(1, 1.5, 16, dunkelMat, -27.5, y + 4, 0));   // Lüftungsschlitze
   // ===== Arme (eigene Gruppen, damit man sie abschießen kann!) =====
   // Links ist -z, rechts ist +z
   const arme = { armL: new THREE.Group(), armR: new THREE.Group() };
@@ -1923,6 +1939,11 @@ const wrackMitte = new THREE.Vector3(), wrackDreh = new THREE.Vector3();
 function zeigeWrack(m, g) {
   const w = m.wrack, gr = m.typ.groesse;
   g.istWrack = true;
+  for (const [id, obj] of Object.entries(g.teile)) {   // Kaputte Teile fliegen weg
+    const dran = hat(m, id);
+    if (!dran && obj.visible && id !== 'visier') truemmerAbwerfen(m, obj);
+    obj.visible = dran;
+  }
   g.gruppe.rotation.set(w.rx, w.ry, w.rz);
   // Der Mech dreht sich um seine Mitte (nicht um die Füße). Liegt er, ist die Mitte näher am Boden.
   const mitteH = (45 - 27 * w.liegtK) * gr;
