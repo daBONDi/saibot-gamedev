@@ -37,7 +37,8 @@ const DUCK_RADIUS = 0.28;        // So klein bist du geduckt (passt unter Tische
 const AUGEN_HOEHE = 0.85;        // So weit über der Körpermitte ist die Kamera
 const DUCK_AUGEN = 0.35;         // ... und geduckt
 const DUCK_SICHT = 0.55;         // Geduckt sehen dich Monster nur aus so viel der normalen Entfernung
-const MAX_LAMPEN = 14;           // So viele Lichter gibt es höchstens (mehr wird langsam)
+const MAX_LAMPEN = 14;
+const MONSTER_START_ABSTAND = 3;   // So viele Räume (Türen) weit weg vom Start tauchen Monster auf           // So viele Lichter gibt es höchstens (mehr wird langsam)
 
 // Die Treppe steht in einem Raum an der Nordwand (Werte in Metern vom Raum-Rand)
 const TREPPE = { von: 1.2, bis: 8.4, z1: 0.3, z2: 1.9 };     // Die Rampe mit den Stufen
@@ -93,10 +94,10 @@ function levelDaten(n) {
     tief: Math.min(4, 3 + Math.floor((n - 1) / 3)),     // Räume hintereinander
     etagen: n >= 4 ? 3 : 2,                             // Stockwerke
     ziel: 3000 + (n - 1) * 2000,                        // So viel Geld musst du abliefern
-    geister: 1 + Math.floor((n - 1) / 2),               // 👻 Staubgeister
-    krabbler: 1 + Math.floor((n - 1) / 2),              // 🕷️ Krabbler
-    lauscher: n >= 2 ? 1 + Math.floor((n - 2) / 3) : 0, // 👂 Lauscher (ab Level 2)
-    starrer: n >= 3 ? 1 + Math.floor((n - 3) / 3) : 0,  // 🗿 Starrer (ab Level 3)
+    // Monster: Hier kannst du einstellen, wie viele es gibt!
+    geister: 1 + Math.floor((n - 1) / 3),               // 👻 Staubgeister (ab Level 4 zwei)
+    lauscher: n >= 3 ? 1 + Math.floor((n - 3) / 4) : 0, // 👂 Lauscher (ab Level 3)
+    starrer: n >= 5 ? 1 + Math.floor((n - 5) / 4) : 0,  // 🗿 Starrer (ab Level 5)
   };
 }
 
@@ -204,7 +205,6 @@ const sound = {
   stoss(laut = 1) { if (!spiele('stoss', 0.6 * laut, zufall(0.85, 1.15))) ton(200, 0, 0.1, 'square', 0.1 * laut, 80); },
   geist() { if (!spiele('geist', 0.6, 0.8)) ton(300, 0, 0.8, 'sine', 0.1, 150); },
   lauscher() { if (!spiele('lauscher', 0.7, 0.7)) ton(120, 0, 0.6, 'sawtooth', 0.1, 60); },
-  krabbler() { if (!spiele('geist', 0.5, 2.2)) ton(900, 0, 0.3, 'square', 0.06, 1400); },
   knirsch() { if (!spiele('stoss', 0.8, 0.45)) ton(70, 0, 0.4, 'sawtooth', 0.12, 40); },   // Stein schabt über den Boden ...
   autsch() { if (!spiele('autsch', 0.8, 0.8)) ton(150, 0, 0.3, 'sawtooth', 0.15, 60); },
   strahl() { if (!spiele('strahl', 0.25, 1.4)) ton(600, 0, 0.15, 'sine', 0.05, 900); },
@@ -1090,10 +1090,10 @@ function baueHaus() {
 
   // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
   const weit = [];
-  for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
+  for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= MONSTER_START_ABSTAND) weit.push(r);
+  if (!weit.length) for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
   if (!weit.length) for (let r = 0; r < anzahl; r++) if (r !== haus.start) weit.push(r);
   for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
-  for (let k = 0; k < ld.krabbler; k++) neuesMonster('krabbler', auswahl(weit));
   for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
   for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
 
@@ -1363,12 +1363,10 @@ function lasterWert() {
 // ===== Die Monster =====
 // =====================================================================
 // 👻 Staubgeist: schwebt herum. Sieht er dich (oder einen Helfer), jagt er! Wirf was auf ihn, dann ist er kurz betäubt.
-// 🕷️ Krabbler: klein und superschnell, beißt aber nicht so fest. Sieht nicht so weit.
 // 👂 Lauscher: ist blind, hört aber alles! Lauter Krach lockt ihn an. Steh still oder duck dich, dann findet er dich nicht.
 // 🗿 Starrer: eine Steinstatue. Sie bewegt sich NUR, wenn du nicht hinschaust! Lass sie nicht aus den Augen ...
 const MONSTER_ARTEN = {
   geist:    { name: 'Staubgeist', emoji: '👻', tempo: 1.6, jagdTempo: 3.3, schaden: 30, sicht: 14, augen: 1.3, pause: 2, betaeubbar: true },
-  krabbler: { name: 'Krabbler',   emoji: '🕷️', tempo: 2.4, jagdTempo: 5.4, schaden: 12, sicht: 10, augen: 0.4, pause: 1.2, betaeubbar: true },
   lauscher: { name: 'Lauscher',   emoji: '👂', tempo: 1.0, jagdTempo: 4.6, schaden: 45, hoeren: 2.5, pause: 2, betaeubbar: true },
   starrer:  { name: 'Starrer',    emoji: '🗿', tempo: 1.2, jagdTempo: 4.8, schaden: 50, pause: 3, betaeubbar: false },
 };
@@ -1385,22 +1383,6 @@ function baueMonsterMesh(art) {
     const auge = new THREE.MeshBasicMaterial({ color: '#ff2a2a', fog: false });   // Die Augen sieht man auch im Nebel!
     for (const s of [-1, 1]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), auge); a.position.set(s * 0.13, 0.12, 0.38); g.add(a); }
     g.userData.auge = auge;
-  } else if (art === 'krabbler') {
-    const panzer = new THREE.MeshStandardMaterial({ color: '#3b1f1a', roughness: 0.5, metalness: 0.3 });
-    const koerper = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), panzer); koerper.scale.set(1, 0.55, 1.3); koerper.position.y = 0.3; g.add(koerper);
-    const kopf = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), panzer); kopf.position.set(0, 0.3, 0.36); g.add(kopf);
-    const auge = new THREE.MeshBasicMaterial({ color: '#7dff5a', fog: false });
-    for (const [x, y] of [[-0.06, 0.36], [0.06, 0.36], [-0.1, 0.31], [0.1, 0.31]]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), auge); a.position.set(x, y, 0.48); g.add(a); }
-    g.userData.beine = [];
-    for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {   // 8 Beine!
-      const bein = new THREE.Group();
-      bein.position.set(s * 0.2, 0.3, -0.2 + k * 0.15);
-      const teil = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.03, 0.03), panzer);
-      teil.position.x = s * 0.2; teil.rotation.z = s * -0.6;
-      bein.add(teil);
-      bein.userData.seite = s; bein.userData.nr = k;
-      g.add(bein); g.userData.beine.push(bein);
-    }
   } else if (art === 'lauscher') {
     const haut = new THREE.MeshStandardMaterial({ color: '#2a2530', roughness: 0.9 });
     const ohrMat = new THREE.MeshStandardMaterial({ color: '#b06a8a', roughness: 0.6, emissive: '#000000' });
@@ -1528,8 +1510,7 @@ function updateMonster(m, dt) {
         if (opfer) {
           if (m.modus !== 'jagen') {
             if (opfer.spieler) {
-              if (m.art === 'geist') { sound.geist(); zeigeNachricht('👻 Der Staubgeist hat dich gesehen! LAUF!', 2, '#ff6b6b'); }
-              else { sound.krabbler(); zeigeNachricht('🕷️ Ein Krabbler kommt!', 2, '#ff6b6b'); }
+              sound.geist(); zeigeNachricht('👻 Der Staubgeist hat dich gesehen! LAUF!', 2, '#ff6b6b');
             } else if (opfer.helfer) {
               opfer.helfer.angst = 3;
               sagen(opfer.helfer, 'hilfe', { monster: info.name }, 1);
@@ -1569,7 +1550,7 @@ function updateMonster(m, dt) {
   }
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
   // Angriff! Auf dich ...
-  const reichweite = m.art === 'krabbler' ? 0.8 : 1.0;
+  const reichweite = 1.0;
   const fuss = p.y - (geduckt ? DUCK_RADIUS : KOERPER_RADIUS);
   if (m.angriffPause <= 0 && abstand2D(m.x, m.z, p.x, p.z) < reichweite && Math.abs(fuss - m.y) < 1.2) {
     m.angriffPause = info.pause;
@@ -1615,11 +1596,6 @@ function zeigeMonster(m) {
       k.position.y += Math.sin(k.userData.kreisen * 1.3) * 0.003;
     });
     g.userData.auge.color.set(m.betaeubt > 0 ? '#555' : m.modus === 'jagen' ? '#ff2a2a' : '#aa3333');
-  } else if (m.art === 'krabbler') {
-    g.position.set(m.x, m.y, m.z);
-    g.rotation.set(0, m.winkel, m.betaeubt > 0 ? Math.PI : 0);   // Betäubt: liegt auf dem Rücken!
-    if (m.betaeubt > 0) g.position.y = m.y + 0.55;
-    for (const b of g.userData.beine) b.rotation.y = m.laeuft ? Math.sin(m.phase * 25 + b.userData.nr * 1.5) * 0.4 * b.userData.seite : 0;
   } else if (m.art === 'lauscher') {
     const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 14 : 6)) : 0;
     g.position.set(m.x, m.y + Math.abs(schritt) * 0.08, m.z);
@@ -2357,7 +2333,7 @@ function zeichneTitel() {
   zeichneRoboter(W / 2, 250, 1.5);
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
   text('Hol die Schätze aus dem Spukhaus und bring sie zum Transporter 🚚', W / 2, 355, 17, '#fff', 'center', false);
-  text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻🕷️👂🗿', W / 2, 380, 14, '#ffb4b4', 'center', false);
+  text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻👂🗿', W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!)', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren · V: Stimmen an/aus', W / 2, 446, 13, '#c9c3ff', 'center', false);
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Den Starrer nicht aus den Augen lassen!', W / 2, 468, 12, '#8a8fb0', 'center', false);
@@ -2375,7 +2351,7 @@ function zeichneGeschafft() {
   text(`💰 Auf dem Konto: ${euro(konto)}`, W / 2, 415, 24, '#ffd166');
   if (konto >= rekord) text('🏆 Neuer Rekord!', W / 2, 452, 20, '#ffd166');
   const n = levelDaten(level + 1);
-  const monsterText = [`${n.geister} 👻`, `${n.krabbler} 🕷️`, n.lauscher ? `${n.lauscher} 👂` : '', n.starrer ? `${n.starrer} 🗿` : ''].filter(Boolean).join(' ');
+  const monsterText = [`${n.geister} 👻`, n.lauscher ? `${n.lauscher} 👂` : '', n.starrer ? `${n.starrer} 🗿` : ''].filter(Boolean).join(' ');
   text(`Nächstes Level: ${n.etagen} Stockwerke mit je ${n.breit}×${n.tief} Räumen, Ziel ${euro(n.ziel)}, Monster: ${monsterText}`, W / 2, 492, 15, '#c9c3ff', 'center', false);
   text('▶ Klicken für das nächste Level', W / 2, 545, 24, '#7cf5c6');
 }
