@@ -47,7 +47,7 @@ const LOCH = { x1: 1.0, x2: 8.4, z1: 0.15, z2: 2.0 };          // Das Loch in de
 // ===== Die Helfer-Bots =====
 const HELFER_ANZAHL = 2;         // So viele Kollegen helfen dir (0 bis 3)
 const HELFER = [
-  { name: 'Bolzen', farbe: '#ffb347', stimme: 0.75 },   // stimme: Tonhöhe (1 = normal, kleiner = tiefer)
+  { name: 'Bolzen', farbe: '#ffb347', stimme: 0.75 },   // stimme: wie hoch sie piepsen (1 = normal, kleiner = tiefer)
   { name: 'Funke', farbe: '#ff6fb5', stimme: 1.2 },
   { name: 'Schraubi', farbe: '#6fa8ff', stimme: 0.95 },
 ];
@@ -219,88 +219,6 @@ const sound = {
     for (let k = 0; k < 4; k++) ton(hoehe * zufall(0.8, 1.5), k * 0.07, 0.06, 'square', 0.035 * laut);
   },
 };
-
-// ===== Stimmen: Die Helfer sprechen (wenn der Computer eine deutsche Stimme hat) =====
-// Wir nehmen nur Stimmen, die direkt auf dem Computer laufen (localService) – so geht nichts ins Internet.
-// Damit es nach Roboter-Funk klingt: Es klickt und rauscht vorher, und ein leises Brummen läuft mit.
-// Mit B kannst du durch alle deutschen Stimmen deines Computers schalten.
-const STIMME_ABGEHACKT = true;   // true = Roboter reden in kleinen Stücken (klingt mehr nach Computer)
-const STIMME_TEMPO = 1.05;       // Wie schnell sie reden
-const FUNK_BRUMMEN = 0.025;      // Wie laut das Roboter-Brummen beim Reden ist (0 = aus)
-let stimmenAn = true, deutscheStimme = null, stimmenListe = [];
-function stimmenLaden() {
-  try {
-    stimmenListe = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('de') && v.localService);
-    let gemerkt = null;
-    try { gemerkt = localStorage.getItem('arag-stimme'); } catch (e) { /* egal */ }
-    deutscheStimme = stimmenListe.find(v => v.name === gemerkt) || stimmenListe[0] || null;
-  } catch (e) { stimmenListe = []; deutscheStimme = null; }
-}
-if (window.speechSynthesis) {
-  stimmenLaden();
-  try { window.speechSynthesis.addEventListener('voiceschanged', stimmenLaden); } catch (e) { /* egal */ }
-}
-function naechsteStimme() {   // Taste B: die nächste Stimme ausprobieren
-  if (!stimmenListe.length) { zeigeNachricht('💬 Dein Computer hat keine deutsche Stimme – die Roboter piepsen nur.', 3, '#c9c3ff'); return; }
-  const nr = (stimmenListe.indexOf(deutscheStimme) + 1) % stimmenListe.length;
-  deutscheStimme = stimmenListe[nr];
-  try { localStorage.setItem('arag-stimme', deutscheStimme.name); } catch (e) { /* egal */ }
-  zeigeNachricht(`🗣️ Stimme ${nr + 1} von ${stimmenListe.length}: ${deutscheStimme.name}`, 3, '#c9c3ff');
-  try { window.speechSynthesis.cancel(); } catch (e) { /* egal */ }
-  stimmenAn = true;
-  laut('Hallo! Ich bin ein ARAG Roboter.', 1, 1);
-}
-// Funk-Effekt: Klick + Rauschen am Anfang, Brummen während des Sprechens, "Kschh" am Ende
-function funkEffekt(dauer, lautstaerke) {
-  try {
-    if (!audio || !tonAn) return;
-    const t = audio.currentTime, sr = audio.sampleRate;
-    const rauschen = (start, laenge, staerke) => {
-      const puffer = audio.createBuffer(1, Math.floor(sr * laenge), sr), d = puffer.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
-      const q = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
-      q.buffer = puffer; f.type = 'bandpass'; f.frequency.value = 2500; g.gain.value = staerke;
-      q.connect(f).connect(g).connect(audio.destination);
-      q.start(t + start);
-    };
-    rauschen(0, 0.12, 0.25 * lautstaerke);
-    ton(1800, 0, 0.03, 'square', 0.05 * lautstaerke);   // Klick
-    if (FUNK_BRUMMEN > 0) {   // Brummen mit leichtem Flattern
-      const o = audio.createOscillator(), g = audio.createGain(), lfo = audio.createOscillator(), lfoG = audio.createGain();
-      o.type = 'sawtooth'; o.frequency.value = 95;
-      lfo.frequency.value = 23; lfoG.gain.value = FUNK_BRUMMEN * lautstaerke * 0.6;
-      g.gain.setValueAtTime(0, t + 0.1);
-      g.gain.linearRampToValueAtTime(FUNK_BRUMMEN * lautstaerke, t + 0.2);
-      g.gain.setValueAtTime(FUNK_BRUMMEN * lautstaerke, t + 0.1 + dauer);
-      g.gain.linearRampToValueAtTime(0, t + 0.2 + dauer);
-      lfo.connect(lfoG).connect(g.gain);
-      o.connect(g).connect(audio.destination);
-      o.start(t + 0.1); lfo.start(t + 0.1); o.stop(t + 0.3 + dauer); lfo.stop(t + 0.3 + dauer);
-    }
-    rauschen(dauer + 0.15, 0.15, 0.18 * lautstaerke);   // Kschh am Ende
-  } catch (e) { /* egal */ }
-}
-function laut(text, hoehe, lautstaerke) {
-  if (!stimmenAn || !tonAn || !deutscheStimme || !window.speechSynthesis) return false;
-  try {
-    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return false;   // Nicht alle durcheinander
-    const sauber = text.replace(/[^\p{L}\p{N}\s.,!?'-]/gu, '').trim();
-    const woerter = sauber.split(/\s+/);
-    // Abgehackt: immer 2 Wörter auf einmal, jedes Stück mit leicht anderer Tonhöhe
-    const stuecke = [];
-    if (STIMME_ABGEHACKT) for (let k = 0; k < woerter.length; k += 2) stuecke.push(woerter.slice(k, k + 2).join(' '));
-    else stuecke.push(sauber);
-    for (const stueck of stuecke) {
-      const u = new SpeechSynthesisUtterance(stueck);
-      u.voice = deutscheStimme; u.lang = deutscheStimme.lang;
-      u.pitch = begrenzt(hoehe * (STIMME_ABGEHACKT ? zufall(0.93, 1.07) : 1), 0, 2);
-      u.rate = STIMME_TEMPO; u.volume = lautstaerke;
-      window.speechSynthesis.speak(u);
-    }
-    funkEffekt(0.35 + woerter.length * 0.33, lautstaerke);
-    return true;
-  } catch (e) { return false; }
-}
 
 // =====================================================================
 // ===== 3D-Welt mit Three.js =====
@@ -1718,7 +1636,7 @@ function sagen(h, art, werte = {}, wichtig = 0) {
   const p = h.body.position, lautstaerke = lautBei(p);
   funk.unshift({ name: h.name, farbe: h.farbe, satz, t: 4 });   // Untertitel unten im Bild
   if (funk.length > 3) funk.pop();
-  if (!laut(satz, h.stimme, Math.min(1, lautstaerke + 0.3))) sound.robo(500 * h.stimme, lautstaerke);
+  sound.robo(500 * h.stimme, lautstaerke);   // Kurzes Roboter-Piepsen
 }
 function baueHelferMesh(info) {
   const g = new THREE.Group();
@@ -2201,7 +2119,6 @@ function levelGeschafft() {
   zustand = 'geschafft';
   loslassen();
   sound.geschafft();
-  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* egal */ }
   if (document.pointerLockElement) document.exitPointerLock();
 }
 
@@ -2286,7 +2203,7 @@ function zeichneHUD() {
     const was = h.kaputt > 0 ? `💤 kaputt (${Math.ceil(h.kaputt)} s)` : h.modus === 'tragen' ? `trägt ${h.auftrag.typ.emoji}${wo}` : h.modus === 'hinlaufen' ? `holt ${h.auftrag.typ.emoji}${wo}` : 'wartet';
     text(`🤖 ${h.name}: ${was}`, W - 222, 60 + k * 22, 12, h.kaputt > 0 ? '#8a8f9e' : h.farbe, 'left', false);
   });
-  text(`${tonAn ? '🔊' : '🔇'} M  ${stimmenAn && deutscheStimme ? '🗣️' : '💬'} V  🔄 B`, W - 80, 68 + helfer.length * 22, 13, '#fff', 'center', false);
+  text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68 + helfer.length * 22, 13, '#fff', 'center', false);
   // Oben Mitte: Pfeil zum Transporter (oder zur Treppe, wenn du oben bist)
   const L = haus.laster;
   let zielX = (L.x1 + L.x2) / 2, zielZ = (L.z1 + L.z2) / 2, zielText = '🚚';
@@ -2392,7 +2309,7 @@ function zeichneTitel() {
   text('Hol die Schätze aus dem Spukhaus und bring sie zum Transporter 🚚', W / 2, 355, 17, '#fff', 'center', false);
   text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻👂🗿', W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!)', W / 2, 425, 13, '#c9c3ff', 'center', false);
-  text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren · V: Stimmen an/aus · B: andere Stimme', W / 2, 446, 13, '#c9c3ff', 'center', false);
+  text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren', W / 2, 446, 13, '#c9c3ff', 'center', false);
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Den Starrer nicht aus den Augen lassen!', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
@@ -2452,12 +2369,6 @@ addEventListener('keydown', e => {
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   if (k === 'm') tonAn = !tonAn;
-  if (k === 'b') naechsteStimme();
-  if (k === 'v') {
-    stimmenAn = !stimmenAn;
-    if (!stimmenAn) try { window.speechSynthesis.cancel(); } catch (er) { /* egal */ }
-    zeigeNachricht(stimmenAn ? (deutscheStimme ? '🗣️ Stimmen an' : '💬 Stimmen an (dein Computer hat keine deutsche Stimme – nur Sprechblasen)') : '💬 Stimmen aus (nur Sprechblasen)', 2.5, '#c9c3ff');
-  }
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
