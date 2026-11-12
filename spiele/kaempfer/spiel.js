@@ -416,6 +416,10 @@ function soundsLaden() {
 }
 // Spielt eine Sound-Datei. tempo: 1 = normal, größer = höher und schneller. dauer: nach so vielen Sekunden ausblenden
 function spiele(name, laut = 1, tempo = 1, dauer = 0) {
+  try { return spieleSound(name, laut, tempo, dauer); }
+  catch (e) { return true; }   // Wenn beim Sound was schiefgeht: einfach still sein, das Spiel läuft weiter
+}
+function spieleSound(name, laut, tempo, dauer) {
   const liste = soundPuffer[name];
   if (!audio || !liste || liste.length === 0) return false;   // noch nicht geladen -> Piep-Sound nehmen
   if (!tonAn || laut <= 0.001) return true;
@@ -423,14 +427,14 @@ function spiele(name, laut = 1, tempo = 1, dauer = 0) {
   q.buffer = liste[Math.floor(Math.random() * liste.length)];
   q.playbackRate.value = tempo;
   g.gain.value = laut;
+  q.connect(g).connect(audio.destination);
+  q.start();   // Wichtig: erst starten, dann darf man stop sagen – sonst gibt es einen Fehler!
   if (dauer > 0) {
     const t = audio.currentTime;
     g.gain.setValueAtTime(laut, t + dauer * 0.6);
     g.gain.linearRampToValueAtTime(0, t + dauer);
     q.stop(t + dauer + 0.05);
   }
-  q.connect(g).connect(audio.destination);
-  q.start();
   return true;
 }
 function zufallsTempo(von, bis) { return von + Math.random() * (bis - von); }
