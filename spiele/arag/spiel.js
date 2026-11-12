@@ -499,6 +499,7 @@ function wegPunkt(von, ziel) {
 function festerKoerper(x, y, z, b, h, t) {
   const k = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(b / 2, h / 2, t / 2)), material: standardMat, collisionFilterGroup: G_WAND });
   k.position.set(x, y, z);
+  k.aabbNeedsUpdate = true;   // Wichtig: Sonst sucht der Physik-Strahl den Klotz an der falschen Stelle
   welt.addBody(k);
   wandKoerper.push(k);
 }
