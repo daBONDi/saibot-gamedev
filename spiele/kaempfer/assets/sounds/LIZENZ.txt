@@ -1,0 +1,9 @@
+Alle Sounds hier sind CC0 (frei für alle, auch ohne Namensnennung).
+Danke an die Macher!
+
+mg_*, boom_*, treffer_*, railgun, boom_gross, boost:
+  "Sci-Fi Sounds" von Kenney (www.kenney.nl) – https://opengameart.org/content/sci-fi-sounds
+rakete:
+  "50 CC0 Sci-Fi SFX" – https://opengameart.org/content/50-cc0-sci-fi-sfx
+abschuss:
+  "63 Digital Sound Effects" von Kenney – https://opengameart.org/content/63-digital-sound-effects-lasers-phasers-space-etc

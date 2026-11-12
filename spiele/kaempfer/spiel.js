@@ -387,7 +387,54 @@ function kannDirekt(m, p) {
   return true;
 }
 
-// ===== Sound (wird direkt im Browser erzeugt) =====
+// ===== Sound =====
+// Echte Sound-Dateien liegen in assets/sounds/ (alle CC0, siehe LIZENZ.txt).
+// Gibt es mehrere Dateien für einen Sound, wird jedes Mal zufällig eine ausgesucht – das klingt lebendiger!
+// Klappt eine Datei nicht, spielt das Spiel einfach den alten selbst gebauten Piep-Sound.
+const SOUND_DATEIEN = {
+  mg:        ['mg_0.ogg', 'mg_1.ogg', 'mg_2.ogg', 'mg_3.ogg', 'mg_4.ogg'],
+  boom:      ['boom_0.ogg', 'boom_1.ogg', 'boom_2.ogg', 'boom_3.ogg', 'boom_4.ogg'],
+  boomGross: ['boom_gross.ogg'],
+  treffer:   ['treffer_0.ogg', 'treffer_1.ogg', 'treffer_2.ogg', 'treffer_3.ogg', 'treffer_4.ogg'],
+  railgun:   ['railgun.ogg'],
+  rakete:    ['rakete.ogg'],
+  boost:     ['boost.ogg'],
+  abschuss:  ['abschuss.mp3'],
+};
+const soundPuffer = {};   // Hier landen die fertig geladenen Sounds
+function soundsLaden() {
+  for (const [name, dateien] of Object.entries(SOUND_DATEIEN)) {
+    soundPuffer[name] = [];
+    for (const datei of dateien) {
+      fetch('assets/sounds/' + datei)
+        .then(r => r.arrayBuffer())
+        .then(daten => new Promise((ok, fehler) => audio.decodeAudioData(daten, ok, fehler)))
+        .then(puffer => soundPuffer[name].push(puffer))
+        .catch(() => { /* egal, dann kommt der Piep-Sound */ });
+    }
+  }
+}
+// Spielt eine Sound-Datei. tempo: 1 = normal, größer = höher und schneller. dauer: nach so vielen Sekunden ausblenden
+function spiele(name, laut = 1, tempo = 1, dauer = 0) {
+  const liste = soundPuffer[name];
+  if (!audio || !liste || liste.length === 0) return false;   // noch nicht geladen -> Piep-Sound nehmen
+  if (!tonAn || laut <= 0.001) return true;
+  const q = audio.createBufferSource(), g = audio.createGain();
+  q.buffer = liste[Math.floor(Math.random() * liste.length)];
+  q.playbackRate.value = tempo;
+  g.gain.value = laut;
+  if (dauer > 0) {
+    const t = audio.currentTime;
+    g.gain.setValueAtTime(laut, t + dauer * 0.6);
+    g.gain.linearRampToValueAtTime(0, t + dauer);
+    q.stop(t + dauer + 0.05);
+  }
+  q.connect(g).connect(audio.destination);
+  q.start();
+  return true;
+}
+function zufallsTempo(von, bis) { return von + Math.random() * (bis - von); }
+
 let audio = null, rauschPuffer = null, tonAn = true;
 function tonStart() {
   if (!audio) {
@@ -396,6 +443,7 @@ function tonStart() {
       rauschPuffer = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
       const d = rauschPuffer.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      soundsLaden();
     } catch (e) { audio = null; }
   }
   if (audio && audio.state === 'suspended') audio.resume();
@@ -427,20 +475,23 @@ const sound = {
   mg(laut = 1) {   // Ratatat
     if (zeit - letzterMgTon < 0.045) return;
     letzterMgTon = zeit;
+    if (spiele('mg', 0.35 * laut, zufallsTempo(0.9, 1.15))) return;
     ton(700, 0, 0.05, 'square', 0.035 * laut, 200);
     rauschen(0, 0.06, 0.08 * laut, 3000);
   },
   anvisieren() { [880, 1100, 1320].forEach((f, i) => ton(f, i * 0.12, 0.1, 'square', 0.07)); },
   warnung() { for (let i = 0; i < 3; i++) { ton(440, i * 0.25, 0.12, 'square', 0.09); ton(330, i * 0.25 + 0.12, 0.12, 'square', 0.09); } },
-  salve(laut = 1) { ton(260, 0, 0.25, 'sawtooth', 0.05 * laut, 900); rauschen(0, 0.2, 0.08 * laut, 3000); },
+  salve(laut = 1) { if (spiele('rakete', 0.4 * laut, zufallsTempo(1.2, 1.4))) return; ton(260, 0, 0.25, 'sawtooth', 0.05 * laut, 900); rauschen(0, 0.2, 0.08 * laut, 3000); },
   pfeifen(laut = 1) { ton(1400, 0, 0.9, 'sine', 0.05 * laut, 500); },
-  railgun(laut = 1) { ton(1800, 0, 0.35, 'sawtooth', 0.08 * laut, 120); ton(3000, 0, 0.1, 'square', 0.04 * laut, 800); rauschen(0, 0.3, 0.15 * laut, 5000); },
-  rakete(laut = 1) { ton(180, 0, 0.45, 'sawtooth', 0.07 * laut, 700); rauschen(0, 0.4, 0.12 * laut, 2500); },
-  boom(laut = 1) { rauschen(0, 0.8, 0.45 * laut, 900); ton(90, 0, 0.6, 'sine', 0.35 * laut, 30); },
-  treffer() { ton(1600, 0, 0.04, 'square', 0.04); },
-  autsch() { ton(200, 0, 0.12, 'sawtooth', 0.08, 90); },
-  abschuss() { ton(880, 0, 0.08, 'square', 0.08); ton(1320, 0.08, 0.15, 'square', 0.08); },
-  boost() { ton(250, 0, 0.3, 'sawtooth', 0.06, 1000); rauschen(0, 0.25, 0.1, 4000); },
+  railgun(laut = 1) { if (spiele('railgun', 0.8 * laut, 0.8)) return; ton(1800, 0, 0.35, 'sawtooth', 0.08 * laut, 120); ton(3000, 0, 0.1, 'square', 0.04 * laut, 800); rauschen(0, 0.3, 0.15 * laut, 5000); },
+  rakete(laut = 1) { if (spiele('rakete', 0.6 * laut, zufallsTempo(0.9, 1.1))) return; ton(180, 0, 0.45, 'sawtooth', 0.07 * laut, 700); rauschen(0, 0.4, 0.12 * laut, 2500); },
+  boom(laut = 1) {
+    if (spiele('boom', 0.9 * laut, zufallsTempo(0.8, 1.05))) { spiele('boomGross', 0.6 * laut, 0.9); return; }
+    rauschen(0, 0.8, 0.45 * laut, 900); ton(90, 0, 0.6, 'sine', 0.35 * laut, 30); },
+  treffer() { if (spiele('treffer', 0.25, zufallsTempo(1.3, 1.6))) return; ton(1600, 0, 0.04, 'square', 0.04); },
+  autsch() { if (spiele('treffer', 0.5, zufallsTempo(0.6, 0.75))) return; ton(200, 0, 0.12, 'sawtooth', 0.08, 90); },
+  abschuss() { if (spiele('abschuss', 0.5)) return; ton(880, 0, 0.08, 'square', 0.08); ton(1320, 0.08, 0.15, 'square', 0.08); },
+  boost() { if (spiele('boost', 0.6, 1.2, 0.6)) return; ton(250, 0, 0.3, 'sawtooth', 0.06, 1000); rauschen(0, 0.25, 0.1, 4000); },
   schritt(laut = 1) { ton(70, 0, 0.12, 'sine', 0.12 * laut, 40); },
   piep() { ton(660, 0, 0.12, 'square', 0.08); },
   los() { ton(990, 0, 0.4, 'square', 0.1); },
