@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARAG – Automatische Roboter AufräumGruppe</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #0d0f14, #1d2230);
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.5rem;
+      box-sizing: border-box;
+    }
+    .leiste {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 1280px;
+      margin-bottom: 0.4rem;
+    }
+    a { color: #7cf5c6; }
+    button {
+      background: #7cf5c6;
+      color: #0d0f14;
+      border: none;
+      border-radius: 0.6rem;
+      padding: 0.35rem 0.8rem;
+      font: bold 0.95rem system-ui, sans-serif;
+      cursor: pointer;
+    }
+    /* Die Bühne: hinten das 3D-Bild, vorne die Anzeigen (HUD) */
+    #buehne {
+      position: relative;
+      width: min(100%, 1280px, calc((100vh - 3.5rem) * 1.6));
+      width: min(100%, 1280px, calc((100dvh - 3.5rem) * 1.6));
+      aspect-ratio: 960 / 600;
+      border-radius: 1rem;
+      overflow: hidden;
+      box-shadow: 0 0 30px #7cf5c633;
+      background: #000;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #buehne canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    /* Vollbild: nur noch das Spiel */
+    html:fullscreen body { padding: 0; justify-content: center; }
+    html:fullscreen .leiste { display: none; }
+    html:fullscreen #buehne { width: min(100vw, calc(100vh * 1.6)); border-radius: 0; }
+  </style>
+</head>
+<body>
+  <div class="leiste">
+    <a href="../../">← Zur Übersicht</a>
+    <button id="vollbild">⛶ Vollbild</button>
+  </div>
+  <div id="buehne">
+    <canvas id="spiel" width="960" height="600"></canvas>
+  </div>
+  <script>
+    // Vollbild-Knopf
+    const vollbild = document.getElementById('vollbild');
+    if (!document.documentElement.requestFullscreen) vollbild.style.display = 'none';
+    vollbild.addEventListener('click', async () => {
+      try { await document.documentElement.requestFullscreen(); } catch (e) { /* egal, dann eben nicht */ }
+    });
+  </script>
+  <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
+  <script type="module" src="spiel.js?v=1"></script>
+</body>
+</html>
