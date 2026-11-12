@@ -1573,7 +1573,8 @@ ladeKarte(karte);
 
 // ----- Ein Mech aus Klötzen -----
 const metall = farbe => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.5, metalness: 0.5 });
-const dunkelMat = metall('#2a2d36'), grauMat = metall('#4b5060');
+const leucht = farbe => new THREE.MeshBasicMaterial({ color: farbe });   // Leuchtet immer, auch im Schatten
+const dunkelMat = metall('#2a2d36'), grauMat = metall('#4b5060'), stahlMat = metall('#8a90a0');
 function klotz(b, h, t, mat, x, y, z) {
   const k = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat);
   k.position.set(x, y, z);
@@ -1587,92 +1588,185 @@ function rohr(r, l, mat, x, y, z) {   // Ein Rohr, das nach vorne (x) zeigt
   k.castShadow = true;
   return k;
 }
+function gelenk(r, l, mat, x, y, z) {   // Ein rundes Gelenk, das zur Seite (z) zeigt
+  const k = new THREE.Mesh(new THREE.CylinderGeometry(r, r, l, 12), mat);
+  k.rotation.x = Math.PI / 2;
+  k.position.set(x, y, z);
+  k.castShadow = true;
+  return k;
+}
+function schraeg(k, winkel) { k.rotation.z = winkel; return k; }   // Ein Teil nach vorne/hinten kippen
+
+// So ist ein Mech aufgebaut (vorne ist +x):
+//   Beine: Hüfte -> Oberschenkel -> Knie -> Unterschenkel -> Fuß. Jedes Gelenk kann sich drehen, damit er richtig läuft!
+//   Oberkörper: Rumpf mit Cockpit, Schultern, Waffen und Düsen hinten.
 // In der Logik zeigt Winkel 0 nach +x. Ein 3D-Objekt mit rotation.y = -winkel schaut dann in die richtige Richtung.
 function baueMech(m) {
   const T = TEAMS[m.team], typ = m.typ;
-  const koerperMat = new THREE.MeshStandardMaterial({ color: T.farbe, roughness: 0.45, metalness: 0.4, emissive: '#000000' });
+  const koerperMat = new THREE.MeshStandardMaterial({ color: T.farbe, roughness: 0.35, metalness: 0.55, emissive: '#000000' });
   const teamDunkel = metall(T.dunkel), akzentMat = metall(typ.akzent);
+  const akzentLeucht = leucht(typ.akzent), augeMat = leucht(T.hell);
+  const dueseMat = new THREE.MeshBasicMaterial({ color: '#ff8c1a', transparent: true, opacity: 0.5 });
   const gruppe = new THREE.Group();
-  // Beine (drehen sich in Laufrichtung)
+  const dick = typ.id === 'koloss' ? 1.4 : typ.id === 'blitz' ? 0.8 : 1;   // Wie dick die Beine sind
+
+  // ===== Beine (drehen sich in Laufrichtung) =====
   const beine = new THREE.Group();
-  const dick = typ.id === 'koloss' ? 1.5 : 1;   // Der Koloss hat dicke Beine
-  beine.add(klotz(22, 10, 40, grauMat, 0, 38, 0));   // Hüfte
-  const fuesse = [], schenkel = [];
+  beine.add(klotz(20, 10, 26, grauMat, 0, 42, 0));             // Becken
+  beine.add(klotz(14, 6, 18, dunkelMat, 0, 48, 0));            // Drehkranz zum Oberkörper
+  const huefte = [], knie = [], fuesse = [];
   for (const s of [-1, 1]) {
-    const sch = klotz(10 * dick, 32, 10 * dick, dunkelMat, 0, 22, s * 17);
-    const fuss = klotz(28, 8, 14 * dick, dunkelMat, 0, 4, s * 19);
-    beine.add(sch, fuss);
-    schenkel.push(sch); fuesse.push(fuss);
+    beine.add(gelenk(6 * dick, 8, dunkelMat, 0, 42, s * 15));  // Hüftgelenk
+    const h = new THREE.Group();                                // Oberschenkel (dreht sich an der Hüfte)
+    h.position.set(0, 42, s * 19);
+    h.add(klotz(11 * dick, 20, 9 * dick, koerperMat, 0, -10, 0));
+    h.add(klotz(3, 14, 9.5 * dick, akzentMat, 5.5 * dick, -10, 0));   // Streifen vorne am Bein
+    const k = new THREE.Group();                                // Unterschenkel (dreht sich am Knie)
+    k.position.set(0, -20, 0);
+    k.add(gelenk(5 * dick, 10 * dick, dunkelMat, 0, 0, 0));    // Kniegelenk
+    k.add(klotz(8 * dick, 6, 10 * dick, teamDunkel, 4, 1, 0)); // Knieschoner
+    k.add(klotz(8 * dick, 18, 8 * dick, grauMat, -1, -9, 0));  // Schienbein
+    k.add(klotz(2.5, 14, 2.5, stahlMat, -5.5, -9, 0));          // Kolben hinten
+    const f = new THREE.Group();                                // Fuß (bleibt flach auf dem Boden)
+    f.position.set(0, -18, 0);
+    f.add(klotz(26 * Math.min(dick, 1.2), 5, 13 * dick, dunkelMat, 2, -2, 0));
+    f.add(schraeg(klotz(8, 4, 13 * dick, grauMat, 13, -1.5, 0), -0.4));   // Zehe vorne
+    f.add(klotz(6, 4, 9 * dick, grauMat, -12, -2, 0));         // Ferse
+    k.add(f); h.add(k); beine.add(h);
+    huefte.push(h); knie.push(k); fuesse.push(f);
   }
   gruppe.add(beine);
-  // Oberkörper (dreht sich zum Ziel)
+
+  // ===== Oberkörper (dreht sich zum Ziel) =====
   const torso = new THREE.Group();
-  torso.position.y = 48;
-  torso.add(klotz(36, 28, 38, koerperMat, 0, 10, 0));            // Rumpf
-  torso.add(klotz(37, 4, 39, akzentMat, 0, -2, 0));               // Streifen in der Mech-Farbe
-  torso.add(klotz(16, 16, 22, dunkelMat, 16, 14, 0));             // Cockpit
-  const visier = new THREE.Mesh(new THREE.BoxGeometry(3, 6, 16), new THREE.MeshBasicMaterial({ color: T.hell }));
-  visier.position.set(24.5, 16, 0);
+  torso.position.y = 50;
+  torso.add(klotz(30, 10, 28, dunkelMat, -2, 0, 0));                       // Bauch
+  torso.add(klotz(34, 22, 34, koerperMat, -2, 14, 0));                     // Rumpf
+  torso.add(schraeg(klotz(6, 20, 28, koerperMat, 16, 11, 0), -0.35));      // Brustpanzer (schräg)
+  torso.add(klotz(30, 4, 30, teamDunkel, -3, 27, 0));                      // Dach
+  torso.add(klotz(35, 3, 35, akzentMat, -2, 4, 0));                        // Streifen in der Mech-Farbe
+  for (const s of [-1, 1]) torso.add(klotz(18, 2, 1, akzentLeucht, -2, 14, s * 17.2));   // Leuchtstreifen an der Seite
+  // Cockpit mit leuchtendem Visier
+  torso.add(klotz(14, 12, 20, dunkelMat, 16, 21, 0));
+  const visier = schraeg(new THREE.Mesh(new THREE.BoxGeometry(2, 6, 16), augeMat), -0.3);
+  visier.position.set(23.5, 22, 0);
   torso.add(visier);
+  for (const s of [-1, 1]) torso.add(klotz(2, 2, 2, akzentLeucht, 23, 16, s * 8));   // kleine Lampen
+  // Schultern
+  const schulterGross = typ.id === 'koloss' ? 1.35 : typ.id === 'blitz' ? 0.8 : 1;
+  for (const s of [-1, 1]) {
+    torso.add(gelenk(6, 6, grauMat, 0, 16, s * 19));
+    torso.add(schraeg(klotz(20 * schulterGross, 9 * schulterGross, 12 * schulterGross, koerperMat, 0, 22, s * 22), 0.12));
+    torso.add(schraeg(klotz(20 * schulterGross, 2, 12.5 * schulterGross, akzentMat, 0, 22 + 4.5 * schulterGross, s * 22), 0.12));
+  }
+  // Rücken: Antrieb mit zwei Düsen (leuchten beim Boosten)
+  torso.add(klotz(10, 18, 22, grauMat, -22, 14, 0));
+  const duesen = [];
+  for (const s of [-1, 1]) {
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 6, 10), dunkelMat);
+    d.rotation.z = Math.PI / 2; d.position.set(-29, 10, s * 6); d.castShadow = true;
+    torso.add(d);
+    const flamme = new THREE.Group();   // Die Flamme wächst von der Düse aus nach hinten
+    flamme.position.set(-32, 10, s * 6);
+    const kegel = new THREE.Mesh(new THREE.ConeGeometry(3.5, 14, 10), dueseMat);
+    kegel.rotation.z = Math.PI / 2; kegel.position.x = -7;
+    flamme.add(kegel);
+    torso.add(flamme);
+    duesen.push(flamme);
+  }
+  for (const y of [9, 13, 17]) torso.add(klotz(1, 1.5, 16, dunkelMat, -27.5, y + 4, 0));   // Lüftungsschlitze
+
+  // ===== Waffen =====
   if (typ.mg.salve) {
     // ☄️ Donnerhagel: ein großer Raketenwerfer mit 9 Rohren auf dem Rücken, schräg nach oben
     const werfer = new THREE.Group();
-    werfer.position.set(-4, 38, 6);
+    werfer.position.set(-6, 40, 0);
     werfer.rotation.z = 0.45;
     werfer.add(klotz(26, 24, 32, teamDunkel, 0, 0, 0));
+    werfer.add(klotz(27, 3, 33, akzentMat, 0, 10, 0));
+    for (const z of [-17, 17]) werfer.add(klotz(22, 20, 2, grauMat, 0, 0, z));   // Seitenplatten
     for (const y of [-7, 0, 7]) for (const z of [-10, 0, 10]) {
-      const loch = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 2, 8), akzentMat);
+      const loch = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 2, 8), akzentLeucht);
       loch.rotation.z = Math.PI / 2;
       loch.position.set(13.5, y, z);
       werfer.add(loch);
     }
     torso.add(werfer);
-    for (const s of [-1, 1]) torso.add(klotz(14, 8, 7, grauMat, 12, 3, s * 21));   // kleine Arme vorne
+    torso.add(klotz(8, 10, 8, grauMat, -6, 30, 0));   // Halterung
+    for (const s of [-1, 1]) {   // kleine Arme mit kurzen Kanonen
+      torso.add(klotz(14, 8, 8, grauMat, 10, 8, s * 22));
+      torso.add(rohr(2.5, 14, dunkelMat, 22, 8, s * 22));
+    }
   } else if (typ.mg.strahl) {
-    // 🎯 Adlerauge: eine lange Railgun mit Zielfernrohr
-    torso.add(klotz(22, 12, 10, grauMat, 12, 4, 21));
-    torso.add(rohr(4, 64, dunkelMat, 52, 4, 21));
-    for (const x of [34, 50, 66]) torso.add(rohr(5, 3, akzentMat, x, 4, 21));   // leuchtende Ringe
-    torso.add(klotz(16, 7, 7, dunkelMat, 10, 14, 21));               // Zielfernrohr
+    // 🎯 Adlerauge: eine lange Railgun mit zwei Schienen und leuchtendem Kern
+    const z = 22;
+    torso.add(klotz(22, 12, 10, grauMat, 10, 8, z));
+    for (const y of [3, 13]) torso.add(klotz(60, 3, 6, dunkelMat, 48, y, z));     // die zwei Schienen
+    torso.add(klotz(58, 2, 2, akzentLeucht, 48, 8, z));                           // leuchtender Kern
+    for (const x of [30, 46, 62]) torso.add(klotz(3, 14, 8, akzentMat, x, 8, z)); // Klammern
+    torso.add(rohr(3, 12, stahlMat, 12, 19, z));                                  // Zielfernrohr
+    torso.add(klotz(1, 4, 4, akzentLeucht, 18.5, 19, z));
+    // Kleiner Arm auf der anderen Seite
+    torso.add(klotz(12, 8, 8, grauMat, 8, 8, -22));
   } else {
+    // Zwei Maschinengewehre mit je drei Läufen (wie eine Gatling)
     for (const s of [-1, 1]) {
-      torso.add(klotz(18, 10, 9, grauMat, 10, 3, s * 21));          // Kanonen-Halter
-      torso.add(rohr(3.5, 30, dunkelMat, 30, 3, s * 21));            // Kanonenrohr
+      torso.add(klotz(10, 10, 8, grauMat, 4, 8, s * 22));            // Oberarm
+      torso.add(klotz(16, 11, 11, teamDunkel, 14, 6, s * 22));       // Waffengehäuse
+      torso.add(klotz(16, 2, 11.5, akzentMat, 14, 11, s * 22));
+      for (let i = 0; i < 3; i++) {
+        const w = i / 3 * Math.PI * 2;
+        torso.add(rohr(1.3, 22, dunkelMat, 32, 6 + Math.sin(w) * 2.6, s * 22 + Math.cos(w) * 2.6));
+      }
+      torso.add(rohr(4, 3, grauMat, 40, 6, s * 22));                  // Mündung
     }
   }
-  // Raketenwerfer: Der Feuersturm hat zwei große, alle anderen einen
+  // Raketenwerfer auf der Schulter: Der Feuersturm hat zwei große, alle anderen einen
   const raketenLicht = new THREE.MeshBasicMaterial({ color: '#ffd166' });
-  const werfer = typ.rakete.anzahl > 1 ? [-1, 1] : [-1];
-  for (const s of werfer) {
-    const gross = typ.rakete.anzahl > 1;
-    torso.add(klotz(24, gross ? 16 : 12, 16, teamDunkel, -6, gross ? 32 : 30, s * 12));
-    const lichter = gross ? [-5, 0, 5] : [-4, 4];
-    for (const z of lichter) {
-      const l = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 2, 8), raketenLicht);
-      l.rotation.z = Math.PI / 2; l.position.set(6.5, gross ? 32 : 30, s * 12 + z);
+  const gross = typ.rakete.anzahl > 1;
+  for (const s of gross ? [-1, 1] : [-1]) {
+    const y = gross ? 36 : 34, b = gross ? 16 : 12;
+    torso.add(klotz(22, b, 14, teamDunkel, -2, y, s * 18));
+    torso.add(klotz(22.5, 2, 14.5, akzentMat, -2, y + b / 2, s * 18));
+    const lichter = gross ? [[-3.5, -3.5], [-3.5, 3.5], [3.5, -3.5], [3.5, 3.5]] : [[0, -3], [0, 3]];
+    for (const [dy, dz] of lichter) {
+      const l = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 2, 8), raketenLicht);
+      l.rotation.z = Math.PI / 2; l.position.set(9.5, y + dy, s * 18 + dz);
       torso.add(l);
     }
   }
-  if (typ.id === 'koloss') {   // 🛡️ Dicke Panzerplatten an den Seiten
-    for (const s of [-1, 1]) torso.add(klotz(30, 26, 6, koerperMat, 0, 12, s * 22));
+  // Besonderheiten der Mechs
+  if (typ.id === 'koloss') {   // 🛡️ Dicke Panzerplatten an den Seiten und ein Rammschild vorne
+    for (const s of [-1, 1]) torso.add(klotz(30, 22, 5, koerperMat, -2, 12, s * 19.5));
+    torso.add(schraeg(klotz(5, 14, 30, teamDunkel, 19, 3, 0), -0.2));
   }
   if (typ.id === 'blitz') {    // ⚡ Flossen hinten, damit er schnell aussieht
     for (const s of [-1, 1]) {
-      const flosse = klotz(18, 4, 4, akzentMat, -22, 22, s * 12);
-      flosse.rotation.z = -0.5;
-      torso.add(flosse);
+      torso.add(schraeg(klotz(22, 3, 3, akzentMat, -22, 30, s * 10), -0.5));
+      torso.add(schraeg(klotz(14, 1.5, 3.5, akzentLeucht, -20, 31.5, s * 10), -0.5));
     }
   }
+  if (typ.id === 'adler') {    // 🎯 Großes Sensor-Auge oben auf dem Cockpit
+    torso.add(gelenk(4, 6, dunkelMat, 12, 30, 0));
+    torso.add(rohr(2.5, 4, akzentLeucht, 15, 30, 0));
+  }
+  if (typ.id === 'feuer') {    // 🔥 Heiße Lüftung am Bauch
+    for (const s of [-1, 1]) torso.add(klotz(1, 6, 8, leucht('#ff6a00'), 12.6, 0, s * 7));
+  }
+  // Antenne mit leuchtender Spitze
+  const antZ = gross ? 0 : typ.mg.salve ? 21 : 12;
   const antenne = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 22, 4), grauMat);
-  antenne.position.set(-12, 34, typ.rakete.anzahl > 1 ? 0 : 12);
+  antenne.position.set(-14, 38, antZ);
   torso.add(antenne);
+  torso.add(klotz(2, 2, 2, augeMat, -14, 49, antZ));
   gruppe.add(torso);
+
   // Schutzschild
-  const schild = new THREE.Mesh(new THREE.SphereGeometry(44, 20, 14), new THREE.MeshBasicMaterial({ color: '#93c5fd', transparent: true, opacity: 0.25, depthWrite: false }));
-  schild.position.y = 40;
+  const schild = new THREE.Mesh(new THREE.SphereGeometry(48, 20, 14), new THREE.MeshBasicMaterial({ color: '#93c5fd', transparent: true, opacity: 0.25, depthWrite: false }));
+  schild.position.y = 44;
   gruppe.add(schild);
   gruppe.scale.setScalar(typ.groesse);
-  return { gruppe, beine, torso, fuesse, schenkel, koerperMat, raketenLicht, schild };
+  return { gruppe, beine, torso, huefte, knie, fuesse, duesen, dueseMat, koerperMat, raketenLicht, schild };
 }
 
 function zeigeMech(m) {
@@ -1682,15 +1776,23 @@ function zeigeMech(m) {
   g.gruppe.position.set(m.x, m.z, m.y);
   g.beine.rotation.y = -m.laufWinkel;
   g.torso.rotation.y = -m.zielWinkel;
+  // Laufen: Die Beine schwingen vor und zurück, das Knie knickt ein, wenn das Bein nach vorne kommt
   [-1, 1].forEach((s, i) => {
-    const vor = m.laeuft ? Math.sin(m.phase) * 11 * s : 0;
-    const heben = m.laeuft ? Math.max(0, Math.cos(m.phase) * s) * 9 : 0;
-    g.fuesse[i].position.set(vor, 4 + heben, s * 19);
-    g.schenkel[i].position.set(vor / 2, 22 + heben / 2, s * 17);
+    const schwung = m.laeuft ? Math.sin(m.phase) * 0.45 * s : 0;
+    const knick = m.laeuft ? Math.max(0, Math.cos(m.phase) * s) * 0.8 : 0;
+    g.huefte[i].rotation.z = schwung + knick * 0.5;
+    g.knie[i].rotation.z = -knick;
+    g.fuesse[i].rotation.z = -(schwung + knick * 0.5 - knick);   // Fuß bleibt flach
   });
-  g.torso.position.y = 48 + (m.laeuft ? Math.abs(Math.sin(m.phase)) * 2.5 : 0);
+  const wippen = m.laeuft ? Math.abs(Math.sin(m.phase)) * 2.5 : 0;
+  g.torso.position.y = 50 - (m.laeuft ? 1.5 : 0) + wippen;
+  g.beine.position.y = m.laeuft ? -1.5 + wippen * 0.4 : 0;
   g.koerperMat.emissive.set(m.blitz > 0 ? '#ffffff' : '#000000');
   g.raketenLicht.color.set(m.raketePause <= 0 ? '#ffd166' : '#222222');
+  // Düsen: kleine Flamme beim Laufen, große beim Boosten
+  const flamme = m.boostZeit > 0 ? 1.6 + Math.random() * 0.5 : m.laeuft ? 0.35 + Math.random() * 0.15 : 0.15;
+  for (const d of g.duesen) d.scale.set(flamme, 1, 1);
+  g.dueseMat.opacity = m.boostZeit > 0 ? 0.9 : 0.5;
   g.schild.visible = m.schutz > 0;
   g.schild.material.opacity = 0.18 + Math.sin(zeit * 10) * 0.08;
 }
