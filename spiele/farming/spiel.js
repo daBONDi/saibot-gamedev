@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';   /
 const START_GELD = 250000;
 const ZELLE = 2.5;               // So groß ist ein Feld-Stück (in Metern)
 const WACHS_ZEIT = 120;          // So viele Sekunden braucht das Getreide, bis es reif ist
-const SAAT_PRO_ZELLE = 40;       // So viel Saat (kg) braucht ein Feld-Stück
+const SAAT_PRO_ZELLE = 16;       // So viel Saat (kg) braucht ein Feld-Stück (eine volle Sämaschine = ein halbes Feld)
 const ERTRAG_PRO_ZELLE = 100;    // So viel Korn (kg) gibt ein reifes Feld-Stück
 const SAAT_MAX = 2000;           // So viel Saat passt in die Sämaschine
 const TANK_MAX = 8000;           // So viel Korn passt in den Korntank
@@ -31,6 +31,11 @@ const FELDER = [
   { x: -45, z: -35, b: 35, t: 45, preis: 50000 },
   { x: 45, z: -35, b: 35, t: 45, preis: 75000 },
   { x: -45, z: 32, b: 35, t: 35, preis: 100000 },
+  { x: 0, z: -85, b: 35, t: 35, preis: 60000 },      // Hintere Reihe (hinter dem zweiten Weg)
+  { x: -45, z: -85, b: 35, t: 35, preis: 80000 },
+  { x: 45, z: -85, b: 35, t: 35, preis: 90000 },
+  { x: -85, z: -35, b: 30, t: 45, preis: 120000 },   // Ganz links
+  { x: 85, z: -35, b: 30, t: 45, preis: 130000 },    // Ganz rechts
 ];
 // Die Anbaugeräte am Traktor (Taste 1, 2, 3)
 // arbeitsTempo: So schnell darfst du beim Arbeiten auf dem Feld fahren (m/s). Pflügen ist schwer!
@@ -180,13 +185,17 @@ const wegMat = new THREE.MeshStandardMaterial({ roughness: 1, map: (() => {   //
   return t;
 })() });
 function weg(x, z, b, t) { kasten(scene, x, 0.03, z, b, 0.06, t, wegMat, false); }
-weg(0, -8, 140, 5);      // Weg an den Feldern entlang
+weg(0, -8, 200, 5);      // Weg an den Feldern entlang
+weg(0, -62.5, 140, 5);   // Weg zwischen den Feld-Reihen
+weg(-65, -35, 5, 55);    // Querweg links zur hinteren Reihe
+weg(65, -35, 5, 55);     // Querweg rechts zur hinteren Reihe
 weg(0, 8, 5, 28);        // Weg zum Hof
 weg(32, 12, 60, 5);      // Weg zum Landhandel
 
 // ===== Hindernisse (damit man nicht durch Scheune und Bäume fährt) =====
 const hindernisse = [];   // { x, z, r } = rund   oder   { x, z, hb, ht } = eckig (halbe Breite/Tiefe)
 const fahrzeuge = [];     // Alle deine Fahrzeuge (die sind auch im Weg!)
+const anhaenger = [];     // Alle deine Anhänger
 function kollidiert(x, z, r, ignorier = null) {   // ignorier = das Fahrzeug, das gerade fährt (stößt nicht an sich selbst)
   if (Math.abs(x) > 190 || Math.abs(z) > 190) return true;   // Ende der Welt
   for (const h of hindernisse) {
@@ -194,6 +203,11 @@ function kollidiert(x, z, r, ignorier = null) {   // ignorier = das Fahrzeug, da
     else if (Math.abs(x - h.x) < h.hb + r && Math.abs(z - h.z) < h.ht + r) return true;
   }
   for (const fz of fahrzeuge) if (fz !== ignorier && Math.hypot(x - fz.g.position.x, z - fz.g.position.z) < r + fz.radius) return true;
+  for (const a of anhaenger) {   // Abgestellte Anhänger (zwei Kreise: vorne und hinten)
+    if (a.an) continue;
+    const sx = -Math.sin(a.g.rotation.y) * a.typ.laenge / 3, sz = -Math.cos(a.g.rotation.y) * a.typ.laenge / 3;
+    if (Math.hypot(x - a.g.position.x - sx, z - a.g.position.z - sz) < r + 1.5 || Math.hypot(x - a.g.position.x + sx, z - a.g.position.z + sz) < r + 1.5) return true;
+  }
   return false;
 }
 
@@ -247,7 +261,9 @@ ladenPlatz.rotation.x = -Math.PI / 2; ladenPlatz.position.set(LADEN.x, 0.07, LAD
 const baumOrte = [];
 for (let i = 0; i < 90; i++) {   // Ein Wald-Ring rundherum
   const w = i / 90 * Math.PI * 2 + Math.sin(i * 7) * 0.03, r = 115 + Math.sin(i * 13) * 12;
-  baumOrte.push([Math.cos(w) * r, Math.sin(w) * r]);
+  const x = Math.cos(w) * r, z = Math.sin(w) * r;
+  if (FELDER.some(F => Math.abs(x - F.x) < F.b / 2 + 4 && Math.abs(z - F.z) < F.t / 2 + 4)) continue;   // Keine Bäume auf den Feldern!
+  baumOrte.push([x, z]);
 }
 for (const [x, z] of [[8, 30], [12, 38], [-10, 18], [40, 40], [-15, 5], [75, 0], [80, 35], [-80, 0]]) baumOrte.push([x, z]);
 const stammGeo = new THREE.CylinderGeometry(0.35, 0.5, 3); stammGeo.translate(0, 1.5, 0);
@@ -554,6 +570,139 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
 }
 
 // =====================================================================
+// ===== Anhänger =====
+// =====================================================================
+// Ein Anhänger hängt hinten am Traktor (Taste H) und fasst extra viel Korn.
+// Der Mähdrescher kann sein Korn mit O in einen Anhänger (oder Traktor) daneben überladen.
+const ANHAENGER = {
+  kipper: { name: 'Kipper', emoji: '🛻', preis: 15000, max: 12000, farbe: 0x2a6fb0, laenge: 5 },
+  grosskipper: { name: 'Großer Kipper', emoji: '🚛', preis: 30000, max: 25000, farbe: 0xb0302a, laenge: 7 },
+};
+const KUPPLUNG = 2.2;   // So weit hinter der Traktor-Mitte ist die Anhängerkupplung (mal Größe)
+function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
+  const typ = ANHAENGER[typName], L = typ.laenge;
+  const g = new THREE.Group(); scene.add(g);
+  kasten(g, 0, 0.95, 0.3, 2.3, 0.25, L, 0x333333);                                  // Rahmen
+  kasten(g, 0, 1.1, 0.3, 2.4, 0.1, L + 0.1, typ.farbe);                              // Boden
+  for (const s of [-1, 1]) kasten(g, s * 1.17, 1.75, 0.3, 0.08, 1.2, L, typ.farbe);  // Seitenwände
+  for (const s of [-1, 1]) kasten(g, 0, 1.75, 0.3 + s * L / 2, 2.4, 1.2, 0.08, typ.farbe);   // Vorne und hinten
+  const korn = kasten(g, 0, 1.2, 0.3, 2.2, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);   // Das Korn drin
+  const deichsel = L / 2 + 1.4;   // Abstand von der Achse bis zur Kupplung vorne
+  kasten(g, 0, 0.75, -(L / 2 + 1.4) / 2 - 0.1, 0.15, 0.15, deichsel - 0.4, 0x222222);   // Deichsel
+  kasten(g, 0, 0.75, -deichsel + 0.1, 0.25, 0.2, 0.25, 0x555555);                   // Öse
+  const raeder = [];
+  const achsen = L > 6 ? [-0.7, 0.7] : [0];
+  for (const az of achsen) for (const x of [-1.25, 1.25]) raeder.push(baueRad(g, x, 0.6, az, 0.6, 0.45, 0));
+  for (const r of raeder) r.rad.parent.position.y = 0.6;
+  const a = { id: daten.id || `${mp.ich}-a-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, typName, typ, g, korn, raeder, deichsel,
+    inhalt: daten.inhalt || 0, basis: daten.inhalt || 0, an: null };
+  a.schild = schild(`${typ.emoji} ${typ.name}`, '#ffffff', 4.5);
+  a.schild.position.y = 3.3; g.add(a.schild);
+  g.position.set(x, 0, z); g.rotation.y = rot;
+  anhaenger.push(a);
+  return a;
+}
+const anhKupplung = (fz, ziel) => { fz.g.updateMatrixWorld(); return ziel.set(0, 0, KUPPLUNG * fz.typ.groesse).applyMatrix4(fz.g.matrixWorld); };
+const anhOese = (a, ziel) => ziel.set(-Math.sin(a.g.rotation.y) * a.deichsel, 0, -Math.cos(a.g.rotation.y) * a.deichsel).add(a.g.position);
+function ankuppeln(fz, a) {
+  if (a.an) a.an.anh = null;
+  fz.anh = a; a.an = fz;
+  // Gerade hinter den Traktor stellen
+  const h = anhKupplung(fz, new THREE.Vector3());
+  a.g.rotation.y = fz.g.rotation.y;
+  a.g.position.set(h.x + Math.sin(fz.g.rotation.y) * a.deichsel, 0, h.z + Math.cos(fz.g.rotation.y) * a.deichsel);
+  if (GERAETE[fz.werkzeug].hinten) fz.werkzeug = 'ernte';   // Hinten ist jetzt der Anhänger, kein Pflug
+}
+function abkuppeln(fz) { if (fz.anh) { fz.anh.an = null; fz.anh = null; } }
+// Der Anhänger rollt hinter dem Traktor her (die Deichsel zieht ihn)
+const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+function anhaengerFolgen(a) {
+  const fz = a.an, h = anhKupplung(fz, tmpA);
+  const p = a.g.position;
+  let dx = h.x - p.x, dz = h.z - p.z;
+  const l = Math.hypot(dx, dz) || 1;
+  dx /= l; dz /= l;
+  const altX = p.x, altZ = p.z;
+  p.set(h.x - dx * a.deichsel, 0, h.z - dz * a.deichsel);
+  a.g.rotation.y = Math.atan2(-dx, -dz);
+  const weg = Math.hypot(p.x - altX, p.z - altZ) * Math.sign(fz.speed || 1);
+  for (const r of a.raeder) r.rad.rotation.x -= weg / r.r;
+}
+// Korn-Rechnung: Fahrzeug + angehängter Anhänger zusammen
+const kornPlatz = fz => fz.typ.tankMax + (fz.anh ? fz.anh.typ.max : 0);
+const kornDrin = fz => fz.tank + (fz.anh ? fz.anh.inhalt : 0);
+function kornDazu(fz, menge) {   // Erst in den eigenen Tank, dann in den Anhänger
+  const inTank = Math.min(menge, fz.typ.tankMax - fz.tank);
+  fz.tank += inTank;
+  if (fz.anh) fz.anh.inhalt += menge - inTank;
+}
+function kornWeg(fz, menge) {   // Erst aus dem Anhänger, dann aus dem Tank
+  if (fz.anh) { const ausAnh = Math.min(menge, fz.anh.inhalt); fz.anh.inhalt -= ausAnh; menge -= ausAnh; }
+  fz.tank -= menge;
+}
+function naheAnhaengerZumKuppeln(fz) {
+  const h = anhKupplung(fz, tmpA);
+  return anhaenger.find(a => !a.an && anhOese(a, tmpB).distanceTo(h) < 2.5) || null;
+}
+function kuppeln() {
+  if (!aktiv) { meldung('🔗 Steig in einen Traktor, um einen Anhänger anzukuppeln!'); sound.nein(); return; }
+  if (aktiv.typ.art === 'drescher') { meldung('🌾 Der Mähdrescher kann keinen Anhänger ziehen – lade mit O in einen Anhänger über!'); sound.nein(); return; }
+  if (aktiv.anh) { const a = aktiv.anh; abkuppeln(aktiv); meldung(`🔓 ${a.typ.name} abgekuppelt.`); sound.klick(); return; }
+  const a = naheAnhaengerZumKuppeln(aktiv);
+  if (!a) { meldung('🔗 Fahr rückwärts mit der Kupplung an die Deichsel eines Anhängers (näher ran!)'); sound.nein(); return; }
+  ankuppeln(aktiv, a);
+  meldung(`🔗 ${a.typ.name} angekuppelt! Jetzt passen ${kg(kornPlatz(aktiv))} Korn rein.`, 3);
+  sound.tuer();
+}
+function ueberladenZiel() {   // Wohin kann der Mähdrescher sein Korn laden? (Fahrzeug oder Anhänger in der Nähe)
+  if (!aktiv || aktiv.typ.art !== 'drescher') return null;
+  const p = aktiv.g.position;
+  let bestes = null, bestD = 11;
+  for (const fz of fahrzeuge) {
+    if (fz === aktiv || fz.typ.art === 'drescher') continue;
+    const d = Math.hypot(fz.g.position.x - p.x, fz.g.position.z - p.z);
+    if (d < bestD && kornDrin(fz) < kornPlatz(fz)) { bestD = d; bestes = { fz }; }
+  }
+  for (const a of anhaenger) {
+    if (a.an) continue;
+    const d = Math.hypot(a.g.position.x - p.x, a.g.position.z - p.z);
+    if (d < bestD && a.inhalt < a.typ.max) { bestD = d; bestes = { a }; }
+  }
+  return bestes;
+}
+function ueberladen() {
+  const z = ueberladenZiel();
+  if (!aktiv || aktiv.typ.art !== 'drescher') { meldung('🌾 Überladen geht mit dem Mähdrescher (Taste O)!'); sound.nein(); return; }
+  if (!z) { meldung('🚛 Fahr mit dem Mähdrescher neben einen Traktor mit Anhänger (oder einen Anhänger)!'); sound.nein(); return; }
+  if (aktiv.tank <= 0) { meldung('Der Korntank vom Mähdrescher ist leer!'); sound.nein(); return; }
+  let menge;
+  if (z.fz) { menge = Math.min(aktiv.tank, kornPlatz(z.fz) - kornDrin(z.fz)); kornDazu(z.fz, menge); mpEvent({ t: 'korn', id: z.fz.id, m: menge }); }
+  else { menge = Math.min(aktiv.tank, z.a.typ.max - z.a.inhalt); z.a.inhalt += menge; }
+  aktiv.tank -= menge;
+  meldung(`🌾➡️🚛 ${kg(menge)} Korn übergeladen!`);
+  sound.korn();
+  const p = aktiv.g.position;
+  for (let k = 0; k < 12; k++) staub(p.x + zufall(-3, 3), p.z + zufall(-3, 3), 0xe3c46a, 4, -0.5);
+}
+function anhaengerKaufen(name) {
+  const typ = ANHAENGER[name];
+  if (money < typ.preis) return;
+  for (let k = 0; k < 20; k++) {
+    const x = k < 10 ? 32 + k * 6 : -12 - (k - 10) * 6, z = 2;
+    if (kollidiert(x, z, 4)) continue;
+    money -= typ.preis;
+    const a = neuerAnhaenger(name, x, z, 0);
+    mpEvent({ t: 'neuerAnh', id: a.id, typ: name, x, z, r: 0 });
+    meldung(`🎉 Dein ${typ.emoji} ${typ.name} steht beim Landhandel! Fahr mit dem Traktor rückwärts ran und drück H.`, 5);
+    sound.kaufen();
+    haendlerZeigen(true);
+    speichern();
+    return;
+  }
+  meldung('🚫 Kein Parkplatz mehr frei beim Landhandel!'); sound.nein();
+}
+
+// =====================================================================
 // ===== Der Farmer =====
 // =====================================================================
 function karoTextur(farbe = '#b3261e') {   // Kariertes Holzfäller-Hemd
@@ -813,7 +962,7 @@ function updateHUD() {
     balken('diesel', fz.diesel, fz.typ.dieselMax, `${Math.round(fz.diesel)} Liter`);
     $('diesel').style.background = fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0';
     balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? kg(fz.saat) : '– (kann nicht säen)');
-    balken('tank', fz.tank, fz.typ.tankMax, kg(fz.tank));
+    balken('tank', kornDrin(fz), kornPlatz(fz), fz.anh ? `${kg(kornDrin(fz))} (mit ${fz.anh.typ.name})` : kg(fz.tank));
   }
   const steigt = Math.cos(spielZeit / 45) > 0;
   $('preis').textContent = `${kornPreis().toFixed(2).replace('.', ',')} €/kg ${steigt ? '📈' : '📉'}`;
@@ -852,8 +1001,8 @@ function bearbeite(fz, x, z) {
     } else if (c.z === 'wiese' || c.z === 'stoppeln') meldungSelten('🟫 Erst pflügen (Taste 1), dann säen!');
   } else if (fz.werkzeug === 'ernte') {
     if (c.z === 'gesaet' && c.w >= 1) {
-      if (fz.tank + ERTRAG_PRO_ZELLE > fz.typ.tankMax) { meldungSelten('🚛 Der Korntank ist voll! Ab zum Silo 🛢️ (L) oder zum Landhandel 🏪 (V).'); return; }
-      fz.tank += ERTRAG_PRO_ZELLE; c.z = 'stoppeln'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0xe3c46a);
+      if (kornDrin(fz) + ERTRAG_PRO_ZELLE > kornPlatz(fz)) { meldungSelten(fz.typ.art === 'drescher' ? '🚛 Der Korntank ist voll! Lade mit O in einen Anhänger über – oder ab zum Silo (L)!' : '🚛 Alles voll! Ab zum Silo 🛢️ (L) oder zum Landhandel 🏪 (V).'); return; }
+      kornDazu(fz, ERTRAG_PRO_ZELLE); c.z = 'stoppeln'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0xe3c46a);
     } else if (c.z === 'gesaet') meldungSelten('⏳ Das Getreide ist noch nicht reif – warte, bis es golden ist!');
   }
 }
@@ -890,11 +1039,12 @@ function brauchtFahrzeug(text) {
 function verkaufen() {
   if (brauchtFahrzeug('Korn zu verkaufen')) return;
   if (!imLaden()) { meldung('🏪 Fahr auf den gelben Platz beim Landhandel!'); sound.nein(); return; }
-  if (aktiv.tank <= 0) { meldung('Der Korntank ist leer. Ernte zuerst etwas – oder hol Korn aus dem Silo! 🌾'); sound.nein(); return; }
-  const erloes = Math.round(aktiv.tank * kornPreis());
+  const drin = kornDrin(aktiv);
+  if (drin <= 0) { meldung('Der Korntank ist leer. Ernte zuerst etwas – oder hol Korn aus dem Silo! 🌾'); sound.nein(); return; }
+  const erloes = Math.round(drin * kornPreis());
   money += erloes;
-  meldung(`💶 ${kg(aktiv.tank)} Korn verkauft für ${euro(erloes)}!`, 3.5);
-  aktiv.tank = 0;
+  meldung(`💶 ${kg(drin)} Korn verkauft für ${euro(erloes)}!`, 3.5);
+  kornWeg(aktiv, drin);
   sound.kasse();
   speichern();
 }
@@ -925,10 +1075,10 @@ function einlagern() {   // Korn vom Fahrzeug ins Silo
   if (brauchtFahrzeug('Korn einzulagern')) return;
   const s = nahesSilo();
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
-  if (aktiv.tank <= 0) { meldung('Der Korntank ist leer!'); sound.nein(); return; }
-  const menge = Math.min(aktiv.tank, SILO_MAX - s.inhalt);
+  if (kornDrin(aktiv) <= 0) { meldung('Der Korntank ist leer!'); sound.nein(); return; }
+  const menge = Math.min(kornDrin(aktiv), SILO_MAX - s.inhalt);
   if (menge <= 0) { meldung('🛢️ Das Silo ist voll! Bau noch eins (Baumodus).'); sound.nein(); return; }
-  aktiv.tank -= menge; s.inhalt += menge;
+  kornWeg(aktiv, menge); s.inhalt += menge;
   siloSchild(s);
   meldung(`🛢️ ${kg(menge)} Korn eingelagert. Im Silo: ${kg(s.inhalt)}`);
   sound.korn();
@@ -939,10 +1089,10 @@ function ausSiloHolen() {   // Korn aus dem Silo aufs Fahrzeug (zum Verkaufen, w
   if (brauchtFahrzeug('Korn zu holen')) return;
   const s = nahesSilo();
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
-  const menge = Math.min(s.inhalt, aktiv.typ.tankMax - aktiv.tank);
+  const menge = Math.min(s.inhalt, kornPlatz(aktiv) - kornDrin(aktiv));
   if (s.inhalt <= 0) { meldung('🛢️ Das Silo ist leer!'); sound.nein(); return; }
   if (menge <= 0) { meldung('Der Korntank ist schon voll!'); sound.nein(); return; }
-  aktiv.tank += menge; s.inhalt -= menge;
+  kornDazu(aktiv, menge); s.inhalt -= menge;
   siloSchild(s);
   meldung(`🚜 ${kg(menge)} Korn aus dem Silo geholt. Ab zum Landhandel! 🏪`);
   sound.korn();
@@ -983,6 +1133,19 @@ function haendlerZeigen(an) {
     knopf.textContent = money >= typ.preis ? '🛒 Kaufen' : '💸 Zu teuer';
     knopf.disabled = money < typ.preis;
     knopf.addEventListener('click', () => fahrzeugKaufen(name));
+    zeile.appendChild(knopf);
+    liste.appendChild(zeile);
+  }
+  for (const [name, typ] of Object.entries(ANHAENGER)) {
+    const anzahl = anhaenger.filter(a => a.typName === name).length;
+    const zeile = document.createElement('div');
+    zeile.className = 'angebot';
+    zeile.innerHTML = `<b>${typ.emoji} ${typ.name}</b> (Anhänger) – ${euro(typ.preis)}${anzahl ? ` <span class="klein">(du hast ${anzahl})</span>` : ''}<br>
+      <span class="klein">🌾 Fasst ${kg(typ.max)} Korn · Ankuppeln mit H · Der Mähdrescher kann mit O hineinladen</span><br>`;
+    const knopf = document.createElement('button');
+    knopf.textContent = money >= typ.preis ? '🛒 Kaufen' : '💸 Zu teuer';
+    knopf.disabled = money < typ.preis;
+    knopf.addEventListener('click', () => anhaengerKaufen(name));
     zeile.appendChild(knopf);
     liste.appendChild(zeile);
   }
@@ -1057,6 +1220,7 @@ function speichern() {
       v: 2, money, hofSilo: hofSilo.inhalt,
       fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, werkzeug: f.werkzeug })),
       aktiv: fahrzeuge.indexOf(aktiv),
+      anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
       gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0 })),
@@ -1082,6 +1246,7 @@ function laden() {
   }
   hofSilo.inhalt = d.hofSilo || 0; siloSchild(hofSilo);
   for (const f of d.fahrzeuge || []) if (FAHRZEUGE[f.typ]) neuesFahrzeug(f.typ, f.x, f.z, f.r, f);
+  anhaengerLaden(d.anhaenger);
   if (!fahrzeuge.length) neuesFahrzeug('fendt', 0, 10, 0);
   if (d.aktiv >= 0 && fahrzeuge[d.aktiv]) einsteigen(fahrzeuge[d.aktiv]);
   else {
@@ -1089,6 +1254,14 @@ function laden() {
     letztes = fahrzeuge[0];
   }
   return true;
+}
+function anhaengerLaden(liste) {
+  for (const da of liste || []) {
+    if (!ANHAENGER[da.typ]) continue;
+    const a = neuerAnhaenger(da.typ, da.x, da.z, da.r, da);
+    const fz = da.an ? fahrzeuge.find(f => f.id === da.an) : null;
+    if (fz) { fz.anh = a; a.an = fz; }
+  }
 }
 function neuesSpiel() {
   if (!confirm('Wirklich ein neues Spiel anfangen? Dein Bauernhof wird dann gelöscht!')) return;
@@ -1100,6 +1273,7 @@ function neuesSpiel() {
 function geraetWaehlen(art) {
   if (!aktiv || aktiv.werkzeug === art) return;
   if (!aktiv.typ.geraete.includes(art)) { meldung(`🌾 Der ${aktiv.typ.name} kann nur ernten!`); sound.nein(); return; }
+  if (aktiv.anh && GERAETE[art].hinten) { meldung('🔗 Hinten hängt der Anhänger! Erst abkuppeln (H), dann geht der Pflug/die Sämaschine.'); sound.nein(); return; }
   aktiv.werkzeug = art;
   sound.klick();
   meldung(`${GERAETE[art].emoji} ${GERAETE[art].name} angebaut`, 1.5);
@@ -1152,6 +1326,8 @@ document.addEventListener('keydown', e => {
   if (k === 'u') ausSiloHolen();
   if (k === 'k') feldKaufen();
   if (k === 'n') haendlerZeigen($('haendler').style.display !== 'block');
+  if (k === 'h') kuppeln();
+  if (k === 'o') ueberladen();
   if (k === 'escape') haendlerZeigen(false);
   if (['1', '2', '3'].includes(k)) {
     if (building) { bauArt = Object.keys(GEBAEUDE_ARTEN)[Number(k) - 1]; updateHUD(); }
@@ -1209,7 +1385,7 @@ const tmp = new THREE.Vector3();
 function fahren(fz, dt) {
   const typ = fz.typ;
   // Ein voller Korntank macht träge (außer mit Allrad)
-  const last = typ.allrad ? 1 : 1 - 0.45 * fz.tank / typ.tankMax;
+  const last = typ.allrad ? 1 : 1 - 0.45 * kornDrin(fz) / kornPlatz(fz);
   // Höchsttempo: beim Arbeiten langsam, ohne Diesel nur noch Schritttempo, mit Turbo schneller!
   const turbo = typ.turbo && keys.shift && fz.diesel > 0 && !fz.arbeitet;
   let maxVor = fz.arbeitet ? GERAETE[fz.werkzeug].arbeitsTempo * typ.arbeit : typ.tempo * (turbo ? 1.4 : 1);
@@ -1229,7 +1405,8 @@ function fahren(fz, dt) {
   fz.g.rotation.y += fz.speed * Math.tan(fz.lenkWinkel) / (fz.radstand * typ.groesse) * dt;
   const alt = fz.g.position.clone();
   fz.g.translateZ(-fz.speed * dt);
-  if (kollidiert(fz.g.position.x, fz.g.position.z, fz.radius, fz)) {
+  // Nur blockieren, wenn wir NEU irgendwo reinfahren (steckt man schon fest, darf man raus fahren)
+  if (kollidiert(fz.g.position.x, fz.g.position.z, fz.radius, fz) && !kollidiert(alt.x, alt.z, fz.radius, fz)) {
     fz.g.position.copy(alt);
     if (Math.abs(fz.speed) > 4) { sound.rumms(); meldungSelten('💥 Rumms!'); }
     fz.speed = -fz.speed * 0.3;
@@ -1312,7 +1489,7 @@ function mpEvent(n) {   // Etwas an alle schicken (Gast: an den Gastgeber, der l
 function mpZelle(f, i, j) { if (mp.aktiv) mpEvent({ t: 'zelle', f: f.nr, i, j, c: zellCode(f.zellen[j * f.nx + i]) }); }
 function mpFzSenden(fz, fahrer) {
   mpEvent({ t: 'fz', id: fz.id, fa: fahrer, x: r2(fz.g.position.x), z: r2(fz.g.position.z), r: r2(fz.g.rotation.y), sp: r2(fz.speed), lw: r2(fz.lenkWinkel),
-    wz: fz.werkzeug, ab: fz.arbeitet, di: Math.round(fz.diesel), ta: fz.tank, sa: fz.saat });
+    wz: fz.werkzeug, ab: fz.arbeitet, di: Math.round(fz.diesel), ta: fz.tank, sa: fz.saat, an: fz.anh ? fz.anh.id : null, ai: fz.anh ? fz.anh.inhalt : 0 });
 }
 function mpSpielerNeu(id, nr) {
   const info = MP_BAUERN[nr] || MP_BAUERN[0];
@@ -1342,6 +1519,7 @@ function weltSchnappschuss() {
     fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel,
       werkzeug: f.werkzeug, fahrer: f === aktiv ? mp.ich : f.fahrer })),
     spieler: [{ id: mp.ich, nr: mp.nr }, ...[...mp.andere.values()].map(o => ({ id: o.id, nr: o.nr }))],
+    anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
   };
 }
 
@@ -1421,6 +1599,8 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
   if (aktiv) aussteigen();
   for (const fz of fahrzeuge) scene.remove(fz.g);
   fahrzeuge.length = 0; letztes = null;
+  for (const a of anhaenger) scene.remove(a.g);
+  anhaenger.length = 0;
   for (const b of gebaute) {
     scene.remove(b.mesh);
     const k = hindernisse.indexOf(b.h); if (k >= 0) hindernisse.splice(k, 1);
@@ -1442,6 +1622,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
     const fz = neuesFahrzeug(f.typ, f.x, f.z, f.r, f);
     fz.fahrer = f.fahrer; fz.fahrerZeit = spielZeit;
   }
+  anhaengerLaden(d.anhaenger);
   letztes = fahrzeuge[0] || null;
   player.position.set(4 + mp.nr * 2, 0, 15); yaw = 0;
   for (const sp of d.spieler) if (sp.id !== mp.ich && !mp.andere.has(sp.id)) mpSpielerNeu(sp.id, sp.nr);
@@ -1483,12 +1664,26 @@ function mpEmpfangen(d, vonGast) {
         fz.ziel = d; fz.fahrer = d.fa; fz.fahrerZeit = spielZeit;
         fz.werkzeug = fz.typ.geraete.includes(d.wz) ? d.wz : fz.werkzeug;
         fz.diesel = d.di; fz.tank = d.ta; fz.saat = d.sa;
+        // Anhänger: an- oder abgekuppelt?
+        if ((fz.anh ? fz.anh.id : null) !== (d.an || null)) {
+          abkuppeln(fz);
+          const a = d.an ? anhaenger.find(x => x.id === d.an) : null;
+          if (a) ankuppeln(fz, a);
+        }
+        if (fz.anh) { fz.anh.inhalt = d.ai; fz.anh.basis = d.ai; }
       }
       break;
     }
     case 'zelle': { const f = felder[d.f]; if (f) { f.zellen[d.j * f.nx + d.i] = zelleAusCode(d.c); malBoden(f, d.i, d.j); } break; }
     case 'feld': { const f = felder[d.nr]; if (f && !f.gekauft) { f.gekauft = true; malFeld(f); meldung(`🎉 Feld ${d.nr + 1} wurde gekauft!`); } break; }
     case 'bau': gebaeudeHinzu(d.art, d.x, d.z, d.rot, 0); sound.bauen(); break;
+    case 'korn': { const fz = fahrzeuge.find(x => x.id === d.id); if (fz) kornDazu(fz, d.m); break; }   // Der Mähdrescher hat übergeladen
+    case 'neuerAnh': if (!anhaenger.some(a => a.id === d.id) && ANHAENGER[d.typ]) neuerAnhaenger(d.typ, d.x, d.z, d.r, { id: d.id }); break;
+    case 'anh': {   // Ein abgestellter Anhänger hat jetzt anderen Inhalt (Mähdrescher hat übergeladen)
+      const a = anhaenger.find(x => x.id === d.id);
+      if (a && !a.an) { a.inhalt = d.i; a.basis = d.i; }
+      break;
+    }
     case 'neuesFz': if (!fahrzeuge.some(f => f.id === d.id) && FAHRZEUGE[d.typ]) { neuesFahrzeug(d.typ, d.x, d.z, d.r, { id: d.id }); meldung(`🚜 Neues Fahrzeug auf dem Hof: ${FAHRZEUGE[d.typ].name}!`); } break;
     default: return;
   }
@@ -1512,6 +1707,7 @@ function mpTick(dt) {
     else mpEvent({ t: 'silo', s: siloSchluessel(s), d: s.inhalt - (s.basis || 0) });
     s.basis = s.inhalt;
   }
+  for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt }); }
   // Wo bin ich?
   mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
@@ -1610,6 +1806,14 @@ function animate() {
     fz.schild.visible = fz !== aktiv && !fremd;   // Namensschild nur bei geparkten Fahrzeugen
   }
   player.visible = !(ansicht === 'ego');   // In First Person siehst du dich nicht selbst
+  for (const a of anhaenger) {
+    if (a.an) anhaengerFolgen(a);
+    const voll = a.inhalt / a.typ.max;
+    a.korn.visible = voll > 0.005;
+    a.korn.scale.y = Math.max(0.01, voll * 1.15);
+    a.korn.position.y = 1.15 + voll * 0.575;
+    a.schild.visible = !a.an;
+  }
   mpAndereZeigen(dt);
   mpTick(dt);
   wachsen(dt);
@@ -1621,8 +1825,10 @@ function animate() {
   // Hinweis unten in der Mitte
   const fn = feldInDerNaehe(), silo = nahesSilo();
   if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1/2/3 = anderes Gebäude · B = fertig`);
-  else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = Korn verkaufen (${kg(aktiv.tank)}) · G = Saat · T = Tanken · N = Fahrzeug-Händler`);
+  else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = Korn verkaufen (${kg(kornDrin(aktiv))}) · G = Saat · T = Tanken · N = Fahrzeug-Händler`);
   else if (silo) zeigeHinweis(`🛢️ Silo (${kg(silo.inhalt)} drin): L = Korn einlagern · U = Korn holen`);
+  else if (aktiv && aktiv.typ.art === 'drescher' && aktiv.tank > 0 && ueberladenZiel()) zeigeHinweis('🌾➡️🚛 O = Korn überladen');
+  else if (aktiv && !aktiv.anh && aktiv.typ.art !== 'drescher' && naheAnhaengerZumKuppeln(aktiv)) zeigeHinweis('🔗 H = Anhänger ankuppeln');
   else if (fn) zeigeHinweis(`🌾 Feld ${fn.nr + 1} kaufen für ${euro(fn.preis)}? Drück K!`);
   else if (!aktiv && beimHaendler()) zeigeHinweis('🚜 N = Fahrzeug-Händler');
   else if (!aktiv) { const fz = naechstesFahrzeug(); zeigeHinweis(fz ? `${fz.typ.emoji} E drücken: in den ${fz.typ.name} einsteigen` : ''); }
