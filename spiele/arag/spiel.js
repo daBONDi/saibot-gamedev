@@ -53,7 +53,9 @@ const HELFER = [
 ];
 const HELFER_TEMPO = 3.2;        // So schnell fahren die Helfer
 const HELFER_TRAGE_TEMPO = 2.2;  // ... und so schnell, wenn sie was tragen
-const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn ein Monster ihn erwischt
+const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn er kein Leben mehr hat
+const HELFER_LEBEN = 3;          // So viele Treffer hält ein Helfer aus, bevor er kaputt geht ❤️
+const HELFER_HEILEN = 20;        // Alle 20 Sekunden bekommt ein Helfer ein Leben zurück (0 = nie)
 // Was die Helfer sagen ({name}, {wert} und {monster} werden ersetzt)
 const SAETZE = {
   start: ['ARAG-Einheit bereit!', 'Los geht\'s, Team!', 'Ich hab ein komisches Gefühl ...', 'Schätze suchen, Schätze finden!'],
@@ -219,6 +221,174 @@ const sound = {
     for (let k = 0; k < 4; k++) ton(hoehe * zufall(0.8, 1.5), k * 0.07, 0.06, 'square', 0.035 * laut);
   },
 };
+
+// ===== Monster-Geräusche =====
+// Jedes Monster macht eigene Geräusche – je näher es ist, desto lauter. So hörst du sie, bevor du sie siehst!
+const MONSTER_GERAEUSCH_LAUT = 1;   // Wie laut die Monster sind (0 = stumm, 2 = doppelt so laut)
+const MONSTER_HOERWEITE = 22;       // Ab dieser Entfernung hörst du ein Monster nicht mehr
+let rauschPuffer = null;
+function rauschen(start, dauer, laut, filter = 'bandpass', frequenz = 1000, ziel = null, frequenzEnde = null) {
+  try {
+    if (!audio || !tonAn || laut <= 0.001) return;
+    if (!rauschPuffer) {   // Einmal 1 Sekunde Rauschen bauen und immer wieder benutzen
+      rauschPuffer = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
+      const d = rauschPuffer.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const t = audio.currentTime + start;
+    const q = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+    q.buffer = rauschPuffer; q.loop = true;
+    f.type = filter; f.frequency.setValueAtTime(frequenz, t);
+    if (frequenzEnde) f.frequency.exponentialRampToValueAtTime(frequenzEnde, t + dauer);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(laut, t + Math.min(0.05, dauer / 3));
+    g.gain.exponentialRampToValueAtTime(0.001, t + dauer);
+    q.connect(f).connect(g).connect(ziel || audio.destination);
+    q.start(t); q.stop(t + dauer + 0.05);
+  } catch (e) { /* egal */ }
+}
+// Ein Ton mit "Zittern" (Vibrato) – klingt gruselig
+function gruselTon(hoehe, start, dauer, klang, laut, hoeheEnde, zittern = 6, ziel = null) {
+  try {
+    if (!audio || !tonAn || laut <= 0.001) return;
+    const t = audio.currentTime + start;
+    const o = audio.createOscillator(), g = audio.createGain(), lfo = audio.createOscillator(), lfoG = audio.createGain();
+    o.type = klang;
+    o.frequency.setValueAtTime(hoehe, t);
+    if (hoeheEnde) o.frequency.exponentialRampToValueAtTime(hoeheEnde, t + dauer);
+    lfo.frequency.value = zittern; lfoG.gain.value = hoehe * 0.04;
+    lfo.connect(lfoG).connect(o.frequency);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(laut, t + dauer * 0.3);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dauer);
+    o.connect(g).connect(ziel || audio.destination);
+    o.start(t); lfo.start(t); o.stop(t + dauer + 0.05); lfo.stop(t + dauer + 0.05);
+  } catch (e) { /* egal */ }
+}
+const monsterSound = {
+  geist(laut, jagt) {   // 👻 Huuuuuu ... (beim Jagen höher und schriller)
+    const h = jagt ? zufall(500, 650) : zufall(300, 420);
+    gruselTon(h, 0, zufall(1.2, 2), 'sine', 0.09 * laut, h * zufall(0.6, 0.8), jagt ? 9 : 5);
+    gruselTon(h * 1.5, 0.1, 1.4, 'triangle', 0.03 * laut, h, 7);
+    rauschen(0, 1.5, 0.05 * laut, 'bandpass', 800, null, 300);   // Wind
+  },
+  lauscher(laut, jagt) {
+    if (jagt) {   // 👂 Knurren und schnelle, schwere Schritte
+      gruselTon(zufall(55, 70), 0, 0.7, 'sawtooth', 0.09 * laut, 45, 18);
+      for (let k = 0; k < 3; k++) ton(70, 0.2 + k * 0.18, 0.1, 'sine', 0.2 * laut, 35);
+    } else {      // Schnüffeln: schnf, schnf, schnf
+      for (let k = 0; k < 3; k++) rauschen(k * 0.16, 0.1, 0.1 * laut, 'bandpass', zufall(1800, 2600));
+    }
+  },
+  starrer(laut) {   // 🗿 Stein schabt über den Boden
+    rauschen(0, 0.45, 0.12 * laut, 'lowpass', 400, null, 150);
+    ton(48, 0, 0.4, 'sawtooth', 0.04 * laut, 40);
+  },
+};
+function monsterLautstaerke(m) {
+  const d = abstand3D(m, spielerKoerper.position);
+  if (d > MONSTER_HOERWEITE) return 0;
+  const n = 1 - d / MONSTER_HOERWEITE;
+  return n * n * MONSTER_GERAEUSCH_LAUT;   // Mal-sich-selbst, damit es nah viel lauter ist als fern
+}
+function monsterGeraeusche(m, dt) {
+  m.geraeuschZeit = (m.geraeuschZeit ?? zufall(0, 2)) - dt;
+  if (m.geraeuschZeit > 0 || m.betaeubt > 0) return;
+  const laut = monsterLautstaerke(m), jagt = m.modus === 'jagen';
+  if (m.art === 'starrer') {
+    // Der Starrer ist nur zu hören, wenn er sich bewegt (also wenn du NICHT hinschaust ...)
+    m.geraeuschZeit = 0.5;
+    if (!m.gesehen && m.laeuft && laut > 0) monsterSound.starrer(laut);
+    return;
+  }
+  if (m.art === 'geist') m.geraeuschZeit = jagt ? zufall(1.2, 2) : zufall(3, 6);
+  else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
+  if (laut > 0) monsterSound[m.art](laut, jagt);
+}
+
+// ===== Verfolgungs-Musik =====
+// Wenn ein Monster dich jagt, startet schnelle, gruselige Musik. Ist die Gefahr vorbei, wird sie leiser.
+// Die Musik wird mit Web Audio "live" gespielt – Note für Note, ganz ohne Musikdatei.
+const MUSIK_AN = true;       // false = keine Verfolgungs-Musik
+const MUSIK_LAUT = 0.45;     // Wie laut die Musik ist
+const MUSIK_TEMPO = 150;     // Schläge pro Minute (höher = hektischer)
+// Bass-Melodie: Halbtöne über dem Ton A (0 = A, 1 = B, 3 = C, -2 = G ...), eine Zahl pro Achtel, 4 Takte
+const MUSIK_BASS = [
+  0, 0, 0, 0, 0, 0, 1, 0,
+  0, 0, 0, 0, 3, 3, 1, 1,
+  0, 0, 0, 0, 0, 0, 1, 0,
+  -2, -2, -2, -2, -1, -1, 1, 1,
+];
+// Hohe Gruselmelodie: eine Note pro Takt-Hälfte (null = Pause)
+const MUSIK_MELODIE = [12, null, 13, null, 12, 15, 13, null];
+let musik = null;
+const halbton = (n, grund) => grund * Math.pow(2, n / 12);
+function musikNote(schritt, t) {
+  const ziel = musik.gain, achtel = schritt % 2 === 0, i = Math.floor(schritt / 2) % MUSIK_BASS.length;
+  const s16 = 60 / MUSIK_TEMPO / 4, imTakt = schritt % 16;
+  const neuStart = t - audio.currentTime;
+  // Bass (auf jedem Achtel)
+  if (achtel) {
+    const f = halbton(MUSIK_BASS[i], 55);
+    try {
+      const o = audio.createOscillator(), fl = audio.createBiquadFilter(), g = audio.createGain();
+      o.type = 'sawtooth'; o.frequency.value = f;
+      fl.type = 'lowpass'; fl.frequency.setValueAtTime(900, t); fl.frequency.exponentialRampToValueAtTime(150, t + s16 * 2);
+      g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + s16 * 2);
+      o.connect(fl).connect(g).connect(ziel);
+      o.start(t); o.stop(t + s16 * 2 + 0.02);
+    } catch (e) { /* egal */ }
+  }
+  // Schlagzeug: Bum auf 1 und 3, Tschak auf 2 und 4, Ts-ts dazwischen
+  if (imTakt === 0 || imTakt === 8 || imTakt === 10) {
+    try {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      o.connect(g).connect(ziel); o.start(t); o.stop(t + 0.25);
+    } catch (e) { /* egal */ }
+  }
+  if (imTakt === 4 || imTakt === 12) rauschen(neuStart, 0.15, 0.35, 'highpass', 1500, ziel);
+  if (schritt % 2 === 1) rauschen(neuStart, 0.04, 0.12, 'highpass', 7000, ziel);
+  // Gruselmelodie (alle halben Takte)
+  if (imTakt % 8 === 0) {
+    const n = MUSIK_MELODIE[Math.floor(schritt / 8) % MUSIK_MELODIE.length];
+    if (n !== null) gruselTon(halbton(n, 220), neuStart, s16 * 7, 'triangle', 0.12, null, 6, ziel);
+  }
+}
+function musikUpdate(aktiv) {
+  if (!audio || !MUSIK_AN) return;
+  const jetzt = audio.currentTime;
+  if (!musik) {
+    const g = audio.createGain();
+    g.gain.value = 0;
+    g.connect(audio.destination);
+    musik = { gain: g, naechste: 0, schritt: 0, war: false, aus: -99, ziel: 0 };
+  }
+  const ziel = aktiv && tonAn ? MUSIK_LAUT : 0;
+  if (ziel !== musik.ziel) {
+    musik.ziel = ziel;
+    musik.gain.gain.cancelScheduledValues(jetzt);
+    musik.gain.gain.setTargetAtTime(ziel, jetzt, ziel > 0 ? 0.1 : 0.8);   // Schnell an, langsam aus
+  }
+  if (aktiv && !musik.war) {
+    // Die Jagd beginnt! Ein dramatischer Schlag ... DUNN!
+    if (jetzt - musik.aus > 4) { musik.naechste = jetzt + 0.05; musik.schritt = 0; }
+    gruselTon(55, 0, 1.2, 'sawtooth', 0.25, 40, 3);
+    gruselTon(58.3, 0, 1.2, 'sawtooth', 0.2, 42, 4);
+    rauschen(0, 0.8, 0.25, 'lowpass', 2000, null, 100);
+  }
+  if (!aktiv && musik.war) musik.aus = jetzt;
+  musik.war = aktiv;
+  if (!aktiv && jetzt - musik.aus > 4) return;   // Ausgeklungen – keine Noten mehr planen
+  // Die nächsten Noten ein kleines Stück im Voraus planen (so klingt es nicht holprig)
+  if (musik.naechste < jetzt) musik.naechste = jetzt + 0.02;
+  while (musik.naechste < jetzt + 0.15) {
+    musikNote(musik.schritt, musik.naechste);
+    musik.naechste += 60 / MUSIK_TEMPO / 4;
+    musik.schritt++;
+  }
+}
 
 // =====================================================================
 // ===== 3D-Welt mit Three.js =====
@@ -1459,6 +1629,7 @@ function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum,
 }
 function updateMonster(m, dt) {
   const p = spielerKoerper.position, info = m.info;
+  monsterGeraeusche(m, dt);
   m.phase += dt;
   m.angriffPause -= dt;
   if (m.betaeubt > 0) { m.betaeubt -= dt; m.laeuft = false; return; }
@@ -1539,7 +1710,7 @@ function updateMonster(m, dt) {
     const hp = h.body.position;
     if (h.kaputt <= 0 && m.angriffPause <= 0 && abstand2D(m.x, m.z, hp.x, hp.z) < reichweite && Math.abs(hp.y - 0.35 - m.y) < 1.2) {
       m.angriffPause = info.pause;
-      helferKaputt(h, info);
+      helferKaputt(h, info, m);
     }
   }
   // Getroffen von einem geworfenen Schatz? Dann betäubt!
@@ -1699,7 +1870,7 @@ function neuerHelfer(info, x, z) {
   body.position.set(x, 0.4, z);
   welt.addBody(body);
   const teile = baueHelferMesh(info);
-  const h = { ...info, body, teile, strahl: neuerStrahl(info.farbe, 0.018), auftrag: null, modus: 'suchen', kaputt: 0, denkZeit: 0, winkel: Math.PI / 2,
+  const h = { ...info, body, teile, strahl: neuerStrahl(info.farbe, 0.018), auftrag: null, modus: 'suchen', kaputt: 0, leben: HELFER_LEBEN, heilZeit: 0, wackelt: 0, denkZeit: 0, winkel: Math.PI / 2,
     pruefZeit: 1, altX: x, altZ: z, ausweichen: 0, ausweichSeite: 1, abgeliefert: 0, tw: null,
     redePause: zufall(1, 3), redet: 0, blasenZeit: 0, angst: 0, froh: 0, wartenZeit: 0, blinzelVersatz: zufall(0, 3),
     gesicht: teile.gesicht, blase: { g: teile.blasenG, tex: teile.blasenTex } };
@@ -1715,10 +1886,25 @@ function helferLoslassen(h) {
   h.modus = 'suchen';
   h.tw = null;
 }
-function helferKaputt(h, info) {
+function helferKaputt(h, info, monster) {
   helferLoslassen(h);
-  h.kaputt = HELFER_PAUSE;
   const p = h.body.position;
+  h.leben -= 1;
+  h.heilZeit = HELFER_HEILEN;
+  if (h.leben > 0) {
+    // Noch Leben übrig: Er wird nur weggeschubst und ist kurz durcheinander
+    h.wackelt = 1.2;
+    h.angst = 4;
+    if (monster) {
+      const dx = p.x - monster.x, dz = p.z - monster.z, d = Math.hypot(dx, dz) || 1;
+      h.body.velocity.set(dx / d * 7, 3, dz / d * 7);
+    }
+    schwebeText(p.x, p.y + 1.2, p.z, `💔 ${h.name}: noch ${'❤️'.repeat(h.leben)}`, h.farbe);
+    sound.autsch();
+    sagen(h, 'hilfe', { monster: info.name }, 2);
+    return;
+  }
+  h.kaputt = HELFER_PAUSE;
   schwebeText(p.x, p.y + 1.2, p.z, `💥 ${h.name} wurde erwischt!`, h.farbe);
   for (let k = 0; k < 10; k++) {
     const m = new THREE.Mesh(new THREE.TetrahedronGeometry(0.04), new THREE.MeshBasicMaterial({ color: '#ffd166' }));
@@ -1749,9 +1935,16 @@ function updateHelfer(h, dt) {
   if (h.kaputt > 0) {
     h.kaputt -= dt;
     v.x *= 0.85; v.z *= 0.85;
-    if (h.kaputt <= 0) { schwebeText(p.x, p.y + 1.2, p.z, `🔧 ${h.name} ist wieder an!`, h.farbe); sagen(h, 'neustart', {}, 2); }
+    if (h.kaputt <= 0) { h.leben = HELFER_LEBEN; schwebeText(p.x, p.y + 1.2, p.z, `🔧 ${h.name} ist wieder an!`, h.farbe); sagen(h, 'neustart', {}, 2); }
     return;
   }
+  // Langsam wieder heilen
+  if (HELFER_HEILEN > 0 && h.leben < HELFER_LEBEN) {
+    h.heilZeit -= dt;
+    if (h.heilZeit <= 0) { h.leben++; h.heilZeit = HELFER_HEILEN; schwebeText(p.x, p.y + 1.2, p.z, `💚 ${h.name} +1 ❤️`, h.farbe); }
+  }
+  // Gerade getroffen? Dann kurz durcheinander
+  if (h.wackelt > 0) { h.wackelt -= dt; return; }
   // Ist der Auftrag noch gültig?
   const s = h.auftrag;
   if (s && (s.kaputt || gegriffen === s || (h.modus === 'hinlaufen' && (imLaster(s) || s.getragenVon)))) helferLoslassen(h);
@@ -1838,7 +2031,7 @@ function updateHelfer(h, dt) {
 function zeigeHelfer(h) {
   const p = h.body.position, T = h.teile;
   T.g.position.set(p.x, p.y - 0.35, p.z);
-  T.g.rotation.set(h.kaputt > 0 ? 1.3 : 0, h.winkel, 0);   // Kaputt: kippt um
+  T.g.rotation.set(h.kaputt > 0 ? 1.3 : 0, h.winkel, h.wackelt > 0 ? Math.sin(zeit * 25) * 0.35 : 0);   // Kaputt: kippt um · Getroffen: wackelt
   if (h.kaputt > 0) T.g.position.y = p.y - 0.25;
   const faehrt = Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.3;
   T.arme.forEach((a, k) => { a.rotation.x = h.modus === 'tragen' ? -0.5 : 0.9 + (faehrt ? Math.sin(zeit * 8 + k * Math.PI) * 0.15 : 0); });
@@ -2034,6 +2227,7 @@ function update(dt) {
   wackeln = Math.max(0, wackeln - dt);
   for (const f of funk) f.t -= dt;
   funk = funk.filter(f => f.t > 0);
+  musikUpdate(zustand === 'spiel' && !pause && gejagt());
   if (zustand !== 'spiel' || pause) return;
   spielZeit += dt;
   if (spielZeit > 1.5 && spielZeit - dt <= 1.5 && helfer.length) sagen(auswahl(helfer), 'start', {}, 2);
@@ -2196,12 +2390,12 @@ function zeichneHUD() {
   const raum = haus.raeume[raumNrVon(p.x, p.y, p.z)];
   text(`📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}`, 24, 86, 13, '#c9c3ff', 'left', false);
   // Oben rechts: Konto und Helfer
-  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(W - 232, 12, 220, 40 + helfer.length * 22, 12); ctx.fill();
-  text(`💰 ${euro(konto)}`, W - 122, 32, 17, '#ffd166');
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(W - 282, 12, 270, 40 + helfer.length * 22, 12); ctx.fill();
+  text(`💰 ${euro(konto)}`, W - 147, 32, 17, '#ffd166');
   helfer.forEach((h, k) => {
     const wo = ETAGEN_NAMEN[etageVon(h.body.position.y)] === ETAGEN_NAMEN[raum.e] ? '' : ` (${ETAGEN_NAMEN[etageVon(h.body.position.y)]})`;
     const was = h.kaputt > 0 ? `💤 kaputt (${Math.ceil(h.kaputt)} s)` : h.modus === 'tragen' ? `trägt ${h.auftrag.typ.emoji}${wo}` : h.modus === 'hinlaufen' ? `holt ${h.auftrag.typ.emoji}${wo}` : 'wartet';
-    text(`🤖 ${h.name}: ${was}`, W - 222, 60 + k * 22, 12, h.kaputt > 0 ? '#8a8f9e' : h.farbe, 'left', false);
+    text(`🤖 ${h.name} ${h.kaputt > 0 ? '' : '❤️'.repeat(h.leben)}: ${was}`, W - 272, 60 + k * 22, 12, h.kaputt > 0 ? '#8a8f9e' : h.farbe, 'left', false);
   });
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68 + helfer.length * 22, 13, '#fff', 'center', false);
   // Oben Mitte: Pfeil zum Transporter (oder zur Treppe, wenn du oben bist)
