@@ -825,6 +825,7 @@ let schatzNummer = 0;       // Jeder Schatz bekommt eine Nummer (für den Multip
 let monster = [];           // Alle Monster
 let helfer = [];            // Deine Helfer-Bots
 let gegriffen = null, halteAbstand = 2.2, schwebend = null;
+let gepackt = null, schwebendSpieler = null, packZeit = 0, freiZeit = 0;   // Multiplayer: andere Spieler mit dem Strahl anheben
 let nachricht = null, schwebeTexte = [], splitter = [], funk = [];
 let energie = 100, ausdauer = AUSDAUER_MAX, schadenBlitz = 0, schrittZeit = 0, herzZeit = 0, wackeln = 0;
 let geduckt = false, zielGemeldet = false;
@@ -2475,11 +2476,13 @@ function greifen(s) {
   sound.strahl();
 }
 function loslassen() {
+  gepackt = null;
   if (!gegriffen) return;
   gegriffen.body.collisionFilterMask = SCHATZ_MASKE;
   gegriffen = null;
 }
 function werfen() {
+  if (gepackt) { spielerWerfen(); return; }
   if (!gegriffen) return;
   const s = gegriffen, r = new THREE.Vector3();
   kamera.getWorldDirection(r);
@@ -2656,6 +2659,8 @@ function update(dt) {
   if (spielZeit > 1.5 && spielZeit - dt <= 1.5 && helfer.length) sagen(auswahl(helfer), 'start', {}, 2);
 
   updateSpieler(dt);
+  gehaltenWerden(dt);
+  packenPruefen();
   for (const h of helfer) updateHelfer(h, dt);
   haltenPhysik();
   mpGastSchaetzeHalten();
@@ -2782,16 +2787,22 @@ function zeichne3D() {
   }
   // Dein Greifer: Ring dreht sich, Zinken schließen sich beim Greifen, alles leuchtet heller
   greifer.position.y = -0.27 + wippen * 0.5;
-  greiferRing.rotation.z += gegriffen ? 0.3 : schwebend ? 0.08 : 0.02;
-  zinken.children.forEach(z => { z.children[0].rotation.x = gegriffen ? 0.35 : 0; });
-  greiferLeucht.color.set(gegriffen ? '#b6fff0' : schwebend ? '#7cf5c6' : '#2f6b5a');
-  greiferGlanz.material.opacity = gegriffen ? 0.9 : schwebend ? 0.5 : 0.15;
-  greiferGlanz.scale.setScalar(gegriffen ? 0.16 + Math.sin(zeit * 20) * 0.02 : 0.1);
+  const haeltWas = gegriffen || gepackt, siehtWas = schwebend || schwebendSpieler;
+  greiferRing.rotation.z += haeltWas ? 0.3 : siehtWas ? 0.08 : 0.02;
+  zinken.children.forEach(z => { z.children[0].rotation.x = haeltWas ? 0.35 : 0; });
+  greiferLeucht.color.set(haeltWas ? '#b6fff0' : siehtWas ? '#7cf5c6' : '#2f6b5a');
+  greiferGlanz.material.opacity = haeltWas ? 0.9 : siehtWas ? 0.5 : 0.15;
+  greiferGlanz.scale.setScalar(haeltWas ? 0.16 + Math.sin(zeit * 20) * 0.02 : 0.1);
   if (gegriffen) {
     const von = new THREE.Vector3(); greiferSpitze.getWorldPosition(von);
     const nach = new THREE.Vector3().copy(gegriffen.body.position);
     const richtung = new THREE.Vector3(); kamera.getWorldDirection(richtung);
     zeigeStrahl(spielerStrahl, von, nach, richtung, Math.max(...gegriffen.typ.groesse) * 0.7);
+  } else if (gepackt && mp.andere.get(gepackt)?.teile) {   // Strahl zum gepackten Mitspieler
+    const o = mp.andere.get(gepackt);
+    const von = new THREE.Vector3(); greiferSpitze.getWorldPosition(von);
+    const richtung = new THREE.Vector3(); kamera.getWorldDirection(richtung);
+    zeigeStrahl(spielerStrahl, von, new THREE.Vector3(o.ax, o.ay + 0.5 + o.teile.ausgefahren, o.az), richtung, 0.9);
   } else spielerStrahl.g.visible = false;
   if (renderer) renderer.render(szene, kamera);
   else szene.updateMatrixWorld();   // Ohne 3D trotzdem alle Positionen aktualisieren
@@ -2882,8 +2893,15 @@ function zeichneHUD() {
     ctx.globalAlpha = 1;
   });
   // Fadenkreuz
-  ctx.strokeStyle = schwebend ? '#7cf5c6' : 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(W / 2, H / 2, schwebend || gegriffen ? 10 : 3, 0, 7); ctx.stroke();
+  ctx.strokeStyle = schwebend || schwebendSpieler ? '#7cf5c6' : 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(W / 2, H / 2, schwebend || gegriffen || schwebendSpieler || gepackt ? 10 : 3, 0, 7); ctx.stroke();
+  // Infos zum Mitspieler, auf den du schaust oder den du hochhältst
+  const mitspieler = gepackt ? mp.andere.get(gepackt) : schwebendSpieler;
+  if (mitspieler && !gegriffen) {
+    ctx.fillStyle = 'rgba(10,12,18,0.75)'; rr(W / 2 - 130, H / 2 + 24, 260, 46, 10); ctx.fill();
+    text(`🤖 ${mitspieler.name}`, W / 2, H / 2 + 40, 15, mitspieler.farbe);
+    text(gepackt ? 'Rechtsklick: WERFEN! 🚀 · Maus los: absetzen' : 'Linksklick halten: anheben 🧲', W / 2, H / 2 + 58, 12, '#c9c3ff', 'center', true);
+  }
   // Infos zum Schatz, auf den du schaust oder den du hältst
   const s = gegriffen || schwebend;
   if (s) {
@@ -3029,6 +3047,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
   if (e.button === 0 && schwebend && !gegriffen && !(mp.aktiv && mpVonAnderemGehalten(schwebend))) greifen(schwebend);
+  else if (e.button === 0 && schwebendSpieler && !gegriffen && !gepackt) spielerPacken(schwebendSpieler);
   if (e.button === 2) werfen();
 });
 addEventListener('pointerup', e => { if (e.button === 0) loslassen(); });
@@ -3180,7 +3199,7 @@ function mpGastWeg(id) {
 }
 function mpVomGast(g, d) {
   if (!d || !d.t) return;
-  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, dk: d.dk, hg: d.hg, hz: d.hz, k: d.k, r: d.r });
+  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
   else if (d.t === 'wurf') {
@@ -3189,6 +3208,10 @@ function mpVomGast(g, d) {
     g.hg = -1;
   } else if (d.t === 'blitz') blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
   else if (d.t === 'abfahren') { if (lasterWert() >= ld.ziel) levelGeschafft(); }
+  else if (d.t === 'wirf') {   // Ein Gast wirft jemanden: Bin ich das? Sonst weiterleiten
+    if (d.ziel === mp.peer.id) geworfenWerden(d.v, g.name);
+    else { const z = mp.andere.get(d.ziel); if (z) mpSendeAn(z, { t: 'wirf', v: d.v, von: g.name }); }
+  }
 }
 // Gäste halten Schätze mit ihrem Greifstrahl – die Physik dafür rechnet der Gastgeber
 function mpGastSchaetzeHalten() {
@@ -3210,8 +3233,10 @@ function mpHostSendet() {
   if (zustand !== 'spiel' || !mp.andere.size) return;
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
-  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1 }];
-  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, dk: g.dk, hg: g.hg });
+  const hz = gepackt ? halteZiel() : null;
+  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+    pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
+  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
     r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null]);
   const he = helfer.map(h => {
@@ -3292,7 +3317,8 @@ function mpVomHost(d) {
     getroffen(d.s, d.von);
     const l = Math.hypot(d.wx, d.wz) || 1;
     spielerKoerper.velocity.set(d.wx / l * d.sb, 3, d.wz / l * d.sb);
-  } else if (d.t === 'los') { loslassen(); if (d.abgerissen) zeigeNachricht('Der Strahl ist abgerissen!', 1.5, '#ffd166'); }
+  } else if (d.t === 'wirf') geworfenWerden(d.v, d.von);
+  else if (d.t === 'los') { loslassen(); if (d.abgerissen) zeigeNachricht('Der Strahl ist abgerissen!', 1.5, '#ffd166'); }
 }
 function mpSchnappschuss(d) {
   // Die anderen Spieler
@@ -3302,7 +3328,7 @@ function mpSchnappschuss(d) {
     da.add(a.id);
     let o = mp.andere.get(a.id);
     if (!o) { o = { id: a.id, nr: a.nr, ...MP_ROBOTER[a.nr] }; mp.andere.set(a.id, o); }
-    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, dk: a.dk, hg: a.hg });
+    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
   }
   for (const [id, o] of mp.andere) if (!da.has(id)) { mpMeshWeg(o); mp.andere.delete(id); }
   // Monster
@@ -3334,6 +3360,8 @@ const mpQuat = new CANNON.Quaternion();
 function updateAlsGast(dt) {
   spielZeit += dt;
   if (!pause) updateSpieler(dt);
+  gehaltenWerden(dt);
+  packenPruefen();
   const f = Math.min(1, dt * 12);
   // Alles weich dorthin schieben, wo der Gastgeber es hat
   for (const s of schaetze) {
@@ -3379,8 +3407,8 @@ function mpGastSendet() {
   if (zustand !== 'spiel') return;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const r = new THREE.Vector3(); kamera.getWorldDirection(r);
-  const k = kamera.position, hz = gegriffen ? halteZiel() : null;
-  mpSende({ t: 'p', x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const k = kamera.position, hz = gegriffen || gepackt ? halteZiel() : null;
+  mpSende({ t: 'p', x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
     hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)] });
 }
 
@@ -3398,6 +3426,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     if (!o.teile) {
       o.teile = baueHelferMesh({ name: o.name, farbe: o.farbe });
       o.strahl = neuerStrahl(o.farbe, 0.025);
+      o.teile.g.traverse(k => { k.userData.spielerId = o.id; });   // Damit der Greifstrahl weiß, wer das ist
       Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
     }
     const f = 0.25;
@@ -3409,7 +3438,9 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     T.g.rotation.set(0, wink, 0);
     beineAnimieren(T, o.dk ? 0 : BEIN_LAENGE, laeuft, 1 / 60);   // Geduckt: Beine einfahren!
     const haelt = o.hg >= 0 ? schatzMitId(o.hg) : null;
-    T.arme.forEach(a => { a.rotation.x = haelt ? -0.5 : 0.9; });
+    // Hält er einen Mitspieler hoch? (vielleicht sogar DICH!)
+    const packtPos = !o.pg ? null : o.pg === mp.peer.id ? spielerKoerper.position : mp.andere.get(o.pg) ? (q => ({ x: q.ax, y: q.ay + 0.6, z: q.az }))(mp.andere.get(o.pg)) : null;
+    T.arme.forEach(a => { a.rotation.x = haelt || packtPos ? -0.5 : 0.9; });
     T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
     T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
     malGesicht(o);
@@ -3417,8 +3448,78 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
       const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55 + T.ausgefahren, o.az + Math.cos(wink) * 0.45);
       const nach = new THREE.Vector3().copy(haelt.body.position);
       zeigeStrahl(o.strahl, von, nach, new THREE.Vector3(Math.sin(wink), 0.3, Math.cos(wink)).normalize(), Math.max(...haelt.typ.groesse) * 0.6);
+    } else if (packtPos) {
+      const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55 + T.ausgefahren, o.az + Math.cos(wink) * 0.45);
+      zeigeStrahl(o.strahl, von, new THREE.Vector3(packtPos.x, packtPos.y, packtPos.z), new THREE.Vector3(Math.sin(wink), 0.3, Math.cos(wink)).normalize(), 0.9);
     } else o.strahl.g.visible = false;
   }
+}
+// ----- Mitspieler mit dem Greifstrahl anheben 🧲 -----
+// Wer packt, schickt seinen Strahl-Punkt mit. Der Gepackte wird auf SEINEM Computer dorthin gezogen.
+const SPIELER_WURF = 10;   // So stark wirfst du einen Mitspieler
+function schauAufSpieler() {   // Schaust du gerade auf einen Mitspieler?
+  if (!mp.aktiv) return null;
+  const ziele = [];
+  for (const o of mp.andere.values()) if (o.teile) ziele.push(o.teile.g);
+  if (!ziele.length) return null;
+  greifStrahl.setFromCamera(MITTE, kamera);
+  greifStrahl.far = GREIF_WEITE;
+  const treffer = greifStrahl.intersectObjects([...ziele, ...sichtBlocker], true);
+  if (!treffer.length) return null;
+  let k = treffer[0].object;
+  while (k && k.userData.spielerId === undefined) k = k.parent;
+  return k ? mp.andere.get(k.userData.spielerId) || null : null;
+}
+function spielerPacken(o) {
+  gepackt = o.id; packZeit = zeit;
+  halteAbstand = begrenzt(kamera.position.distanceTo(new THREE.Vector3(o.x, o.y + 0.5, o.z)), 1.5, 3);
+  sound.strahl();
+}
+function packenPruefen() {   // Hat sich der Gepackte losgerissen (zu weit weg)?
+  if (!gepackt) return;
+  const o = mp.andere.get(gepackt);
+  if (!o) { gepackt = null; return; }
+  if (zeit - packZeit < 1.5) return;   // Am Anfang hat er noch Zeit, herzufliegen
+  const z = halteZiel();
+  if (Math.hypot(o.x - z.x, o.y + 0.5 - z.y, o.z - z.z) > 3.5) { gepackt = null; zeigeNachricht(`💪 ${o.name} hat sich losgerissen!`, 2, o.farbe); }
+}
+function spielerWerfen() {
+  const r = new THREE.Vector3();
+  kamera.getWorldDirection(r);
+  const v = [r2(r.x * SPIELER_WURF), r2(r.y * SPIELER_WURF + 4), r2(r.z * SPIELER_WURF)];
+  const o = mp.andere.get(gepackt);
+  if (mp.rolle === 'host') { if (o) mpSendeAn(o, { t: 'wirf', v, von: MP_ROBOTER[0].name }); }
+  else mpSende({ t: 'wirf', ziel: gepackt, v });
+  if (o) zeigeNachricht(`🚀 ${o.name} fliegt!`, 1.5, o.farbe);
+  gepackt = null;
+  sound.sprung();
+}
+function geworfenWerden(v, von) {
+  freiZeit = 1;   // Kurz nicht mehr festgehalten
+  spielerKoerper.velocity.set(v[0], v[1], v[2]);
+  zeigeNachricht(`🚀 ${von} hat dich geworfen! Wiiiiii!`, 2, '#ffd166');
+  sound.sprung();
+}
+function gehaltenWerden(dt) {   // Hält mich gerade jemand mit seinem Strahl hoch?
+  if (!mp.aktiv || !mp.peer) return;
+  freiZeit -= dt;
+  let packer = null;
+  for (const o of mp.andere.values()) if (o.pg === mp.peer.id && o.hz) { packer = o; break; }
+  if (packer && packer !== mp.packer) { zeigeNachricht(`🧲 ${packer.name} hat dich gepackt! Leertaste = losreißen`, 2.5, packer.farbe); sound.strahl(); }
+  mp.packer = packer;
+  if (!packer || freiZeit > 0) return;
+  if (tasten[' ']) {   // Zappeln und losreißen!
+    freiZeit = 1.5;
+    spielerKoerper.velocity.y = SPRUNG;
+    zeigeNachricht('💪 Losgerissen!', 1.5, '#4ade80');
+    return;
+  }
+  // Zum Strahl-Punkt ziehen (wie bei einem Schatz)
+  const p = spielerKoerper.position;
+  let vx = (packer.hz[0] - p.x) * 8, vy = (packer.hz[1] - p.y) * 8, vz = (packer.hz[2] - p.z) * 8;
+  const l = Math.hypot(vx, vy, vz);
+  if (l > 9) { vx *= 9 / l; vy *= 9 / l; vz *= 9 / l; }
+  spielerKoerper.velocity.set(vx, vy, vz);
 }
 function mpHUD() {
   if (!mp.aktiv) return;
@@ -3441,7 +3542,10 @@ function schleife(jetzt) {
   // Wenn irgendwo ein Fehler passiert, soll das Spiel nicht einfrieren (der Fehler steht dann in der Konsole, F12)
   try {
     update(dt);
-    if (zustand === 'spiel' && !pause) schwebend = gegriffen ? null : schauAuf();
+    if (zustand === 'spiel' && !pause) {
+      schwebend = gegriffen || gepackt ? null : schauAuf();
+      schwebendSpieler = gegriffen || gepackt || schwebend ? null : schauAufSpieler();
+    }
   } catch (e) { console.error('Fehler in update:', e); }
   try { zeichne(); } catch (e) { console.error('Fehler beim Zeichnen:', e); }
   requestAnimationFrame(schleife);
