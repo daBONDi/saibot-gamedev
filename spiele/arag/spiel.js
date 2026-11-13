@@ -307,53 +307,88 @@ function monsterGeraeusche(m, dt) {
 }
 
 // ===== Verfolgungs-Musik =====
-// Wenn ein Monster dich jagt, startet schnelle, gruselige Musik. Ist die Gefahr vorbei, wird sie leiser.
+// Wenn ein Monster dich jagt, startet schnelle, BRUTALE Musik. Ist die Gefahr vorbei, wird sie leiser.
 // Die Musik wird mit Web Audio "live" gespielt – Note für Note, ganz ohne Musikdatei.
 const MUSIK_AN = true;       // false = keine Verfolgungs-Musik
-const MUSIK_LAUT = 0.45;     // Wie laut die Musik ist
-const MUSIK_TEMPO = 150;     // Schläge pro Minute (höher = hektischer)
-// Bass-Melodie: Halbtöne über dem Ton A (0 = A, 1 = B, 3 = C, -2 = G ...), eine Zahl pro Achtel, 4 Takte
-const MUSIK_BASS = [
-  0, 0, 0, 0, 0, 0, 1, 0,
-  0, 0, 0, 0, 3, 3, 1, 1,
-  0, 0, 0, 0, 0, 0, 1, 0,
-  -2, -2, -2, -2, -1, -1, 1, 1,
+const MUSIK_LAUT = 0.5;      // Wie laut die Musik ist
+const MUSIK_TEMPO = 175;     // Schläge pro Minute (höher = hektischer)
+const MUSIK_VERZERRUNG = 60; // Wie dreckig die E-Gitarre klingt (0 = sauber, 100 = ganz kaputt)
+// Gitarren-Riff: Halbtöne über dem Ton A (0 = A, 1 = B, 3 = C, 6 = Teufelston!), eine Zahl pro Sechzehntel
+// null = Pause (kurz Stille, das macht es härter). 4 Takte lang.
+const MUSIK_RIFF = [
+  0, 0, 0, null, 0, 0, 1, null,   0, 0, 0, null, 6, null, 5, null,
+  0, 0, 0, null, 0, 0, 1, null,   0, 0, 3, 3, 1, 1, null, null,
+  0, 0, 0, null, 0, 0, 1, null,   0, 0, 0, null, 6, null, 5, null,
+  -2, -2, -2, null, -1, -1, -1, null,   1, 1, 1, 1, 6, 6, 6, 6,
 ];
-// Hohe Gruselmelodie: eine Note pro Takt-Hälfte (null = Pause)
-const MUSIK_MELODIE = [12, null, 13, null, 12, 15, 13, null];
+// Doppel-Bassdrum: 1 = Bum. In den Takten 3 und 4 durchgehend (wie bei Metal!)
+const MUSIK_KICK = [
+  1, 0, 1, 0, 0, 0, 1, 0,   1, 0, 1, 0, 0, 0, 1, 1,
+  1, 0, 1, 0, 0, 0, 1, 0,   1, 0, 1, 0, 0, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1,   1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1,   1, 1, 1, 1, 1, 1, 1, 1,
+];
+// Hohe kreischende Melodie: eine Note pro halben Takt (null = Pause)
+const MUSIK_MELODIE = [12, 13, 12, 18, 12, 13, 15, 18];
 let musik = null;
 const halbton = (n, grund) => grund * Math.pow(2, n / 12);
-function musikNote(schritt, t) {
-  const ziel = musik.gain, achtel = schritt % 2 === 0, i = Math.floor(schritt / 2) % MUSIK_BASS.length;
-  const s16 = 60 / MUSIK_TEMPO / 4, imTakt = schritt % 16;
-  const neuStart = t - audio.currentTime;
-  // Bass (auf jedem Achtel)
-  if (achtel) {
-    const f = halbton(MUSIK_BASS[i], 55);
-    try {
-      const o = audio.createOscillator(), fl = audio.createBiquadFilter(), g = audio.createGain();
-      o.type = 'sawtooth'; o.frequency.value = f;
-      fl.type = 'lowpass'; fl.frequency.setValueAtTime(900, t); fl.frequency.exponentialRampToValueAtTime(150, t + s16 * 2);
-      g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + s16 * 2);
-      o.connect(fl).connect(g).connect(ziel);
-      o.start(t); o.stop(t + s16 * 2 + 0.02);
-    } catch (e) { /* egal */ }
+function verzerrKurve(staerke) {   // Macht aus einem sauberen Ton einen dreckigen, kratzigen Ton
+  const n = 1024, kurve = new Float32Array(n), k = staerke * 4 + 1;
+  for (let i = 0; i < n; i++) {
+    const x = i / (n - 1) * 2 - 1;
+    kurve[i] = (1 + k) * x / (1 + k * Math.abs(x));
   }
-  // Schlagzeug: Bum auf 1 und 3, Tschak auf 2 und 4, Ts-ts dazwischen
-  if (imTakt === 0 || imTakt === 8 || imTakt === 10) {
+  return kurve;
+}
+function musikNote(schritt, t) {
+  const ziel = musik.gain, s16 = 60 / MUSIK_TEMPO / 4, imTakt = schritt % 16;
+  const i = schritt % MUSIK_RIFF.length, neuStart = t - audio.currentTime;
+  try {
+    // 🎸 Verzerrte Gitarre: zwei leicht verstimmte Töne + Quinte = Power-Akkord
+    const n = MUSIK_RIFF[i];
+    if (n !== null) {
+      const f = halbton(n, 110), betont = imTakt % 4 === 0;
+      const lang = (MUSIK_RIFF[(i + 1) % MUSIK_RIFF.length] === null ? 1.6 : 0.9) * s16;
+      const fl = audio.createBiquadFilter(), g = audio.createGain();
+      fl.type = 'lowpass'; fl.frequency.setValueAtTime(betont ? 3500 : 2200, t); fl.frequency.exponentialRampToValueAtTime(600, t + lang);
+      g.gain.setValueAtTime(betont ? 0.5 : 0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + lang);
+      fl.connect(g).connect(musik.dreck);
+      for (const [mal, verstimmt] of [[1, -8], [1, 8], [1.5, 0], [0.5, 0]]) {
+        const o = audio.createOscillator();
+        o.type = mal === 0.5 ? 'square' : 'sawtooth';
+        o.frequency.value = f * mal; o.detune.value = verstimmt;
+        o.connect(fl); o.start(t); o.stop(t + lang + 0.02);
+      }
+    }
+    // 🥁 Bassdrum (mit Klick, damit man sie gut hört)
+    if (MUSIK_KICK[i % MUSIK_KICK.length]) {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
+      g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.connect(g).connect(ziel); o.start(t); o.stop(t + 0.2);
+      rauschen(neuStart, 0.015, 0.3, 'highpass', 3000, ziel);
+    }
+  } catch (e) { /* egal */ }
+  // Snare: KRACH auf 2 und 4 (Rauschen + ein tiefer Ton als "Körper")
+  if (imTakt === 4 || imTakt === 12) {
+    rauschen(neuStart, 0.2, 0.6, 'highpass', 1200, ziel);
     try {
       const o = audio.createOscillator(), g = audio.createGain();
-      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
-      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-      o.connect(g).connect(ziel); o.start(t); o.stop(t + 0.25);
+      o.type = 'triangle'; o.frequency.setValueAtTime(240, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.08);
+      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      o.connect(g).connect(ziel); o.start(t); o.stop(t + 0.12);
     } catch (e) { /* egal */ }
   }
-  if (imTakt === 4 || imTakt === 12) rauschen(neuStart, 0.15, 0.35, 'highpass', 1500, ziel);
-  if (schritt % 2 === 1) rauschen(neuStart, 0.04, 0.12, 'highpass', 7000, ziel);
-  // Gruselmelodie (alle halben Takte)
+  // Becken: Ts-ts auf jedem Achtel, alle 4 Takte ein großes KSSSSHHH
+  if (schritt % 2 === 0) rauschen(neuStart, 0.05, 0.15, 'highpass', 8000, ziel);
+  if (schritt % 64 === 0) rauschen(neuStart, 1.6, 0.4, 'highpass', 4000, ziel, 2500);
+  // Kreischende Melodie (schief und verstimmt = extra gruselig)
   if (imTakt % 8 === 0) {
-    const n = MUSIK_MELODIE[Math.floor(schritt / 8) % MUSIK_MELODIE.length];
-    if (n !== null) gruselTon(halbton(n, 220), neuStart, s16 * 7, 'triangle', 0.12, null, 6, ziel);
+    const m = MUSIK_MELODIE[Math.floor(schritt / 8) % MUSIK_MELODIE.length];
+    if (m !== null) {
+      gruselTon(halbton(m, 220), neuStart, s16 * 7, 'sawtooth', 0.07, null, 9, ziel);
+      gruselTon(halbton(m + 0.3, 220), neuStart, s16 * 7, 'square', 0.04, null, 7, ziel);
+    }
   }
 }
 function musikUpdate(aktiv) {
@@ -362,8 +397,16 @@ function musikUpdate(aktiv) {
   if (!musik) {
     const g = audio.createGain();
     g.gain.value = 0;
-    g.connect(audio.destination);
-    musik = { gain: g, naechste: 0, schritt: 0, war: false, aus: -99, ziel: 0 };
+    // Ein Kompressor am Ende passt auf, dass es nicht zu laut wird und kratzt
+    const komp = audio.createDynamicsCompressor();
+    komp.threshold.value = -14; komp.ratio.value = 6;
+    g.connect(komp).connect(audio.destination);
+    // Die Gitarre geht erst durch den Verzerrer
+    const dreck = audio.createWaveShaper();
+    dreck.curve = verzerrKurve(MUSIK_VERZERRUNG); dreck.oversample = '2x';
+    const dreckLeiser = audio.createGain(); dreckLeiser.gain.value = 0.35;
+    dreck.connect(dreckLeiser).connect(g);
+    musik = { gain: g, dreck, naechste: 0, schritt: 0, war: false, aus: -99, ziel: 0 };
   }
   const ziel = aktiv && tonAn ? MUSIK_LAUT : 0;
   if (ziel !== musik.ziel) {
@@ -374,9 +417,11 @@ function musikUpdate(aktiv) {
   if (aktiv && !musik.war) {
     // Die Jagd beginnt! Ein dramatischer Schlag ... DUNN!
     if (jetzt - musik.aus > 4) { musik.naechste = jetzt + 0.05; musik.schritt = 0; }
-    gruselTon(55, 0, 1.2, 'sawtooth', 0.25, 40, 3);
-    gruselTon(58.3, 0, 1.2, 'sawtooth', 0.2, 42, 4);
-    rauschen(0, 0.8, 0.25, 'lowpass', 2000, null, 100);
+    gruselTon(55, 0, 1.5, 'sawtooth', 0.3, 30, 3);
+    gruselTon(58.3, 0, 1.5, 'sawtooth', 0.25, 31, 4);
+    gruselTon(77.8, 0, 1.5, 'sawtooth', 0.2, 40, 5);   // Teufelston dazu!
+    ton(120, 0, 0.6, 'sine', 0.6, 30);                 // Tiefer Wumms
+    rauschen(0, 1.2, 0.35, 'lowpass', 3000, null, 80);
   }
   if (!aktiv && musik.war) musik.aus = jetzt;
   musik.war = aktiv;
