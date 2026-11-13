@@ -68,6 +68,25 @@ button {
 }
 button.aktiv { background: #ffd166; font-weight: bold; }
 button:disabled { opacity: 0.5; cursor: default; }
+#mp-box {
+    top: 15px;
+    right: 15px;
+    padding: 10px 12px;
+    width: 230px;
+    line-height: 1.6;
+}
+#mp-code {
+    width: 80px;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #b9f5a0;
+    background: #0d1a12;
+    color: #fff;
+    font: bold 1rem monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    text-align: center;
+}
 #haendler {
     top: 50%;
     left: 50%;
@@ -125,7 +144,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 <div id="help" class="box">
 <b>So geht's:</b> 🟫 Pflügen → 🌱 Säen → ⏳ Wachsen → 🌾 Ernten → 🛢️ Silo oder 🏪 Verkaufen<br>
-W A S D / Pfeile = Fahren/Laufen · Leertaste = Bremsen · Shift = Rennen / Turbo<br>
+W A S D / Pfeile = Fahren/Laufen · Leertaste = Hüpfen / Bremsen · Shift = Rennen / Turbo<br>
 1 = Pflug · 2 = Sämaschine · 3 = Erntevorsatz<br>
 F = First Person an/aus · Maus ziehen = Umschauen · Mausrad = Zoom<br>
 E = Ein-/Aussteigen · K = Feld kaufen<br>
@@ -142,6 +161,14 @@ B = Baumodus · R = Gebäude drehen · M = Ton an/aus
 
 <div id="fadenkreuz"></div>
 
+<div id="mp-box" class="box">
+<b>🌐 Mit Freunden spielen</b><br>
+<button id="mp-erstellen">🏠 Raum erstellen</button><br>
+<input id="mp-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false">
+<button id="mp-beitreten">🔑 Beitreten</button>
+<div id="mp-status" class="klein"></div>
+</div>
+
 <div id="meldung" class="box"></div>
 <div id="hinweis" class="box"></div>
 
@@ -155,6 +182,6 @@ B = Baumodus · R = Gebäude drehen · M = Ton an/aus
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=3"></script>
+<script type="module" src="spiel.js?v=4"></script>
 </body>
 </html>

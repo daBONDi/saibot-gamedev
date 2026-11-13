@@ -533,6 +533,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : baueTraktor(typ, K);
   const fz = {
     typName, typ, g, K, ...teile, speed: 0, lenkWinkel: 0, arbeitet: false, geraete: {},
+    id: daten.id || `${mp.ich}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, fahrer: null, fahrerZeit: 0, ziel: null,
     radius: (typ.art === 'drescher' ? 2.8 : 1.8) * typ.groesse,
     werkzeug: typ.geraete.includes(daten.werkzeug) ? daten.werkzeug : typ.geraete[typ.geraete.length - 1],
     diesel: daten.diesel ?? typ.dieselMax, tank: daten.tank ?? 0, saat: daten.saat ?? typ.saatMax,
@@ -555,10 +556,10 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
 // =====================================================================
 // ===== Der Farmer =====
 // =====================================================================
-function karoTextur() {   // Kariertes Holzfäller-Hemd
+function karoTextur(farbe = '#b3261e') {   // Kariertes Holzfäller-Hemd
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
-  g.fillStyle = '#b3261e'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = farbe; g.fillRect(0, 0, 64, 64);
   g.fillStyle = 'rgba(20,10,10,0.55)';
   for (let k = 0; k < 64; k += 16) { g.fillRect(k, 0, 6, 64); g.fillRect(0, k, 64, 6); }
   g.fillStyle = 'rgba(255,255,255,0.15)';
@@ -566,10 +567,10 @@ function karoTextur() {   // Kariertes Holzfäller-Hemd
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter;
   return t;
 }
-const player = new THREE.Group();
-const farmer = {};
-{
-  const haut = mat(0xe8b896), jeans = mat(0x2f4f86), hemd = new THREE.MeshStandardMaterial({ map: karoTextur(), roughness: 0.9 });
+function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die anderen Spieler im Multiplayer)
+  const player = new THREE.Group(), farmer = { phase: 0 };
+  const haut = mat(0xe8b896), jeans = mat(0x2f4f86), hemd = new THREE.MeshStandardMaterial({ map: karoTextur(hemdFarbe), roughness: 0.9 });
+  farmer.hemd = hemd;
   const stiefel = mat(0x4a2e18), hut = mat(0xe6c35c), hutband = mat(0x7a3b1d), schwarz = mat(0x111111), bart = mat(0x6b4423);
   const teil = (eltern, geo, m, x, y, z) => { const t = new THREE.Mesh(geo, m); t.position.set(x, y, z); t.castShadow = true; eltern.add(t); return t; };
   // Beine (drehen sich an der Hüfte)
@@ -609,20 +610,29 @@ const farmer = {};
   teil(kopf, new THREE.CylinderGeometry(0.17, 0.2, 0.16, 16), hut, 0, 0.31, 0);
   teil(kopf, new THREE.CylinderGeometry(0.205, 0.205, 0.04, 16), hutband, 0, 0.26, 0);
   farmer.kopf = kopf;
+  return { g: player, t: farmer };
 }
+const meinFarmer = baueFarmer('#b3261e');
+const player = meinFarmer.g, farmer = meinFarmer.t;
 player.visible = false;
 scene.add(player);
-let laufPhase = 0;
-function farmerPose(sitzt, laeuft, dt) {
+let spielerVy = 0, amBoden = true;   // Hüpfen: Geschwindigkeit nach oben, und ob du gerade auf dem Boden stehst
+const SPRUNG_KRAFT = 6.5, SCHWERKRAFT = 18;
+function farmerPose(t, sitzt, laeuft, dt, inLuft = false) {
   if (sitzt) {
-    farmer.beinL.rotation.x = farmer.beinR.rotation.x = Math.PI / 2;   // Beine nach vorne (sitzen)
-    farmer.armL.rotation.x = farmer.armR.rotation.x = 0.9;             // Hände am Lenkrad
+    t.beinL.rotation.x = t.beinR.rotation.x = Math.PI / 2;   // Beine nach vorne (sitzen)
+    t.armL.rotation.x = t.armR.rotation.x = 0.9;             // Hände am Lenkrad
     return;
   }
-  laufPhase = laeuft ? laufPhase + dt * 9 : laufPhase * Math.pow(0.001, dt);
-  const s = Math.sin(laufPhase) * (laeuft ? 0.6 : 0);
-  farmer.beinL.rotation.x = s; farmer.beinR.rotation.x = -s;
-  farmer.armL.rotation.x = -s * 0.8; farmer.armR.rotation.x = s * 0.8;
+  if (inLuft) {   // In der Luft: Beine angezogen, Arme hoch – Juhuu!
+    t.beinL.rotation.x = 0.6; t.beinR.rotation.x = -0.3;
+    t.armL.rotation.x = t.armR.rotation.x = -2.6;
+    return;
+  }
+  t.phase = laeuft ? t.phase + dt * 9 : t.phase * Math.pow(0.001, dt);
+  const s = Math.sin(t.phase) * (laeuft ? 0.6 : 0);
+  t.beinL.rotation.x = s; t.beinR.rotation.x = -s;
+  t.armL.rotation.x = -s * 0.8; t.armR.rotation.x = s * 0.8;
 }
 
 // ===== Spielstand =====
@@ -662,7 +672,7 @@ function baueGebaeudeMesh(art) {
   return g;
 }
 function neuesSilo(x, z, inhalt = 0) {
-  const s = { x, z, inhalt, schild: schild('', '#fff', 7) };
+  const s = { x, z, inhalt, basis: inhalt, schild: schild('', '#fff', 7) };
   s.schild.position.set(x, 13.5, z);
   scene.add(s.schild);
   silos.push(s);
@@ -740,6 +750,7 @@ const sound = {
   nein() { ton(200, 0, 0.2, 'sawtooth', 0.06); },
   korn() { for (let k = 0; k < 12; k++) ton(2000 + Math.random() * 3000, k * 0.04, 0.05, 'square', 0.015); },   // Rieseln
   tuer() { ton(300, 0, 0.08, 'square', 0.05); ton(220, 0.08, 0.1, 'square', 0.05); },
+  hupf() { ton(330, 0, 0.12, 'sine', 0.06); ton(520, 0.05, 0.1, 'sine', 0.05); },
 };
 
 // ===== Staub- und Rauch-Wolken =====
@@ -832,17 +843,17 @@ function bearbeite(fz, x, z) {
   if (i < 0 || j < 0 || i >= f.nx || j >= f.nz) return;
   const c = f.zellen[j * f.nx + i];
   if (fz.werkzeug === 'pflug') {
-    if (c.z === 'wiese' || c.z === 'stoppeln') { c.z = 'gepfluegt'; c.w = 0; malBoden(f, i, j); if (Math.random() < 0.5) staub(x, z, 0x6b4a2b); }
+    if (c.z === 'wiese' || c.z === 'stoppeln') { c.z = 'gepfluegt'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j); if (Math.random() < 0.5) staub(x, z, 0x6b4a2b); }
     else if (c.z === 'gesaet') meldungSelten('🌾 Hier wächst schon was! Erst ernten (Taste 3), dann pflügen.');
   } else if (fz.werkzeug === 'saat') {
     if (c.z === 'gepfluegt') {
       if (fz.saat < SAAT_PRO_ZELLE) { meldungSelten('🌱 Die Saat ist leer! Fahr zum Landhandel 🏪 und drück G.'); return; }
-      fz.saat -= SAAT_PRO_ZELLE; c.z = 'gesaet'; c.w = 0; malBoden(f, i, j);
+      fz.saat -= SAAT_PRO_ZELLE; c.z = 'gesaet'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j);
     } else if (c.z === 'wiese' || c.z === 'stoppeln') meldungSelten('🟫 Erst pflügen (Taste 1), dann säen!');
   } else if (fz.werkzeug === 'ernte') {
     if (c.z === 'gesaet' && c.w >= 1) {
       if (fz.tank + ERTRAG_PRO_ZELLE > fz.typ.tankMax) { meldungSelten('🚛 Der Korntank ist voll! Ab zum Silo 🛢️ (L) oder zum Landhandel 🏪 (V).'); return; }
-      fz.tank += ERTRAG_PRO_ZELLE; c.z = 'stoppeln'; c.w = 0; malBoden(f, i, j); staub(x, z, 0xe3c46a);
+      fz.tank += ERTRAG_PRO_ZELLE; c.z = 'stoppeln'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0xe3c46a);
     } else if (c.z === 'gesaet') meldungSelten('⏳ Das Getreide ist noch nicht reif – warte, bis es golden ist!');
   }
 }
@@ -948,6 +959,7 @@ function feldKaufen() {
   if (money < f.preis) { meldung(`💸 Feld ${f.nr + 1} kostet ${euro(f.preis)} – du hast nur ${euro(money)}.`); sound.nein(); return; }
   money -= f.preis; f.gekauft = true;
   malFeld(f);
+  mpEvent({ t: 'feld', nr: f.nr });
   meldung(`🎉 Feld ${f.nr + 1} gehört jetzt dir! Pflüg es mit Taste 1.`, 3.5);
   sound.kaufen();
   speichern();
@@ -983,7 +995,8 @@ function fahrzeugKaufen(name) {
     const x = k < 10 ? 32 + k * 6 : -12 - (k - 10) * 6, z = 1;   // Parkplätze am Weg (erst Richtung Landhandel, dann nach Westen)
     if (kollidiert(x, z, 3.2)) continue;
     money -= typ.preis;
-    neuesFahrzeug(name, x, z, 0);
+    const fz = neuesFahrzeug(name, x, z, 0);
+    mpEvent({ t: 'neuesFz', id: fz.id, typ: name, x, z, r: 0 });
     meldung(`🎉 Dein neuer ${typ.emoji} ${typ.name} steht beim Landhandel! Steig mit E ein.`, 4);
     sound.kaufen();
     haendlerZeigen(true);
@@ -1003,7 +1016,8 @@ function einsteigen(fz) {
   player.position.set(fz.sitz[0], fz.sitz[1] - 1.65 / g, fz.sitz[2] + 0.05);
   player.rotation.set(0, 0, 0);
   player.scale.setScalar(1 / g);
-  farmerPose(true, false, 0);
+  farmerPose(farmer, true, false, 0);
+  fz.ziel = null;   // Jetzt fahre ICH es
   sound.tuer();
 }
 function aussteigen() {
@@ -1016,7 +1030,9 @@ function aussteigen() {
   player.position.set(fz.g.position.x + Math.cos(yaw) * seite, 0, fz.g.position.z - Math.sin(yaw) * seite);
   if (kollidiert(player.position.x, player.position.z, 0.4, fz)) player.position.set(fz.g.position.x - Math.cos(yaw) * seite, 0, fz.g.position.z + Math.sin(yaw) * seite);
   player.rotation.set(0, yaw, 0);
+  spielerVy = 0; amBoden = true;
   aktiv = null;
+  if (mp.aktiv) mpFzSenden(fz, null);   // Allen sagen: Das Fahrzeug ist wieder frei
   blickHoch = 0;
   sound.tuer();
 }
@@ -1032,11 +1048,14 @@ function naechstesFahrzeug() {
 // ===== Speichern (im Browser) =====
 const ZUSTAND_KURZ = { wiese: 'w', stoppeln: 's', gepfluegt: 'p', gesaet: 'g' };
 const ZUSTAND_LANG = { w: 'wiese', s: 'stoppeln', p: 'gepfluegt', g: 'gesaet' };
+const zellCode = c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '');
+const zelleAusCode = code => ({ z: ZUSTAND_LANG[code[0]] || 'wiese', w: code[0] === 'g' ? Number(code.slice(1)) / 100 : 0 });
 function speichern() {
+  if (mp.rolle === 'gast') return;   // Beim Freund mitspielen überschreibt nicht deinen eigenen Hof!
   try {
     localStorage.setItem(SPEICHER_NAME, JSON.stringify({
       v: 2, money, hofSilo: hofSilo.inhalt,
-      fahrzeuge: fahrzeuge.map(f => ({ typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, werkzeug: f.werkzeug })),
+      fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, werkzeug: f.werkzeug })),
       aktiv: fahrzeuge.indexOf(aktiv),
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
@@ -1116,7 +1135,11 @@ document.addEventListener('keydown', e => {
 
   if (k === 'e') {
     if (aktiv) aussteigen();
-    else { const fz = naechstesFahrzeug(); if (fz) einsteigen(fz); }
+    else {
+      const fz = naechstesFahrzeug();
+      if (fz && fremdGefahren(fz)) { meldung('🚫 Da sitzt schon ein anderer Bauer drin!'); sound.nein(); }
+      else if (fz) einsteigen(fz);
+    }
   }
   if (k === 'b') buildMode();
   if (k === 'f') ansichtWechseln();
@@ -1171,7 +1194,9 @@ renderer.domElement.addEventListener('click', () => {
   geistAktualisieren(mausPunkt);
   const A = GEBAEUDE_ARTEN[bauArt];
   if (!geistOk) { meldung(money < A.preis ? `💸 ${A.name} kostet ${euro(A.preis)}!` : '🚫 Hier kannst du nicht bauen (Feld, Weg oder zu nah an etwas).'); sound.nein(); return; }
-  gebaeudeHinzu(bauArt, mausPunkt.x, mausPunkt.z, rotation);
+  const bx = r2(mausPunkt.x), bz = r2(mausPunkt.z);   // Gerundet, damit es bei allen Spielern genau gleich steht
+  gebaeudeHinzu(bauArt, bx, bz, rotation);
+  mpEvent({ t: 'bau', art: bauArt, x: bx, z: bz, rot: rotation });
   money -= A.preis;
   sound.bauen();
   if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
@@ -1234,6 +1259,301 @@ function fahren(fz, dt) {
   }
 }
 
+// =====================================================================
+// ===== Multiplayer (mit PeerJS – wie bei ARAG) =====
+// =====================================================================
+// Einer macht einen Raum auf (der Gastgeber). SEIN Hof wird gespielt, alle helfen zusammen und teilen das Geld.
+// Die Gäste geben den Code ein. Jeder schickt 15-mal pro Sekunde, wo er ist und was er fährt.
+// Änderungen (gepflügt, gekauft, gebaut ...) gehen über den Gastgeber an alle.
+const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+const MP_VORSILBE = 'farming-hof-';   // Damit sich die Codes nicht mit ARAG mischen
+const MP_MAX = 4, MP_RATE = 15;
+const MP_BAUERN = [
+  { name: 'Bauer Rot', farbe: '#b3261e' },
+  { name: 'Bauer Blau', farbe: '#2457a6' },
+  { name: 'Bauer Grün', farbe: '#2f8f3a' },
+  { name: 'Bauer Lila', farbe: '#7b3fa6' },
+];
+const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, ich: 'lokal', nr: 0, andere: new Map(), takt: 0, geldBasis: null, felderTakt: 15, laeuft: false };
+const r2 = v => Math.round(v * 100) / 100;
+const siloSchluessel = s => `${s.x.toFixed(1)},${s.z.toFixed(1)}`;
+function fremdGefahren(fz) { return !!fz.fahrer && fz.fahrer !== mp.ich && fz !== aktiv && spielZeit - fz.fahrerZeit < 2; }
+function mpStatus(t) { $('mp-status').textContent = t; }
+function mpUI() {
+  const drin = mp.aktiv;
+  for (const id of ['mp-erstellen', 'mp-code', 'mp-beitreten']) $(id).style.display = drin ? 'none' : '';
+  if (drin) mpStatus(`🌐 Raum ${mp.code} · ${mp.andere.size + 1} Bauern · du: ${MP_BAUERN[mp.nr].name}${mp.rolle === 'host' ? ' (Gastgeber)' : ''}`);
+}
+function mpFehlerText(e) {
+  if (e && (e.type === 'network' || e.type === 'server-error')) return 'Keine Verbindung zum Vermittlungs-Server (Internet?)';
+  return (e && (e.type || e.message)) || 'unbekannter Fehler';
+}
+function mpLadePeerJS() {
+  if (window.Peer) return Promise.resolve();
+  return new Promise((ok, fehler) => {
+    const sc = document.createElement('script');
+    sc.src = MP_PEERJS; sc.onload = ok; sc.onerror = () => fehler(new Error('PeerJS nicht geladen'));
+    document.head.appendChild(sc);
+  });
+}
+function mpNeuerCode() {
+  const z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let k = 0; k < 4; k++) c += z[Math.floor(Math.random() * z.length)];
+  return c;
+}
+function mpSendeAn(g, n) { try { if (g.conn && g.conn.open) g.conn.send(n); } catch (e) { /* egal */ } }
+function mpAnAlle(n, ausser = null) { for (const g of mp.andere.values()) if (g !== ausser) mpSendeAn(g, n); }
+function mpEvent(n) {   // Etwas an alle schicken (Gast: an den Gastgeber, der leitet es weiter)
+  if (!mp.aktiv) return;
+  if (mp.rolle === 'host') mpAnAlle(n);
+  else try { if (mp.conn && mp.conn.open) mp.conn.send(n); } catch (e) { /* egal */ }
+}
+function mpZelle(f, i, j) { if (mp.aktiv) mpEvent({ t: 'zelle', f: f.nr, i, j, c: zellCode(f.zellen[j * f.nx + i]) }); }
+function mpFzSenden(fz, fahrer) {
+  mpEvent({ t: 'fz', id: fz.id, fa: fahrer, x: r2(fz.g.position.x), z: r2(fz.g.position.z), r: r2(fz.g.rotation.y), sp: r2(fz.speed), lw: r2(fz.lenkWinkel),
+    wz: fz.werkzeug, ab: fz.arbeitet, di: Math.round(fz.diesel), ta: fz.tank, sa: fz.saat });
+}
+function mpSpielerNeu(id, nr) {
+  const info = MP_BAUERN[nr] || MP_BAUERN[0];
+  const o = { id, nr, ...info, x: 0, y: 0, z: 0, yaw: 0, fz: null, lf: false, farmer: baueFarmer(info.farbe) };
+  o.schild = schild(`👨‍🌾 ${info.name}`, info.farbe, 3.2);
+  o.schild.position.y = 2.75; o.farmer.g.add(o.schild);
+  o.ax = o.ay = o.az = 0; o.ayaw = 0;
+  scene.add(o.farmer.g);
+  mp.andere.set(id, o);
+  mpUI();
+  return o;
+}
+function mpSpielerWeg(id, verbreiten) {
+  const o = mp.andere.get(id);
+  if (!o) return;
+  if (o.farmer.g.parent) o.farmer.g.parent.remove(o.farmer.g);
+  mp.andere.delete(id);
+  if (verbreiten && mp.rolle === 'host') mpAnAlle({ t: 'weg', id });
+  meldung(`👋 ${o.name} hat den Hof verlassen.`);
+  mpUI();
+}
+function weltSchnappschuss() {
+  return {
+    t: 'welt', money, spielZeit, hofSilo: hofSilo.inhalt,
+    felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
+    gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0 })),
+    fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel,
+      werkzeug: f.werkzeug, fahrer: f === aktiv ? mp.ich : f.fahrer })),
+    spieler: [{ id: mp.ich, nr: mp.nr }, ...[...mp.andere.values()].map(o => ({ id: o.id, nr: o.nr }))],
+  };
+}
+
+// ----- Gastgeber -----
+async function mpRaumErstellen(versuch = 0) {
+  if (mp.peer && versuch === 0) return;
+  mpStatus('⏳ Raum wird erstellt ...');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
+  const code = mpNeuerCode();
+  const peer = new window.Peer(MP_VORSILBE + code);
+  mp.peer = peer;
+  peer.on('open', id => {
+    Object.assign(mp, { aktiv: true, rolle: 'host', code, ich: id, nr: 0, geldBasis: money });
+    mpUI();
+    meldung(`🌐 Dein Raum-Code: ${code} – sag ihn deinen Freunden!`, 8);
+  });
+  peer.on('connection', conn => mpNeuerGast(conn));
+  peer.on('disconnected', () => { try { if (mp.peer === peer) peer.reconnect(); } catch (e) { /* egal */ } });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id' && versuch < 3) { peer.destroy(); mp.peer = null; mpRaumErstellen(versuch + 1); return; }
+    if (!mp.aktiv) { peer.destroy(); mp.peer = null; mpStatus('❌ ' + mpFehlerText(e)); }
+  });
+}
+function mpNeuerGast(conn) {
+  conn.on('open', () => {
+    const belegt = new Set([0, ...[...mp.andere.values()].map(g => g.nr)]);
+    let nr = 1;
+    while (belegt.has(nr)) nr++;
+    if (nr >= MP_MAX) { conn.send({ t: 'voll' }); setTimeout(() => conn.close(), 500); return; }
+    const g = mpSpielerNeu(conn.peer, nr);
+    g.conn = conn;
+    conn.send({ t: 'hallo', nr, code: mp.code });
+    conn.send(weltSchnappschuss());
+    meldung(`👋 ${g.name} ist auf deinem Hof!`, 3);
+    sound.kaufen();
+  });
+  conn.on('data', d => { const g = mp.andere.get(conn.peer); if (g) mpEmpfangen(d, g); });
+  conn.on('close', () => mpSpielerWeg(conn.peer, true));
+  conn.on('error', () => mpSpielerWeg(conn.peer, true));
+}
+
+// ----- Gast -----
+async function mpBeitreten() {
+  const code = $('mp-code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { mpStatus('Der Code hat 4 Zeichen, z. B. K7PX'); return; }
+  if (mp.peer) return;
+  mpStatus('⏳ Verbinde ...');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
+  const peer = new window.Peer();
+  mp.peer = peer;
+  peer.on('open', id => {
+    mp.ich = id;
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true });
+    mp.conn = conn;
+    conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code }); mpStatus('✅ Verbunden! Der Hof wird geladen ...'); });
+    conn.on('data', d => mpEmpfangen(d, null));
+    conn.on('close', () => { if (mp.conn === conn) mpVerbindungWeg('Die Verbindung zum Gastgeber ist weg.'); });
+  });
+  peer.on('error', e => {
+    if (mp.peer !== peer) return;
+    mpVerbindungWeg(e.type === 'peer-unavailable' ? 'Raum nicht gefunden – stimmt der Code?' : mpFehlerText(e));
+  });
+}
+function mpVerbindungWeg(text) {
+  const warGast = mp.rolle === 'gast' && mp.aktiv;
+  try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ }
+  Object.assign(mp, { aktiv: false, peer: null, conn: null });
+  mpStatus('❌ ' + text);
+  for (const id of ['mp-erstellen', 'mp-code', 'mp-beitreten']) $(id).style.display = '';
+  if (warGast) {   // Zurück auf den eigenen Hof (Seite neu laden – dein Spielstand ist ja nicht verändert worden)
+    meldung(`❌ ${text} Gleich bist du wieder auf deinem eigenen Hof ...`, 4);
+    setTimeout(() => location.reload(), 3500);
+  }
+  mp.rolle = null;
+}
+function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
+  if (aktiv) aussteigen();
+  for (const fz of fahrzeuge) scene.remove(fz.g);
+  fahrzeuge.length = 0; letztes = null;
+  for (const b of gebaute) {
+    scene.remove(b.mesh);
+    const k = hindernisse.indexOf(b.h); if (k >= 0) hindernisse.splice(k, 1);
+    if (b.silo) { scene.remove(b.silo.schild); silos.splice(silos.indexOf(b.silo), 1); }
+  }
+  gebaute.length = 0;
+  money = d.money; mp.geldBasis = money; spielZeit = d.spielZeit;
+  hofSilo.inhalt = d.hofSilo; hofSilo.basis = d.hofSilo; siloSchild(hofSilo);
+  d.felder.forEach((df, k) => {
+    const f = felder[k];
+    if (!f || df.c.length !== f.zellen.length) return;
+    f.gekauft = df.g;
+    df.c.forEach((code, n) => { f.zellen[n] = zelleAusCode(code); });
+    malFeld(f);
+  });
+  for (const b of d.gebaeude) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0);
+  for (const f of d.fahrzeuge) {
+    if (!FAHRZEUGE[f.typ]) continue;
+    const fz = neuesFahrzeug(f.typ, f.x, f.z, f.r, f);
+    fz.fahrer = f.fahrer; fz.fahrerZeit = spielZeit;
+  }
+  letztes = fahrzeuge[0] || null;
+  player.position.set(4 + mp.nr * 2, 0, 15); yaw = 0;
+  for (const sp of d.spieler) if (sp.id !== mp.ich && !mp.andere.has(sp.id)) mpSpielerNeu(sp.id, sp.nr);
+  mpUI();
+  meldung(`🌐 Willkommen auf dem Hof! Du bist ${MP_BAUERN[mp.nr].name}. Das Geld gehört allen zusammen!`, 5);
+}
+
+// ----- Nachrichten empfangen -----
+function mpEmpfangen(d, vonGast) {
+  if (!d || !d.t) return;
+  const host = mp.rolle === 'host';
+  switch (d.t) {
+    case 'hallo':
+      mp.nr = d.nr;
+      farmer.hemd.map = karoTextur(MP_BAUERN[d.nr].farbe); farmer.hemd.needsUpdate = true;   // Dein Hemd bekommt deine Farbe
+      return;
+    case 'voll': mpVerbindungWeg('Der Raum ist voll (höchstens 4 Bauern).'); return;
+    case 'welt': weltLaden(d); return;
+    case 'weg': mpSpielerWeg(d.id, false); return;
+    // Geld und Silos rechnet der Gastgeber: Gäste schicken nur, wie viel sich geändert hat
+    case 'geldStand': money = d.m; mp.geldBasis = d.m; return;
+    case 'geld': if (host) money += d.d; return;
+    case 'siloStand': { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = d.i; s.basis = d.i; siloSchild(s); } return; }
+    case 'silo': if (host) { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = begrenzt(s.inhalt + d.d, 0, SILO_MAX); siloSchild(s); } } return;
+    case 'felder':   // Alle 15 Sekunden: Felder abgleichen (falls etwas verloren ging)
+      d.felder.forEach((codes, k) => {
+        const f = felder[k];
+        if (!f) return;
+        codes.forEach((code, n) => {
+          const c = f.zellen[n], neu = zelleAusCode(code);
+          if (c.z !== neu.z || Math.abs(c.w - neu.w) > 0.05) { f.zellen[n] = neu; malBoden(f, n % f.nx, Math.floor(n / f.nx)); }
+        });
+      });
+      return;
+    case 'sp': if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf }); } break;
+    case 'fz': {
+      const fz = fahrzeuge.find(f => f.id === d.id);
+      if (fz && fz !== aktiv) {
+        fz.ziel = d; fz.fahrer = d.fa; fz.fahrerZeit = spielZeit;
+        fz.werkzeug = fz.typ.geraete.includes(d.wz) ? d.wz : fz.werkzeug;
+        fz.diesel = d.di; fz.tank = d.ta; fz.saat = d.sa;
+      }
+      break;
+    }
+    case 'zelle': { const f = felder[d.f]; if (f) { f.zellen[d.j * f.nx + d.i] = zelleAusCode(d.c); malBoden(f, d.i, d.j); } break; }
+    case 'feld': { const f = felder[d.nr]; if (f && !f.gekauft) { f.gekauft = true; malFeld(f); meldung(`🎉 Feld ${d.nr + 1} wurde gekauft!`); } break; }
+    case 'bau': gebaeudeHinzu(d.art, d.x, d.z, d.rot, 0); sound.bauen(); break;
+    case 'neuesFz': if (!fahrzeuge.some(f => f.id === d.id) && FAHRZEUGE[d.typ]) { neuesFahrzeug(d.typ, d.x, d.z, d.r, { id: d.id }); meldung(`🚜 Neues Fahrzeug auf dem Hof: ${FAHRZEUGE[d.typ].name}!`); } break;
+    default: return;
+  }
+  if (host && vonGast) mpAnAlle(d, vonGast);   // Der Gastgeber leitet es an die anderen Gäste weiter
+}
+
+// ----- Jeden Takt: eigene Sachen verschicken -----
+function mpTick(dt) {
+  if (!mp.aktiv) return;
+  mp.takt -= dt;
+  if (mp.takt > 0) return;
+  mp.takt = 1 / MP_RATE;
+  const host = mp.rolle === 'host';
+  if (!host && !weltDa()) return;
+  // Geld: Gastgeber sagt allen den Stand, Gäste schicken ihre Änderung
+  if (host) { if (money !== mp.geldBasis) { mp.geldBasis = money; mpAnAlle({ t: 'geldStand', m: money }); } }
+  else if (mp.geldBasis !== null && money !== mp.geldBasis) { mpEvent({ t: 'geld', d: money - mp.geldBasis }); mp.geldBasis = money; }
+  for (const s of silos) {
+    if (s.inhalt === s.basis) continue;
+    if (host) mpAnAlle({ t: 'siloStand', s: siloSchluessel(s), i: s.inhalt });
+    else mpEvent({ t: 'silo', s: siloSchluessel(s), d: s.inhalt - (s.basis || 0) });
+    s.basis = s.inhalt;
+  }
+  // Wo bin ich?
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft });
+  if (aktiv) mpFzSenden(aktiv, mp.ich);
+  if (host) {
+    mp.felderTakt -= 1 / MP_RATE;
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); }
+  }
+}
+const weltDa = () => mp.geldBasis !== null;
+// Die anderen Bauern zeichnen (zu Fuß oder sitzend im Fahrzeug)
+function mpAndereZeigen(dt) {
+  for (const o of mp.andere.values()) {
+    const G = o.farmer.g;
+    const fzO = o.fz ? fahrzeuge.find(f => f.id === o.fz) : null;
+    if (fzO) {
+      if (G.parent !== fzO.K) {
+        fzO.K.add(G);
+        const gr = fzO.typ.groesse;
+        G.position.set(fzO.sitz[0], fzO.sitz[1] - 1.65 / gr, fzO.sitz[2] + 0.05);
+        G.rotation.set(0, 0, 0); G.scale.setScalar(1 / gr);
+        o.schild.visible = false;
+      }
+      farmerPose(o.farmer.t, true, false, dt);
+      continue;
+    }
+    if (G.parent !== scene) { scene.add(G); G.scale.setScalar(1); o.ax = o.x; o.ay = o.y; o.az = o.z; o.ayaw = o.yaw; o.schild.visible = true; }
+    const f = Math.min(1, dt * 12);
+    o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
+    let d = o.yaw - o.ayaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    o.ayaw += d * f;
+    G.position.set(o.ax, o.ay, o.az);
+    G.rotation.set(0, o.ayaw, 0);
+    farmerPose(o.farmer.t, false, o.lf, dt, o.y > 0.05);
+  }
+}
+$('mp-erstellen').addEventListener('click', () => { tonStart(); mpRaumErstellen(); });
+$('mp-beitreten').addEventListener('click', () => { tonStart(); mpBeitreten(); });
+$('mp-code').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tonStart(); mpBeitreten(); } });
+$('mp-code').addEventListener('keyup', e => e.stopPropagation());
+
 // ===== Spielschleife =====
 const clock = new THREE.Clock();
 const kamPos = new THREE.Vector3(0, 8, 20);
@@ -1258,19 +1578,40 @@ function animate() {
     if (keys.d || keys.arrowright) player.position.addScaledVector(right, tempo);
     if (kollidiert(player.position.x, player.position.z, 0.4)) player.position.copy(alt);
     player.rotation.y = yaw;
-    farmerPose(false, player.position.distanceTo(alt) > 0.001, dt);
+    // Hüpfen mit der Leertaste
+    if (keys[' '] && amBoden) { spielerVy = SPRUNG_KRAFT; amBoden = false; sound.hupf(); }
+    spielerVy -= SCHWERKRAFT * dt;
+    player.position.y += spielerVy * dt;
+    if (player.position.y <= 0) { player.position.y = 0; spielerVy = 0; amBoden = true; }
+    mp.laeuft = Math.hypot(player.position.x - alt.x, player.position.z - alt.z) > 0.001;
+    farmerPose(farmer, false, mp.laeuft, dt, !amBoden);
   }
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
-    if (fz !== aktiv) { fz.speed = 0; fz.arbeitet = false; }
+    const fremd = fremdGefahren(fz);
+    if (fz !== aktiv && fz.ziel) {   // Ein anderer Spieler fährt (oder hat es geparkt): weich dorthin schieben
+      const f = Math.min(1, dt * 10);
+      fz.g.position.x += (fz.ziel.x - fz.g.position.x) * f;
+      fz.g.position.z += (fz.ziel.z - fz.g.position.z) * f;
+      let d = fz.ziel.r - fz.g.rotation.y;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      fz.g.rotation.y += d * f;
+    }
+    if (fz !== aktiv && fremd && fz.ziel) {
+      fz.speed = fz.ziel.sp; fz.lenkWinkel = fz.ziel.lw; fz.arbeitet = fz.ziel.ab;
+      for (const r of fz.raeder) { r.rad.rotation.x -= fz.speed * dt / (r.r * fz.typ.groesse); if (r.lenkt) r.lenker.rotation.y = fz.lenkWinkel * r.lenkt; }
+    } else if (fz !== aktiv) { fz.speed = 0; fz.arbeitet = false; }
     for (const [art, m] of Object.entries(fz.geraete)) {
       m.visible = art === fz.werkzeug;
       m.position.y += ((fz.arbeitet ? 0 : 0.45) - m.position.y) * Math.min(1, dt * 5);   // Abgesenkt auf dem Feld, sonst angehoben
-      if (m.userData.haspel && fz === aktiv) m.userData.haspel.rotation.x -= dt * (3 + Math.max(0, fz.speed) * 0.4);
+      if (m.userData.haspel && (fz === aktiv || fremd)) m.userData.haspel.rotation.x -= dt * (3 + Math.max(0, fz.speed) * 0.4);
     }
-    fz.schild.visible = fz !== aktiv;   // Namensschild nur bei geparkten Fahrzeugen
+    fz.schild.visible = fz !== aktiv && !fremd;   // Namensschild nur bei geparkten Fahrzeugen
   }
   player.visible = !(ansicht === 'ego');   // In First Person siehst du dich nicht selbst
+  mpAndereZeigen(dt);
+  mpTick(dt);
   wachsen(dt);
   staubUpdate(dt);
   windZeit.value = spielZeit;
@@ -1315,7 +1656,7 @@ function animate() {
       camera.position.copy(tmp);
       camera.rotation.set(blickHoch, aktiv.g.rotation.y + kamOffset, 0);
     } else {
-      camera.position.set(player.position.x, 1.68, player.position.z);
+      camera.position.set(player.position.x, player.position.y + 1.68, player.position.z);
       camera.rotation.set(blickHoch, yaw, 0);
     }
     kamPos.copy(camera.position);
