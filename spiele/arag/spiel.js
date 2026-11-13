@@ -36,6 +36,11 @@ const KOERPER_RADIUS = 0.45;     // So dick ist dein Roboter
 const DUCK_RADIUS = 0.28;        // So klein bist du geduckt (passt unter Tische!)
 const AUGEN_HOEHE = 0.85;        // So weit über der Körpermitte ist die Kamera
 const DUCK_AUGEN = 0.35;         // ... und geduckt
+// ===== Blitzlampe (Taste F): Ein superheller Blitz, der Monster blendet =====
+const BLITZ_WEITE = 11;         // So weit reicht der Blitz (in Metern)
+const BLITZ_WINKEL = 0.6;       // So breit ist der Blitz (größer = breiter)
+const BLITZ_BETAEUBT = 4;       // So viele Sekunden sind geblendete Monster betäubt
+const BLITZ_LADEN = 10;         // So viele Sekunden braucht die Blitzlampe zum Aufladen
 const DUCK_SICHT = 0.55;         // Geduckt sehen dich Monster nur aus so viel der normalen Entfernung
 const MAX_LAMPEN = 14;
 const MONSTER_START_ABSTAND = 3;   // So viele Räume (Türen) weit weg vom Start tauchen Monster auf           // So viele Lichter gibt es höchstens (mehr wird langsam)
@@ -100,6 +105,7 @@ function levelDaten(n) {
     geister: 1 + Math.floor((n - 1) / 3),               // 👻 Staubgeister (ab Level 4 zwei)
     lauscher: n >= 3 ? 1 + Math.floor((n - 3) / 4) : 0, // 👂 Lauscher (ab Level 3)
     starrer: n >= 5 ? 1 + Math.floor((n - 5) / 4) : 0,  // 🗿 Starrer (ab Level 5)
+    jaeger: n >= 2 ? 1 + Math.floor((n - 2) / 4) : 0,   // 🤠 Verrückter Jäger (ab Level 2)
   };
 }
 
@@ -216,6 +222,7 @@ const sound = {
   schritt() { ton(90, 0, 0.06, 'sine', 0.05, 50); },
   sprung() { ton(300, 0, 0.15, 'sine', 0.05, 500); },
   ducken() { ton(200, 0, 0.08, 'sine', 0.04, 140); },
+  blitz() { ton(2400, 0, 0.25, 'sine', 0.1, 600); rauschen(0, 0.2, 0.25, 'highpass', 3000); ton(4000, 0.25, 0.8, 'sine', 0.03, 3000); },   // PFFT! ... iiiiiii
   piep() { ton(660, 0, 0.1, 'square', 0.06); },
   robo(hoehe, laut) {   // Roboter-Piepsen beim Reden (wie kleine Computer-Wörter)
     for (let k = 0; k < 4; k++) ton(hoehe * zufall(0.8, 1.5), k * 0.07, 0.06, 'square', 0.035 * laut);
@@ -280,6 +287,26 @@ const monsterSound = {
       for (let k = 0; k < 3; k++) rauschen(k * 0.16, 0.1, 0.1 * laut, 'bandpass', zufall(1800, 2600));
     }
   },
+  jaeger(laut, jagt) {
+    if (jagt) {   // 🤠 Irres Lachen: HEHEHEHAHA!
+      for (let k = 0; k < 6; k++) gruselTon(zufall(380, 480) * (1 - k * 0.06), k * 0.11, 0.1, 'square', 0.05 * laut, null, 25);
+      for (let k = 0; k < 6; k++) rauschen(k * 0.11, 0.08, 0.04 * laut, 'bandpass', 1500);
+    } else {      // Er pfeift ein schiefes Liedchen ...
+      const lied = [0, 4, 7, 4, 9, 7];
+      lied.forEach((n, k) => gruselTon(halbton(n, 880), k * 0.18, 0.16, 'sine', 0.05 * laut, null, 5));
+    }
+  },
+  klickKlack(laut) {   // Durchladen: KLICK-KLACK!
+    rauschen(0, 0.05, 0.35 * laut, 'highpass', 2500);
+    ton(900, 0, 0.04, 'square', 0.08 * laut);
+    rauschen(0.18, 0.06, 0.45 * laut, 'highpass', 1800);
+    ton(600, 0.18, 0.05, 'square', 0.1 * laut);
+  },
+  schuss(laut) {   // KA-WUMM!
+    rauschen(0, 0.5, 0.9 * laut, 'lowpass', 4000, null, 200);
+    ton(110, 0, 0.35, 'sine', 0.7 * laut, 35);
+    rauschen(0.05, 1.2, 0.15 * laut, 'bandpass', 600, null, 150);   // Echo im Haus
+  },
   starrer(laut) {   // 🗿 Stein schabt über den Boden
     rauschen(0, 0.45, 0.12 * laut, 'lowpass', 400, null, 150);
     ton(48, 0, 0.4, 'sawtooth', 0.04 * laut, 40);
@@ -302,6 +329,7 @@ function monsterGeraeusche(m, dt) {
     return;
   }
   if (m.art === 'geist') m.geraeuschZeit = jagt ? zufall(1.2, 2) : zufall(3, 6);
+  else if (m.art === 'jaeger') m.geraeuschZeit = jagt ? zufall(2.5, 4) : zufall(4, 7);
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
   if (laut > 0) monsterSound[m.art](laut, jagt);
 }
@@ -348,6 +376,17 @@ const MUSIK_LIEDER = {
     ],
     snare: [4, 12],
     melodie: [12, 13, 12, 18, 12, 13, 15, 18],
+  },
+  // 🤠 Jäger: Verrückter Banjo-Wahnsinn – schnell wie ein wildes Hoedown!
+  jaeger: {
+    tempo: 190, grund: 110, verzerrung: 8, gitarre: 0.3, melodieKlang: 'banjo', becken: 'achtel',
+    riff: [
+      0, null, 7, null,  0, null, 7, 7,   5, null, 12, null,  5, null, 12, 12,
+      0, null, 7, null,  0, null, 7, 7,   7, null, 2, null,  7, 6, 5, 4,
+    ],
+    kick: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+    snare: [4, 12],
+    melodie: [12, 12, 17, 17, 12, 12, 19, 18],
   },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
@@ -443,6 +482,8 @@ function musikNote(art, schritt, t) {
       for (const mal of [1, 2, 3]) gruselTon(halbton(m, 220) * mal, neuStart, dauer, mal === 1 ? 'square' : 'sine', 0.06 / mal, null, 5, ziel);
       gruselTon(halbton(m, 440), neuStart, dauer * 1.2, 'sine', 0.05, halbton(m - 1, 440), 4, ziel);
       rauschen(neuStart, dauer, 0.04, 'bandpass', 900, ziel, 600);
+    } else if (L.melodieKlang === 'banjo') {   // Schnelles Zupfen: pling-pling-pling-pling
+      [0, 4, 7, 12, 7, 4].forEach((plus, k) => ton(halbton(m + plus, 220), neuStart + k * s16 * 1.15, 0.18, 'triangle', 0.1, null, ziel));
     } else if (L.melodieKlang === 'gong') {   // Tiefer Stein-Gong: BOOONG
       for (const [mal, laut] of [[1, 0.25], [2.76, 0.1], [5.4, 0.05]]) ton(halbton(m, 110) * mal, neuStart, s16 * 14, 'sine', laut, null, ziel);
     }
@@ -453,6 +494,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     gruselTon(900, 0, 1.4, 'sawtooth', 0.12, 300, 12);
     gruselTon(1350, 0, 1.4, 'sine', 0.1, 450, 10);
     rauschen(0, 1.5, 0.3, 'bandpass', 3000, null, 300);
+  } else if (art === 'jaeger') {  // 🤠 Schuss in die Luft + JIIIIHAAA!
+    monsterSound.schuss(0.6);
+    gruselTon(300, 0.3, 0.5, 'sawtooth', 0.12, 900, 14);
+    gruselTon(900, 0.8, 0.6, 'sawtooth', 0.1, 400, 14);
   } else if (art === 'starrer') { // 🗿 Riesiger Steingong + Krachen
     for (const [f, laut] of [[55, 0.5], [151.8, 0.2], [297, 0.1]]) ton(f, 0, 3, 'sine', laut, f * 0.9);
     rauschen(0, 1.5, 0.5, 'lowpass', 1500, null, 60);
@@ -766,6 +811,7 @@ let gegriffen = null, halteAbstand = 2.2, schwebend = null;
 let nachricht = null, schwebeTexte = [], splitter = [], funk = [];
 let energie = 100, ausdauer = AUSDAUER_MAX, schadenBlitz = 0, schrittZeit = 0, herzZeit = 0, wackeln = 0;
 let geduckt = false, zielGemeldet = false;
+let blitzLadung = 1, blitzHell = 0;   // Blitzlampe: Ladung (0 bis 1) und wie hell es gerade blitzt
 let blick = { links: 0, hoch: 0 };
 let amBoden = false, kaputtGrund = '', levelErgebnis = null;
 const tasten = {};
@@ -1239,6 +1285,8 @@ function hausAufraeumen() {
   for (const m of monster) szene.remove(m.mesh);
   for (const h of helfer) { welt.removeBody(h.body); szene.remove(h.teile.g); szene.remove(h.strahl.g); }
   for (const s of splitter) szene.remove(s.mesh);
+  for (const s of schussSpuren) szene.remove(s.mesh);
+  schussSpuren = [];
   wandKoerper = []; sichtBlocker = []; schaetze = []; monster = []; helfer = []; splitter = []; schwebeTexte = []; funk = [];
   gegriffen = null; schwebend = null;
 }
@@ -1354,6 +1402,7 @@ function baueHaus() {
   for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
   for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
   for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
+  for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
 
   // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
   ducken(false);
@@ -1627,6 +1676,10 @@ const MONSTER_ARTEN = {
   geist:    { name: 'Staubgeist', emoji: '👻', tempo: 1.6, jagdTempo: 3.3, schaden: 30, sicht: 14, augen: 1.3, pause: 2, betaeubbar: true },
   lauscher: { name: 'Lauscher',   emoji: '👂', tempo: 1.0, jagdTempo: 4.6, schaden: 45, hoeren: 2.5, pause: 2, betaeubbar: true },
   starrer:  { name: 'Starrer',    emoji: '🗿', tempo: 1.2, jagdTempo: 4.8, schaden: 50, pause: 3, betaeubbar: false },
+  // Der verrückte Jäger ballert mit seiner Schrotflinte! schussWeite: so weit schießt er · schussSchaden: so viel Energie kostet ein Treffer aus nächster Nähe
+  // zielen: so lange zielt er, bevor er schießt (dann hast du Zeit, dich zu verstecken!) · nachladen: so lange braucht er zum Nachladen
+  jaeger:   { name: 'Jäger',      emoji: '🤠', tempo: 1.4, jagdTempo: 2.6, schaden: 20, sicht: 16, augen: 1.6, pause: 2, betaeubbar: true,
+              schussWeite: 12, schussSchaden: 35, zielen: 0.8, nachladen: 2.5 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
@@ -1659,6 +1712,39 @@ function baueMonsterMesh(art) {
     const mund = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.02), new THREE.MeshBasicMaterial({ color: '#000' }));
     mund.position.set(0, 1.9, 0.27); g.add(mund);
     g.userData.ohrMat = ohrMat;
+  } else if (art === 'jaeger') {
+    // 🤠 Der verrückte Jäger: Stiefel, grüne Jacke, Hut, wilder Bart und eine Schrotflinte
+    const mat = f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.9 });
+    const hose = mat('#4a3b2a'), jacke = mat('#3f5a2e'), haut = mat('#e0b08a'), bart = mat('#b8b2a8'), hut = mat('#5a3f22'), holz = mat('#7a4a22');
+    const metall = new THREE.MeshStandardMaterial({ color: '#333', metalness: 0.8, roughness: 0.4 });
+    for (const s of [-1, 1]) {
+      const bein = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.8, 0.2), hose); bein.position.set(s * 0.12, 0.4, 0); g.add(bein);
+      const stiefel = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.3), mat('#2a1d12')); stiefel.position.set(s * 0.12, 0.07, 0.04); g.add(stiefel);
+      g.userData['bein' + s] = bein;
+    }
+    const koerper = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.32), jacke); koerper.position.y = 1.15; g.add(koerper);
+    const kopf = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), haut); kopf.position.y = 1.68; g.add(kopf);
+    const bartM = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.35, 8), bart); bartM.position.set(0, 1.5, 0.08); bartM.rotation.x = Math.PI; g.add(bartM);
+    const krempe = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.03, 14), hut); krempe.position.y = 1.82; g.add(krempe);
+    const hutOben = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.2, 12), hut); hutOben.position.y = 1.93; g.add(hutOben);
+    const augeMat = new THREE.MeshBasicMaterial({ color: '#ffdd33', fog: false });   // Irre, leuchtende Augen
+    for (const s of [-1, 1]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), augeMat); a.position.set(s * 0.07, 1.72, 0.17); g.add(a); }
+    // Die Schrotflinte (zeigt nach vorne)
+    const flinte = new THREE.Group();
+    const kolben = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.35), holz); kolben.position.z = 0; flinte.add(kolben);
+    for (const s of [-1, 1]) { const lauf = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 8), metall); lauf.rotation.x = Math.PI / 2; lauf.position.set(s * 0.026, 0.03, 0.5); flinte.add(lauf); }
+    flinte.position.set(0.2, 1.25, 0.25);
+    g.add(flinte);
+    for (const s of [-1, 1]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.45), jacke); arm.position.set(s * 0.18, 1.3, 0.2); g.add(arm); }
+    // Mündungsblitz (ein Licht, das nur beim Schuss kurz leuchtet)
+    const blitz = new THREE.PointLight('#ffb347', 0, 8, 1.5); blitz.position.set(0.2, 1.3, 1.0); g.add(blitz);
+    const feuer = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd166', fog: false }));
+    feuer.position.set(0.2, 1.28, 0.95); feuer.visible = false; g.add(feuer);
+    // Ziel-Laser: Ein roter Strich zeigt, wohin er gleich schießt!
+    const laserGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0.2, 1.28, 0.9), new THREE.Vector3(0, 1, 5)]);
+    const laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({ color: '#ff2020', fog: false, transparent: true, opacity: 0.8 }));
+    laser.visible = false; laser.castShadow = false; g.add(laser);
+    Object.assign(g.userData, { blitz, feuer, laser, flinte });
   } else {   // starrer
     const stein = new THREE.MeshStandardMaterial({ color: '#8a8780', roughness: 1 });
     const sockel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.2, 12), stein); sockel.position.y = 0.1; g.add(sockel);
@@ -1685,6 +1771,7 @@ function neuesMonster(art, raum) {
     x: m.x + zufall(-1, 1), y: m.y, z: m.z + zufall(-1, 1), winkel: 0, tw: null,
     modus: 'wandern', ziel: null, zielZeit: 0, angriffPause: 0, betaeubt: 0, siehtNicht: 0, sichtCheck: zufall(0, 0.2),
     lautZeit: 0, phase: zufall(0, 6), laeuft: false, gesehen: false, bewegtSeit: 0,
+    opfer: null, opferZeit: -99, zielen: 0, nachladen: 1, blitzZeit: 0,   // (nur für den Jäger)
   });
 }
 // Jemand hat Krach gemacht! Monster in der Nähe hören das. (Ein Stockwerk dazwischen dämpft den Krach)
@@ -1745,7 +1832,7 @@ function updateMonster(m, dt) {
   monsterGeraeusche(m, dt);
   m.phase += dt;
   m.angriffPause -= dt;
-  if (m.betaeubt > 0) { m.betaeubt -= dt; m.laeuft = false; return; }
+  if (m.betaeubt > 0) { m.betaeubt -= dt; m.laeuft = false; m.zielen = 0; return; }
   let tempo;
   if (m.art === 'starrer') {
     // 🗿 Der Starrer friert ein, sobald du hinschaust
@@ -1767,9 +1854,11 @@ function updateMonster(m, dt) {
         m.sichtCheck = 0.2;
         const opfer = sichtbaresOpfer(m);
         if (opfer) {
+          m.opfer = opfer; m.opferZeit = zeit;
           if (m.modus !== 'jagen') {
             if (opfer.spieler) {
-              sound.geist(); zeigeNachricht('👻 Der Staubgeist hat dich gesehen! LAUF!', 2, '#ff6b6b');
+              if (m.art === 'jaeger') { monsterSound.jaeger(1, true); zeigeNachricht('🤠 Der verrückte Jäger hat dich gesehen! IN DECKUNG!', 2, '#ff6b6b'); }
+              else { sound.geist(); zeigeNachricht(`${info.emoji} Der ${info.name} hat dich gesehen! LAUF!`, 2, '#ff6b6b'); }
             } else if (opfer.helfer) {
               opfer.helfer.angst = 3;
               sagen(opfer.helfer, 'hilfe', { monster: info.name }, 1);
@@ -1792,11 +1881,12 @@ function updateMonster(m, dt) {
       }
     }
     tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
+    if (m.art === 'jaeger' && jaegerZielt(m, dt)) tempo = 0;   // Beim Zielen bleibt er stehen
   }
   // Laufen (durch die Türen und über die Treppen)
   const wp = wegPunkt(m, m, m.ziel);
   const dx = wp.x - m.x, dz = wp.z - m.z, d = Math.hypot(dx, dz);
-  m.laeuft = d > 0.2;
+  m.laeuft = d > 0.2 && tempo > 0;
   if (m.laeuft) {
     const schritt = Math.min(d, tempo * dt);
     m.x += dx / d * schritt; m.z += dz / d * schritt;
@@ -1842,6 +1932,64 @@ function updateMonster(m, dt) {
     }
   }
 }
+// 🤠 Der Jäger: Sieht er jemanden in Schussweite, bleibt er stehen, zielt (roter Laser!) und ballert los.
+let schussSpuren = [];   // Die kurzen Striche der Schrotkugeln
+function jaegerZielt(m, dt) {
+  const info = m.info;
+  m.nachladen -= dt;
+  const o = m.opfer;
+  if (!o || m.modus !== 'jagen' || zeit - m.opferZeit > 0.35 || m.nachladen > 0) { m.zielen = 0; return false; }
+  const ziel = o.helfer ? o.helfer.body.position : spielerKoerper.position;
+  if (o.helfer && o.helfer.kaputt > 0) { m.zielen = 0; return false; }
+  const d = abstand3D(m, ziel);
+  if (d > info.schussWeite) { m.zielen = 0; return false; }
+  m.winkel = Math.atan2(ziel.x - m.x, ziel.z - m.z);   // Zum Opfer drehen
+  if (m.zielen === 0) monsterSound.klickKlack(Math.max(0.4, monsterLautstaerke(m)));
+  m.zielen += dt;
+  if (m.zielen >= info.zielen) schiessen(m, o, ziel, d);
+  return true;
+}
+function schiessen(m, o, ziel, d) {
+  const info = m.info;
+  m.zielen = 0; m.nachladen = info.nachladen; m.blitzZeit = 0.1;
+  monsterSound.schuss(Math.max(0.35, monsterLautstaerke(m)));
+  laerm(m.x, m.y, m.z, 14);   // BUMM! Das hören alle Monster ...
+  wackeln = Math.max(wackeln, 0.15);
+  // Wo ist die Mündung?
+  const mund = new THREE.Vector3(m.x + Math.sin(m.winkel) * 0.95 + Math.cos(m.winkel) * 0.2, m.y + 1.28, m.z + Math.cos(m.winkel) * 0.95 - Math.sin(m.winkel) * 0.2);
+  const zielV = new THREE.Vector3(ziel.x, ziel.y + 0.1, ziel.z);
+  // Trifft er? (Je weiter weg, desto öfter daneben. Geduckt bist du schwerer zu treffen.)
+  let chance = begrenzt(1.15 - d / info.schussWeite, 0.25, 1);
+  if (o.spieler && geduckt) chance *= 0.6;
+  const trifft = freieSicht(mund, zielV) && Math.random() < chance;
+  if (trifft) {
+    const schaden = Math.round(info.schussSchaden * (1 - d / (info.schussWeite * 1.6)));
+    if (o.spieler) {
+      getroffen(schaden, '🤠 Jäger (Schrotflinte!)');
+      const weg = new CANNON.Vec3(ziel.x - m.x, 0, ziel.z - m.z); weg.normalize();
+      spielerKoerper.velocity.set(weg.x * 7, 2.5, weg.z * 7);
+      zeigeNachricht(`💥 Getroffen! -${schaden} Energie`, 1.5, '#ff6b6b');
+    } else if (o.helfer) helferKaputt(o.helfer, info, m);
+  } else if (o.spieler) zeigeNachricht('💨 Knapp daneben!', 1.2, '#ffd166');
+  // Schrotkugeln als kurze leuchtende Striche
+  for (let k = 0; k < 7; k++) {
+    const streu = trifft ? 0.3 : 1.4;
+    const ende = zielV.clone().add(new THREE.Vector3(zufall(-streu, streu), zufall(-streu, streu) * 0.6, zufall(-streu, streu)));
+    ende.sub(mund).multiplyScalar(trifft ? 1 : 1.5).add(mund);
+    const linie = new THREE.Line(new THREE.BufferGeometry().setFromPoints([mund, ende]),
+      new THREE.LineBasicMaterial({ color: '#ffe08a', fog: false, transparent: true, opacity: 1 }));
+    szene.add(linie);
+    schussSpuren.push({ mesh: linie, t: 0.15 });
+  }
+}
+function updateSchussSpuren(dt) {
+  for (const sp of schussSpuren) {
+    sp.t -= dt;
+    sp.mesh.material.opacity = Math.max(0, sp.t / 0.15);
+    if (sp.t <= 0) { szene.remove(sp.mesh); sp.mesh.geometry.dispose(); sp.mesh.material.dispose(); }
+  }
+  schussSpuren = schussSpuren.filter(sp => sp.t > 0);
+}
 function zeigeMonster(m) {
   const g = m.mesh;
   if (m.art === 'geist') {
@@ -1860,6 +2008,25 @@ function zeigeMonster(m) {
     g.position.set(m.x, m.y + Math.abs(schritt) * 0.08, m.z);
     g.rotation.set(m.betaeubt > 0 ? 0.3 : 0, m.winkel, schritt * 0.05);
     g.userData.ohrMat.emissive.set(m.modus === 'jagen' ? '#7a1f5a' : '#000000');   // Ohren glühen, wenn er was gehört hat
+  } else if (m.art === 'jaeger') {
+    const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 11 : 6)) : 0;
+    g.position.set(m.x, m.y + Math.abs(schritt) * 0.05, m.z);
+    g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel + (m.betaeubt > 0 ? Math.sin(zeit * 8) * 0.4 : 0), 0);
+    g.userData.bein1.rotation.x = schritt * 0.5; g.userData['bein-1'].rotation.x = -schritt * 0.5;
+    // Beim Nachladen zeigt die Flinte nach oben, beim Zielen gerade nach vorne
+    g.userData.flinte.rotation.x = m.betaeubt > 0 ? 0.9 : m.zielen > 0 ? 0 : m.nachladen > 0 && m.modus === 'jagen' ? -0.7 : 0.35;
+    m.blitzZeit -= 1 / 60;
+    g.userData.blitz.intensity = m.blitzZeit > 0 ? 25 : 0;
+    g.userData.feuer.visible = m.blitzZeit > 0;
+    // Roter Ziel-Laser (blinkt schneller, kurz bevor er schießt!)
+    const L = g.userData.laser;
+    L.visible = m.zielen > 0 && (m.zielen < m.info.zielen * 0.6 || Math.sin(zeit * 40) > 0);
+    if (L.visible && m.opfer) {
+      const ziel = m.opfer.helfer ? m.opfer.helfer.body.position : spielerKoerper.position;
+      const pos = L.geometry.attributes.position;
+      pos.setXYZ(1, 0, ziel.y + 0.1 - m.y, abstand2D(m.x, m.z, ziel.x, ziel.z));
+      pos.needsUpdate = true;
+    }
   } else {
     g.position.set(m.x, m.y, m.z);
     g.rotation.set(0, m.winkel, 0);   // Eine Statue wackelt nicht ...
@@ -2268,6 +2435,32 @@ function getroffen(menge, von) {
     if (document.pointerLockElement) document.exitPointerLock();
   }
 }
+// 📸 Blitzlampe: Ein superheller Blitz nach vorne. Alle Monster, die du anleuchtest, sind kurz geblendet!
+function blitzen() {
+  if (zustand !== 'spiel' || pause) return;
+  if (blitzLadung < 1) { zeigeNachricht(`🔦 Blitzlampe lädt noch ... (${Math.ceil((1 - blitzLadung) * BLITZ_LADEN)} s)`, 1, '#ffd166'); return; }
+  blitzLadung = 0; blitzHell = 1;
+  sound.blitz();
+  const blickRichtung = new THREE.Vector3();
+  kamera.getWorldDirection(blickRichtung);
+  let geblendet = 0, starrerDa = false;
+  for (const m of monster) {
+    const kopf = new THREE.Vector3(m.x, m.y + 1.2, m.z);
+    const zu = kopf.clone().sub(kamera.position), d = zu.length();
+    if (d > BLITZ_WEITE || zu.normalize().dot(blickRichtung) < Math.cos(BLITZ_WINKEL)) continue;
+    if (!freieSicht(kamera.position.clone(), kopf)) continue;
+    if (!m.info.betaeubbar) { starrerDa = true; continue; }   // Steinaugen kann man nicht blenden ...
+    m.betaeubt = Math.max(m.betaeubt, BLITZ_BETAEUBT);
+    m.modus = 'wandern'; m.ziel = null; m.zielen = 0;
+    schwebeText(m.x, m.y + 2.3, m.z, `💫 ${m.info.name} geblendet!`, '#ffd166');
+    geblendet++;
+  }
+  if (geblendet) {
+    zeigeNachricht(`📸 BLITZ! ${geblendet === 1 ? 'Ein Monster ist' : geblendet + ' Monster sind'} geblendet!`, 2, '#ffd166');
+    const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, spielerKoerper.position) < 15);
+    if (zeuge) sagen(zeuge, 'volltreffer', {}, 1);
+  } else if (starrerDa) zeigeNachricht('🗿 Der Starrer hat Steinaugen – Blitzen hilft nicht! Schau ihn einfach an!', 2.5, '#c9c3ff');
+}
 // Ducken: Der Roboter wird kleiner (passt unter Tische), leiser und schwerer zu sehen
 function ducken(an) {
   if (an === geduckt) return;
@@ -2359,6 +2552,9 @@ function update(dt) {
   for (const h of helfer) if (h.body.position.y < -2) { h.body.position.set(RAUM / 2, 0.5, haus.laster.z1 + 2); h.body.velocity.set(0, 0, 0); }
   if (spielerKoerper.position.y < -2) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
   for (const m of monster) updateMonster(m, dt);
+  updateSchussSpuren(dt);
+  blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
+  if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
 
   // Neue Schätze im Transporter?
   for (const s of schaetze) {
@@ -2420,7 +2616,7 @@ function neuesSpiel() {
 function starteLevel() {
   baueHaus();
   energie = 100; ausdauer = AUSDAUER_MAX;
-  spielZeit = 0; pause = false; zielGemeldet = false;
+  spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   zustand = 'spiel';
   zeigeNachricht(`Level ${level}: Bring Schätze für ${euro(ld.ziel)} zum Transporter! 🚚`, 4);
   mausFangen();
@@ -2481,6 +2677,8 @@ function aufBildschirm(v) {
 }
 
 function zeichneHUD() {
+  // Weiß blitzen bei der Blitzlampe
+  if (blitzHell > 0) { ctx.fillStyle = `rgba(255,255,240,${blitzHell * 0.85})`; ctx.fillRect(0, 0, W, H); }
   // Rot blitzen, wenn du getroffen wurdest
   if (schadenBlitz > 0) { ctx.fillStyle = `rgba(255,0,0,${schadenBlitz * 0.5})`; ctx.fillRect(0, 0, W, H); }
   if (energie < 35) {
@@ -2541,6 +2739,11 @@ function zeichneHUD() {
   text('⚡', 30, H - 26, 14, '#fff', 'center', false);
   balken(48, H - 32, 200, 10, ausdauer / AUSDAUER_MAX, '#ffd166');
   if (geduckt) text('🦆 Geduckt – leise und schwer zu sehen', 272, H - 30, 13, '#c9c3ff', 'left');
+  // Blitzlampe-Ladung
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, H - 104, 250, 26, 10); ctx.fill();
+  text('📸', 30, H - 91, 14, '#fff', 'center', false);
+  balken(48, H - 97, 160, 12, blitzLadung, blitzLadung >= 1 ? '#fff6b0' : '#8a8f9e');
+  text(blitzLadung >= 1 ? 'F: Blitz!' : 'lädt ...', 214, H - 91, 11, blitzLadung >= 1 ? '#fff6b0' : '#8a8f9e', 'left', false);
   // Funk: Was die Helfer gerade sagen (Untertitel)
   funk.forEach((f, k) => {
     ctx.globalAlpha = Math.min(1, f.t);
@@ -2621,8 +2824,8 @@ function zeichneTitel() {
   zeichneRoboter(W / 2, 250, 1.5);
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
   text('Hol die Schätze aus dem Spukhaus und bring sie zum Transporter 🚚', W / 2, 355, 17, '#fff', 'center', false);
-  text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻👂🗿', W / 2, 380, 14, '#ffb4b4', 'center', false);
-  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!)', W / 2, 425, 13, '#c9c3ff', 'center', false);
+  text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻👂🗿🤠', W / 2, 380, 14, '#ffb4b4', 'center', false);
+  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren', W / 2, 446, 13, '#c9c3ff', 'center', false);
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Den Starrer nicht aus den Augen lassen!', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
@@ -2683,6 +2886,7 @@ addEventListener('keydown', e => {
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   if (k === 'm') tonAn = !tonAn;
+  if (k === 'f') blitzen();
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
