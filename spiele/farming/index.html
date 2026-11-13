@@ -67,6 +67,33 @@ button {
     font-size: 0.9em;
 }
 button.aktiv { background: #ffd166; font-weight: bold; }
+button:disabled { opacity: 0.5; cursor: default; }
+#haendler {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 14px 18px;
+    width: min(440px, 90vw);
+    max-height: 80vh;
+    overflow-y: auto;
+    display: none;
+    z-index: 5;
+}
+#haendler h3 { margin: 0 0 8px; }
+.angebot { background: #ffffff14; border-radius: 8px; padding: 8px; margin-bottom: 8px; line-height: 1.5; }
+#fadenkreuz {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: #ffffffcc;
+    box-shadow: 0 0 3px #000;
+    display: none;
+    pointer-events: none;
+}
 </style>
 </head>
 <body>
@@ -75,8 +102,8 @@ button.aktiv { background: #ffd166; font-weight: bold; }
 <a href="../../">← Zur Übersicht</a>
 <h2>🌾 Farming Game</h2>
 💶 Geld: <b><span id="money">250000</span> €</b><br>
-🚜 Fahrzeug: Fendt<br>
-📍 Modus: <span id="mode">Fahren</span><br>
+🚜 Fahrzeug: <span id="fahrzeug">-</span><br>
+📍 Modus: <span id="mode">Fahren</span> · <span id="ansicht" class="klein"></span><br>
 🔧 Gerät: <span id="geraet">-</span><br>
 ⏱️ Tempo: <b><span id="tempo">0</span> km/h</b><br>
 ⛽ Diesel: <span id="dieselText" class="klein"></span>
@@ -87,6 +114,7 @@ button.aktiv { background: #ffd166; font-weight: bold; }
 <div class="balken"><div id="tank"></div></div>
 📊 Kornpreis: <span id="preis"></span><br>
 <button id="btn-bau">🏗️ Baumodus</button>
+<button id="btn-haendler">🛒 Händler</button>
 <button id="btn-neu">🔄 Neues Spiel</button>
 <div id="bauleiste">
   <button id="bau-schuppen">🏠 Schuppen 10.000 €</button>
@@ -96,14 +124,23 @@ button.aktiv { background: #ffd166; font-weight: bold; }
 </div>
 
 <div id="help" class="box">
-<b>So geht's:</b> 🟫 Pflügen → 🌱 Säen → ⏳ Wachsen → 🌾 Ernten → 🏪 Verkaufen<br>
-W A S D / Pfeile = Fahren · Leertaste = Bremsen<br>
+<b>So geht's:</b> 🟫 Pflügen → 🌱 Säen → ⏳ Wachsen → 🌾 Ernten → 🛢️ Silo oder 🏪 Verkaufen<br>
+W A S D / Pfeile = Fahren/Laufen · Leertaste = Bremsen · Shift = Rennen / Turbo<br>
 1 = Pflug · 2 = Sämaschine · 3 = Erntevorsatz<br>
-Maus ziehen = Kamera drehen · Mausrad = Zoom<br>
+F = First Person an/aus · Maus ziehen = Umschauen · Mausrad = Zoom<br>
 E = Ein-/Aussteigen · K = Feld kaufen<br>
-Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken<br>
+Beim Silo: L = Einlagern · U = Holen<br>
+Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken · N = Händler<br>
 B = Baumodus · R = Gebäude drehen · M = Ton an/aus
 </div>
+
+<div id="haendler" class="box">
+<h3>🛒 Fahrzeug-Händler</h3>
+<div id="haendlerListe"></div>
+<button id="haendler-zu">✖ Schließen</button>
+</div>
+
+<div id="fadenkreuz"></div>
 
 <div id="meldung" class="box"></div>
 <div id="hinweis" class="box"></div>
@@ -118,6 +155,6 @@ B = Baumodus · R = Gebäude drehen · M = Ton an/aus
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=2"></script>
+<script type="module" src="spiel.js?v=3"></script>
 </body>
 </html>
