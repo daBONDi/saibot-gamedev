@@ -3527,7 +3527,7 @@ const MP_RATE = 15;
 const MP_ABSTIMM_ZEIT = 60;          // So viele Sekunden hat man beim Treffen zum Abstimmen
 const mp = {
   aktiv: false, rolle: null, code: '', peer: null, conn: null, ich: '', andere: new Map(), takt: 0,
-  stimmen: new Map(), treffenStart: 0, ergebnisZeit: 0, gewaehlt: false, fortschritt: 0, hostZustand: 'titel', letzterZustand: 'titel', chatZeit: 0,
+  stimmen: new Map(), treffenStart: 0, ergebnisZeit: 0, gewaehlt: false, fortschritt: 0, hostZustand: 'titel', letzterZustand: 'titel', chatZeit: -9,
 };
 const r1 = v => Math.round(v * 10) / 10;
 const $mp = id => document.getElementById(id);
@@ -3606,7 +3606,7 @@ function mpNeuerGast(conn) {
     while (belegt.has(nr)) nr++;
     if (nr >= MP_MAX) { conn.send({ t: 'voll' }); setTimeout(() => conn.close(), 500); return; }
     // Jeder Gast bekommt den Namen und die Farbe vom Schaf, das er später spielt
-    const g = { id: conn.peer, conn, nr, name: NAMEN[nr - 1], farbe: FARBEN[nr - 1], schaf: null, letzterChat: 0 };
+    const g = { id: conn.peer, conn, nr, name: NAMEN[nr - 1], farbe: FARBEN[nr - 1], schaf: null, letzterChat: -9 };
     mp.andere.set(g.id, g);
     conn.send({ t: 'hallo', nr, name: g.name, farbe: g.farbe, code: mp.code });
     mpLobbySenden(); mpLobbyZeigen();
