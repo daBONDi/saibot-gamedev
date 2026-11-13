@@ -545,6 +545,129 @@ function baueRad(K, x, y, z, r, b, lenkt) {   // lenkt: 1 = lenkt mit, -1 = lenk
   rad.add(new THREE.Mesh(new THREE.BoxGeometry(b + 0.06, r * 0.3, r * 0.3), mat(0x555555)));   // Nabe (damit man das Drehen sieht)
   return { lenker, rad, r, lenkt };
 }
+// Die Traktor-Kabine: Rahmen, Scheiben, Dach mit Rundumleuchte, Türen – und innen Sitz, Lenkrad, Armaturenbrett mit Bildschirm!
+// (Kabine: links/rechts x = ±0,8 · vorne z = -0,4 · hinten z = 1,3 · Boden y = 1,6 · Dach y = 3,15)
+const scheibenMat = new THREE.MeshStandardMaterial({ color: 0x9fd4e6, transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false });
+function baueKabine(K, farbe, dunkler) {
+  const rahmen = mat(0x1c1f22, { roughness: 0.6 }), gummi = mat(0x111111), grau = mat(0x55595e, { metalness: 0.4, roughness: 0.5 });
+  const X = 0.8, Z1 = -0.4, Z2 = 1.3, Y1 = 1.6, Y2 = 3.1, mz = (Z1 + Z2) / 2, h = Y2 - Y1, my = (Y1 + Y2) / 2;
+  // Boden (Gummimatte) und Unterbau
+  kasten(K, 0, Y1 - 0.03, mz, 2 * X, 0.08, Z2 - Z1, gummi);
+  // Rahmen: 4 Ecksäulen, 2 Türsäulen in der Mitte, oben und unten rundherum
+  for (const x of [-X, X]) {
+    for (const z of [Z1, Z2]) kasten(K, x, my, z, 0.07, h, 0.07, rahmen);
+    kasten(K, x, my, 0.55, 0.06, h, 0.06, rahmen);                     // Türsäule
+    kasten(K, x, Y1 + 0.35, mz, 0.06, 0.06, Z2 - Z1, rahmen);           // Querstrebe unten
+  }
+  for (const z of [Z1, Z2]) kasten(K, 0, Y1 + 0.35, z, 2 * X, 0.06, 0.06, rahmen);
+  // Scheiben (durchsichtig, man sieht von innen und außen durch)
+  const scheibe = (x, y, z, b, hh, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(b, hh), scheibenMat); m.position.set(x, y, z); m.rotation.y = ry; m.renderOrder = 2; K.add(m); };
+  scheibe(0, my + 0.1, Z1, 2 * X - 0.05, h - 0.2, 0);                   // Frontscheibe (bis fast unten – gute Sicht!)
+  scheibe(0, my + 0.15, Z2, 2 * X - 0.05, h - 0.3, 0);                  // Heckscheibe
+  for (const x of [-X, X]) { scheibe(x, my + 0.1, (Z1 + 0.55) / 2, 0.92, h - 0.2, Math.PI / 2); scheibe(x, my + 0.1, (0.55 + Z2) / 2, 0.72, h - 0.2, Math.PI / 2); }
+  // Türgriffe (links ist die Tür)
+  kasten(K, -X - 0.04, Y1 + 0.75, 0.42, 0.04, 0.05, 0.16, grau, false);
+  kasten(K, -X - 0.02, my, (Z1 + 0.55) / 2, 0.02, h - 0.1, 0.02, rahmen, false);   // Türdichtung
+  // Dach: zweistufig, mit Lüftungsklappe, Arbeitsscheinwerfern, Antenne und Rundumleuchte
+  kasten(K, 0, Y2 + 0.05, mz, 2 * X + 0.15, 0.1, Z2 - Z1 + 0.25, dunkler);
+  kasten(K, 0, Y2 + 0.14, mz, 2 * X - 0.1, 0.08, Z2 - Z1 - 0.05, farbe);
+  kasten(K, 0, Y2 + 0.21, mz + 0.15, 0.6, 0.06, 0.5, 0x222222);                                      // Lüftung
+  const lichtMat = new THREE.MeshBasicMaterial({ color: 0xfff6c0 });
+  for (const x of [-0.55, -0.2, 0.2, 0.55]) { kasten(K, x, Y2 + 0.05, Z1 - 0.13, 0.2, 0.12, 0.08, 0x222222, false); kasten(K, x, Y2 + 0.05, Z1 - 0.175, 0.15, 0.08, 0.01, lichtMat, false); }
+  for (const x of [-0.5, 0.5]) { kasten(K, x, Y2 + 0.05, Z2 + 0.13, 0.2, 0.12, 0.08, 0x222222, false); kasten(K, x, Y2 + 0.05, Z2 + 0.175, 0.15, 0.08, 0.01, lichtMat, false); }
+  const antenne = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.7, 6), gummi);
+  antenne.position.set(-0.6, Y2 + 0.5, Z2 - 0.1); antenne.rotation.x = 0.15; K.add(antenne);
+  const rundumMat = new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff6a00, emissiveIntensity: 0.2, transparent: true, opacity: 0.9 });
+  const rundum = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.18, 12), rundumMat);
+  rundum.position.set(0.55, Y2 + 0.32, Z2 - 0.15); K.add(rundum);
+  kasten(K, 0.55, Y2 + 0.22, Z2 - 0.15, 0.18, 0.04, 0.18, 0x222222, false);
+  // Scheibenwischer
+  const wischer = new THREE.Group(); wischer.position.set(0.1, Y1 + 0.45, Z1 - 0.02); K.add(wischer);
+  kasten(wischer, 0, 0.4, 0, 0.03, 0.8, 0.02, gummi, false);
+  wischer.rotation.z = 0.9;
+  // Spiegel an Armen
+  for (const s of [-1, 1]) {
+    kasten(K, s * (X + 0.15), Y2 - 0.25, Z1 + 0.05, 0.3, 0.04, 0.04, rahmen, false);
+    kasten(K, s * (X + 0.32), Y2 - 0.38, Z1 + 0.05, 0.05, 0.32, 0.2, rahmen, false);
+    kasten(K, s * (X + 0.32), Y2 - 0.38, Z1 + 0.1, 0.03, 0.28, 0.01, mat(0xbfd8e8, { metalness: 0.9, roughness: 0.05 }), false);
+  }
+  // Aufstieg: zwei Trittstufen und ein Haltegriff links
+  for (const [y, z] of [[0.75, 0.0], [1.2, 0.0]]) kasten(K, -1.22, y, z, 0.3, 0.05, 0.4, grau, false);   // (vor dem Hinterrad)
+  kasten(K, -X - 0.08, Y1 + 0.7, -0.05, 0.04, 0.9, 0.04, grau, false);
+
+  // ===== Innen =====
+  // Sitz mit Lehne, Kopfstütze und Armlehne
+  kasten(K, 0, 2.0, 0.85, 0.52, 0.14, 0.5, 0x2a2a2a);                  // Sitzfläche
+  kasten(K, 0, 1.8, 0.85, 0.2, 0.3, 0.2, grau);                        // Federung
+  kasten(K, 0, 2.38, 1.12, 0.5, 0.65, 0.12, 0x2a2a2a);                 // Lehne
+  kasten(K, 0, 2.8, 1.14, 0.3, 0.18, 0.1, 0x2a2a2a);                   // Kopfstütze
+  kasten(K, 0.33, 2.15, 0.82, 0.12, 0.08, 0.5, 0x333333);              // Armlehne rechts ...
+  kasten(K, 0.33, 2.21, 0.66, 0.1, 0.05, 0.14, 0x111111, false);       // ... mit Bedienfeld
+  for (let k = 0; k < 3; k++) kasten(K, 0.31 + k * 0.025, 2.24, 0.62 + k * 0.03, 0.015, 0.01, 0.015, new THREE.MeshBasicMaterial({ color: [0x4ade80, 0xffd166, 0xff6b6b][k] }), false);
+  const joystick = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), mat(0xd23c2a));
+  joystick.position.set(0.34, 2.3, 0.75); K.add(joystick);
+  kasten(K, 0.34, 2.24, 0.75, 0.02, 0.1, 0.02, gummi, false);
+  // Armaturenbrett (vorne) mit zwei Rundinstrumenten und einem Bildschirm
+  const armatur = kasten(K, 0, 2.12, -0.12, 0.9, 0.5, 0.3, 0x24282c);
+  armatur.rotation.x = 0.25;
+  kasten(K, 0, 1.75, -0.2, 0.4, 0.3, 0.25, 0x24282c);                  // Lenksäulen-Fuß
+  // Lenkrad an der Lenksäule (dreht sich beim Lenken!)
+  const saeule = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.55, 8), gummi);
+  saeule.position.set(0, 2.2, 0.12); saeule.rotation.x = -0.75; K.add(saeule);
+  const lenkHalter = new THREE.Group(); lenkHalter.position.set(0, 2.4, 0.32); lenkHalter.rotation.x = -0.85; K.add(lenkHalter);
+  const lenkrad = new THREE.Group(); lenkHalter.add(lenkrad);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.022, 8, 24), gummi); lenkrad.add(ring);
+  for (const w of [0, 2.1, -2.1]) { const speiche = kasten(lenkrad, Math.sin(w) * 0.095, Math.cos(w) * -0.095, 0, 0.025, 0.19, 0.02, grau, false); speiche.rotation.z = -w; }
+  kasten(lenkrad, 0, 0, 0, 0.07, 0.07, 0.04, farbe, false);                   // Hupe in der Mitte
+  kasten(lenkrad, 0, 0.19, 0.01, 0.04, 0.03, 0.03, 0xffd166, false);          // Markierung oben (damit man das Drehen sieht)
+  // Bildschirm (zeigt Tempo, Diesel, Korn – live!)
+  const bildCanvas = document.createElement('canvas'); bildCanvas.width = 256; bildCanvas.height = 128;
+  const bildTex = new THREE.CanvasTexture(bildCanvas); bildTex.colorSpace = THREE.SRGBColorSpace;
+  const bild = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.17), new THREE.MeshBasicMaterial({ map: bildTex, toneMapped: false }));
+  bild.position.set(0.32, 2.47, -0.02); bild.rotation.set(-0.35, -0.25, 0); K.add(bild);
+  kasten(K, 0.32, 2.47, -0.035, 0.37, 0.2, 0.02, 0x111111, false).rotation.set(-0.35, -0.25, 0);   // Bildschirm-Rahmen
+  // Rundinstrumente: Tacho mit Nadel und Drehzahl
+  const nadeln = [];
+  for (const x of [-0.14, 0.14]) {
+    const skala = new THREE.Mesh(new THREE.CircleGeometry(0.065, 24), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+    skala.position.set(x, 2.27, 0.11); skala.rotation.x = -0.5; K.add(skala);   // Schräg zum Fahrer hin
+    const ringI = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.008, 6, 24), grau); ringI.position.copy(skala.position); ringI.rotation.copy(skala.rotation); K.add(ringI);
+    const nadelG = new THREE.Group(); nadelG.position.copy(skala.position); nadelG.rotation.copy(skala.rotation); nadelG.translateZ(0.003); K.add(nadelG);
+    const nadel = kasten(nadelG, 0, 0.025, 0, 0.006, 0.05, 0.002, new THREE.MeshBasicMaterial({ color: 0xd23c2a }), false);
+    nadeln.push(nadelG);
+  }
+  // Pedale, Schalthebel und Deckenkonsole mit Radio
+  for (const x of [-0.18, 0.14, 0.24]) kasten(K, x, 1.72, -0.28, 0.08, 0.14, 0.04, grau, false);
+  const hebel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.4, 6), grau);
+  hebel.position.set(-0.38, 2.0, 0.6); hebel.rotation.x = 0.3; K.add(hebel);
+  const knauf = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), gummi); knauf.position.set(-0.38, 2.2, 0.66); K.add(knauf);
+  kasten(K, 0, Y2 - 0.1, Z1 + 0.18, 0.9, 0.12, 0.3, 0x2a2e33, false);   // Deckenkonsole
+  kasten(K, 0, Y2 - 0.16, Z1 + 0.28, 0.3, 0.06, 0.01, new THREE.MeshBasicMaterial({ color: 0x55c3ff }), false);   // Radio-Anzeige
+  // Feuerlöscher hinter dem Sitz
+  const loescher = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.35, 10), mat(0xd23c2a)); loescher.position.set(0.55, 1.8, 1.15); K.add(loescher);
+  return { lenkrad, nadeln, rundumMat, bildCanvas, bildTex, wischer };
+}
+function malBildschirm(fz) {   // Der Bildschirm in der Kabine
+  if (!fz.bildCanvas) return;
+  const g = fz.bildCanvas.getContext('2d'), W = 256, H = 128;
+  g.fillStyle = '#0b1a14'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#7cf5a0'; g.font = 'bold 44px Arial'; g.textAlign = 'left'; g.textBaseline = 'top';
+  g.fillText(`${Math.round(Math.abs(fz.speed) * 3.6)}`, 10, 6);
+  g.font = 'bold 16px Arial'; g.fillText('km/h', 12, 52);
+  g.font = '15px Arial'; g.fillStyle = '#ffffff';
+  g.fillText(`${GERAETE[fz.werkzeug].emoji} ${GERAETE[fz.werkzeug].name}${fz.arbeitet ? ' ⬇' : ''}`, 110, 10);
+  const balkenMalen = (y, anteil, farbe, text) => {
+    g.fillStyle = '#ffffff22'; g.fillRect(110, y, 136, 12);
+    g.fillStyle = farbe; g.fillRect(110, y, 136 * Math.max(0, Math.min(1, anteil)), 12);
+    g.fillStyle = '#ffffff'; g.font = '12px Arial'; g.fillText(text, 110, y + 14);
+  };
+  balkenMalen(36, fz.diesel / fz.typ.dieselMax, fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0', `⛽ ${Math.round(fz.diesel)} l`);
+  balkenMalen(70, kornDrin(fz) / kornPlatz(fz), '#e3b341', `🌾 ${kg(kornDrin(fz))}`);
+  g.fillStyle = '#ffffff'; g.font = '13px Arial';
+  if (fz.typ.saatMax) g.fillText(`🌱 ${kg(fz.saat)}`, 10, 80);
+  g.fillStyle = '#7cf5a0'; g.fillText(fz.typ.name, 10, 104);
+  fz.bildTex.needsUpdate = true;
+}
 function baueTraktor(typ, K) {
   const farbe = typ.farbe, dunkler = new THREE.Color(farbe).multiplyScalar(0.65).getHex();
   kasten(K, 0, 1, 0, 2.3, 1.1, 3.5, farbe);                       // Körper
@@ -552,16 +675,10 @@ function baueTraktor(typ, K) {
   kasten(K, 0, 0.75, -2.0, 1.4, 0.5, 0.35, 0x333333);             // Frontgewicht
   kasten(K, 0, 1.15, -1.83, 1.3, 0.6, 0.06, 0x1a1a1a);            // Kühlergrill
   for (let k = 0; k < 5; k++) kasten(K, 0, 0.92 + k * 0.11, -1.87, 1.2, 0.03, 0.03, 0x666666, false);
-  kasten(K, 0, 2.1, 0.45, 1.6, 0.12, 1.6, farbe);                 // Kabine: Boden ...
-  kasten(K, 0, 3.0, 0.45, 1.7, 0.12, 1.7, dunkler);               // ... Dach
-  for (const [x, z] of [[-0.75, -0.3], [0.75, -0.3], [-0.75, 1.2], [0.75, 1.2]]) kasten(K, x, 2.55, z, 0.1, 0.9, 0.1, 0x233e39);
-  kasten(K, 0, 2.55, 0.45, 1.45, 0.85, 1.45, glasMat, false);     // Glas
-  kasten(K, 0, 2.25, 0.85, 0.5, 0.12, 0.5, 0x222222, false);      // Sitz
-  const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.025, 6, 16), mat(0x111111));
-  lenkrad.position.set(0, 2.55, 0.15); lenkrad.rotation.x = -1.0; K.add(lenkrad);
   kasten(K, 0.75, 2.2, -1.3, 0.12, 1.4, 0.12, 0x222222);          // Auspuff
+  kasten(K, 0.75, 2.95, -1.3, 0.16, 0.1, 0.16, 0x111111);         // Auspuff-Klappe
   for (const x of [-0.6, 0.6]) kasten(K, x, 1.25, -1.82, 0.3, 0.2, 0.05, new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), false);   // Lichter
-  for (const x of [-0.95, 0.95]) kasten(K, x, 2.75, -0.45, 0.06, 0.25, 0.04, 0x111111, false);   // Spiegel
+  const kabine = baueKabine(K, farbe, dunkler);
   const raeder = [];
   for (const x of [-1.2, 1.2]) {
     raeder.push(baueRad(K, x, 0.55, -1.15, 0.55, 0.4, 1));        // Vorne: klein, lenkt
@@ -569,14 +686,14 @@ function baueTraktor(typ, K) {
     kasten(K, x * 1.1, 1.61, 1.05, 0.7, 0.08, 1.25, farbe);       // Kotflügel
   }
   if (typ.turbo) {   // Flitzer: Spoiler und Rennstreifen
-    kasten(K, 0, 3.15, 1.25, 1.9, 0.08, 0.35, 0x111111);
+    kasten(K, 0, 3.4, 1.5, 1.9, 0.08, 0.3, 0x111111);
     kasten(K, 0, 1.56, -0.2, 0.4, 0.02, 3.4, 0xffffff, false);
   }
   if (typ.allrad) {   // Kraftprotz: Zusatz-Scheinwerfer auf dem Dach und Zwillingsräder
-    for (const x of [-0.5, -0.2, 0.2, 0.5]) kasten(K, x, 3.12, -0.3, 0.18, 0.14, 0.1, new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), false);
+    for (const x of [-0.5, -0.2, 0.2, 0.5]) kasten(K, x, 3.33, -0.42, 0.18, 0.14, 0.1, new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), false);
     for (const x of [-1.85, 1.85]) raeder.push(baueRad(K, x, 0.78, 1.05, 0.78, 0.45, 0));
   }
-  return { raeder, auspuff: [0.75, 3.0, -1.3], sitz: [0, 2.85, 0.75], radstand: 2.3 };
+  return { raeder, auspuff: [0.75, 3.05, -1.3], sitz: [0, 2.85, 0.8], radstand: 2.3, ...kabine };
 }
 function baueDrescher(typ, K) {
   const gelb = typ.farbe;
@@ -850,7 +967,7 @@ let spielerVy = 0, amBoden = true;   // Hüpfen: Geschwindigkeit nach oben, und 
 const SPRUNG_KRAFT = 6.5, SCHWERKRAFT = 18;
 function farmerPose(t, sitzt, laeuft, dt, inLuft = false) {
   if (sitzt) {
-    t.beinL.rotation.x = t.beinR.rotation.x = Math.PI / 2;   // Beine nach vorne (sitzen)
+    t.beinL.rotation.x = t.beinR.rotation.x = 1.25;   // Beine nach vorne, Füße auf den Pedalen (sitzen)
     t.armL.rotation.x = t.armR.rotation.x = 0.9;             // Hände am Lenkrad
     return;
   }
@@ -1886,6 +2003,14 @@ function animate() {
       if (m.userData.haspel && (fz === aktiv || fremd)) m.userData.haspel.rotation.x -= dt * (3 + Math.max(0, fz.speed) * 0.4);
     }
     fz.schild.visible = fz !== aktiv && !fremd;   // Namensschild nur bei geparkten Fahrzeugen
+    if (fz.lenkrad) {   // Kabine lebendig machen
+      const faehrt = fz === aktiv || fremd;
+      fz.lenkrad.rotation.z = fz.lenkWinkel * 4;   // Lenkrad dreht sich mit
+      fz.nadeln[0].rotation.z = 2.2 - Math.min(4.4, Math.abs(fz.speed) * 0.25);   // Tacho
+      fz.nadeln[1].rotation.z = faehrt ? 1.6 - Math.min(3.2, 0.6 + Math.abs(fz.speed) * 0.15 + (fz.arbeitet ? 0.6 : 0)) + Math.sin(spielZeit * 30) * 0.03 : 2.2;   // Drehzahl (zittert ein bisschen)
+      fz.rundumMat.emissiveIntensity = faehrt && fz.arbeitet ? (Math.sin(spielZeit * 12) > 0 ? 3 : 0.2) : 0.2;   // Rundumleuchte blinkt beim Arbeiten
+      if (fz === aktiv) { fz.bildTakt = (fz.bildTakt || 0) - dt; if (fz.bildTakt <= 0) { fz.bildTakt = 0.25; malBildschirm(fz); } }
+    }
   }
   player.visible = !(ansicht === 'ego');   // In First Person siehst du dich nicht selbst
   for (const a of anhaenger) {
