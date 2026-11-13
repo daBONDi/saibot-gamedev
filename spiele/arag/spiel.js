@@ -110,18 +110,32 @@ function levelDaten(n) {
 }
 
 // ===== Hilfsfunktionen =====
-const zufall = (a, b) => a + Math.random() * (b - a);
+// Zufall: Normalerweise echter Zufall. Beim Haus-Bauen aber "Zufall mit Startzahl" (Seed):
+// Gleiche Startzahl = gleiches Haus. So bekommen im Multiplayer alle genau dasselbe Haus!
+let zufallsQuelle = Math.random;
+const rnd = () => zufallsQuelle();
+function mitStartzahl(zahl, machWas) {
+  let a = zahl | 0;
+  zufallsQuelle = () => {   // "Mulberry32" – ein kleiner Zufallsgenerator
+    a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  try { machWas(); } finally { zufallsQuelle = Math.random; }
+}
+const zufall = (a, b) => a + rnd() * (b - a);
 const zufallGanz = (a, b) => Math.floor(zufall(a, b + 1));
-const auswahl = arr => arr[Math.floor(Math.random() * arr.length)];
+const auswahl = arr => arr[Math.floor(rnd() * arr.length)];
 const begrenzt = (v, a, b) => Math.max(a, Math.min(b, v));
 const abstand2D = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 const abstand3D = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) * 2, a.z - b.z);   // Höhe zählt doppelt (anderes Stockwerk = weit weg)
-const mischen = arr => arr.map(x => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+const mischen = arr => arr.map(x => [rnd(), x]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 const ETAGEN_NAMEN = ['Erdgeschoss', '1. Stock', '2. Stock'];
 function gewichtetWaehlen(liste) {
   let summe = 0;
   for (const t of liste) summe += t.haeufig;
-  let r = Math.random() * summe;
+  let r = rnd() * summe;
   for (const t of liste) { r -= t.haeufig; if (r <= 0) return t; }
   return liste[0];
 }
@@ -805,6 +819,7 @@ let rekord = 0;
 try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /* egal */ }
 let haus = null;            // Das aktuelle Haus
 let schaetze = [];          // Alle Schätze im Haus
+let schatzNummer = 0;       // Jeder Schatz bekommt eine Nummer (für den Multiplayer)
 let monster = [];           // Alle Monster
 let helfer = [];            // Deine Helfer-Bots
 let gegriffen = null, halteAbstand = 2.2, schwebend = null;
@@ -1288,7 +1303,7 @@ function hausAufraeumen() {
   for (const s of schussSpuren) szene.remove(s.mesh);
   schussSpuren = [];
   wandKoerper = []; sichtBlocker = []; schaetze = []; monster = []; helfer = []; splitter = []; schwebeTexte = []; funk = [];
-  gegriffen = null; schwebend = null;
+  gegriffen = null; schwebend = null; schatzNummer = 0;
 }
 
 function baueHaus() {
@@ -1318,7 +1333,7 @@ function baueHaus() {
     if (j > 0) { gesperrt.add(tuerSchluessel(unten, unten - haus.breit)); gesperrt.add(tuerSchluessel(oben, oben - haus.breit)); }
   }
   // 2. Türen: Pro Stockwerk erst ein Weg zu jedem Raum (wie ein Labyrinth), dann noch ein paar Abkürzungen
-  const verbinde = (a, b) => haus.tueren.set(tuerSchluessel(a, b), Math.random() < 0.2 ? DURCHGANG_BREITE : TUER_BREITE);
+  const verbinde = (a, b) => haus.tueren.set(tuerSchluessel(a, b), rnd() < 0.2 ? DURCHGANG_BREITE : TUER_BREITE);
   const gleicheEtage = r => nachbarn(r).filter(n => haus.raeume[n].e === haus.raeume[r].e && !gesperrt.has(tuerSchluessel(r, n)));
   for (let e = 0; e < haus.etagen; e++) {
     const wurzel = e === 0 ? haus.start : haus.treppen[e - 1].oben;
@@ -1331,7 +1346,7 @@ function baueHaus() {
       verbinde(r, n); besucht.add(n); stapel.push(n);
     }
   }
-  for (let r = 0; r < anzahl; r++) for (const n of gleicheEtage(r)) if (n > r && !verbunden(r, n) && Math.random() < 0.3) verbinde(r, n);
+  for (let r = 0; r < anzahl; r++) for (const n of gleicheEtage(r)) if (n > r && !verbunden(r, n) && rnd() < 0.3) verbinde(r, n);
   for (const t of haus.treppen) haus.tueren.set(tuerSchluessel(t.unten, t.oben), -1);   // Treppe = Verbindung nach oben
   // Wie breit sind die Türen an jeder Seite? (0 = keine Tür)
   for (const R of haus.raeume) {
@@ -1423,13 +1438,13 @@ function raumEinrichten(R) {
   const liste = mischen(art.ecken);
   viertel.forEach((q, k) => inViertel(R, q, MOEBEL[liste[k % liste.length]]()));
   // Teppich in der Mitte
-  if (art.teppich && Math.random() < 0.7) {
+  if (art.teppich && rnd() < 0.7) {
     const t = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.2), new THREE.MeshStandardMaterial({ map: teppichTextur, roughness: 1 }));
     t.rotation.x = -Math.PI / 2; t.rotation.z = auswahl([0, Math.PI / 2]); t.position.set(cx, b0 + 0.006, cz + (treppe ? 1 : 0)); t.receiveShadow = true;
     hausGruppe.add(t);
   }
   // Licht: Kronleuchter oder einfache Glühbirne (nicht überall – manche Räume sind stockdunkel!)
-  if (Math.random() < 0.5 && lampeHinzu(cx, b0 + WAND_HOEHE - 0.5, cz, art.kronleuchter ? '#ffd9a0' : '#ffcf8a', 1.4, 11, Math.random() < 0.4)) {
+  if (rnd() < 0.5 && lampeHinzu(cx, b0 + WAND_HOEHE - 0.5, cz, art.kronleuchter ? '#ffd9a0' : '#ffcf8a', 1.4, 11, rnd() < 0.4)) {
     if (art.kronleuchter) {
       const k = new THREE.Group();
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 6, 20), goldMat);
@@ -1454,7 +1469,7 @@ function raumEinrichten(R) {
   }
   // Spinnweben in den oberen Ecken
   for (const [ex, ez, dreh] of [[0.16, 0.16, 0], [RAUM - 0.16, 0.16, -Math.PI / 2], [RAUM - 0.16, RAUM - 0.16, Math.PI], [0.16, RAUM - 0.16, Math.PI / 2]]) {
-    if (Math.random() < 0.55) continue;
+    if (rnd() < 0.55) continue;
     const netz = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: netzTextur, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
     netz.position.set(R.x0 + ex, b0 + WAND_HOEHE - 0.45, R.z0 + ez);
     netz.rotation.y = dreh + Math.PI / 4;
@@ -1467,7 +1482,7 @@ function raumEinrichten(R) {
   for (let k = 0; k < anzahl; k++) {
     const typ = gewichtetWaehlen(SCHAETZE);
     const [sb, sh, st] = typ.groesse;
-    if (!typ.boden && R.ablagen.length && Math.random() < 0.65) {
+    if (!typ.boden && R.ablagen.length && rnd() < 0.65) {
       const a = auswahl(R.ablagen);
       neuerSchatz(typ, a.x + zufall(-a.b / 2, a.b / 2) * 0.7, a.y + sh / 2 + 0.03, a.z + zufall(-a.t / 2, a.t / 2) * 0.7);
       continue;
@@ -1501,7 +1516,7 @@ function wandDeko(R) {
       deko = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), new THREE.MeshBasicMaterial({ map: fensterTextur }));
       deko.position.set(s.x, R.basis + 1.7, s.z);
     } else {
-      if (Math.random() < 0.4) continue;
+      if (rnd() < 0.4) continue;
       deko = new THREE.Group();
       const b = zufall(0.7, 1.2), h = zufall(0.6, 0.9);
       deko.add(new THREE.Mesh(new THREE.BoxGeometry(b + 0.1, h + 0.1, 0.04), goldMat));
@@ -1611,7 +1626,7 @@ function neuerSchatz(typ, x, y, z) {
   body.position.set(x, y, z);
   body.quaternion.setFromEuler(0, zufall(0, Math.PI * 2), 0);
   welt.addBody(body);
-  const s = { typ, mesh, body, wert: wertMax, wertMax, letzterStoss: 0, kaputt: false, zerbrechen: false, geworfen: 0, reserviert: null, getragenVon: null };
+  const s = { id: schatzNummer++, typ, mesh, body, wert: wertMax, wertMax, letzterStoss: 0, kaputt: false, zerbrechen: false, geworfen: 0, reserviert: null, getragenVon: null };
   mesh.traverse(o => { o.userData.schatz = s; });
   body.addEventListener('collide', e => stoss(s, e));
   schaetze.push(s);
@@ -1619,7 +1634,7 @@ function neuerSchatz(typ, x, y, z) {
 }
 // Aua! Ein Schatz ist irgendwo angestoßen
 function stoss(s, e) {
-  if (spielZeit < 3 || s.kaputt || zustand !== 'spiel') return;   // Am Anfang fällt alles noch kurz hin
+  if (spielZeit < 3 || s.kaputt || zustand !== 'spiel' || mp.rolle === 'gast') return;   // (Gäste: rechnet der Gastgeber) Am Anfang fällt alles noch kurz hin
   const tempo = Math.abs(e.contact.getImpactVelocityAlongNormal());
   if (tempo < STOSS_GRENZE || zeit - s.letzterStoss < 0.2) return;
   s.letzterStoss = zeit;
@@ -1635,6 +1650,7 @@ function stoss(s, e) {
 }
 function zerbrechen(s) {
   s.kaputt = true;
+  if (mp.rolle === 'host') mpAnAlle({ t: 'kaputt', id: s.id });
   const vonDir = gegriffen === s;
   if (vonDir) loslassen();
   for (const h of helfer) if (h.auftrag === s) helferLoslassen(h);
@@ -1776,6 +1792,7 @@ function neuesMonster(art, raum) {
 }
 // Jemand hat Krach gemacht! Monster in der Nähe hören das. (Ein Stockwerk dazwischen dämpft den Krach)
 function laerm(x, y, z, staerke) {
+  if (mp.rolle === 'gast') { mpSende({ t: 'l', x: r2(x), y: r2(y), z: r2(z), st: staerke }); return; }
   const quelle = { x, y, z };
   for (const m of monster) {
     if (m.betaeubt > 0 || m.art === 'starrer') continue;
@@ -1809,12 +1826,21 @@ function sichtbaresOpfer(m) {
     const hp = h.body.position, d = abstand3D(m, hp);
     if (d < m.info.sicht && d < bestD && freieSicht(von, new THREE.Vector3(hp.x, hp.y + 0.3, hp.z))) { bestes = { x: hp.x, y: hp.y, z: hp.z, helfer: h }; bestD = d; }
   }
+  for (const g of mpGaeste()) {   // Multiplayer: die anderen Spieler
+    const d = abstand3D(m, g);
+    if (d < m.info.sicht * (g.d ? DUCK_SICHT : 1) && d < bestD && freieSicht(von, new THREE.Vector3(g.x, g.y + 0.4, g.z))) { bestes = { x: g.x, y: g.y, z: g.z, gast: g }; bestD = d; }
+  }
   return bestes;
 }
 // Schaust du gerade auf den Starrer?
 function starrerGesehen(m) {
   if (zustand !== 'spiel') return false;
   const kopf = new THREE.Vector3(m.x, m.y + 1.2, m.z);
+  for (const g of mpGaeste()) {   // Schaut ein anderer Spieler hin? Dann bleibt er auch stehen!
+    if (!g.k) continue;
+    const auge = new THREE.Vector3(g.k[0], g.k[1], g.k[2]), zu = kopf.clone().sub(auge);
+    if (zu.length() < 40 && zu.normalize().dot(new THREE.Vector3(g.r[0], g.r[1], g.r[2])) > 0.55 && freieSicht(auge, kopf)) return true;
+  }
   if (kopf.distanceTo(kamera.position) > 40) return false;
   const p = kopf.clone().project(kamera);
   if (p.z > 1 || Math.abs(p.x) > 1.1 || Math.abs(p.y) > 1.1) return false;   // Nicht im Bild
@@ -1908,6 +1934,13 @@ function updateMonster(m, dt) {
     weg.normalize();
     spielerKoerper.velocity.set(weg.x * 9, 3, weg.z * 9);   // Wegschubsen
   }
+  // ... oder einen anderen Spieler (Multiplayer)
+  for (const g of mpGaeste()) {
+    if (m.angriffPause <= 0 && abstand2D(m.x, m.z, g.x, g.z) < reichweite && Math.abs(g.y - m.y) < 1.2) {
+      m.angriffPause = info.pause;
+      mpTreffer(g, info.schaden, `${info.emoji} ${info.name}`, m, 9);
+    }
+  }
   // ... oder auf einen Helfer
   for (const h of helfer) {
     const hp = h.body.position;
@@ -1939,8 +1972,10 @@ function jaegerZielt(m, dt) {
   m.nachladen -= dt;
   const o = m.opfer;
   if (!o || m.modus !== 'jagen' || zeit - m.opferZeit > 0.35 || m.nachladen > 0) { m.zielen = 0; return false; }
-  const ziel = o.helfer ? o.helfer.body.position : spielerKoerper.position;
+  const ziel = o.helfer ? o.helfer.body.position : o.gast ? { x: o.gast.x, y: o.gast.y + 0.4, z: o.gast.z } : spielerKoerper.position;
   if (o.helfer && o.helfer.kaputt > 0) { m.zielen = 0; return false; }
+  if (o.gast && !mp.andere.has(o.gast.id)) { m.zielen = 0; return false; }
+  m.laserZiel = { x: ziel.x, y: ziel.y, z: ziel.z };
   const d = abstand3D(m, ziel);
   if (d > info.schussWeite) { m.zielen = 0; return false; }
   m.winkel = Math.atan2(ziel.x - m.x, ziel.z - m.z);   // Zum Opfer drehen
@@ -1970,7 +2005,15 @@ function schiessen(m, o, ziel, d) {
       spielerKoerper.velocity.set(weg.x * 7, 2.5, weg.z * 7);
       zeigeNachricht(`💥 Getroffen! -${schaden} Energie`, 1.5, '#ff6b6b');
     } else if (o.helfer) helferKaputt(o.helfer, info, m);
+    else if (o.gast) mpTreffer(o.gast, Math.max(5, schaden), '🤠 Jäger (Schrotflinte!)', m, 7);
   } else if (o.spieler) zeigeNachricht('💨 Knapp daneben!', 1.2, '#ffd166');
+  if (mp.rolle === 'host') mpAnAlle({ t: 'schuss', m: monster.indexOf(m), z: [r2(zielV.x), r2(zielV.y), r2(zielV.z)], tr: trifft });
+  schussEffekt(m, zielV, trifft);
+}
+function schussEffekt(m, zielV, trifft) {   // Was man sieht und hört, wenn der Jäger schießt
+  m.blitzZeit = 0.1;
+  if (mp.rolle === 'gast') { monsterSound.schuss(Math.max(0.35, monsterLautstaerke(m))); wackeln = Math.max(wackeln, 0.15); }
+  const mund = new THREE.Vector3(m.x + Math.sin(m.winkel) * 0.95 + Math.cos(m.winkel) * 0.2, m.y + 1.28, m.z + Math.cos(m.winkel) * 0.95 - Math.sin(m.winkel) * 0.2);
   // Schrotkugeln als kurze leuchtende Striche
   for (let k = 0; k < 7; k++) {
     const streu = trifft ? 0.3 : 1.4;
@@ -2021,8 +2064,8 @@ function zeigeMonster(m) {
     // Roter Ziel-Laser (blinkt schneller, kurz bevor er schießt!)
     const L = g.userData.laser;
     L.visible = m.zielen > 0 && (m.zielen < m.info.zielen * 0.6 || Math.sin(zeit * 40) > 0);
-    if (L.visible && m.opfer) {
-      const ziel = m.opfer.helfer ? m.opfer.helfer.body.position : spielerKoerper.position;
+    if (L.visible && m.laserZiel) {
+      const ziel = m.laserZiel;
       const pos = L.geometry.attributes.position;
       pos.setXYZ(1, 0, ziel.y + 0.1 - m.y, abstand2D(m.x, m.z, ziel.x, ziel.z));
       pos.needsUpdate = true;
@@ -2082,6 +2125,10 @@ function sagen(h, art, werte = {}, wichtig = 0) {
   if (h.redePause > 0 && wichtig < 2 && !(wichtig === 1 && h.redePause < 2)) return;
   let satz = auswahl(SAETZE[art]);
   for (const [k, v] of Object.entries(werte)) satz = satz.replace(`{${k}}`, v);
+  if (mp.rolle === 'host') mpAnAlle({ t: 'sag', h: helfer.indexOf(h), satz });
+  helferSpricht(h, satz);
+}
+function helferSpricht(h, satz) {
   h.redePause = 4; h.redet = 1.2 + satz.length * 0.05; h.blasenZeit = 2.8;
   malBlase(h, satz);
   const p = h.body.position, lautstaerke = lautBei(p);
@@ -2201,7 +2248,7 @@ function waehleSchatz(h) {
   const p = h.body.position;
   let bester = null, punkte = 0;
   for (const s of schaetze) {
-    if (s.kaputt || s.reserviert || s.getragenVon || gegriffen === s || imLaster(s)) continue;
+    if (s.kaputt || s.reserviert || s.getragenVon || gegriffen === s || s.gastHaelt || imLaster(s)) continue;
     const sp = s.body.position;
     if (sp.y - (etageVon(sp.y) * ETAGE_HOEHE) > 1.6) continue;   // Zu hoch (z. B. auf einem Schrank)
     const wertung = s.wert / (abstand3D(p, sp) * 1.5 + 8);
@@ -2395,7 +2442,8 @@ function werfen() {
   const s = gegriffen, r = new THREE.Vector3();
   kamera.getWorldDirection(r);
   const kraft = WURF_KRAFT / Math.sqrt(Math.max(1, s.typ.masse / 3));
-  s.body.velocity.set(r.x * kraft, r.y * kraft + 1.5, r.z * kraft);
+  if (mp.rolle === 'gast') mpSende({ t: 'wurf', id: s.id, v: [r2(r.x * kraft), r2(r.y * kraft + 1.5), r2(r.z * kraft)] });
+  else s.body.velocity.set(r.x * kraft, r.y * kraft + 1.5, r.z * kraft);
   s.geworfen = 1.5;
   loslassen();
   sound.sprung();
@@ -2403,21 +2451,28 @@ function werfen() {
   laerm(p.x, p.y, p.z, 3);
 }
 // Der Strahl zieht den Schatz zu der Stelle vor dir
-function haltenPhysik() {
-  if (!gegriffen) return;
-  const s = gegriffen, b = s.body;
+function halteZiel() {   // Wo soll der gegriffene Schatz hin? (vor deine Nase)
   const r = new THREE.Vector3();
   kamera.getWorldDirection(r);
   const ziel = kamera.position.clone().addScaledVector(r, halteAbstand);
-  if (s.typ.masse > 10) ziel.y -= 0.3;   // Schwere Sachen hängen ein bisschen durch
+  if (gegriffen && gegriffen.typ.masse > 10) ziel.y -= 0.3;   // Schwere Sachen hängen ein bisschen durch
+  return ziel;
+}
+function haltenPhysik() {
+  if (!gegriffen || mp.rolle === 'gast') return;
+  if (!zieheSchatz(gegriffen, halteZiel())) { loslassen(); zeigeNachricht('Der Strahl ist abgerissen!', 1.5, '#ffd166'); }
+}
+function zieheSchatz(s, ziel) {   // Zieht einen Schatz zum Ziel. false = zu weit weg, Strahl reißt ab
+  const b = s.body;
   const diff = new CANNON.Vec3(ziel.x - b.position.x, ziel.y - b.position.y, ziel.z - b.position.z);
-  if (diff.length() > 3) { loslassen(); zeigeNachricht('Der Strahl ist abgerissen!', 1.5, '#ffd166'); return; }
+  if (diff.length() > 3) return false;
   const maxTempo = 9 / Math.sqrt(Math.max(1, s.typ.masse / 3));
   diff.scale(10, diff);
   if (diff.length() > maxTempo) diff.scale(maxTempo / diff.length(), diff);
   b.velocity.copy(diff);
   b.angularVelocity.scale(0.85, b.angularVelocity);   // Nicht so wild drehen
   b.wakeUp();
+  return true;
 }
 function getroffen(menge, von) {
   if (zustand !== 'spiel') return;
@@ -2428,6 +2483,14 @@ function getroffen(menge, von) {
   loslassen();   // Vor Schreck lässt du alles fallen!
   const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, spielerKoerper.position) < 15);
   if (zeuge) sagen(zeuge, 'aufpassen', {}, 1);
+  if (energie <= 0 && mp.aktiv) {   // Im Multiplayer ist nicht Schluss – du startest neu beim Transporter
+    energie = 100;
+    const L = haus.laster;
+    spielerKoerper.position.set(RAUM / 2 + zufall(-1, 1), KOERPER_RADIUS + 0.3, L.z1 + 2.5);
+    spielerKoerper.velocity.set(0, 0, 0);
+    zeigeNachricht(`🔧 Kaputt (${von})! Neustart beim Transporter ...`, 3, '#ff6b6b');
+    return;
+  }
   if (energie <= 0) {
     energie = 0;
     kaputtGrund = von;
@@ -2443,18 +2506,28 @@ function blitzen() {
   sound.blitz();
   const blickRichtung = new THREE.Vector3();
   kamera.getWorldDirection(blickRichtung);
+  if (mp.rolle === 'gast') {   // Die Monster sind beim Gastgeber – also dorthin schicken
+    const k = kamera.position;
+    mpSende({ t: 'blitz', p: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(blickRichtung.x), r2(blickRichtung.y), r2(blickRichtung.z)] });
+    zeigeNachricht('📸 BLITZ!', 1.5, '#ffd166');
+    return;
+  }
+  blitzVon(kamera.position.clone(), blickRichtung, true);
+}
+function blitzVon(von, blickRichtung, meldung) {
   let geblendet = 0, starrerDa = false;
   for (const m of monster) {
     const kopf = new THREE.Vector3(m.x, m.y + 1.2, m.z);
-    const zu = kopf.clone().sub(kamera.position), d = zu.length();
+    const zu = kopf.clone().sub(von), d = zu.length();
     if (d > BLITZ_WEITE || zu.normalize().dot(blickRichtung) < Math.cos(BLITZ_WINKEL)) continue;
-    if (!freieSicht(kamera.position.clone(), kopf)) continue;
+    if (!freieSicht(von.clone(), kopf)) continue;
     if (!m.info.betaeubbar) { starrerDa = true; continue; }   // Steinaugen kann man nicht blenden ...
     m.betaeubt = Math.max(m.betaeubt, BLITZ_BETAEUBT);
     m.modus = 'wandern'; m.ziel = null; m.zielen = 0;
     schwebeText(m.x, m.y + 2.3, m.z, `💫 ${m.info.name} geblendet!`, '#ffd166');
     geblendet++;
   }
+  if (!meldung) return;
   if (geblendet) {
     zeigeNachricht(`📸 BLITZ! ${geblendet === 1 ? 'Ein Monster ist' : geblendet + ' Monster sind'} geblendet!`, 2, '#ffd166');
     const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, spielerKoerper.position) < 15);
@@ -2534,13 +2607,16 @@ function update(dt) {
   for (const f of funk) f.t -= dt;
   funk = funk.filter(f => f.t > 0);
   musikUpdate(zustand === 'spiel' && !pause ? jaeger()?.art ?? null : null);
-  if (zustand !== 'spiel' || pause) return;
+  mpUpdate(dt);
+  if (mp.rolle === 'gast') { if (zustand === 'spiel') updateAlsGast(dt); return; }
+  if (zustand !== 'spiel' || (pause && !mp.aktiv)) return;   // Im Multiplayer läuft das Spiel auch in der Pause weiter
   spielZeit += dt;
   if (spielZeit > 1.5 && spielZeit - dt <= 1.5 && helfer.length) sagen(auswahl(helfer), 'start', {}, 2);
 
   updateSpieler(dt);
   for (const h of helfer) updateHelfer(h, dt);
   haltenPhysik();
+  mpGastSchaetzeHalten();
   welt.step(1 / 60, dt, 3);
   pruefeBoden();
   for (const s of [...schaetze]) {
@@ -2572,6 +2648,9 @@ function update(dt) {
   if (gejagt() && herzZeit <= 0) { herzZeit = 0.7; sound.herz(0.8); }
   // Abfahren!
   if (tasten['e'] && spielerImLaster() && lasterWert() >= ld.ziel) levelGeschafft();
+  updateEffekte(dt);
+}
+function updateEffekte(dt) {
   // Splitter und Schwebetexte
   for (const sp of splitter) {
     sp.t -= dt;
@@ -2613,8 +2692,10 @@ function neuesSpiel() {
   level = 1; konto = 0;
   starteLevel();
 }
-function starteLevel() {
-  baueHaus();
+function starteLevel(startzahl = Math.floor(Math.random() * 1e9)) {
+  mitStartzahl(startzahl, baueHaus);   // Gleiche Startzahl = gleiches Haus
+  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto }); }
+  if (mp.rolle === 'gast') mpGastVorbereiten();
   energie = 100; ausdauer = AUSDAUER_MAX;
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   zustand = 'spiel';
@@ -2629,6 +2710,7 @@ function levelGeschafft() {
   zustand = 'geschafft';
   loslassen();
   sound.geschafft();
+  if (mp.rolle === 'host') mpAnAlle({ t: 'geschafft', wert, konto, helfer: levelErgebnis.helfer });
   if (document.pointerLockElement) document.exitPointerLock();
 }
 
@@ -2645,6 +2727,7 @@ function zeichne3D() {
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
   for (const m of monster) zeigeMonster(m);
   for (const h of helfer) zeigeHelfer(h);
+  mpZeigeAndere();
   // Flackernde Lampen, Kaminfeuer und Pendel
   hausGruppe.children.forEach(o => {
     if (!o.isPointLight || !o.userData.flackern) return;
@@ -2716,6 +2799,7 @@ function zeichneHUD() {
     text(`🤖 ${h.name} ${h.kaputt > 0 ? '' : '❤️'.repeat(h.leben)}: ${was}`, W - 272, 60 + k * 22, 12, h.kaputt > 0 ? '#8a8f9e' : h.farbe, 'left', false);
   });
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68 + helfer.length * 22, 13, '#fff', 'center', false);
+  mpHUD();
   // Oben Mitte: Pfeil zum Transporter (oder zur Treppe, wenn du oben bist)
   const L = haus.laster;
   let zielX = (L.x1 + L.x2) / 2, zielZ = (L.z1 + L.z2) / 2, zielText = '🚚';
@@ -2844,7 +2928,7 @@ function zeichneGeschafft() {
   const n = levelDaten(level + 1);
   const monsterText = [`${n.geister} 👻`, n.lauscher ? `${n.lauscher} 👂` : '', n.starrer ? `${n.starrer} 🗿` : ''].filter(Boolean).join(' ');
   text(`Nächstes Level: ${n.etagen} Stockwerke mit je ${n.breit}×${n.tief} Räumen, Ziel ${euro(n.ziel)}, Monster: ${monsterText}`, W / 2, 492, 15, '#c9c3ff', 'center', false);
-  text('▶ Klicken für das nächste Level', W / 2, 545, 24, '#7cf5c6');
+  text(mp.rolle === 'gast' ? '⏳ Warte auf den Gastgeber ...' : '▶ Klicken für das nächste Level', W / 2, 545, 24, '#7cf5c6');
 }
 function zeichneKaputt() {
   ctx.fillStyle = 'rgba(25,0,0,0.85)'; ctx.fillRect(0, 0, W, H);
@@ -2856,6 +2940,7 @@ function zeichneKaputt() {
   text('▶ Klicken für ein neues Spiel', W / 2, 470, 24, '#7cf5c6');
 }
 function zeichne() {
+  mpMenueZeigen(zustand === 'titel');
   ctx.clearRect(0, 0, W, H);
   if (zustand === 'titel') { zeichneTitel(); return; }
   zeichne3D();
@@ -2892,11 +2977,11 @@ addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
 canvas.addEventListener('pointerdown', e => {
   tonStart();
-  if (zustand === 'titel') { neuesSpiel(); return; }
-  if (zustand === 'geschafft') { level++; starteLevel(); return; }
+  if (zustand === 'titel') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
+  if (zustand === 'geschafft') { if (mp.rolle !== 'gast') { level++; starteLevel(); } return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
-  if (e.button === 0 && schwebend && !gegriffen) greifen(schwebend);
+  if (e.button === 0 && schwebend && !gegriffen && !(mp.rolle === 'gast' && mpVonAnderemGehalten(schwebend))) greifen(schwebend);
   if (e.button === 2) werfen();
 });
 addEventListener('pointerup', e => { if (e.button === 0) loslassen(); });
