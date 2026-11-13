@@ -58,6 +58,7 @@ const HELFER = [
 ];
 const HELFER_TEMPO = 3.2;        // So schnell fahren die Helfer
 const HELFER_TRAGE_TEMPO = 2.2;  // ... und so schnell, wenn sie was tragen
+const BEIN_LAENGE = 0.3;         // So weit fahren die Roboter-Beine aus (0 = keine Beine)
 const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn er kein Leben mehr hat
 const HELFER_LEBEN = 3;          // So viele Treffer hält ein Helfer aus, bevor er kaputt geht ❤️
 const HELFER_HEILEN = 20;        // Alle 20 Sekunden bekommt ein Helfer ein Leben zurück (0 = nie)
@@ -2142,11 +2143,22 @@ function baueHelferMesh(info) {
   const dunkel = new THREE.MeshStandardMaterial({ color: '#2b3038', metalness: 0.5, roughness: 0.6 });
   const lack = new THREE.MeshStandardMaterial({ color: info.farbe, metalness: 0.4, roughness: 0.4 });
   const leucht = new THREE.MeshBasicMaterial({ color: info.farbe });
-  const teil = (geo, mat, x, y, z, eltern = g) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; eltern.add(m); return m; };
-  // Kettenantrieb mit Rädern
+  // "oben" = alles über den Beinen. Fahren die Beine aus, wird "oben" hochgeschoben.
+  const oben = new THREE.Group(); g.add(oben);
+  const teil = (geo, mat, x, y, z, eltern = oben) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; eltern.add(m); return m; };
+  // Teleskop-Beine: Hüfte (Gelenk) -> Hülse -> silberne Kolbenstange -> Fuß
+  const beine = [];
   for (const s of [-1, 1]) {
-    teil(new THREE.BoxGeometry(0.13, 0.2, 0.6), schwarzMat, s * 0.25, 0.1, 0);
-    for (const z of [-0.22, 0, 0.22]) teil(new THREE.CylinderGeometry(0.075, 0.075, 0.14, 12), metallGrauMat, s * 0.25, 0.1, z).rotation.z = Math.PI / 2;
+    const huefte = new THREE.Group(); g.add(huefte);
+    teil(new THREE.SphereGeometry(0.07, 10, 8), dunkel, 0, 0, 0, huefte);                       // Hüftgelenk
+    teil(new THREE.CylinderGeometry(0.06, 0.06, 0.14, 10), lack, 0, -0.07, 0, huefte);           // Hülse
+    teil(new THREE.TorusGeometry(0.06, 0.012, 6, 14), leucht, 0, -0.14, 0, huefte).rotation.x = Math.PI / 2;   // Leuchtring
+    const kolben = teil(new THREE.CylinderGeometry(0.035, 0.035, 1, 8), metallGrauMat, 0, -0.5, 0, huefte);  // Wird je nach Länge gestreckt
+    const fuss = new THREE.Group(); g.add(fuss);
+    teil(new THREE.BoxGeometry(0.15, 0.07, 0.28), schwarzMat, 0, 0.035, 0.03, fuss);
+    teil(new THREE.BoxGeometry(0.15, 0.03, 0.08), lack, 0, 0.08, 0.13, fuss);                    // Zehenkappe
+    teil(new THREE.CylinderGeometry(0.04, 0.04, 0.16, 10), metallGrauMat, 0, 0.035, -0.1, fuss).rotation.z = Math.PI / 2;   // Ferse/Rad
+    beine.push({ s, huefte, kolben, fuss });
   }
   teil(new THREE.BoxGeometry(0.4, 0.14, 0.5), dunkel, 0, 0.2, 0);                               // Fahrgestell
   // Körper mit Brustplatte, Lämpchen und Akku hinten
@@ -2160,7 +2172,7 @@ function baueHelferMesh(info) {
   const arme = [];
   for (const s of [-1, 1]) {
     teil(new THREE.SphereGeometry(0.06, 10, 8), blech, s * 0.27, 0.6, 0);                       // Schulter
-    const arm = new THREE.Group(); arm.position.set(s * 0.29, 0.6, 0); g.add(arm);
+    const arm = new THREE.Group(); arm.position.set(s * 0.29, 0.6, 0); oben.add(arm);
     teil(new THREE.BoxGeometry(0.06, 0.06, 0.2), blech, 0, 0, 0.1, arm);                        // Oberarm
     teil(new THREE.SphereGeometry(0.04, 8, 6), dunkel, 0, 0, 0.21, arm);                        // Ellbogen
     teil(new THREE.BoxGeometry(0.05, 0.05, 0.16), lack, 0, -0.02, 0.29, arm);                   // Unterarm
@@ -2169,7 +2181,7 @@ function baueHelferMesh(info) {
   }
   // Kopf mit Bildschirm-Gesicht, Ohren und Antenne
   teil(new THREE.CylinderGeometry(0.05, 0.06, 0.1, 10), dunkel, 0, 0.7, 0);                     // Hals
-  const kopf = new THREE.Group(); kopf.position.set(0, 0.88, 0); g.add(kopf);
+  const kopf = new THREE.Group(); kopf.position.set(0, 0.88, 0); oben.add(kopf);
   teil(new THREE.BoxGeometry(0.42, 0.28, 0.32), blech, 0, 0, 0, kopf);
   teil(new THREE.BoxGeometry(0.44, 0.04, 0.34), lack, 0, 0.14, 0, kopf);
   const gesichtCanvas = document.createElement('canvas'); gesichtCanvas.width = 128; gesichtCanvas.height = 64;
@@ -2180,13 +2192,37 @@ function baueHelferMesh(info) {
   const antenne = teil(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: info.farbe }), 0.1, 0.35, 0, kopf);
   // Namensschild und Sprechblase
   const schild = namensSchild(`🤖 ${info.name}`, info.farbe);
-  schild.position.y = 1.35; g.add(schild);
+  schild.position.y = 1.35; oben.add(schild);
   const blasenCanvas = document.createElement('canvas'); blasenCanvas.width = 512; blasenCanvas.height = 128;
   const blasenTex = new THREE.CanvasTexture(blasenCanvas); blasenTex.colorSpace = THREE.SRGBColorSpace;
   const blase = new THREE.Sprite(new THREE.SpriteMaterial({ map: blasenTex, transparent: true, depthWrite: false }));
-  blase.scale.set(2.0, 0.5, 1); blase.position.y = 1.75; blase.visible = false; g.add(blase);
+  blase.scale.set(2.0, 0.5, 1); blase.position.y = 1.75; blase.visible = false; oben.add(blase);
   szene.add(g);
-  return { g, kopf, arme, antenne, lampen, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
+  const T = { g, oben, beine, ausgefahren: BEIN_LAENGE, schrittPhase: Math.random() * 6, kopf, arme, antenne, lampen, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
+  beineAnimieren(T, BEIN_LAENGE, false, 0);
+  return T;
+}
+// Beine bewegen: ziel = wie weit ausgefahren (0 = ganz eingefahren, z. B. beim Ducken). laeuft = Schritte machen
+function beineAnimieren(T, ziel, laeuft, dt) {
+  T.ausgefahren += (ziel - T.ausgefahren) * Math.min(1, dt * 10 || 1);   // Weich ein- und ausfahren (zischhh!)
+  if (laeuft) T.schrittPhase += dt * 11;
+  const hoch = T.ausgefahren;
+  T.oben.position.y = hoch;
+  for (const b of T.beine) {
+    const huefteY = hoch + 0.15;
+    // Beim Laufen: Füße abwechselnd nach vorne und hoch (je weiter ausgefahren, desto größer die Schritte)
+    const welle = Math.sin(T.schrittPhase + (b.s > 0 ? Math.PI : 0)) * (laeuft ? 1 : 0);
+    const schritt = welle * 0.14 * Math.min(1, hoch / 0.15);
+    const heben = laeuft ? Math.max(0, Math.cos(T.schrittPhase + (b.s > 0 ? Math.PI : 0))) * 0.06 * Math.min(1, hoch / 0.15) : 0;
+    b.fuss.position.set(b.s * 0.17, heben, schritt);
+    b.huefte.position.set(b.s * 0.17, huefteY, 0);
+    // Die Kolbenstange geht von der Hüfte bis zum Fuß (schräg, wenn der Fuß vorne oder hinten ist)
+    const dy = huefteY - (heben + 0.07), dz = schritt;
+    const laenge = Math.max(0.01, Math.hypot(dy, dz));
+    b.huefte.rotation.x = -Math.atan2(dz, dy);
+    b.kolben.scale.y = laenge;
+    b.kolben.position.y = -laenge / 2;
+  }
 }
 function neuerHelfer(info, x, z) {
   const body = new CANNON.Body({
@@ -2360,7 +2396,8 @@ function zeigeHelfer(h) {
   T.g.position.set(p.x, p.y - 0.35, p.z);
   T.g.rotation.set(h.kaputt > 0 ? 1.3 : 0, h.winkel, h.wackelt > 0 ? Math.sin(zeit * 25) * 0.35 : 0);   // Kaputt: kippt um · Getroffen: wackelt
   if (h.kaputt > 0) T.g.position.y = p.y - 0.25;
-  const faehrt = Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.3;
+  const faehrt = mp.rolle === 'gast' ? h.zx !== undefined && Math.hypot(h.zx - p.x, h.zz - p.z) > 0.05 : Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.3;
+  beineAnimieren(T, h.kaputt > 0 ? 0 : BEIN_LAENGE, faehrt && h.kaputt <= 0, 1 / 60);   // Kaputt: Beine fahren ein
   T.arme.forEach((a, k) => { a.rotation.x = h.modus === 'tragen' ? -0.5 : 0.9 + (faehrt ? Math.sin(zeit * 8 + k * Math.PI) * 0.15 : 0); });
   // Beim Reden zu dir schauen, sonst nach vorne
   let kopfDreh = 0;
@@ -2379,7 +2416,7 @@ function zeigeHelfer(h) {
   malGesicht(h);
   // Greifstrahl aus der Zange
   if (h.modus === 'tragen' && h.kaputt <= 0) {
-    const von = new THREE.Vector3(p.x + Math.sin(h.winkel) * 0.45, p.y + 0.2, p.z + Math.cos(h.winkel) * 0.45);
+    const von = new THREE.Vector3(p.x + Math.sin(h.winkel) * 0.45, p.y + 0.2 + T.ausgefahren, p.z + Math.cos(h.winkel) * 0.45);
     const nach = new THREE.Vector3().copy(h.auftrag.body.position);
     zeigeStrahl(h.strahl, von, nach, new THREE.Vector3(Math.sin(h.winkel), 0.3, Math.cos(h.winkel)).normalize(), Math.max(...h.auftrag.typ.groesse) * 0.6);
   } else h.strahl.g.visible = false;
@@ -2894,8 +2931,12 @@ function zeichneRoboter(x, y, s, farbe = '#7cf5c6') {   // Ein kleiner ARAG-Robo
   ['#4ade80', '#ffd166', '#ff6b6b'].forEach((c, k) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(-7 + k * 7, 16, 2.5, 0, 7); ctx.fill(); });
   ctx.strokeStyle = '#d7dde6'; ctx.lineWidth = 5; ctx.lineCap = 'round';                // Arme
   ctx.beginPath(); ctx.moveTo(-26, 10); ctx.lineTo(-36, 24); ctx.moveTo(26, 10); ctx.lineTo(36, 24); ctx.stroke();
-  ctx.fillStyle = '#1a1d22'; rr(-30, 36, 60, 14, 7); ctx.fill();                         // Kette
-  ctx.fillStyle = '#5f646d'; for (const k of [-18, 0, 18]) { ctx.beginPath(); ctx.arc(k, 43, 5, 0, 7); ctx.fill(); }
+  for (const s of [-1, 1]) {                                                             // Teleskop-Beine
+    const tritt = Math.sin(zeit * 3 + (s > 0 ? Math.PI : 0) + x) * 3;
+    ctx.fillStyle = '#9aa1ab'; ctx.fillRect(s * 13 - 3, 36, 6, 20 - Math.max(0, tritt));  // Kolbenstange
+    ctx.fillStyle = farbe; rr(s * 13 - 6, 34, 12, 10, 3); ctx.fill();                    // Hülse
+    ctx.fillStyle = '#1a1d22'; rr(s * 13 - 9, 54 - Math.max(0, tritt), 18, 8, 3); ctx.fill();   // Fuß
+  }
   ctx.restore();
 }
 function zeichneTitel() {
@@ -3355,19 +3396,20 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
       Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
     }
     const f = 0.25;
+    const laeuft = Math.hypot(o.x - o.ax, o.z - o.az) > 0.03;
     o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
     o.aw = winkelHin(o.aw, o.w, f);
     const T = o.teile, wink = o.aw + Math.PI;   // Die Kamera schaut nach -Z, die Roboter nach +Z
     T.g.position.set(o.ax, o.ay, o.az);
     T.g.rotation.set(0, wink, 0);
-    T.g.scale.set(1, o.dk ? 0.7 : 1, 1);
+    beineAnimieren(T, o.dk ? 0 : BEIN_LAENGE, laeuft, 1 / 60);   // Geduckt: Beine einfahren!
     const haelt = o.hg >= 0 ? schatzMitId(o.hg) : null;
     T.arme.forEach(a => { a.rotation.x = haelt ? -0.5 : 0.9; });
     T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
     T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
     malGesicht(o);
     if (haelt) {
-      const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55, o.az + Math.cos(wink) * 0.45);
+      const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55 + T.ausgefahren, o.az + Math.cos(wink) * 0.45);
       const nach = new THREE.Vector3().copy(haelt.body.position);
       zeigeStrahl(o.strahl, von, nach, new THREE.Vector3(Math.sin(wink), 0.3, Math.cos(wink)).normalize(), Math.max(...haelt.typ.groesse) * 0.6);
     } else o.strahl.g.visible = false;
