@@ -224,11 +224,92 @@ function bretterTextur(farbe) {   // Holzbretter (senkrechte Streifen mit Fugen)
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1); t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-const barn = kasten(scene, 25, 3.5, 25, 15, 7, 12, new THREE.MeshStandardMaterial({ map: bretterTextur('#a83225'), roughness: 0.95 }));
-const scheunenDach = kasten(scene, 25, 7, 25, 15.4, 8.5, 8.5, 0x5b2a22);
-scheunenDach.rotation.x = Math.PI / 4;
-kasten(scene, 25, 2.2, 18.95, 5, 4.4, 0.1, 0xf2e6c9);   // Tor
-hindernisse.push({ x: 25, z: 25, hb: 7.5, ht: 6 });
+// Die Scheune ist hohl: 4 Wände, vorne ein großes offenes Tor, oben ein Spitzdach. Man kann reingehen und reinfahren!
+const SCHEUNE = { x1: 17.5, x2: 32.5, z1: 19, z2: 31, hoehe: 7, torBreite: 6.5, torHoehe: 5.6 };
+const TANKSTELLE = { x: 31.2, z: 21.6 };   // Die Hof-Tankstelle steht in der Scheune
+{
+  const S = SCHEUNE, d = 0.3, mx = (S.x1 + S.x2) / 2, mz = (S.z1 + S.z2) / 2, H = S.hoehe;
+  const brett = new THREE.MeshStandardMaterial({ map: bretterTextur('#a83225'), roughness: 0.95 });
+  const wand = (x, y, z, b, h, t, hb, ht) => { kasten(scene, x, y, z, b, h, t, brett); if (hb) hindernisse.push({ x, z, hb, ht }); };
+  wand(mx, H / 2, S.z2 - d / 2, S.x2 - S.x1, H, d, (S.x2 - S.x1) / 2, d / 2);            // Hinten
+  wand(S.x1 + d / 2, H / 2, mz, d, H, S.z2 - S.z1, d / 2, (S.z2 - S.z1) / 2);            // Links
+  wand(S.x2 - d / 2, H / 2, mz, d, H, S.z2 - S.z1, d / 2, (S.z2 - S.z1) / 2);            // Rechts
+  const seite = (S.x2 - S.x1 - S.torBreite) / 2;                                         // Vorne: links und rechts vom Tor
+  wand(S.x1 + seite / 2, H / 2, S.z1 + d / 2, seite, H, d, seite / 2, d / 2);
+  wand(S.x2 - seite / 2, H / 2, S.z1 + d / 2, seite, H, d, seite / 2, d / 2);
+  wand(mx, (H + S.torHoehe) / 2, S.z1 + d / 2, S.torBreite, H - S.torHoehe, d);         // Über dem Tor
+  // Die zwei Schiebetore stehen offen (zur Seite geschoben)
+  const torMat = new THREE.MeshStandardMaterial({ map: bretterTextur('#f2e6c9'), roughness: 0.95 });
+  for (const s of [-1, 1]) {
+    kasten(scene, mx + s * (S.torBreite / 2 + 1.6), S.torHoehe / 2, S.z1 - 0.12, 3.2, S.torHoehe, 0.12, torMat);
+    for (const y of [1.2, S.torHoehe - 1.2]) kasten(scene, mx + s * (S.torBreite / 2 + 1.6), y, S.z1 - 0.2, 3.2, 0.12, 0.05, 0xd8cba8, false);   // Querbalken
+  }
+  kasten(scene, mx, S.torHoehe + 0.25, S.z1 - 0.15, S.torBreite + 7, 0.15, 0.15, 0x333333, false);   // Laufschiene
+  // Spitzdach (ein Dreieck, lang gezogen) – innen sieht man die Unterseite
+  const form = new THREE.Shape([new THREE.Vector2(-6.6, 0), new THREE.Vector2(6.6, 0), new THREE.Vector2(0, 4.4)]);
+  const dachGeo = new THREE.ExtrudeGeometry(form, { depth: 15.8, bevelEnabled: false });
+  dachGeo.translate(0, 0, -7.9); dachGeo.rotateY(Math.PI / 2);
+  const dach = new THREE.Mesh(dachGeo, [brett, mat(0x5b2a22, { side: THREE.DoubleSide })]);   // Giebel aus Brettern, Dach dunkelrot
+  dach.position.set(mx, H, mz); dach.castShadow = dach.receiveShadow = true;
+  scene.add(dach);
+  // Innen: Strohboden
+  const stroh = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#b89a52'; g.fillRect(0, 0, 128, 128);
+    for (let k = 0; k < 900; k++) {
+      g.strokeStyle = `hsl(${40 + Math.random() * 12}, ${45 + Math.random() * 25}%, ${45 + Math.random() * 30}%)`;
+      g.beginPath(); const x = Math.random() * 128, y = Math.random() * 128, w = Math.random() * Math.PI;
+      g.moveTo(x, y); g.lineTo(x + Math.cos(w) * 8, y + Math.sin(w) * 8); g.stroke();
+    }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 3); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(S.x2 - S.x1 - 2 * d, S.z2 - S.z1 - 2 * d), new THREE.MeshStandardMaterial({ map: stroh, roughness: 1 }));
+  boden.rotation.x = -Math.PI / 2; boden.position.set(mx, 0.04, mz); boden.receiveShadow = true;
+  scene.add(boden);
+  // Heuballen hinten links (gestapelt)
+  const heuMat = new THREE.MeshStandardMaterial({ map: stroh, color: 0xe8d28a, roughness: 1 });
+  for (let reihe = 0; reihe < 3; reihe++) for (let k = 0; k < 4 - reihe; k++) for (let t = 0; t < 2; t++) {
+    const b = kasten(scene, S.x1 + 1.2 + k * 1.3 + reihe * 0.65, 0.38 + reihe * 0.74, S.z2 - 0.9 - t * 0.9, 1.25, 0.72, 0.85, heuMat);
+    b.rotation.y = ((k + reihe + t) % 3 - 1) * 0.04;
+  }
+  hindernisse.push({ x: S.x1 + 2.9, z: S.z2 - 1.35, hb: 2.8, ht: 1.0 });
+  // Runde Heuballen hinten rechts
+  for (const [x, z] of [[S.x2 - 1.6, S.z2 - 1.6], [S.x2 - 3.5, S.z2 - 1.6]]) {
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 1.3, 20), heuMat);
+    r.rotation.z = Math.PI / 2; r.position.set(x, 0.85, z); r.castShadow = true; scene.add(r);
+    hindernisse.push({ x, z, r: 0.9 });
+  }
+  // Werkbank mit Werkzeug an der rechten Wand
+  kasten(scene, S.x2 - 0.75, 0.9, mz + 2.5, 1.0, 0.1, 3.0, 0x7a5230);
+  for (const z of [-1.3, 1.3]) for (const x of [-0.35, 0.35]) kasten(scene, S.x2 - 0.75 + x, 0.43, mz + 2.5 + z, 0.1, 0.86, 0.1, 0x5a3a20);
+  kasten(scene, S.x2 - 0.5, 1.05, mz + 1.8, 0.3, 0.2, 0.5, 0xc23b22);       // Werkzeugkasten
+  kasten(scene, S.x2 - 0.9, 1.0, mz + 3.2, 0.25, 0.1, 0.25, 0x888888);       // Schraubstock
+  for (let k = 0; k < 4; k++) kasten(scene, S.x2 - d - 0.05, 2.0, mz + 1.6 + k * 0.5, 0.05, 0.9, 0.06, k % 2 ? 0x888888 : 0x5a3a20, false);   // Werkzeug an der Wand
+  hindernisse.push({ x: S.x2 - 0.75, z: mz + 2.5, hb: 0.6, ht: 1.6 });
+  // Mistgabel an der linken Wand
+  kasten(scene, S.x1 + d + 0.1, 1.2, mz - 2, 0.05, 2.2, 0.05, 0x7a5230, false);
+  for (const z of [-0.1, 0, 0.1]) kasten(scene, S.x1 + d + 0.1, 2.45, mz - 2 + z, 0.03, 0.35, 0.03, 0x999999, false);
+  // Hof-Tankstelle: ein liegender Dieseltank mit Zapfsäule
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 2.2, 16), mat(0x2e6b3a, { metalness: 0.3, roughness: 0.5 }));
+  tank.rotation.x = Math.PI / 2; tank.position.set(TANKSTELLE.x, 1.3, TANKSTELLE.z); tank.castShadow = true; scene.add(tank);
+  for (const z of [-0.7, 0.7]) kasten(scene, TANKSTELLE.x, 0.3, TANKSTELLE.z + z, 0.9, 0.6, 0.15, 0x444444);
+  kasten(scene, TANKSTELLE.x - 0.85, 0.9, TANKSTELLE.z - 1.0, 0.3, 1.8, 0.3, 0xd23c2a);   // Zapfsäule
+  kasten(scene, TANKSTELLE.x - 1.0, 1.3, TANKSTELLE.z - 1.0, 0.1, 0.35, 0.1, 0x111111, false);   // Zapfhahn
+  hindernisse.push({ x: TANKSTELLE.x, z: TANKSTELLE.z, r: 1.0 });
+  const tankSchild = schild('⛽ Hof-Tankstelle', '#7cf5a0', 4);
+  tankSchild.position.set(TANKSTELLE.x - 0.5, 3.2, TANKSTELLE.z); scene.add(tankSchild);
+  // Lampe unter dem Dach (warmes Licht)
+  const lampe = new THREE.PointLight(0xffcc88, 25, 16, 1.6);
+  lampe.position.set(mx, 5.6, mz); scene.add(lampe);
+  const birne = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff1c8 }));
+  birne.position.copy(lampe.position); scene.add(birne);
+  kasten(scene, mx, 6.6, mz, 0.03, 1.8, 0.03, 0x222222, false);   // Kabel
+  const scheunenSchild = schild('🏚️ Scheune', '#ffd166', 5);
+  scheunenSchild.position.set(mx, S.hoehe + 0.6, S.z1 - 0.6); scene.add(scheunenSchild);
+}
+const inScheune = (x, z, rand = 0) => x > SCHEUNE.x1 - rand && x < SCHEUNE.x2 + rand && z > SCHEUNE.z1 - rand && z < SCHEUNE.z2 + rand;
 
 function schild(text, farbe = '#ffffff', breite = 8) {   // Ein Schild mit Text, das immer zu dir schaut
   const c = document.createElement('canvas'); c.width = 512; c.height = 128;
@@ -342,7 +423,7 @@ const felder = FELDER.map((F, nr) => {
   for (let versuch = 0; versuch < anzahl * 3 && n < anzahl; versuch++) {
     const w = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 110;
     const x = Math.cos(w) * r, z = Math.sin(w) * r;
-    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62)) continue;
+    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62)) continue;
     d.position.set(x, 0, z); d.rotation.y = Math.random() * 6; d.scale.setScalar(0.7 + Math.random() * 0.9); d.updateMatrix();
     gras.setMatrixAt(n, d.matrix);
     gras.setColorAt(n, c.setHSL(0.22 + Math.random() * 0.08, 0.5, 0.25 + Math.random() * 0.15));
@@ -1060,9 +1141,10 @@ function saatKaufen() {
   sound.kasse();
   speichern();
 }
+function anHofTankstelle() { return !!aktiv && Math.hypot(aktiv.g.position.x - TANKSTELLE.x, aktiv.g.position.z - TANKSTELLE.z) < aktiv.radius + 3.5; }
 function tanken() {
   if (brauchtFahrzeug('zu tanken')) return;
-  if (!imLaden()) { meldung('⛽ Tanken kannst du beim Landhandel 🏪 (gelber Platz)!'); sound.nein(); return; }
+  if (!imLaden() && !anHofTankstelle()) { meldung('⛽ Tanken kannst du beim Landhandel 🏪 oder an der Hof-Tankstelle in der Scheune 🏚️!'); sound.nein(); return; }
   const menge = aktiv.typ.dieselMax - aktiv.diesel, kosten = Math.round(menge * DIESEL_PREIS);
   if (menge < 1) { meldung('⛽ Der Tank ist schon voll!'); return; }
   if (money < kosten) { meldung('💸 Nicht genug Geld zum Tanken!'); sound.nein(); return; }
@@ -1825,6 +1907,7 @@ function animate() {
   // Hinweis unten in der Mitte
   const fn = feldInDerNaehe(), silo = nahesSilo();
   if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1/2/3 = anderes Gebäude · B = fertig`);
+  else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
   else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = Korn verkaufen (${kg(kornDrin(aktiv))}) · G = Saat · T = Tanken · N = Fahrzeug-Händler`);
   else if (silo) zeigeHinweis(`🛢️ Silo (${kg(silo.inhalt)} drin): L = Korn einlagern · U = Korn holen`);
   else if (aktiv && aktiv.typ.art === 'drescher' && aktiv.tank > 0 && ueberladenZiel()) zeigeHinweis('🌾➡️🚛 O = Korn überladen');
@@ -1873,6 +1956,17 @@ function animate() {
     const g = aktiv ? aktiv.typ.groesse * (aktiv.typ.art === 'drescher' ? 1.4 : 1) : 1;
     const distance = (aktiv ? 10 : 6) * zoom * g, height = (aktiv ? 5 : 3.2) * zoom * g;
     const ziel = new THREE.Vector3(target.x + Math.sin(angle) * distance, target.y + height + pitch * 3 * zoom, target.z + Math.cos(angle) * distance);
+    if (inScheune(target.x, target.z)) {   // Drinnen: Kamera bleibt in der Scheune – oder schaut von draußen durchs Tor
+      const S = SCHEUNE, mx = (S.x1 + S.x2) / 2;
+      ziel.z = begrenzt(ziel.z, S.z1 - 6, S.z2 - 0.8);
+      if (ziel.z < S.z1 + 0.5) {   // Vor dem Tor: nur so weit seitlich und so hoch, dass man durchs Tor schaut
+        ziel.x = begrenzt(ziel.x, mx - S.torBreite / 2 + 0.7, mx + S.torBreite / 2 - 0.7);
+        ziel.y = Math.min(ziel.y, S.torHoehe - 0.6);
+      } else {
+        ziel.x = begrenzt(ziel.x, S.x1 + 0.8, S.x2 - 0.8);
+        ziel.y = Math.min(ziel.y, S.hoehe + 1.2);
+      }
+    }
     kamPos.lerp(ziel, 1 - Math.pow(0.002, dt));
     camera.position.copy(kamPos);
     camera.lookAt(target.x, target.y + 1.4, target.z);
