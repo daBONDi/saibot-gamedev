@@ -37,6 +37,7 @@ body {
 .balken div { height: 100%; transition: width 0.2s; }
 #saat { background: #6fcf6f; }
 #tank { background: #e3b341; }
+#diesel { background: #5aa0e0; }
 .klein { font-size: 0.85em; color: #cfe8c8; }
 #help {
     bottom: 15px;
@@ -77,6 +78,9 @@ button.aktiv { background: #ffd166; font-weight: bold; }
 🚜 Fahrzeug: Fendt<br>
 📍 Modus: <span id="mode">Fahren</span><br>
 🔧 Gerät: <span id="geraet">-</span><br>
+⏱️ Tempo: <b><span id="tempo">0</span> km/h</b><br>
+⛽ Diesel: <span id="dieselText" class="klein"></span>
+<div class="balken"><div id="diesel"></div></div>
 🌱 Saat: <span id="saatText" class="klein"></span>
 <div class="balken"><div id="saat"></div></div>
 🌾 Korntank: <span id="tankText" class="klein"></span>
@@ -97,14 +101,23 @@ W A S D / Pfeile = Fahren · Leertaste = Bremsen<br>
 1 = Pflug · 2 = Sämaschine · 3 = Erntevorsatz<br>
 Maus ziehen = Kamera drehen · Mausrad = Zoom<br>
 E = Ein-/Aussteigen · K = Feld kaufen<br>
-Beim Landhandel: V = Verkaufen · G = Saat kaufen<br>
+Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken<br>
 B = Baumodus · R = Gebäude drehen · M = Ton an/aus
 </div>
 
 <div id="meldung" class="box"></div>
 <div id="hinweis" class="box"></div>
 
+<!-- Import-Map: sagt dem Browser, wo "three" und die Three.js-Zusatzteile (addons) liegen -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=1"></script>
+<script type="module" src="spiel.js?v=2"></script>
 </body>
 </html>
