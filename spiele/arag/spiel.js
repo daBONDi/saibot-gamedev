@@ -47,6 +47,7 @@ const MONSTER_START_ABSTAND = 3;   // So viele Räume (Türen) weit weg vom Star
 
 // Die Treppe steht in einem Raum an der Nordwand (Werte in Metern vom Raum-Rand)
 const TREPPE = { von: 1.2, bis: 8.4, z1: 0.3, z2: 1.9 };     // Die Rampe mit den Stufen
+const GELAENDER_AB = 2.2;         // Ab so vielen Metern nach dem Treppen-Anfang kommt das Geländer (unten ist es offen)
 const LOCH = { x1: 1.0, x2: 8.4, z1: 0.15, z2: 2.0 };          // Das Loch in der Decke darüber
 
 // ===== Die Helfer-Bots =====
@@ -1241,9 +1242,13 @@ function baueTreppe(t) {
   const laenge = Math.hypot(lauf, ETAGE_HOEHE), dicke = 0.15;
   const q = new CANNON.Quaternion(); q.setFromEuler(0, 0, winkel);
   festerKoerper((x1 + x2) / 2 + Math.sin(winkel) * dicke / 2, t.basis + ETAGE_HOEHE / 2 - Math.cos(winkel) * dicke / 2, zm, laenge, dicke, breite, q);
-  // Festes Geländer an der offenen Seite (damit niemand seitlich runterfällt)
-  festerKoerper((x1 + x2) / 2 - Math.sin(winkel) * 0.5, t.basis + ETAGE_HOEHE / 2 + Math.cos(winkel) * 0.5, z2 + 0.04, laenge, 1.0, 0.08, q);
+  // Festes Geländer an der offenen Seite (damit niemand seitlich runterfällt).
+  // Es fängt erst weiter oben an (GELAENDER_AB) – sonst ragt es unten in den Gang und man bleibt daran hängen!
+  const gA = x1 + GELAENDER_AB, gLauf = x2 - gA, gLaenge = gLauf / Math.cos(winkel);
+  const gMitteX = (gA + x2) / 2, gMitteY = t.basis + ETAGE_HOEHE * ((gMitteX - x1) / lauf);
+  festerKoerper(gMitteX - Math.sin(winkel) * 0.5, gMitteY + Math.cos(winkel) * 0.5, z2 + 0.04, gLaenge, 1.0, 0.08, q);
   // Unter der Treppe ist es fest (sonst könnte man in die Stufen hineinlaufen)
+  festerKoerper(x1 + 2.05, t.basis + 0.3, zm, 1.1, 0.6, breite);
   festerKoerper(x1 + 3.6, t.basis + 0.5, zm, 2.0, 1.0, breite);
   festerKoerper((x1 + 4.6 + x2) / 2, t.basis + 1.0, zm, x2 - x1 - 4.6, 2.0, breite);
   // Aussehen: einzelne Stufen
@@ -1255,14 +1260,14 @@ function baueTreppe(t) {
     hausGruppe.add(stufe);
   }
   // Geländer an der offenen Seite (Pfosten und Handlauf)
-  for (let k = 0; k <= 6; k++) {
-    const x = x1 + lauf * k / 6, y = t.basis + ETAGE_HOEHE * k / 6;
+  for (let k = 0; k <= 5; k++) {
+    const x = gA + gLauf * k / 5, y = t.basis + ETAGE_HOEHE * (x - x1) / lauf;
     const pfosten = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.95, 0.06), dunkelHolzMat);
     pfosten.position.set(x, y + 0.48, z2 - 0.05);
     hausGruppe.add(pfosten);
   }
-  const lauf3 = new THREE.Mesh(new THREE.BoxGeometry(laenge, 0.06, 0.08), dunkelHolzMat);
-  lauf3.position.set((x1 + x2) / 2, t.basis + ETAGE_HOEHE / 2 + 0.95, z2 - 0.05);
+  const lauf3 = new THREE.Mesh(new THREE.BoxGeometry(gLaenge, 0.06, 0.08), dunkelHolzMat);
+  lauf3.position.set(gMitteX, gMitteY + 0.95, z2 - 0.05);
   lauf3.rotation.z = winkel;
   hausGruppe.add(lauf3);
   // Oben: Geländer um das Loch, damit man nicht runterfällt (die Ostseite bleibt offen – da kommt man an)
