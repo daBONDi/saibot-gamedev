@@ -1431,7 +1431,7 @@ function endeCutscene() {
   const c = cutscene;
   cutscene = null;
   if (mp.rolle === 'gast') {   // Gast: Danach einfach weiterspielen (das Spiel rechnet der Gastgeber)
-    zustand = mp.hostZustand === 'treffen' ? 'spiel' : 'spiel';
+    zustand = 'spiel';
     if (c.art === 'gefressen') zeigeNachricht('👻 Jetzt bist du ein Geist. Schau zu – und red im Geister-Chat!', 4);
     return;
   }
@@ -3512,6 +3512,502 @@ addEventListener('pointerup', loslassen);
 addEventListener('pointercancel', loslassen);
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // kein Menü bei langem Drücken
 
+// =====================================================================
+// ===== 🌐 Multiplayer + 💬 Chat (mit PeerJS – wie bei ARAG und Farming) =====
+// =====================================================================
+// Einer macht einen Raum auf (Gastgeber). Die anderen geben den Code ein.
+// Der Gastgeber rechnet das ganze Spiel (Bots, Wolf, Treffen ...) und schickt allen 15-mal pro Sekunde, wo alle sind.
+// Jeder Gast steuert ein Schaf (vielleicht ist er ja der Wolf! 🐺) und schickt, was er tut.
+// Spezial-Rollen und Gruben gibt es für Mitspieler erst später – die Computer-Schafe haben sie aber!
+const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+const MP_VORSILBE = 'schafspelz-herde-';
+const MP_MAX = 6;                    // So viele echte Spieler (mit Gastgeber)
+const MP_HOST_NAME = 'Schneeflocke'; // So heißt das Schaf vom Gastgeber
+const MP_RATE = 15;
+const MP_ABSTIMM_ZEIT = 60;          // So viele Sekunden hat man beim Treffen zum Abstimmen
+const mp = {
+  aktiv: false, rolle: null, code: '', peer: null, conn: null, ich: '', andere: new Map(), takt: 0,
+  stimmen: new Map(), treffenStart: 0, ergebnisZeit: 0, gewaehlt: false, fortschritt: 0, hostZustand: 'titel', letzterZustand: 'titel', chatZeit: 0,
+};
+const r1 = v => Math.round(v * 10) / 10;
+const $mp = id => document.getElementById(id);
+function simLaeuft() { return zustand === 'spiel' || (mp.rolle === 'host' && zustand === 'cutscene' && cutscene && cutscene.art === 'gefressen'); }
+function mpStatus(t) { $mp('mp-status').textContent = t; }
+function mpLobbyZeigen() {
+  for (const id of ['mp-erstellen', 'mp-oder', 'mp-zeile']) $mp(id).style.display = mp.aktiv ? 'none' : '';
+  const liste = $mp('mp-liste');
+  liste.innerHTML = '';
+  if (!mp.aktiv) return;
+  const namen = mp.rolle === 'host'
+    ? [{ name: MP_HOST_NAME + ' (du)', farbe: '#ffffff' }, ...[...mp.andere.values()].map(g => ({ name: g.name, farbe: g.farbe }))]
+    : mp.lobby || [];
+  for (const n of namen) {
+    const z = document.createElement('div');
+    z.textContent = '🐑 ' + n.name;
+    z.style.color = n.farbe;
+    liste.appendChild(z);
+  }
+  mpStatus(mp.rolle === 'host'
+    ? `✅ Raum ${mp.code} – sag den Code deinen Freunden! Wenn alle da sind: Karte anklicken zum Starten.`
+    : `✅ Raum ${mp.code} – warte, bis der Gastgeber startet ...`);
+}
+function mpFehlerText(e) {
+  if (e && (e.type === 'network' || e.type === 'server-error')) return 'Keine Verbindung zum Vermittlungs-Server (Internet?)';
+  return (e && (e.type || e.message)) || 'unbekannter Fehler';
+}
+function mpLadePeerJS() {
+  if (window.Peer) return Promise.resolve();
+  return new Promise((ok, fehler) => {
+    const sc = document.createElement('script');
+    sc.src = MP_PEERJS; sc.onload = ok; sc.onerror = () => fehler(new Error('PeerJS nicht geladen'));
+    document.head.appendChild(sc);
+  });
+}
+function mpNeuerCode() {
+  const z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let k = 0; k < 4; k++) c += z[Math.floor(Math.random() * z.length)];
+  return c;
+}
+function mpSendeAn(g, n) { try { if (g && g.conn && g.conn.open) g.conn.send(n); } catch (e) { /* egal */ } }
+function mpAnAlle(n) { for (const g of mp.andere.values()) mpSendeAn(g, n); }
+function mpSende(n) { try { if (mp.conn && mp.conn.open) mp.conn.send(n); } catch (e) { /* egal */ } }
+const mpGastVon = s => s && s.mensch ? mp.andere.get(s.mensch) : null;
+function mpNachrichtAn(s, text) { mpSendeAn(mpGastVon(s), { t: 'nachricht', text }); }
+function mpLobbySenden() {
+  const lobby = [{ name: MP_HOST_NAME, farbe: '#ffffff' }, ...[...mp.andere.values()].map(g => ({ name: g.name, farbe: g.farbe }))];
+  mpAnAlle({ t: 'lobby', lobby });
+}
+
+// ----- Gastgeber -----
+async function mpRaumErstellen(versuch = 0) {
+  if (mp.peer && versuch === 0) return;
+  mpStatus('⏳ Raum wird erstellt ...');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
+  const code = mpNeuerCode();
+  const peer = new window.Peer(MP_VORSILBE + code);
+  mp.peer = peer;
+  peer.on('open', id => {
+    Object.assign(mp, { aktiv: true, rolle: 'host', code, ich: id });
+    mpLobbyZeigen(); chatZeigen();
+    chatSystem(`🌐 Raum ${code} ist offen! Chatten mit T oder Enter.`);
+  });
+  peer.on('connection', conn => mpNeuerGast(conn));
+  peer.on('disconnected', () => { try { if (mp.peer === peer) peer.reconnect(); } catch (e) { /* egal */ } });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id' && versuch < 3) { peer.destroy(); mp.peer = null; mpRaumErstellen(versuch + 1); return; }
+    if (!mp.aktiv) { peer.destroy(); mp.peer = null; mpStatus('❌ ' + mpFehlerText(e)); }
+  });
+}
+function mpNeuerGast(conn) {
+  conn.on('open', () => {
+    const belegt = new Set([...mp.andere.values()].map(g => g.nr));
+    let nr = 1;
+    while (belegt.has(nr)) nr++;
+    if (nr >= MP_MAX) { conn.send({ t: 'voll' }); setTimeout(() => conn.close(), 500); return; }
+    // Jeder Gast bekommt den Namen und die Farbe vom Schaf, das er später spielt
+    const g = { id: conn.peer, conn, nr, name: NAMEN[nr - 1], farbe: FARBEN[nr - 1], schaf: null, letzterChat: 0 };
+    mp.andere.set(g.id, g);
+    conn.send({ t: 'hallo', nr, name: g.name, farbe: g.farbe, code: mp.code });
+    mpLobbySenden(); mpLobbyZeigen();
+    chatSystem(`👋 ${g.name} ist da!`, true);
+    sound.glocke();
+    if (zustand !== 'titel') { conn.send({ t: 'nachricht', text: '⏳ Das Spiel läuft schon – beim nächsten Spiel bist du dabei!' }); }
+  });
+  conn.on('data', d => { const g = mp.andere.get(conn.peer); if (g) mpVomGast(g, d); });
+  conn.on('close', () => mpGastWeg(conn.peer));
+  conn.on('error', () => mpGastWeg(conn.peer));
+}
+function mpGastWeg(id) {
+  const g = mp.andere.get(id);
+  if (!g) return;
+  mp.andere.delete(id);
+  if (g.schaf) { g.schaf.mensch = null; }   // Ein Computer übernimmt sein Schaf
+  chatSystem(`👋 ${g.name} hat das Spiel verlassen.`, true);
+  mpLobbySenden(); mpLobbyZeigen();
+}
+// Spielstart: Die ersten Plätze in der Herde bekommen die Gäste
+function mpSpielStart() {
+  for (const s of schafe) s.mensch = null;
+  mp.stimmen = new Map(); mp.gewaehlt = false;
+  // Der Gastgeber: im Multiplayer ohne Spezial-Rolle (die kommen später)
+  if (spielerIstWolf) spieler.rolle = 'wolf';
+  else if (spieler.rolle !== 'normal') {
+    spieler.rolle = 'normal';
+    if (!spieler.gesamt) { spieler.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 5); spieler.alleAufgaben = [...spieler.aufgaben]; spieler.gesamt = 5; }
+  }
+  for (const g of mp.andere.values()) {
+    const s = schafe[g.nr];
+    g.schaf = null;
+    if (!s || s.istSpieler) { mpSendeAn(g, { t: 'nachricht', text: '😢 Kein Platz mehr in der Herde – stell mehr Schafe ein!' }); continue; }
+    s.mensch = g.id; g.schaf = s;
+    s.name = g.name; s.farbe = g.farbe;
+    s.ziel = null; s.jagt = null; s.grubenPlan = null;
+    if (s.istWolf) { s.rolle = 'wolf'; s.cooldown = 12; }
+    else {
+      s.rolle = 'normal';
+      if (!s.gesamt) { s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 4); s.gesamt = 4; s.erledigt = 0; }
+    }
+    s.alleAufgaben = [...s.aufgaben];
+  }
+  const namen = schafe.map(s => [s.istSpieler ? MP_HOST_NAME : s.name, s.farbe]);
+  for (const g of mp.andere.values()) {
+    if (!g.schaf) continue;
+    const s = g.schaf;
+    mpSendeAn(g, {
+      t: 'start', karte: kartenNr, E, nr: schafe.indexOf(s), namen,
+      istWolf: s.istWolf, woelfe: s.istWolf ? woelfe.map(w => schafe.indexOf(w)) : [],
+      aufgaben: s.istWolf ? [] : s.aufgaben,
+      pos: schafe.map(x => [Math.round(x.x), Math.round(x.y)]),
+    });
+  }
+  chatSystem('🐑 Das Spiel startet! Viel Glück!', true);
+}
+function mpAlleTeleportieren() {
+  for (const g of mp.andere.values()) if (g.schaf) mpSendeAn(g, { t: 'teleport', x: Math.round(g.schaf.x), y: Math.round(g.schaf.y) });
+}
+function mpGefressen(opfer, w) {
+  mpSendeAn(mpGastVon(opfer), { t: 'gefressen', wolf: schafe.indexOf(w), variante: zufall(FRESS_ARTEN) });
+}
+// Herden-Treffen: jedem Gast seine eigene Sicht schicken
+function mpTreffenGestartet(melder, fund) {
+  mp.stimmen = new Map(); mp.gewaehlt = false; mp.treffenStart = zeit;
+  treffen.grund = fund ? `${melder.name} hat Wolle von ${fund.opfer.name} gefunden! 😱` : `${melder.name} hat die Glocke geläutet! 🔔`;
+  mpTreffenSenden();
+  chatSystem('🔔 Herden-Treffen! Redet hier im Chat, wer der Wolf ist!', true);
+}
+function mpTreffenSenden() {
+  for (const g of mp.andere.values()) {
+    if (!g.schaf) continue;
+    const ich = g.schaf;
+    const aus = treffen.lebende.map(s => {
+      if (s === ich) return ich.istWolf ? 'Das bist du (der Wolf 🤫). Wen willst du verdächtigen?' : 'Das bist du! Wen hältst du für den Wolf?';
+      if (s.istSpieler) return '💬 Echter Mitspieler – lies den Chat!';
+      return treffen.aussagen.get(s) || '';
+    });
+    mpSendeAn(g, {
+      t: 'treffen', grund: treffen.grund, leb: treffen.lebende.map(s => schafe.indexOf(s)), aus, phase: treffen.phase,
+      st: treffen.stimmen ? [...treffen.stimmen].map(([w, z]) => [schafe.indexOf(w), z ? schafe.indexOf(z) : -1]) : null,
+      raus: treffen.raus ? schafe.indexOf(treffen.raus) : -1, skip: treffen.skip, erg: treffen.ergebnis, start: zeit - mp.treffenStart,
+    });
+  }
+}
+function mpErgebnis() { mp.ergebnisZeit = zeit; mpTreffenSenden(); }
+function mpKlickTreffen(p) {
+  if (treffen.phase === 'waehlen') {
+    if (!spieler.lebt || mp.gewaehlt) return;
+    let wahl;
+    for (const k of kartenRechtecke()) if (!k.s.istSpieler && imRechteck(p, k)) wahl = k.s;
+    if (wahl === undefined && imRechteck(p, SKIP_KNOPF)) wahl = null;
+    if (wahl === undefined) return;
+    mp.gewaehlt = true;
+    ton(660, 0, 0.08, 'triangle', 0.1);
+    if (mp.rolle === 'host') { mp.stimmen.set(spieler, wahl); mpAbstimmungPruefen(); }
+    else mpSende({ t: 'stimme', z: wahl ? schafe.indexOf(wahl) : -1 });
+  } else if (mp.rolle === 'host' && imRechteck(p, WEITER_KNOPF)) weiterNachAbstimmung();
+}
+function mpAbstimmungPruefen() {
+  if (!treffen || treffen.phase !== 'waehlen') return;
+  const menschen = treffen.lebende.filter(s => s.istSpieler || (s.mensch && mp.andere.has(s.mensch)));
+  const alle = menschen.every(s => mp.stimmen.has(s));
+  if (alle || zeit - mp.treffenStart > MP_ABSTIMM_ZEIT) abstimmen(null);
+}
+// Nachrichten von Gästen
+function mpVomGast(g, d) {
+  if (!d || !d.t) return;
+  const s = g.schaf;
+  if (d.t === 'chat') { mpChatVerteilen(g, d.text); return; }
+  if (!s) return;
+  switch (d.t) {
+    case 'pos': s.x = begrenzt(d.x, 50, WELT_B - 50); s.y = begrenzt(d.y, 60, WELT_H - 50); s.richtung = d.r; s.laeuft = !!d.l; if (s.laeuft) s.phase += 0.8; break;
+    case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; } break;
+    case 'melden': { const w = wolle[d.w]; if (zustand === 'spiel' && s.lebt && w && dist(s, w) < 130) starteTreffen(s, w); break; }
+    case 'glocke': if (zustand === 'spiel' && s.lebt && !glockeGenutzt && dist(s, GLOCKE) < 120) { glockeGenutzt = true; starteTreffen(s, null); } break;
+    case 'fressen': { const o = schafe[d.z]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.cooldown <= 0 && o && o.lebt && !o.istWolf && dist(s, o) < 80) fressen(o, s); break; }
+    case 'reparieren': if (sabotage && s.lebt && !s.istWolf && dist(s, sabotagePunkt()) < 100) repariert(s); break;
+    case 'sabotage': if (s.istWolf && s.lebt && zustand === 'spiel') {
+      if (sabotage) mpNachrichtAn(s, 'Es läuft schon eine Sabotage!');
+      else if (sabotagePause > 0) mpNachrichtAn(s, `Sabotage geht erst in ${Math.ceil(sabotagePause)} Sekunden wieder`);
+      else starteSabotage(d.art === 'nebel' ? 'nebel' : 'gatter');
+    } break;
+    case 'stimme': if (treffen && treffen.phase === 'waehlen' && s.lebt && !mp.stimmen.has(s)) { mp.stimmen.set(s, d.z >= 0 ? schafe[d.z] : null); mpAbstimmungPruefen(); } break;
+  }
+}
+// Jeden Takt: allen schicken, wo alle sind
+function mpHostTick() {
+  // Zurück im Titel? Dann sind alle wieder in der Lobby
+  if (zustand === 'titel' && mp.letzterZustand !== 'titel') { mpAnAlle({ t: 'lobby', lobby: null, zurueck: true }); mpLobbySenden(); }
+  mp.letzterZustand = zustand;
+  if (zustand === 'treffen') {
+    if (treffen && treffen.phase === 'waehlen') mpAbstimmungPruefen();
+    else if (treffen && treffen.phase === 'ergebnis' && zeit - mp.ergebnisZeit > 8) weiterNachAbstimmung();   // Automatisch weiter
+  }
+  if (zustand === 'titel' || zustand === 'einstellungen' || !schafe.length) return;
+  const z = zustand === 'cutscene' && cutscene && cutscene.art === 'gefressen' ? 'spiel' : zustand;
+  const basis = {
+    t: 's', z,
+    sch: schafe.map(s => [Math.round(s.x), Math.round(s.y), s.richtung, s.laeuft ? 1 : 0, s.lebt ? 1 : 0, s.inGrube != null ? 1 : 0, s.unsichtbar > 0 ? 1 : 0, s.verkleidet ? schafe.indexOf(s.verkleidet.als) : -1]),
+    wo: wolle.map(w => [Math.round(w.x), Math.round(w.y), schafe.indexOf(w.opfer), w.angst ? 1 : 0, w.aufloesen != null ? r1(w.aufloesen) : -1]),
+    sab: sabotage ? [sabotage.art, Math.ceil(sabotage.t)] : null,
+    fo: fortschritt(), gl: glockeGenutzt ? 1 : 0,
+  };
+  for (const g of mp.andere.values()) if (g.schaf) mpSendeAn(g, { ...basis, cd: r1(g.schaf.cooldown), le: g.schaf.lebt ? 1 : 0 });
+}
+
+// ----- Gast -----
+async function mpBeitreten() {
+  const code = $mp('mp-code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { mpStatus('Der Code hat 4 Zeichen, z. B. K7PX'); return; }
+  if (mp.peer) return;
+  mpStatus('⏳ Verbinde ...');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
+  const peer = new window.Peer();
+  mp.peer = peer;
+  peer.on('open', id => {
+    mp.ich = id;
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true });
+    mp.conn = conn;
+    conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code }); mpLobbyZeigen(); chatZeigen(); });
+    conn.on('data', d => mpVomHost(d));
+    conn.on('close', () => { if (mp.conn === conn) mpVerbindungWeg('Die Verbindung zum Gastgeber ist weg.'); });
+  });
+  peer.on('error', e => {
+    if (mp.peer !== peer) return;
+    mpVerbindungWeg(e.type === 'peer-unavailable' ? 'Raum nicht gefunden – stimmt der Code?' : mpFehlerText(e));
+  });
+}
+function mpVerbindungWeg(text) {
+  try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ }
+  Object.assign(mp, { aktiv: false, rolle: null, peer: null, conn: null });
+  zustand = 'titel'; miniSpiel = null; treffen = null; cutscene = null;
+  chatZeigen();
+  mpLobbyZeigen();
+  mpStatus('❌ ' + text);
+}
+function mpGastStart(d) {
+  kartenNr = d.karte;
+  ladeKarte(kartenNr);
+  E = { ...STANDARD, ...d.E };
+  partikel = []; effekte = []; wolle = []; treffen = null; ende = null; miniSpiel = null; cutscene = null;
+  sabotage = null; klickZiel = null; zielModus = false; glockeGenutzt = false; joystickLos();
+  schafe = d.namen.map(([name, farbe], i) => macheSchaf(name, farbe, i === d.nr));
+  schafe.forEach((s, i) => { s.x = s.zx = d.pos[i][0]; s.y = s.zy = d.pos[i][1]; });
+  spieler = schafe[d.nr];
+  spielerIstWolf = d.istWolf;
+  for (const i of d.woelfe) { schafe[i].istWolf = true; schafe[i].rolle = 'wolf'; }   // Nur Wölfe kennen die anderen Wölfe!
+  spieler.istWolf = d.istWolf;
+  spieler.rolle = d.istWolf ? 'wolf' : 'normal';
+  woelfe = schafe.filter(s => s.istWolf); wolf = woelfe[0] || null;
+  spieler.aufgaben = [...d.aufgaben]; spieler.alleAufgaben = [...d.aufgaben]; spieler.gesamt = d.aufgaben.length; spieler.erledigt = 0;
+  spieler.cooldown = 12;
+  sicht = SICHT; mp.fortschritt = 0; mp.gewaehlt = false;
+  zustand = 'intro'; intro = 0;
+  mpLobbyZeigen();
+}
+function mpVomHost(d) {
+  if (!d || !d.t) return;
+  switch (d.t) {
+    case 'hallo': mp.nr = d.nr; mpStatus(`✅ Du bist ${d.name}! Warte, bis der Gastgeber startet ...`); return;
+    case 'voll': mpVerbindungWeg(`Der Raum ist voll (höchstens ${MP_MAX} Spieler).`); return;
+    case 'lobby':
+      if (d.lobby) mp.lobby = d.lobby;
+      if (d.zurueck) { zustand = 'titel'; miniSpiel = null; treffen = null; cutscene = null; }
+      mpLobbyZeigen();
+      return;
+    case 'chat': chatZeigeNachricht(d); return;
+    case 'start': mpGastStart(d); return;
+    case 'nachricht': zeigeNachricht(d.text, 3); return;
+  }
+  if (!schafe.length || !spieler) return;
+  switch (d.t) {
+    case 's': mpSchnappschuss(d); break;
+    case 'teleport': spieler.x = d.x; spieler.y = d.y; klickZiel = null; break;
+    case 'gefressen':
+      miniSpiel = null; zielModus = false; klickZiel = null; joystickLos();
+      spieler.lebt = false;
+      zustand = 'cutscene';
+      cutscene = { t: 0, art: 'gefressen', wolf: schafe[d.wolf] || spieler, variante: FRESS_ARTEN.includes(d.variante) ? d.variante : zufall(FRESS_ARTEN) };
+      break;
+    case 'treffen': {
+      const neu = !treffen || zustand !== 'treffen';
+      const lebende = d.leb.map(i => schafe[i]).filter(Boolean);
+      const aussagen = new Map();
+      d.leb.forEach((i, k) => { if (schafe[i]) aussagen.set(schafe[i], d.aus[k]); });
+      treffen = {
+        grund: d.grund, lebende, aussagen, anklaeger: [], phase: d.phase,
+        stimmen: d.st ? new Map(d.st.map(([w, z]) => [schafe[w], z >= 0 ? schafe[z] : null])) : null,
+        raus: d.raus >= 0 ? schafe[d.raus] : null, skip: d.skip, ergebnis: d.erg,
+      };
+      if (neu) {
+        mp.gewaehlt = false; mp.treffenStart = zeit - (d.start || 0);
+        miniSpiel = null; zielModus = false;
+        if (zustand !== 'cutscene') zustand = 'treffen';
+        sound.glocke();
+      }
+      if (d.phase === 'ergebnis') { if (!treffen.raus) sound.hmm(); else sound.trommel(); }
+      break;
+    }
+    case 'weiter': {
+      const raus = d.raus >= 0 ? schafe[d.raus] : null;
+      if (raus) { zustand = 'cutscene'; cutscene = { t: 0, raus, herde: schafe.filter(s => s.lebt && s !== raus) }; }
+      else { zustand = 'spiel'; treffen = null; }
+      break;
+    }
+    case 'ende': {
+      const grund = d.sieger === 'wolf' ? 'Die Wölfe haben gewonnen! 🐺' : d.sieger === 'ziege' ? 'Die Ziege hat gewonnen! 🐐' : 'Die Schafe haben gewonnen! 🐑';
+      beende(d.sieger, grund);
+      break;
+    }
+  }
+}
+function mpSchnappschuss(d) {
+  mp.hostZustand = d.z;
+  d.sch.forEach((a, i) => {
+    const s = schafe[i];
+    if (!s) return;
+    if (s !== spieler) { s.zx = a[0]; s.zy = a[1]; s.richtung = a[2]; s.laeuft = !!a[3]; }
+    s.lebt = !!a[4];
+    s.inGrube = a[5] ? 0 : null;
+    s.unsichtbar = a[6] ? 1 : 0;
+    s.verkleidet = a[7] >= 0 && schafe[a[7]] ? { als: schafe[a[7]], t: 1 } : null;
+  });
+  wolle = d.wo.map(a => ({ x: a[0], y: a[1], opfer: schafe[a[2]] || spieler, angst: !!a[3], aufloesen: a[4] >= 0 ? a[4] : null, aufloeseMax: E.aufloesen, ort: naechsterOrt({ x: a[0], y: a[1] }) }));
+  sabotage = d.sab ? { art: d.sab[0], t: d.sab[1] } : null;
+  mp.fortschritt = d.fo;
+  glockeGenutzt = !!d.gl;
+  spieler.cooldown = d.cd;
+  spieler.lebt = !!d.le;
+  // Das Treffen ist beim Gastgeber vorbei? Dann weiterspielen
+  if (d.z === 'spiel' && zustand === 'treffen') { zustand = 'spiel'; treffen = null; }
+  if (d.z === 'treffen' && zustand === 'spiel' && treffen) zustand = 'treffen';   // (z. B. nach der eigenen Fress-Animation)
+}
+function moeglicheAktionGast() {
+  if (!spieler.lebt) return null;
+  if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
+    return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => mpSende({ t: 'reparieren' }) };
+  }
+  if (spielerIstWolf && spieler.cooldown <= 0) {
+    const opfer = schafe.find(s => s.lebt && s !== spieler && !s.istWolf && dist(s, spieler) < 50);
+    if (opfer) return { text: 'Fressen!', tun: () => { mpSende({ t: 'fressen', z: schafe.indexOf(opfer) }); spieler.cooldown = 2; } };
+  }
+  for (let i = 0; i < wolle.length; i++) if (dist(spieler, wolle[i]) < 80) return { text: 'Wolle melden!', tun: () => mpSende({ t: 'melden', w: i }) };
+  for (const i of spieler.aufgaben) {
+    if (dist(spieler, ORTE[i]) < 55) return { text: ORTE[i].aufgabe, tun: () => { miniSpiel = neuesMiniSpiel(i); klickZiel = null; } };
+  }
+  if (dist(spieler, GLOCKE) < 70 && !glockeGenutzt) return { text: 'Glocke läuten', tun: () => { glockeGenutzt = true; mpSende({ t: 'glocke' }); } };
+  return null;
+}
+function mpGastUpdate(dt) {
+  if (miniSpiel) miniUpdate(dt);
+  bewegeSpieler(dt);
+  spieler.cooldown -= dt;
+  // Sicht (wie beim Gastgeber)
+  let zielSicht = SICHT;
+  if (!spieler.lebt) zielSicht = 2500;
+  else if (spielerIstWolf) zielSicht = SICHT_WOLF;
+  else if (sabotage && sabotage.art === 'nebel') zielSicht = 130;
+  sicht += (zielSicht - sicht) * Math.min(1, dt * 2);
+  if (sabotage) sabotage.t -= dt;
+  // Die anderen weich dorthin bewegen, wo der Gastgeber sie hat
+  const f = Math.min(1, dt * 12);
+  for (const s of schafe) {
+    if (s === spieler || s.zx === undefined) continue;
+    if (Math.hypot(s.zx - s.x, s.zy - s.y) > 200) { s.x = s.zx; s.y = s.zy; }
+    s.x += (s.zx - s.x) * f; s.y += (s.zy - s.y) * f;
+    if (s.laeuft) s.phase += dt * 12;
+  }
+}
+function mpGastTick() {
+  if (!spieler || !schafe.length || zustand === 'titel') return;
+  mpSende({ t: 'pos', x: Math.round(spieler.x), y: Math.round(spieler.y), r: spieler.richtung, l: spieler.laeuft ? 1 : 0 });
+}
+let mpBoxAn = null;
+function mpTick(dt) {
+  const boxAn = zustand === 'titel';   // Das Multiplayer-Fenster gibt es nur auf dem Titelbild
+  if (boxAn !== mpBoxAn) { mpBoxAn = boxAn; $mp('mp-box').style.display = boxAn ? 'block' : 'none'; }
+  if (!mp.aktiv) return;
+  mp.takt -= dt;
+  if (mp.takt > 0) return;
+  mp.takt = 1 / MP_RATE;
+  if (mp.rolle === 'host') mpHostTick(); else mpGastTick();
+  if (zustand === 'titel') mpLobbyZeigen();
+}
+
+// ----- 💬 Chat -----
+// Geister (gefressene oder rausgeworfene Schafe) können nur mit anderen Geistern reden!
+const CHAT_MAX = 100;
+function chatZeigen() { $mp('chat').style.display = mp.aktiv ? 'flex' : 'none'; }
+function chatOeffnen() {
+  const eingabe = $mp('chat-eingabe');
+  eingabe.style.display = 'block';
+  eingabe.focus();
+  for (const k in tasten) tasten[k] = false;   // Nicht weiterlaufen, während man tippt
+}
+function chatSchliessen() {
+  const eingabe = $mp('chat-eingabe');
+  eingabe.value = '';
+  eingabe.blur();
+  eingabe.style.display = 'none';
+}
+function ichBinGeist() { return zustand !== 'titel' && zustand !== 'ende' && spieler && !spieler.lebt; }
+function chatSenden() {
+  const eingabe = $mp('chat-eingabe');
+  const text = eingabe.value.trim().slice(0, CHAT_MAX);
+  chatSchliessen();
+  if (!text || !mp.aktiv) return;
+  if (zeit - mp.chatZeit < 0.8) return;   // Nicht so schnell hintereinander
+  mp.chatZeit = zeit;
+  if (mp.rolle === 'host') mpChatVerteilen(null, text);
+  else mpSende({ t: 'chat', text });
+}
+// Der Gastgeber verteilt alle Nachrichten (und merkt sich, wer ein Geist ist)
+function mpChatVerteilen(g, text) {
+  text = String(text || '').slice(0, CHAT_MAX);
+  if (!text) return;
+  if (g) { if (zeit - g.letzterChat < 0.6) return; g.letzterChat = zeit; }
+  const imSpiel = zustand !== 'titel' && zustand !== 'ende' && schafe.length;
+  const s = g ? g.schaf : spieler;
+  const geist = !!(imSpiel && s && !s.lebt);
+  const n = { t: 'chat', name: g ? g.name : MP_HOST_NAME, farbe: g ? g.farbe : '#ffffff', text, geist };
+  mpAnAlle(n);
+  chatZeigeNachricht(n);
+}
+function chatSystem(text, anAlle = false) {
+  const n = { t: 'chat', name: '', farbe: '#ffd166', text, system: true };
+  if (anAlle && mp.rolle === 'host') mpAnAlle(n);
+  chatZeigeNachricht(n);
+}
+function chatZeigeNachricht(n) {
+  if (n.geist && !ichBinGeist()) return;   // Geister-Nachrichten sehen nur Geister 👻
+  const liste = $mp('chat-liste');
+  const z = document.createElement('div');
+  z.className = 'chat-zeile' + (n.geist ? ' geist' : '');
+  if (n.system) { z.textContent = n.text; z.style.color = n.farbe; }
+  else {
+    const name = document.createElement('b');
+    name.textContent = (n.geist ? '👻 ' : '') + n.name + ': ';
+    name.style.color = n.farbe;
+    z.appendChild(name);
+    z.appendChild(document.createTextNode(n.text));   // Als reiner Text (sicher!)
+  }
+  liste.appendChild(z);
+  while (liste.children.length > 30) liste.removeChild(liste.firstChild);
+  liste.scrollTop = liste.scrollHeight;
+  if (!n.system) ton(880, 0, 0.07, 'sine', 0.06);   // Pling!
+}
+$mp('mp-erstellen').addEventListener('click', () => { tonStart(); mpRaumErstellen(); });
+$mp('mp-beitreten').addEventListener('click', () => { tonStart(); mpBeitreten(); });
+$mp('mp-code').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tonStart(); mpBeitreten(); } });
+$mp('mp-code').addEventListener('keyup', e => e.stopPropagation());
+$mp('chat-eingabe').addEventListener('keydown', e => {
+  e.stopPropagation();   // Beim Tippen nicht das Schaf steuern!
+  if (e.key === 'Enter') chatSenden();
+  if (e.key === 'Escape') chatSchliessen();
+});
+$mp('chat-eingabe').addEventListener('keyup', e => e.stopPropagation());
+$mp('chat-knopf').addEventListener('click', () => { tonStart(); chatOeffnen(); });
+mpLobbyZeigen();
+
 // ===== Spielschleife =====
 let letzte = performance.now();
 function schleife(jetzt) {
@@ -3519,6 +4015,7 @@ function schleife(jetzt) {
   letzte = jetzt;
   zeit += dt;
   update(dt);
+  mpTick(dt);
   zeichne();
   requestAnimationFrame(schleife);
 }
