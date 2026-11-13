@@ -56,6 +56,39 @@
       display: block;
       touch-action: none;
     }
+    /* Multiplayer-Menü oben rechts auf dem Titelbild */
+    #mp {
+      position: absolute;
+      top: 2%;
+      right: 1.5%;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      width: 13rem;
+      padding: 0.6rem;
+      border-radius: 0.8rem;
+      background: rgba(10, 12, 18, 0.85);
+      border: 1px solid #7cf5c655;
+      font-size: 0.85rem;
+    }
+    #mp .zeile { display: flex; gap: 0.35rem; }
+    #mp input {
+      width: 5.2rem;
+      min-width: 0;
+      flex: 1;
+      padding: 0.3rem 0.4rem;
+      border-radius: 0.5rem;
+      border: 1px solid #7cf5c6;
+      background: #0d0f14;
+      color: #fff;
+      font: bold 1rem monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      text-align: center;
+    }
+    #mp .oder { color: #8a8fb0; text-align: center; font-size: 0.75rem; }
+    #mp-status { color: #ffd166; min-height: 1em; font-size: 0.8rem; }
     /* Vollbild: nur noch das Spiel */
     html:fullscreen body { padding: 0; justify-content: center; }
     html:fullscreen .leiste { display: none; }
@@ -69,6 +102,16 @@
   </div>
   <div id="buehne">
     <canvas id="spiel" width="960" height="600"></canvas>
+    <div id="mp">
+      <b>🌐 Mit Freunden spielen</b>
+      <button id="mp-erstellen">🏠 Raum erstellen</button>
+      <div class="oder">– oder Code eingeben –</div>
+      <div class="zeile">
+        <input id="mp-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false">
+        <button id="mp-beitreten">🔑 Los!</button>
+      </div>
+      <div id="mp-status"></div>
+    </div>
   </div>
   <script>
     // Vollbild-Knopf
@@ -79,6 +122,6 @@
     });
   </script>
   <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-  <script type="module" src="spiel.js?v=10"></script>
+  <script type="module" src="spiel.js?v=11"></script>
 </body>
 </html>

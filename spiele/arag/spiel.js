@@ -1177,7 +1177,7 @@ const MOEBEL = {
     while (x < 0.7) {
       const g = zufall(0.6, 0.9);
       m.box(g, g, g, x + g / 2, g / 2, g / 2 + 0.05, kistenMat, { fest: true, blockt: g > 0.8 });
-      if (Math.random() < 0.5) { const k = g * 0.7; m.box(k, k, k, x + g / 2, g + k / 2, g / 2 + 0.05, kistenMat, { fest: true }); }
+      if (rnd() < 0.5) { const k = g * 0.7; m.box(k, k, k, x + g / 2, g + k / 2, g / 2 + 0.05, kistenMat, { fest: true }); }
       else m.ablage(x + g / 2, g / 2 + 0.05, g - 0.2, g - 0.2, g + 0.02);
       x += g + 0.1;
     }
@@ -1186,7 +1186,7 @@ const MOEBEL = {
   metallregal() {   // Metallregal mit Kartons
     const m = neuesMoebel();
     m.box(1.8, 2.0, 0.5, 0, 1.0, 0.25, metallGrauMat, { fest: true, blockt: true });
-    for (let k = 0; k < 3; k++) for (let n = 0; n < 3; n++) if (Math.random() < 0.7) m.box(0.45, 0.35, 0.4, -0.6 + n * 0.6, 0.38 + k * 0.62, 0.28, kistenMat, { schatten: false });
+    for (let k = 0; k < 3; k++) for (let n = 0; n < 3; n++) if (rnd() < 0.7) m.box(0.45, 0.35, 0.4, -0.6 + n * 0.6, 0.38 + k * 0.62, 0.28, kistenMat, { schatten: false });
     return m;
   },
   zugedeckt() {   // Alte Möbel unter weißen Tüchern (gruselig!)
@@ -1828,7 +1828,7 @@ function sichtbaresOpfer(m) {
   }
   for (const g of mpGaeste()) {   // Multiplayer: die anderen Spieler
     const d = abstand3D(m, g);
-    if (d < m.info.sicht * (g.d ? DUCK_SICHT : 1) && d < bestD && freieSicht(von, new THREE.Vector3(g.x, g.y + 0.4, g.z))) { bestes = { x: g.x, y: g.y, z: g.z, gast: g }; bestD = d; }
+    if (d < m.info.sicht * (g.dk ? DUCK_SICHT : 1) && d < bestD && freieSicht(von, new THREE.Vector3(g.x, g.y + 0.4, g.z))) { bestes = { x: g.x, y: g.y, z: g.z, gast: g }; bestD = d; }
   }
   return bestes;
 }
@@ -2914,7 +2914,8 @@ function zeichneTitel() {
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Den Starrer nicht aus den Augen lassen!', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
-  if (rekord > 0) text(`🏆 Rekord: ${euro(rekord)}`, W / 2, 565, 15, '#ffd166', 'center', false);
+  text('🌐 Mit Freunden spielen? Oben rechts einen Raum erstellen oder einen Code eingeben!', W / 2, 548, 12, '#7cf5c6', 'center', false);
+  if (rekord > 0) text(`🏆 Rekord: ${euro(rekord)}`, W / 2, 572, 15, '#ffd166', 'center', false);
   if (!renderer) text('⚠️ 3D geht auf diesem Computer leider nicht (kein WebGL).', W / 2, 588, 14, '#ff6b6b');
 }
 function zeichneGeschafft() {
@@ -2981,7 +2982,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'geschafft') { if (mp.rolle !== 'gast') { level++; starteLevel(); } return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
-  if (e.button === 0 && schwebend && !gegriffen && !(mp.rolle === 'gast' && mpVonAnderemGehalten(schwebend))) greifen(schwebend);
+  if (e.button === 0 && schwebend && !gegriffen && !(mp.aktiv && mpVonAnderemGehalten(schwebend))) greifen(schwebend);
   if (e.button === 2) werfen();
 });
 addEventListener('pointerup', e => { if (e.button === 0) loslassen(); });
@@ -2994,6 +2995,395 @@ canvas.addEventListener('wheel', e => {
   if (gegriffen) { halteAbstand = begrenzt(halteAbstand - e.deltaY * 0.002, 1.2, 3.2); e.preventDefault(); }
 }, { passive: false });
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // Kein Menü bei Rechtsklick
+
+// =====================================================================
+// ===== Multiplayer (mit PeerJS) =====
+// =====================================================================
+// So funktioniert's: Einer macht einen Raum auf (der Gastgeber) und bekommt einen Code, z. B. "K7PX".
+// Die anderen geben den Code ein und sind dabei. Der Computer vom Gastgeber rechnet ALLES
+// (Monster, Helfer, Schätze) und schickt es 15-mal pro Sekunde an alle. Die Gäste schicken zurück, wo sie gerade sind.
+// Zum Finden benutzt PeerJS einen kostenlosen Vermittlungs-Server. Danach reden die Computer direkt miteinander.
+// PeerJS wird erst geladen, wenn jemand auf "Raum erstellen" oder "Beitreten" klickt.
+const MP_MAX_SPIELER = 4;      // So viele Spieler passen in einen Raum (mit Gastgeber)
+const MP_SENDE_RATE = 15;      // So oft pro Sekunde wird verschickt, wo alles ist
+const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+const MP_VORSILBE = 'arag-spukhaus-';   // Damit unsere Raum-Codes nicht mit anderen Spielen zusammenstoßen
+const MP_ROBOTER = [           // Namen und Farben der Spieler-Roboter
+  { name: 'Chef', farbe: '#7cf5c6' },
+  { name: 'Blitz', farbe: '#ffe66d' },
+  { name: 'Kolben', farbe: '#b388ff' },
+  { name: 'Zahnrad', farbe: '#ff8a65' },
+];
+const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, andere: new Map(), sendeZeit: 0, nr: 0, zaehler: 0, startzahl: 0, abfahrZeit: 0 };
+const r2 = v => Math.round(v * 100) / 100;   // Auf 2 Kommastellen runden (spart Daten)
+const mpEl = {
+  box: document.getElementById('mp'), erstellen: document.getElementById('mp-erstellen'),
+  code: document.getElementById('mp-code'), beitreten: document.getElementById('mp-beitreten'), status: document.getElementById('mp-status'),
+};
+function mpMenueZeigen(an) {
+  if (!mpEl.box) return;
+  const d = an ? 'flex' : 'none';
+  if (mpEl.box.style.display !== d) mpEl.box.style.display = d;
+}
+function mpStatus(t) { if (mpEl.status) mpEl.status.textContent = t; }
+function mpFehlerText(e) {
+  if (e && e.type === 'network' || e && e.type === 'server-error') return 'Keine Verbindung zum Vermittlungs-Server (Internet?)';
+  if (e && e.type === 'browser-incompatible') return 'Dein Browser kann das leider nicht';
+  return (e && (e.type || e.message)) || 'unbekannt';
+}
+function mpLadePeerJS() {
+  if (window.Peer) return Promise.resolve();
+  return new Promise((ok, fehler) => {
+    const sc = document.createElement('script');
+    sc.src = MP_PEERJS; sc.onload = ok; sc.onerror = () => fehler(new Error('PeerJS nicht geladen'));
+    document.head.appendChild(sc);
+  });
+}
+function mpNeuerCode() {   // 4 Zeichen, ohne verwechselbare wie 0/O und 1/I
+  const z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let k = 0; k < 4; k++) c += z[Math.floor(Math.random() * z.length)];
+  return c;
+}
+const schatzMitId = id => schaetze.find(s => s.id === id) || null;
+function mpGaeste() {   // Nur beim Gastgeber: alle Gäste, die schon im Haus sind
+  if (mp.rolle !== 'host') return [];
+  const liste = [];
+  for (const g of mp.andere.values()) if (g.y > -10) liste.push(g);
+  return liste;
+}
+function mpVonAnderemGehalten(s) {
+  if (s.gastHaelt) return true;
+  for (const a of mp.andere.values()) if (a.hg === s.id) return true;
+  return false;
+}
+function mpAnAlle(nachricht) {
+  for (const g of mp.andere.values()) mpSendeAn(g, nachricht);
+}
+function mpSendeAn(g, nachricht) {
+  try { if (g.conn && g.conn.open) g.conn.send(nachricht); } catch (e) { /* egal */ }
+}
+function mpSende(nachricht) {   // Gast -> Gastgeber
+  try { if (mp.conn && mp.conn.open) mp.conn.send(nachricht); } catch (e) { /* egal */ }
+}
+function mpMeshWeg(o) {
+  if (o.teile) szene.remove(o.teile.g);
+  if (o.strahl) szene.remove(o.strahl.g);
+  o.teile = null; o.strahl = null;
+}
+function mpBeenden() {
+  for (const o of mp.andere.values()) mpMeshWeg(o);
+  mp.andere.clear();
+  try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ }
+  Object.assign(mp, { aktiv: false, rolle: null, code: '', peer: null, conn: null, nr: 0 });
+}
+function mpVerbindungWeg(text) {
+  const warImSpiel = mp.aktiv;
+  mpBeenden();
+  mpStatus('❌ ' + text);
+  if (warImSpiel) {
+    zustand = 'titel';
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+}
+
+// ----- Gastgeber -----
+async function mpRaumErstellen(versuch = 0) {
+  if (mp.peer && versuch === 0) return;
+  mpStatus('⏳ Raum wird erstellt ...');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
+  const code = mpNeuerCode();
+  const peer = new window.Peer(MP_VORSILBE + code);
+  mp.peer = peer;
+  peer.on('open', () => {
+    Object.assign(mp, { aktiv: true, rolle: 'host', code, nr: 0 });
+    mpStatus(`✅ Raum ${code} ist offen!`);
+    neuesSpiel();
+    zeigeNachricht(`🌐 Dein Raum-Code: ${code} – sag ihn deinen Freunden!`, 8, '#7cf5c6');
+  });
+  peer.on('connection', conn => mpNeuerGast(conn));
+  peer.on('disconnected', () => { try { if (mp.peer === peer) peer.reconnect(); } catch (e) { /* egal */ } });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id' && versuch < 3) { peer.destroy(); mpRaumErstellen(versuch + 1); return; }   // Code schon vergeben? Neuer Code!
+    if (!mp.aktiv) { peer.destroy(); mp.peer = null; mpStatus('❌ ' + mpFehlerText(e)); }
+  });
+}
+function mpNeuerGast(conn) {
+  conn.on('open', () => {
+    const belegt = new Set([...mp.andere.values()].map(g => g.nr));
+    let nr = 1;
+    while (belegt.has(nr)) nr++;
+    if (nr >= MP_MAX_SPIELER) { conn.send({ t: 'voll' }); setTimeout(() => conn.close(), 500); return; }
+    const g = { id: conn.peer, conn, nr, ...MP_ROBOTER[nr], x: 0, y: -50, z: 0, w: 0, dk: false, hg: -1, hz: null, k: null, r: null };
+    mp.andere.set(g.id, g);
+    conn.send({ t: 'hallo', nr, code: mp.code });
+    conn.send({ t: 'start', level, seed: mp.startzahl, konto });
+    zeigeNachricht(`🤖 ${g.name} ist dem Raum beigetreten!`, 3);
+    sound.abgabe();
+  });
+  conn.on('data', d => { const g = mp.andere.get(conn.peer); if (g) mpVomGast(g, d); });
+  conn.on('close', () => mpGastWeg(conn.peer));
+  conn.on('error', () => mpGastWeg(conn.peer));
+}
+function mpGastWeg(id) {
+  const g = mp.andere.get(id);
+  if (!g) return;
+  mpMeshWeg(g);
+  mp.andere.delete(id);
+  zeigeNachricht(`👋 ${g.name} hat den Raum verlassen`, 3, '#c9c3ff');
+}
+function mpVomGast(g, d) {
+  if (!d || !d.t) return;
+  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, dk: d.dk, hg: d.hg, hz: d.hz, k: d.k, r: d.r });
+  else if (zustand !== 'spiel') return;
+  else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
+  else if (d.t === 'wurf') {
+    const s = schatzMitId(d.id);
+    if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
+    g.hg = -1;
+  } else if (d.t === 'blitz') blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
+  else if (d.t === 'abfahren') { if (lasterWert() >= ld.ziel) levelGeschafft(); }
+}
+// Gäste halten Schätze mit ihrem Greifstrahl – die Physik dafür rechnet der Gastgeber
+function mpGastSchaetzeHalten() {
+  if (mp.rolle !== 'host') return;
+  for (const s of schaetze) s.gastHaelt = null;
+  for (const g of mp.andere.values()) {
+    if (g.hg < 0 || !g.hz) continue;
+    const s = schatzMitId(g.hg);
+    if (!s || s === gegriffen || s.gastHaelt) { mpSendeAn(g, { t: 'los' }); g.hg = -1; continue; }
+    if (s.getragenVon) helferLoslassen(s.getragenVon);
+    s.gastHaelt = g;
+    if (!zieheSchatz(s, new THREE.Vector3(g.hz[0], g.hz[1], g.hz[2]))) { mpSendeAn(g, { t: 'los', abgerissen: true }); g.hg = -1; }
+  }
+}
+function mpTreffer(g, schaden, von, m, schubs) {   // Ein Monster hat einen Gast erwischt
+  mpSendeAn(g, { t: 'au', s: schaden, von, wx: r2(g.x - m.x), wz: r2(g.z - m.z), sb: schubs });
+}
+function mpHostSendet() {
+  if (zustand !== 'spiel' || !mp.andere.size) return;
+  mp.zaehler++;
+  const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
+  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1 }];
+  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, dk: g.dk, hg: g.hg });
+  const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
+    r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null]);
+  const he = helfer.map(h => {
+    const q = h.body.position;
+    return [r2(q.x), r2(q.y), r2(q.z), r2(h.winkel), h.modus, Math.ceil(Math.max(0, h.kaputt)), h.leben, h.auftrag ? h.auftrag.id : -1, h.angst > 0 ? 1 : 0, h.wackelt > 0 ? 1 : 0, h.froh > 0 ? 1 : 0];
+  });
+  // Schätze: nur die, die sich bewegt haben (einmal pro Sekunde alle)
+  const alle = mp.zaehler % MP_SENDE_RATE === 0, sc = [];
+  for (const s of schaetze) {
+    const b = s.body, q = b.quaternion;
+    const a = [s.id, r2(b.position.x), r2(b.position.y), r2(b.position.z), r2(q.x), r2(q.y), r2(q.z), r2(q.w), s.wert];
+    const alt = s.mpAlt;
+    if (alle || !alt || a.some((v, i) => Math.abs(v - alt[i]) > 0.004)) { sc.push(a); s.mpAlt = a; }
+  }
+  mpAnAlle({ t: 's', sp, mo, he, sc, ids: alle ? schaetze.map(x => x.id) : null });
+}
+
+// ----- Gast -----
+async function mpBeitreten() {
+  const code = (mpEl.code ? mpEl.code.value : '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { mpStatus('Der Code hat 4 Zeichen, z. B. K7PX'); return; }
+  if (mp.peer) return;
+  mpStatus('⏳ Verbinde ...');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
+  const peer = new window.Peer();
+  mp.peer = peer;
+  peer.on('open', () => {
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true });
+    mp.conn = conn;
+    conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code }); mpStatus('✅ Verbunden! Das Haus wird gebaut ...'); });
+    conn.on('data', d => mpVomHost(d));
+    conn.on('close', () => { if (mp.conn === conn) mpVerbindungWeg('Die Verbindung zum Gastgeber ist weg.'); });
+  });
+  peer.on('error', e => {
+    if (mp.peer !== peer) return;
+    mpVerbindungWeg(e.type === 'peer-unavailable' ? 'Raum nicht gefunden – stimmt der Code?' : mpFehlerText(e));
+  });
+}
+function mpGastVorbereiten() {
+  // Beim Gast bewegt der Gastgeber die Schätze und Helfer – hier sind sie "kinematisch" (sie schubsen, werden aber nicht geschubst)
+  for (const s of schaetze) { s.body.type = CANNON.Body.KINEMATIC; s.body.velocity.set(0, 0, 0); s.body.angularVelocity.set(0, 0, 0); s.body.wakeUp(); }
+  for (const h of helfer) { h.body.type = CANNON.Body.KINEMATIC; h.body.velocity.set(0, 0, 0); }
+  spielerKoerper.position.x += mp.nr * 0.9;   // Nicht alle auf denselben Fleck
+}
+function mpSchatzWeg(s) {
+  s.kaputt = true;
+  if (gegriffen === s) loslassen();
+  welt.removeBody(s.body);
+  szene.remove(s.mesh);
+  schaetze = schaetze.filter(x => x !== s);
+}
+function mpVomHost(d) {
+  if (!d || !d.t) return;
+  if (d.t === 'hallo') { mp.nr = d.nr; return; }
+  if (d.t === 'voll') { mpVerbindungWeg('Der Raum ist voll (höchstens 4 Spieler).'); return; }
+  if (d.t === 'start') {
+    level = d.level; konto = d.konto;
+    starteLevel(d.seed);
+    zeigeNachricht(`🌐 Du bist ${MP_ROBOTER[mp.nr].name}! Raum ${mp.code} – Level ${level}`, 4, MP_ROBOTER[mp.nr].farbe);
+    return;
+  }
+  if (d.t === 'geschafft') {
+    levelErgebnis = { wert: d.wert, helfer: d.helfer };
+    konto = d.konto;
+    if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } }
+    zustand = 'geschafft';
+    loslassen();
+    sound.geschafft();
+    if (document.pointerLockElement) document.exitPointerLock();
+    return;
+  }
+  if (zustand !== 'spiel') return;
+  if (d.t === 's') mpSchnappschuss(d);
+  else if (d.t === 'kaputt') { const s = schatzMitId(d.id); if (s && !s.kaputt) zerbrechen(s); }
+  else if (d.t === 'sag') { const h = helfer[d.h]; if (h) helferSpricht(h, d.satz); }
+  else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
+  else if (d.t === 'au') {
+    getroffen(d.s, d.von);
+    const l = Math.hypot(d.wx, d.wz) || 1;
+    spielerKoerper.velocity.set(d.wx / l * d.sb, 3, d.wz / l * d.sb);
+  } else if (d.t === 'los') { loslassen(); if (d.abgerissen) zeigeNachricht('Der Strahl ist abgerissen!', 1.5, '#ffd166'); }
+}
+function mpSchnappschuss(d) {
+  // Die anderen Spieler
+  const da = new Set();
+  for (const a of d.sp) {
+    if (a.id === mp.peer.id) continue;
+    da.add(a.id);
+    let o = mp.andere.get(a.id);
+    if (!o) { o = { id: a.id, nr: a.nr, ...MP_ROBOTER[a.nr] }; mp.andere.set(a.id, o); }
+    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, dk: a.dk, hg: a.hg });
+  }
+  for (const [id, o] of mp.andere) if (!da.has(id)) { mpMeshWeg(o); mp.andere.delete(id); }
+  // Monster
+  d.mo.forEach((a, i) => {
+    const m = monster[i];
+    if (!m) return;
+    Object.assign(m, { zx: a[0], zy: a[1], zz: a[2], zw: a[3], modus: a[4], betaeubt: a[5], zielen: a[6], laeuft: !!a[7], bewegtSeit: a[8], gesehen: !!a[9], nachladen: a[10] });
+    m.laserZiel = a[11] ? { x: a[11][0], y: a[11][1], z: a[11][2] } : null;
+  });
+  // Helfer
+  d.he.forEach((a, i) => {
+    const h = helfer[i];
+    if (!h) return;
+    Object.assign(h, { zx: a[0], zy: a[1], zz: a[2], zw: a[3], modus: a[4], kaputt: a[5], leben: a[6], angst: a[8], wackelt: a[9], froh: a[10] });
+    h.auftrag = a[7] >= 0 ? schatzMitId(a[7]) : null;
+    if (!h.auftrag) h.modus = 'suchen';
+  });
+  // Schätze
+  for (const a of d.sc) { const s = schatzMitId(a[0]); if (s) { s.ziel = a; s.wert = a[8]; } }
+  if (d.ids) { const gibt = new Set(d.ids); for (const s of [...schaetze]) if (!gibt.has(s.id)) mpSchatzWeg(s); }
+}
+const winkelHin = (von, nach, f) => {   // Einen Winkel weich zu einem anderen drehen (den kurzen Weg!)
+  let diff = nach - von;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return von + diff * f;
+};
+const mpQuat = new CANNON.Quaternion();
+function updateAlsGast(dt) {
+  spielZeit += dt;
+  if (!pause) updateSpieler(dt);
+  const f = Math.min(1, dt * 12);
+  // Alles weich dorthin schieben, wo der Gastgeber es hat
+  for (const s of schaetze) {
+    if (!s.ziel) continue;
+    const a = s.ziel, b = s.body;
+    if (Math.hypot(a[1] - b.position.x, a[2] - b.position.y, a[3] - b.position.z) > 3) b.position.set(a[1], a[2], a[3]);
+    else b.position.set(b.position.x + (a[1] - b.position.x) * f, b.position.y + (a[2] - b.position.y) * f, b.position.z + (a[3] - b.position.z) * f);
+    mpQuat.set(a[4], a[5], a[6], a[7]).normalize();
+    b.quaternion.slerp(mpQuat, f, b.quaternion);
+  }
+  for (const h of helfer) {
+    h.redePause -= dt; h.redet = Math.max(0, h.redet - dt); h.blasenZeit -= dt;
+    if (h.zx === undefined) continue;
+    const b = h.body.position;
+    b.set(b.x + (h.zx - b.x) * f, b.y + (h.zy - b.y) * f, b.z + (h.zz - b.z) * f);
+    h.winkel = winkelHin(h.winkel, h.zw, f);
+  }
+  for (const m of monster) {
+    m.phase += dt;
+    if (m.zx === undefined) continue;
+    m.x += (m.zx - m.x) * f; m.y += (m.zy - m.y) * f; m.z += (m.zz - m.z) * f;
+    m.winkel = winkelHin(m.winkel, m.zw, f);
+    monsterGeraeusche(m, dt);
+  }
+  if (gegriffen && gegriffen.kaputt) loslassen();
+  welt.step(1 / 60, dt, 3);
+  pruefeBoden();
+  if (spielerKoerper.position.y < -2) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
+  updateSchussSpuren(dt);
+  blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
+  if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
+  for (const s of schaetze) {
+    const drin = imLaster(s);
+    if (drin && !s.warDrin && spielZeit > 2) { sound.abgabe(); schwebeText(s.body.position.x, s.body.position.y + 0.6, s.body.position.z, `+${euro(s.wert)} 🚚`, '#7cf5c6'); }
+    s.warDrin = drin;
+  }
+  herzZeit -= dt;
+  if (gejagt() && herzZeit <= 0) { herzZeit = 0.7; sound.herz(0.8); }
+  if (tasten['e'] && spielerImLaster() && lasterWert() >= ld.ziel && zeit - mp.abfahrZeit > 1) { mp.abfahrZeit = zeit; mpSende({ t: 'abfahren' }); }
+  updateEffekte(dt);
+}
+function mpGastSendet() {
+  if (zustand !== 'spiel') return;
+  const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
+  const r = new THREE.Vector3(); kamera.getWorldDirection(r);
+  const k = kamera.position, hz = gegriffen ? halteZiel() : null;
+  mpSende({ t: 'p', x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+    hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)] });
+}
+
+// ----- Für beide -----
+function mpUpdate(dt) {
+  if (!mp.aktiv) return;
+  mp.sendeZeit -= dt;
+  if (mp.sendeZeit > 0) return;
+  mp.sendeZeit = 1 / MP_SENDE_RATE;
+  if (mp.rolle === 'host') mpHostSendet(); else mpGastSendet();
+}
+function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
+  for (const o of mp.andere.values()) {
+    if (o.y === undefined || o.y < -10) continue;
+    if (!o.teile) {
+      o.teile = baueHelferMesh({ name: o.name, farbe: o.farbe });
+      o.strahl = neuerStrahl(o.farbe, 0.025);
+      Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
+    }
+    const f = 0.25;
+    o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
+    o.aw = winkelHin(o.aw, o.w, f);
+    const T = o.teile, wink = o.aw + Math.PI;   // Die Kamera schaut nach -Z, die Roboter nach +Z
+    T.g.position.set(o.ax, o.ay, o.az);
+    T.g.rotation.set(0, wink, 0);
+    T.g.scale.set(1, o.dk ? 0.7 : 1, 1);
+    const haelt = o.hg >= 0 ? schatzMitId(o.hg) : null;
+    T.arme.forEach(a => { a.rotation.x = haelt ? -0.5 : 0.9; });
+    T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
+    T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
+    malGesicht(o);
+    if (haelt) {
+      const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55, o.az + Math.cos(wink) * 0.45);
+      const nach = new THREE.Vector3().copy(haelt.body.position);
+      zeigeStrahl(o.strahl, von, nach, new THREE.Vector3(Math.sin(wink), 0.3, Math.cos(wink)).normalize(), Math.max(...haelt.typ.groesse) * 0.6);
+    } else o.strahl.g.visible = false;
+  }
+}
+function mpHUD() {
+  if (!mp.aktiv) return;
+  const namen = [mp.rolle === 'host' ? MP_ROBOTER[0] : MP_ROBOTER[mp.nr], ...[...mp.andere.values()].map(o => MP_ROBOTER[o.nr])];
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 112, 280, 30 + namen.length * 18, 12); ctx.fill();
+  text(`🌐 Raum ${mp.code} · ${namen.length} Spieler${mp.rolle === 'host' ? ' · du bist Gastgeber' : ''}`, 24, 128, 13, '#7cf5c6', 'left', false);
+  namen.forEach((n, k) => text(`🤖 ${n.name}${k === 0 ? ' (du)' : ''}`, 24, 148 + k * 18, 12, n.farbe, 'left', false));
+}
+if (mpEl.erstellen) mpEl.erstellen.addEventListener('click', () => { tonStart(); mpRaumErstellen(); });
+if (mpEl.beitreten) mpEl.beitreten.addEventListener('click', () => { tonStart(); mpBeitreten(); });
+if (mpEl.code) mpEl.code.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tonStart(); mpBeitreten(); } });
+addEventListener('beforeunload', () => { try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ } });
 
 // ===== Spielschleife =====
 let letzte = performance.now();
