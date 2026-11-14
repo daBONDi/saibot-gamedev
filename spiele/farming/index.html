@@ -42,10 +42,25 @@ body {
 #help {
     bottom: 15px;
     left: 15px;
-    padding: 10px 12px;
+    padding: 6px 12px 10px;
     font-size: 0.85em;
     line-height: 1.5;
+    max-width: calc(100vw - 30px);
+    z-index: 3;
 }
+#help-kopf {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: move;          /* Hier anfassen und ziehen */
+    touch-action: none;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #ffffff33;
+}
+#help-zu { margin: 0 0 0 auto; padding: 2px 9px; }
+#help.zu #help-inhalt { display: none; }
+#help.zu #help-kopf { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 #hinweis, #meldung {
     left: 50%;
     transform: translateX(-50%);
@@ -153,6 +168,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 </div>
 
 <div id="help" class="box">
+<div id="help-kopf">✋ <b>📖 Anleitung</b> <span class="klein">(hier ziehen = verschieben · I = ein/aus)</span><button id="help-zu" title="Einklappen / Ausklappen">➖</button></div>
+<div id="help-inhalt">
 <b>So geht's:</b> 🟫 Pflügen → 🌱 Säen → ⏳ Wachsen → 🌾 Ernten → 🛢️ Silo oder 🏪 Verkaufen<br>
 W A S D / Pfeile = Fahren/Laufen · Leertaste = Hüpfen / Bremsen · Shift = Rennen / Turbo<br>
 1 = Pflug · 2 = Sämaschine · 3 = Erntevorsatz<br>
@@ -164,7 +181,8 @@ Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken · N = Händler<br>
 Beim Sägewerk: V = Holz verkaufen · Zu Fuß beim Landhandel/Tankstelle: T = Säge tanken<br>
 🦾 Harvester: X / Maus halten = Baum fällen · 🪵 Holzanhänger: L = Kran lädt Holz auf (zu Fuß: Holz drauflegen) · V beim Sägewerk<br>
 🪴🐄🍎 Beim Gewächshaus/Gehege: P = Menü · Beim Obstbaum: P = pflücken · Mit Korn beim Gehege: L = Futter · Beim Dorfladen 🛒: V = Gemüse, Milch, Eier, Wolle verkaufen<br>
-B = Baumodus (1–9, 0 = Gebäude) · R = Gebäude drehen · M = Ton an/aus
+B = Baumodus (1–9, 0 = Gebäude) · R = Gebäude drehen · M = Ton an/aus · I = Anleitung ein/aus
+</div>
 </div>
 
 <div id="haendler" class="box">
@@ -202,6 +220,6 @@ B = Baumodus (1–9, 0 = Gebäude) · R = Gebäude drehen · M = Ton an/aus
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=17"></script>
+<script type="module" src="spiel.js?v=18"></script>
 </body>
 </html>

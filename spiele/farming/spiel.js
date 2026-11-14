@@ -2692,6 +2692,54 @@ $('btn-neu').addEventListener('click', neuesSpiel);
 $('btn-haendler').addEventListener('click', () => haendlerZeigen(true));
 $('haendler-zu').addEventListener('click', () => haendlerZeigen(false));
 $('hofpanel-zu').addEventListener('click', () => panelZeigen(null));
+
+// ===== Die Anleitung: verschieben (oben an der Leiste ziehen) und einklappen (➖ oder Taste I) =====
+const ANLEITUNG_SPEICHER = 'farming-anleitung';
+function anleitungZu(zu) {
+  $('help').classList.toggle('zu', zu);
+  $('help-zu').textContent = zu ? '➕' : '➖';
+  anleitungInsBild();
+  anleitungMerken();
+}
+function anleitungMerken() {
+  const h = $('help');
+  try { localStorage.setItem(ANLEITUNG_SPEICHER, JSON.stringify({ zu: h.classList.contains('zu'), x: h.style.left ? parseFloat(h.style.left) : null, y: h.style.top ? parseFloat(h.style.top) : null })); } catch (e) { /* egal */ }
+}
+function anleitungInsBild() {   // Nicht aus dem Bildschirm rausschieben!
+  const h = $('help');
+  if (!h.style.top) return;   // Noch nie verschoben: bleibt unten links
+  h.style.left = `${begrenzt(parseFloat(h.style.left), 0, Math.max(0, innerWidth - h.offsetWidth))}px`;
+  h.style.top = `${begrenzt(parseFloat(h.style.top), 0, Math.max(0, innerHeight - h.offsetHeight))}px`;
+}
+{
+  const h = $('help'), kopf = $('help-kopf');
+  let zieht = null;
+  kopf.addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    const box = h.getBoundingClientRect();
+    zieht = { dx: e.clientX - box.left, dy: e.clientY - box.top };
+    h.style.left = `${box.left}px`; h.style.top = `${box.top}px`; h.style.bottom = 'auto';
+    kopf.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  kopf.addEventListener('pointermove', e => {
+    if (!zieht) return;
+    h.style.left = `${e.clientX - zieht.dx}px`; h.style.top = `${e.clientY - zieht.dy}px`;
+    anleitungInsBild();
+  });
+  const loslassen = () => { if (zieht) { zieht = null; anleitungMerken(); } };
+  kopf.addEventListener('pointerup', loslassen);
+  kopf.addEventListener('pointercancel', loslassen);
+  $('help-zu').addEventListener('click', e => { anleitungZu(!h.classList.contains('zu')); e.currentTarget.blur(); });   // blur: sonst klappt die Leertaste sie wieder auf
+  // Wo war die Anleitung beim letzten Mal?
+  let alt = null;
+  try { alt = JSON.parse(localStorage.getItem(ANLEITUNG_SPEICHER)); } catch (e) { alt = null; }
+  if (alt) {
+    if (alt.x !== null && alt.y !== null) { h.style.left = `${alt.x}px`; h.style.top = `${alt.y}px`; h.style.bottom = 'auto'; }
+    anleitungZu(!!alt.zu);
+  }
+  addEventListener('resize', anleitungInsBild);
+}
 for (const art of Object.keys(GEBAEUDE_ARTEN)) $('bau-' + art).addEventListener('click', () => { bauArt = art; updateHUD(); });
 
 document.addEventListener('keydown', e => {
@@ -2722,6 +2770,7 @@ document.addEventListener('keydown', e => {
   if (k === 'n') haendlerZeigen($('haendler').style.display !== 'block');
   if (k === 'h') kuppeln();
   if (k === 'q') saegeNehmen();
+  if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
   if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
   if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); }
