@@ -4119,7 +4119,7 @@ function zeichneTitel() {
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
   text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠👹👾', W / 2, 355, 17, '#fff', 'center', false);
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
-  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische, durch Mauselöcher 🐭!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
+  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische, durch Mauselöcher 🐭!) · F: Blitzlampe 📸 · E: Tür auf/zu 🚪', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster! 📸', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
