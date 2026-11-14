@@ -2440,9 +2440,10 @@ const MONSTER_ARTEN = {
               sichtWeite: 13, geduld: 1.0, jagdDauer: 7, schubs: 14, ruhe: 5 },
   // 🐾 Der Achtarm-Maulwurf lebt NUR draußen im Wald. Er gräbt unter der Erde und spürt deine Schritte!
   // Stillstehen oder Ducken (C) = er spürt dich nicht. fuehlWeite: so weit spürt er Schritte · auftauchWeite: so nah, dann bricht er raus
-  // auftauchen: so lange bebt der Boden vorher (Warnung!) · obenZeit: so lange bleibt er oben und haut mit seinen 8 Armen um sich
+  // auftauchen: so lange bebt der Boden vorher (Warnung!) · obenZeit: so lange krabbelt er oben herum und jagt dich mit seinen 8 Armen
+  // krabbelTempo: so schnell krabbelt er oben (du läufst 4, rennst 6.5) · krabbelWeite: so weit riecht er dich oben (auch wenn du stillstehst!)
   maulwurf: { name: 'Achtarm-Maulwurf', emoji: '🐾', tempo: 2.0, jagdTempo: 5.0, schaden: 40, pause: 1.2, betaeubbar: true,
-              fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 3, abtauchen: 0.6, schubs: 11 },
+              fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 8, abtauchen: 0.6, schubs: 11, krabbelTempo: 3.6, krabbelWeite: 14 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
@@ -2997,13 +2998,14 @@ function maulwurfUpdate(m, dt) {
     return info.tempo;
   }
   if (m.modus === 'auftauchen') { m.warnZeit -= dt; if (m.warnZeit <= 0) { m.modus = 'oben'; m.obenZeit = info.obenZeit; } return 0; }
-  if (m.modus === 'oben') {   // Oben! Er fuchtelt mit allen acht Armen und schiebt sich auf den Nächsten zu
+  if (m.modus === 'oben') {   // Oben! Er krabbelt auf seinen acht Armen hinter dir her und haut zu!
     m.obenZeit -= dt;
-    if (m.obenZeit <= 0) { m.modus = 'abtauchen'; m.warnZeit = info.abtauchen; return 0; }
-    const o = maulwurfOpfer(m, 4, true);
-    if (o) { m.ziel = { x: o.x, y: 0, z: o.z }; m.winkel = Math.atan2(o.x - m.x, o.z - m.z); return 1.3; }
-    m.ziel = { x: m.x, y: 0, z: m.z };
-    return 0;
+    const o = maulwurfOpfer(m, info.krabbelWeite, true);   // Oben riecht er dich – Stillstehen hilft jetzt nicht mehr!
+    m.alleinZeit = o ? 0 : (m.alleinZeit || 0) + dt;
+    if (m.obenZeit <= 0 || m.alleinZeit > 1.5) { m.modus = 'abtauchen'; m.warnZeit = info.abtauchen; m.alleinZeit = 0; return 0; }   // Müde (oder keiner mehr da): wieder runter
+    if (!o) { m.ziel = { x: m.x, y: 0, z: m.z }; return 0; }
+    m.ziel = { x: o.x, y: 0, z: o.z };
+    return abstand2D(m.x, m.z, o.x, o.z) < 1.0 ? 0 : info.krabbelTempo;
   }
   if (m.modus === 'abtauchen') { m.warnZeit -= dt; if (m.warnZeit <= 0) { m.modus = 'graben'; m.ziel = null; m.ruhe = 2; } return 0; }
   m.modus = 'graben';
@@ -3266,11 +3268,21 @@ function zeigeMonster(m) {
       b.visible = spritzt;
       if (spritzt) { const t = (zeit * 1.5 + k * 0.137) % 1; b.position.set(Math.cos(b.userData.w) * t * 1.6, 0.2 + b.userData.v * t - 4.9 * t * t, Math.sin(b.userData.w) * t * 1.6); }
     });
-    const wild = m.betaeubt > 0 ? 0.2 : m.modus === 'oben' ? 1 : 0.4;   // Acht Arme fuchteln durcheinander
+    const krabbelt = m.modus === 'oben' && m.laeuft && m.betaeubt <= 0;
+    if (krabbelt) U.koerper.position.y += Math.abs(Math.sin(m.phase * 9)) * 0.08;   // Beim Krabbeln wippt der Körper
+    const wild = m.betaeubt > 0 ? 0.2 : m.modus === 'oben' ? 1 : 0.4;
     U.arme.forEach(a => {
-      const { s, k, unter } = a.userData, ph = zeit * 9 + k * 1.3 + (s > 0 ? 0.7 : 0);
-      a.rotation.z = s * (0.3 + Math.sin(ph) * 0.5 * wild); a.rotation.y = Math.cos(ph * 0.8) * 0.4 * wild;
-      unter.rotation.x = -0.6 + Math.sin(ph + 1) * 0.8 * wild;
+      const { s, k, unter } = a.userData;
+      if (krabbelt) {   // Krabbeln: Die Arme greifen abwechselnd nach vorne, stemmen sich in den Boden und ziehen ihn weiter (wie eine Spinne!)
+        const ph = m.phase * 9 + (k % 2 ? Math.PI : 0) + (s > 0 ? Math.PI : 0);
+        a.rotation.z = s * (0.15 + Math.max(0, Math.cos(ph)) * 0.35);   // Arm hochheben
+        a.rotation.y = -s * Math.sin(ph) * 0.6;                         // Nach vorne und hinten
+        unter.rotation.x = -0.2 + Math.max(0, Math.cos(ph)) * -0.5;
+      } else {   // Stehen: Acht Arme fuchteln wild durcheinander
+        const ph = zeit * 9 + k * 1.3 + (s > 0 ? 0.7 : 0);
+        a.rotation.z = s * (0.3 + Math.sin(ph) * 0.5 * wild); a.rotation.y = Math.cos(ph * 0.8) * 0.4 * wild;
+        unter.rotation.x = -0.6 + Math.sin(ph + 1) * 0.8 * wild;
+      }
     });
     U.tentakel.forEach((t, k) => t.scale.setScalar(1 + Math.sin(zeit * 20 + k) * 0.25));   // Die Sternnase schnuppert
     U.augeMat.color.set(m.betaeubt > 0 ? '#555' : m.modus === 'oben' ? '#ff1a1a' : '#a33');
