@@ -49,6 +49,13 @@ const MONSTER_START_ABSTAND = 3;   // So viele Räume (Türen) weit weg vom Star
 const TREPPE = { von: 1.2, bis: 8.4, z1: 0.3, z2: 1.9 };     // Die Rampe mit den Stufen
 const GELAENDER_AB = 2.2;         // Ab so vielen Metern nach dem Treppen-Anfang kommt das Geländer (unten ist es offen)
 const LOCH = { x1: 1.0, x2: 8.4, z1: 0.15, z2: 2.0 };          // Das Loch in der Decke darüber
+// 🐭 Mauselöcher: kleine Löcher unten in den Wänden. Geduckt (C) passt du durch – Monster und Helfer sind zu groß!
+const MAUSELOCH_ANZAHL = 4;      // So viele Mauselöcher pro Stockwerk
+const MAUSELOCH = { breit: 0.72, hoch: 0.62 };   // So groß ist ein Mauseloch (geduckt bist du 0.56 groß)
+// 🕳️ Bodenlöcher: Oben fällst du ein Stockwerk tiefer, im Erdgeschoss landest du in einer Grube (rausspringen!)
+const BODENLOCH_ANZAHL = 2;      // So viele Bodenlöcher pro Stockwerk
+const BODENLOCH = 1.6;           // So groß ist ein Bodenloch (in Metern)
+const GRUBE_TIEFE = 0.8;         // So tief ist eine Grube im Erdgeschoss
 
 // ===== Die Helfer-Bots =====
 const HELFER_ANZAHL = 2;         // So viele Kollegen helfen dir (0 bis 3)
@@ -916,6 +923,7 @@ const SCHATZ_MASKE = G_WAND | G_SPIELER | G_SCHATZ | G_HELFER;
 // Boden und Decke (unendlich große Flächen; die Decke wird je nach Stockwerken verschoben)
 const bodenKoerper = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: standardMat, collisionFilterGroup: G_WAND });
 bodenKoerper.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+bodenKoerper.position.y = -GRUBE_TIEFE;   // Ganz unten: der Grund der Gruben (der echte Boden sind dicke Platten, siehe baueHaus)
 const deckenKoerper = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: standardMat, collisionFilterGroup: G_WAND });
 deckenKoerper.quaternion.setFromEuler(Math.PI / 2, 0, 0);
 deckenKoerper.position.y = WAND_HOEHE;
@@ -1114,7 +1122,7 @@ function festerKlotz(x, y, z, b, h, t, mat, sicht = true) {
   return mesh;
 }
 // Ein Wandstück von (x1,z1) nach (x2,z2) auf Höhe "basis", auf Wunsch mit Tür (tuer = Breite der Tür, 0 = keine)
-function wandStueck(x1, z1, x2, z2, basis, tuer, mat) {
+function wandStueck(x1, z1, x2, z2, basis, tuer, mat, maus = 0) {
   const D = 0.3, laenge = Math.hypot(x2 - x1, z2 - z1), entlangX = z1 === z2;
   const stueck = (von, bis, unten, oben) => {
     const mitte = (von + bis) / 2, l = bis - von;
@@ -1123,6 +1131,14 @@ function wandStueck(x1, z1, x2, z2, basis, tuer, mat) {
     else festerKlotz(x1, basis + (unten + oben) / 2, z1 + mitte, D, oben - unten, l, mat);
   };
   if (tuer >= OFFEN) return;   // Großer Saal: hier ist gar keine Wand
+  if (!tuer && maus) {   // 🐭 Mauseloch: unten ein kleines Loch in der Wand
+    const a = maus - MAUSELOCH.breit / 2, b = maus + MAUSELOCH.breit / 2;
+    stueck(0, a, 0, WAND_HOEHE);
+    stueck(b, laenge, 0, WAND_HOEHE);
+    stueck(a, b, MAUSELOCH.hoch, WAND_HOEHE);
+    mausLochDeko(entlangX ? x1 + maus : x1, basis, entlangX ? z1 : z1 + maus, entlangX, mat);
+    return;
+  }
   if (!tuer) { stueck(0, laenge, 0, WAND_HOEHE); return; }
   const a = laenge / 2 - tuer / 2, b = laenge / 2 + tuer / 2;
   stueck(0, a, 0, WAND_HOEHE);
@@ -1132,6 +1148,30 @@ function wandStueck(x1, z1, x2, z2, basis, tuer, mat) {
     if (entlangX) festerKlotz(x1 + p, basis + TUER_HOEHE / 2, z1, 0.12, TUER_HOEHE, D + 0.08, dunkelHolzMat, false);
     else festerKlotz(x1, basis + TUER_HOEHE / 2, z1 + p, D + 0.08, TUER_HOEHE, 0.12, dunkelHolzMat, false);
   }
+}
+// Ein Mauseloch soll rund aussehen: Oben wird die Ecke mit Tapete zugemacht, dazu ein dunkler Holzrahmen
+const mausDunkel = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+function mausLochDeko(x, basis, z, entlangX, mat) {
+  const r = MAUSELOCH.breit / 2, h = MAUSELOCH.hoch, by = h - r - 0.02;   // by = Mitte vom runden Bogen
+  const ecken = new THREE.Shape();
+  ecken.moveTo(-r, h); ecken.lineTo(r, h); ecken.lineTo(r, by);
+  ecken.absarc(0, by, r, 0, Math.PI, false);   // Der Bogen (von rechts über oben nach links)
+  ecken.lineTo(-r, h);
+  const eckenGeo = new THREE.ShapeGeometry(ecken, 10);
+  const dunkel = new THREE.Shape();   // Drinnen ist es dunkel ...
+  dunkel.moveTo(-r, 0); dunkel.lineTo(r, 0); dunkel.lineTo(r, by); dunkel.absarc(0, by, r, 0, Math.PI, false); dunkel.lineTo(-r, 0);
+  const dunkelGeo = new THREE.ShapeGeometry(dunkel, 10);
+  const g = new THREE.Group();
+  for (const seite of [-1, 1]) {
+    const e = new THREE.Mesh(eckenGeo, mat); e.position.z = seite * 0.152; if (seite < 0) e.rotation.y = Math.PI; g.add(e);
+    const bogen = new THREE.Mesh(new THREE.TorusGeometry(r, 0.035, 6, 14, Math.PI), dunkelHolzMat);
+    bogen.position.set(0, by, seite * 0.16); g.add(bogen);
+    for (const sx of [-1, 1]) { const pfosten = new THREE.Mesh(new THREE.BoxGeometry(0.07, by, 0.05), dunkelHolzMat); pfosten.position.set(sx * r, by / 2, seite * 0.16); g.add(pfosten); }
+  }
+  const innen = new THREE.Mesh(dunkelGeo, mausDunkel); g.add(innen);   // (Ohne Physik: Da kriechst du einfach durch)
+  g.position.set(x, basis, z);
+  if (!entlangX) g.rotation.y = Math.PI / 2;
+  hausGruppe.add(g);
 }
 // Eine Lampe (es gibt nur MAX_LAMPEN, sonst wird das Spiel langsam)
 function lampeHinzu(x, y, z, farbe, staerke, weite, flackern) {
@@ -1412,6 +1452,48 @@ function baueTreppe(t) {
   festerKlotz(t.x0 + LOCH.x1 - 0.04, o + 0.5, t.z0 + (LOCH.z1 + LOCH.z2) / 2, 0.08, 1.0, LOCH.z2 - LOCH.z1, dunkelHolzMat, false);
 }
 // Boden/Decke zwischen zwei Stockwerken für einen Raum (mit Loch, wenn von unten eine Treppe hochkommt)
+// ----- Bodenlöcher -----
+const erdeMat = new THREE.MeshStandardMaterial({ color: '#2a1d14', roughness: 1 });
+function platteMitLoch(R, L, platte) {   // Den Boden eines Raumes in Platten bauen – um das Loch herum
+  const x0 = R.x0, z0 = R.z0, x1 = x0 + RAUM, z1 = z0 + RAUM;
+  if (!L) { platte(x0, z0, x1, z1); return; }
+  platte(x0, z0, x1, L.z1);          // Norden
+  platte(x0, L.z2, x1, z1);          // Süden
+  platte(x0, L.z1, L.x1, L.z2);      // Westen
+  platte(L.x2, L.z1, x1, L.z2);      // Osten
+}
+function bodenFlaeche(R, xa, za, xb, zb, y, mat) {   // Ein Stück Boden – das Muster passt genau zum Rest vom Raum
+  const b = xb - xa, t = zb - za;
+  if (b <= 0.01 || t <= 0.01) return;
+  const geo = new THREE.PlaneGeometry(b, t), pos = geo.attributes.position, uv = geo.attributes.uv;
+  const mx = (xa + xb) / 2, mz = (za + zb) / 2;
+  for (let k = 0; k < pos.count; k++) uv.setXY(k, (mx + pos.getX(k) - R.x0) / RAUM, (R.z0 + RAUM - mz + pos.getY(k)) / RAUM);
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.x = -Math.PI / 2; m.position.set(mx, y, mz); m.receiveShadow = true;
+  hausGruppe.add(m);
+}
+function lochRand(L) {   // Kaputte, abgebrochene Bretter rund ums Loch
+  const y = L.basis + 0.015, b = L.x2 - L.x1, t = L.z2 - L.z1, mx = (L.x1 + L.x2) / 2, mz = (L.z1 + L.z2) / 2;
+  for (const [x, z, lb, lt] of [[mx, L.z1, b + 0.1, 0.08], [mx, L.z2, b + 0.1, 0.08], [L.x1, mz, 0.08, t + 0.1], [L.x2, mz, 0.08, t + 0.1]]) {
+    const brett = new THREE.Mesh(new THREE.BoxGeometry(lb, 0.03, lt), dunkelHolzMat);
+    brett.position.set(x, y, z); hausGruppe.add(brett);
+  }
+  for (let k = 0; k < 5; k++) {   // Ein paar Splitter ragen ins Loch
+    const seite = k % 4, laenge = zufall(0.15, 0.35);
+    const splitter = new THREE.Mesh(new THREE.BoxGeometry(seite < 2 ? 0.07 : laenge, 0.025, seite < 2 ? laenge : 0.07), dunkelHolzMat);
+    const x = seite === 2 ? L.x1 + laenge / 2 : seite === 3 ? L.x2 - laenge / 2 : zufall(L.x1 + 0.2, L.x2 - 0.2);
+    const z = seite === 0 ? L.z1 + laenge / 2 : seite === 1 ? L.z2 - laenge / 2 : zufall(L.z1 + 0.2, L.z2 - 0.2);
+    splitter.position.set(x, y - 0.02, z); splitter.rotation.set(zufall(-0.3, 0.3), zufall(-0.4, 0.4), zufall(-0.3, 0.3));
+    hausGruppe.add(splitter);
+  }
+}
+// Ist hier ein Bodenloch? (rand = so viel Abstand halten)
+function bodenLochBei(x, z, y, rand = 0) {
+  for (const L of haus.bodenloecher || []) {
+    if (Math.abs(y - L.basis) < 0.7 && x > L.x1 - rand && x < L.x2 + rand && z > L.z1 - rand && z < L.z2 + rand) return L;
+  }
+  return null;
+}
 function baueZwischendecke(R, boden) {
   const y = R.basis - 0.1, x0 = R.x0, z0 = R.z0;
   const mats = [deckenMat, deckenMat, boden, deckenMat, deckenMat, deckenMat];   // oben Boden, unten Decke
@@ -1425,6 +1507,11 @@ function baueZwischendecke(R, boden) {
     sichtBlocker.push(mesh);
     festerKoerper((xa + xb) / 2, y, (za + zb) / 2, b, 0.2, t);
   };
+  if (R.bodenloch) {   // Mit Bodenloch: Platten rundherum, der Boden obendrauf (damit das Muster passt)
+    mats[2] = deckenMat;
+    platteMitLoch(R, R.bodenloch, (xa, za, xb, zb) => { platte(xa, za, xb, zb); bodenFlaeche(R, xa, za, xb, zb, R.basis + 0.001, boden); });
+    return;
+  }
   if (!R.treppeRunter) { platte(x0, z0, x0 + RAUM, z0 + RAUM); return; }
   platte(x0, z0 + LOCH.z2, x0 + RAUM, z0 + RAUM);             // Süden
   platte(x0, z0, x0 + LOCH.x1, z0 + LOCH.z2);                 // Westen
@@ -1502,6 +1589,27 @@ function baueHaus() {
     R.tuer = { n: R.j > 0 ? breite(R.nr - haus.breit) : 0, s: R.j < haus.tief - 1 ? breite(R.nr + haus.breit) : 0, w: R.i > 0 ? breite(R.nr - 1) : 0, o: R.i < haus.breit - 1 ? breite(R.nr + 1) : 0 };
   }
 
+  // 2b. 🐭 Mauselöcher (in Wänden ohne Tür) und 🕳️ Bodenlöcher aussuchen
+  haus.mauseloecher = new Map(); haus.bodenloecher = [];
+  const ohneTreppe = R => !R.treppeHoch && !R.treppeRunter;
+  for (let e = 0; e < haus.etagen; e++) {
+    const kandidaten = [];
+    for (const R of haus.raeume) if (R.e === e) {
+      if (R.i + 1 < haus.breit && !verbunden(R.nr, R.nr + 1)) kandidaten.push([R.nr, R.nr + 1]);
+      if (R.j + 1 < haus.tief && !verbunden(R.nr, R.nr + haus.breit) && ohneTreppe(haus.raeume[R.nr + haus.breit])) kandidaten.push([R.nr, R.nr + haus.breit]);   // (Nicht hinter der Treppe)
+    }
+    for (const [a, b] of mischen(kandidaten).slice(0, MAUSELOCH_ANZAHL)) haus.mauseloecher.set(tuerSchluessel(a, b), RAUM / 2 + (rnd() - 0.5) * 1.2);
+    const raeume = mischen(haus.raeume.filter(R => R.e === e && R.nr !== haus.start && ohneTreppe(R)));
+    for (const R of raeume.slice(0, BODENLOCH_ANZAHL)) {
+      // Das Loch liegt zwischen Raummitte und einer Wand (am liebsten einer ohne Tür)
+      const seiten = ['n', 's', 'w', 'o'].filter(w => !R.tuer[w]), seite = auswahl(seiten.length ? seiten : ['n', 's', 'w', 'o']);
+      const cx = R.x0 + RAUM / 2, cz = R.z0 + RAUM / 2, a = 2.95, h = BODENLOCH / 2;
+      const [mx, mz] = { n: [cx, cz - a], s: [cx, cz + a], w: [cx - a, cz], o: [cx + a, cz] }[seite];
+      R.bodenloch = { e, nr: R.nr, basis: R.basis, x1: mx - h, x2: mx + h, z1: mz - h, z2: mz + h };
+      haus.bodenloecher.push(R.bodenloch);
+    }
+  }
+
   // 3. Räume mit Thema: Böden und Zwischendecken
   for (const R of haus.raeume) {
     R.saal = saalVon(R.i, R.j, R.e);
@@ -1510,11 +1618,23 @@ function baueHaus() {
     const t = BOEDEN[R.art.boden].clone(); t.needsUpdate = true;
     t.repeat.set(R.art.boden === 'holz' ? 3.3 : 5, R.art.boden === 'holz' ? 3.3 : 5);
     const bodenMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 });
-    if (R.e === 0) {
-      const boden = new THREE.Mesh(new THREE.PlaneGeometry(RAUM, RAUM), bodenMat);
-      boden.rotation.x = -Math.PI / 2; boden.position.set(R.x0 + RAUM / 2, 0, R.z0 + RAUM / 2); boden.receiveShadow = true;
-      hausGruppe.add(boden);
+    if (R.e === 0) {   // Erdgeschoss: dicke Platten (so tief wie eine Grube), darauf der Boden
+      platteMitLoch(R, R.bodenloch, (xa, za, xb, zb) => {
+        const b = xb - xa, t = zb - za;
+        if (b <= 0.01 || t <= 0.01) return;
+        const klotz = new THREE.Mesh(new THREE.BoxGeometry(b, GRUBE_TIEFE, t), erdeMat);
+        klotz.position.set((xa + xb) / 2, -GRUBE_TIEFE / 2 - 0.002, (za + zb) / 2);
+        hausGruppe.add(klotz);
+        festerKoerper((xa + xb) / 2, -GRUBE_TIEFE / 2, (za + zb) / 2, b, GRUBE_TIEFE, t);
+        bodenFlaeche(R, xa, za, xb, zb, 0, bodenMat);
+      });
+      if (R.bodenloch) {   // Der Grund der Grube: dunkle Erde
+        const L = R.bodenloch, grund = new THREE.Mesh(new THREE.PlaneGeometry(L.x2 - L.x1, L.z2 - L.z1), erdeMat);
+        grund.rotation.x = -Math.PI / 2; grund.position.set((L.x1 + L.x2) / 2, -GRUBE_TIEFE + 0.002, (L.z1 + L.z2) / 2);
+        hausGruppe.add(grund);
+      }
     } else baueZwischendecke(R, bodenMat);
+    if (R.bodenloch) lochRand(R.bodenloch);
   }
   const B = haus.breit * RAUM, T = haus.tief * RAUM, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
   const decke = deckenTextur.clone(); decke.needsUpdate = true; decke.repeat.set(B / 2, T / 2);
@@ -1529,12 +1649,14 @@ function baueHaus() {
   for (let e = 0; e < haus.etagen; e++) {
     const basis = e * ETAGE_HOEHE;
     for (let j = 0; j <= haus.tief; j++) for (let i = 0; i < haus.breit; i++) {   // Wände entlang x
-      const tuer = j > 0 && j < haus.tief ? haus.tueren.get(tuerSchluessel(raumNr(i, j - 1, e), raumNr(i, j, e))) || 0 : 0;
-      wandStueck(i * RAUM, j * RAUM, (i + 1) * RAUM, j * RAUM, basis, tuer, tapete());
+      const innen = j > 0 && j < haus.tief, schl = innen ? tuerSchluessel(raumNr(i, j - 1, e), raumNr(i, j, e)) : '';
+      const tuer = innen ? haus.tueren.get(schl) || 0 : 0;
+      wandStueck(i * RAUM, j * RAUM, (i + 1) * RAUM, j * RAUM, basis, tuer, tapete(), innen ? haus.mauseloecher.get(schl) || 0 : 0);
     }
     for (let i = 0; i <= haus.breit; i++) for (let j = 0; j < haus.tief; j++) {   // Wände entlang z
-      const tuer = i > 0 && i < haus.breit ? haus.tueren.get(tuerSchluessel(raumNr(i - 1, j, e), raumNr(i, j, e))) || 0 : 0;
-      wandStueck(i * RAUM, j * RAUM, i * RAUM, (j + 1) * RAUM, basis, tuer, tapete());
+      const innen = i > 0 && i < haus.breit, schl = innen ? tuerSchluessel(raumNr(i - 1, j, e), raumNr(i, j, e)) : '';
+      const tuer = innen ? haus.tueren.get(schl) || 0 : 0;
+      wandStueck(i * RAUM, j * RAUM, i * RAUM, (j + 1) * RAUM, basis, tuer, tapete(), innen ? haus.mauseloecher.get(schl) || 0 : 0);
     }
   }
   for (const t of haus.treppen) baueTreppe(t);
@@ -2279,7 +2401,9 @@ function updateMonster(m, dt) {
     const schritt = Math.min(d, tempo * dt);
     const nx = m.x + dx / d * schritt, nz = m.z + dz / d * schritt;
     // Oben nicht ins Treppenloch laufen (sonst fällt das Monster durch und hängt hinter der Treppe fest)
-    const loch = (x, z) => !m.tw && haus.treppen.some(t => imLoch(t, x, z) && m.y > t.basis + ETAGE_HOEHE - 0.3 && !(aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - m.y) < 0.6));
+    const schonDrin = bodenLochBei(m.x, m.z, m.y, 0.3);   // (Monster laufen um Bodenlöcher herum)
+    const loch = (x, z) => (!m.tw && haus.treppen.some(t => imLoch(t, x, z) && m.y > t.basis + ETAGE_HOEHE - 0.3 && !(aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - m.y) < 0.6))) ||
+      (!schonDrin && !!bodenLochBei(x, z, m.y, 0.3));
     if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
     else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
     else if (!loch(m.x, nz)) m.z = nz;
@@ -2977,6 +3101,16 @@ function updateHelfer(h, dt) {
   if (h.angst > 0) tempo *= 1.3;   // Angst macht schnell!
   if (d < 0.25 || (h.modus === 'suchen' && zielD < 0.6 && !h.tw)) tempo = 0;
   if (d > 0) { dx /= d; dz /= d; }
+  // 🕳️ Nicht ins Bodenloch fahren! (Außer der Schatz liegt genau da drin)
+  const bl = !h.tw && bodenLochBei(p.x + dx * 0.8, p.z + dz * 0.8, p.y - 0.35, 0.35);
+  if (bl && !bodenLochBei(ziel.x, ziel.z, ziel.y, 0.3)) {
+    let ax = p.x - (bl.x1 + bl.x2) / 2, az = p.z - (bl.z1 + bl.z2) / 2;
+    const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+    const seite = -az * dx + ax * dz >= 0 ? 1 : -1;   // Links oder rechts herum – wie es näher ist
+    dx = -az * seite * 0.85 + ax * 0.5; dz = ax * seite * 0.85 + az * 0.5;
+  }
+  // In die Grube gefallen? Hopp, rausspringen!
+  if (p.y < -0.1 && Math.abs(v.y) < 0.3 && !bodenLochBei(ziel.x, ziel.z, 0, 0.3)) v.y = 5.5;
   if (h.ausweichen > 0) {   // Seitlich ausweichen
     h.ausweichen -= dt;
     [dx, dz] = [-dz * h.ausweichSeite, dx * h.ausweichSeite];
@@ -3696,7 +3830,7 @@ function zeichneTitel() {
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
   text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠👹👾', W / 2, 355, 17, '#fff', 'center', false);
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
-  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
+  text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische, durch Mauselöcher 🐭!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster! 📸', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
