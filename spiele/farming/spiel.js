@@ -55,7 +55,8 @@ const LADEN = { x: 60, z: 12, r: 8 };   // Der Landhandel: Hier verkaufst du Kor
 const WALD = { x: 88, z: 60, r: 19 };   // Mitte und Größe vom Wald
 const WALD_BAEUME = 40;          // So viele Fichten stehen im Wald
 const SAEGEWERK = { x: 58, z: 53, platzX: 58, platzZ: 42, r: 6 };   // Hier verkaufst du das Holz
-const SAEGE_ZEIT = 3;            // So viele Sekunden musst du sägen, bis ein Baum umfällt
+const SAEGE_ZEIT = 8;            // So viele Sekunden musst du sägen, bis ein Baum umfällt
+const SCHNITT_HOEHE = 0.9;       // In dieser Höhe (Meter) sägst du den Stamm durch
 const HOLZ_PRO_BAUM = 3;         // So viele Holzstämme gibt ein Baum
 const HOLZ_TRAGEN_MAX = 4;       // So viele Stämme kannst du auf einmal tragen
 const HOLZ_PREIS = 250;          // So viel bringt ein Stamm beim Sägewerk
@@ -421,6 +422,7 @@ const baeume = [];   // Alle Fichten: { nr, x, z, s, g, kipp, stumpf, h, zustand
       const t = new THREE.Mesh(geo, m); t.castShadow = true; t.receiveShadow = true; kipp.add(t);
     }
     const stumpf = new THREE.Mesh(fichteStumpfGeo, [rindeMat, schnittMat, rindeMat]);   // Oben sieht man das helle Holz
+    stumpf.scale.y = SCHNITT_HOEHE / s / 0.5;   // Der Stumpf ist so hoch, wie du gesägt hast
     stumpf.castShadow = true; stumpf.visible = false; g.add(stumpf);
     scene.add(g);
     const h = { x, z, r: 0.7 * s };
@@ -1051,13 +1053,19 @@ function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die 
   teil(kopf, new THREE.CylinderGeometry(0.17, 0.2, 0.16, 16), hut, 0, 0.31, 0);
   teil(kopf, new THREE.CylinderGeometry(0.205, 0.205, 0.04, 16), hutband, 0, 0.26, 0);
   farmer.kopf = kopf;
-  // Motorsäge in der rechten Hand (erst mal versteckt)
-  const saege = new THREE.Group(); saege.position.set(0, -0.62, 0); saege.visible = false;
-  farmer.armR.add(saege);
-  teil(saege, new THREE.BoxGeometry(0.17, 0.32, 0.24), mat(0xf07f13), 0, -0.14, 0);                 // Motor (orange)
-  teil(saege, new THREE.BoxGeometry(0.05, 0.12, 0.22), schwarz, 0, 0.04, 0.02);                      // Griff
-  teil(saege, new THREE.BoxGeometry(0.035, 0.62, 0.09), mat(0xb5b9bf, { metalness: 0.6, roughness: 0.4 }), 0, -0.6, -0.03);   // Schwert
-  teil(saege, new THREE.BoxGeometry(0.045, 0.64, 0.02), schwarz, 0, -0.6, -0.085);                   // Kette
+  // Motorsäge: wird mit beiden Händen vor dem Bauch gehalten (erst mal versteckt)
+  const saege = new THREE.Group(); saege.position.set(0.12, 1.02, -0.45); saege.visible = false;
+  player.add(saege);
+  const orange = mat(0xf07f13);
+  teil(saege, new THREE.BoxGeometry(0.2, 0.24, 0.36), orange, 0, 0, 0);                             // Motor (orange)
+  teil(saege, new THREE.BoxGeometry(0.16, 0.06, 0.1), schwarz, 0, 0.05, 0.22);                      // Hinterer Griff (rechte Hand)
+  teil(saege, new THREE.BoxGeometry(0.06, 0.1, 0.06), schwarz, 0.08, 0.02, 0.22);
+  teil(saege, new THREE.BoxGeometry(0.5, 0.05, 0.05), schwarz, -0.25, 0.17, -0.12);                 // Vorderer Bügel (linke Hand)
+  teil(saege, new THREE.BoxGeometry(0.05, 0.17, 0.05), schwarz, -0.02, 0.09, -0.12);
+  teil(saege, new THREE.BoxGeometry(0.03, 0.06, 0.03), mat(0xd4af37), 0.11, 0.08, 0.05);           // Starter-Griff
+  teil(saege, new THREE.BoxGeometry(0.035, 0.09, 0.8), mat(0xb5b9bf, { metalness: 0.6, roughness: 0.4 }), 0, -0.02, -0.58);   // Schwert
+  teil(saege, new THREE.BoxGeometry(0.045, 0.02, 0.82), schwarz, 0, -0.07, -0.58);                  // Kette unten
+  teil(saege, new THREE.BoxGeometry(0.045, 0.02, 0.82), schwarz, 0, 0.03, -0.58);                   // Kette oben
   farmer.saege = saege;
   // Holzstämme auf dem Rücken (erst mal versteckt)
   farmer.holz = [];
@@ -1072,11 +1080,12 @@ function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die 
 function farmerWerkzeug(t, saege, saegt, holz) {
   t.saege.visible = saege;
   t.holz.forEach((h, k) => { h.visible = k < holz; });
-  if (holz > 0 && !saegt) t.armL.rotation.x = -2.3;   // Mit links die Stämme auf dem Rücken festhalten
-  if (saege) {
-    t.armR.rotation.x = saegt ? 1.15 + Math.sin(spielZeit * 60) * 0.03 : 0.4;   // Beim Sägen nach vorne – und es rüttelt!
-    if (saegt) t.armL.rotation.x = 1.0;
-  }
+  if (saege) {   // Beide Hände an der Säge
+    const r = saegt ? Math.sin(spielZeit * 60) * 0.02 : 0;   // Beim Sägen rüttelt alles!
+    t.armL.rotation.x = 0.85 + r; t.armR.rotation.x = 0.85 - r;
+    t.saege.rotation.x = saegt ? -0.15 + r : -0.35;           // Beim Sägen waagerecht, sonst Spitze nach unten
+    t.saege.position.y = 1.02 + r * 0.5;
+  } else if (holz > 0) t.armL.rotation.x = -2.3;   // Mit links die Stämme auf dem Rücken festhalten
 }
 const meinFarmer = baueFarmer('#b3261e');
 const player = meinFarmer.g, farmer = meinFarmer.t;
@@ -1467,7 +1476,8 @@ function holzWeg(id) {
   holzStuecke.splice(k, 1);
 }
 function baumZustand(b, zustand, wert) {   // Einen Baum stehen, liegen oder wachsen lassen
-  b.zustand = zustand; b.hp = 0;
+  b.zustand = zustand; b.hp = 0; b.knackt = false;
+  if (b.schnitt) b.schnitt.visible = false;
   b.kipp.rotation.set(0, 0, 0);
   if (zustand === 'stumpf') {
     b.kipp.visible = false; b.stumpf.visible = true; b.h.r = 0.45;
@@ -1480,7 +1490,8 @@ function baumZustand(b, zustand, wert) {   // Einen Baum stehen, liegen oder wac
 }
 const lautstaerkeBei = (x, z) => { const p = wo(); return Math.max(0, 1 - Math.hypot(x - p.x, z - p.z) / 90); };   // Weit weg = leiser
 function baumFaellen(b, w, id, ich) {   // w = Richtung, in die der Baum fällt
-  b.zustand = 'faellt'; b.hp = 0; b.fallW = 0; b.fallV = 0.15;
+  b.zustand = 'faellt'; b.hp = 0; b.fallW = 0; b.fallV = 0.15; b.kipp.rotation.z = 0;
+  if (b.schnitt) b.schnitt.visible = false;
   b.g.rotation.y = w + Math.PI;   // So kippt er von dir weg
   b.stumpf.visible = true; b.h.r = 0.45;
   // Die Holzstämme liegen schon bereit – man sieht sie aber erst, wenn der Baum unten ist
@@ -1506,9 +1517,24 @@ function baumAufgeschlagen(b) {
     staub(b.x + Math.sin(w) * d, b.z + Math.cos(w) * d, k % 2 ? 0x8a7a5a : 0x3f6a32, 0.4, 1.2, 1.8);
   }
 }
+const schnittMat2 = mat(0x2a1a0e);
+function schnittZeigen(b) {   // Der Sägeschnitt im Stamm: ein dunkler Spalt, der langsam durch den Stamm wandert
+  if (!b.schnitt) {
+    b.schnitt = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), schnittMat2);
+    scene.add(b.schnitt);
+  }
+  const r = (0.4 - 0.15 * (SCHNITT_HOEHE / b.s) / 3) * b.s + 0.01;   // So dick ist der Stamm an der Schnitt-Stelle
+  const tief = Math.max(0.02, b.hp * 2 * r);
+  b.schnitt.visible = true;
+  b.schnitt.scale.set(2 * r + 0.02, 0.05, tief);
+  b.schnitt.rotation.y = b.schnittW;   // Die Box zeigt in Säge-Richtung
+  // Von deiner Seite aus in den Stamm hinein
+  const mitte = -r + tief / 2;
+  b.schnitt.position.set(b.x + Math.sin(b.schnittW) * mitte, SCHNITT_HOEHE, b.z + Math.cos(b.schnittW) * mitte);
+}
 function baumVorMir() {   // Der Baum, vor dem du stehst (zum Sägen)
   const p = player.position, vx = -Math.sin(yaw), vz = -Math.cos(yaw);
-  let bester = null, bestD = 2.6;
+  let bester = null, bestD = 1.8;
   for (const b of baeume) {
     if (b.zustand !== 'steht') continue;
     const d = Math.hypot(b.x - p.x, b.z - p.z);
@@ -1559,14 +1585,19 @@ function waldUpdate(dt) {
       if (saegeSprit <= 0) meldungSelten('⛽ Die Motorsäge hat keinen Sprit mehr! Drück T beim Landhandel 🏪 oder an der Hof-Tankstelle 🏚️.');
       else {
         saegt = true;
-        saegeSprit = Math.max(0, saegeSprit - dt * 3);
+        saegeSprit = Math.max(0, saegeSprit - dt * 1.5);
         const b = baumVorMir();
         if (b) {
-          b.hp += dt / SAEGE_ZEIT;
-          b.kipp.rotation.z = Math.sin(spielZeit * 70) * 0.01;   // Der Baum zittert
+          if (b.hp === 0) b.schnittW = Math.atan2(b.x - player.position.x, b.z - player.position.z);   // Von hier aus sägst du
+          b.hp = Math.min(1, b.hp + dt / SAEGE_ZEIT);
+          b.g.rotation.y = b.schnittW + Math.PI;
+          b.kipp.rotation.z = Math.sin(spielZeit * 70) * 0.006;   // Der Baum zittert
+          b.kipp.rotation.x = -Math.max(0, b.hp - 0.8) * 0.25;     // Kurz vor Schluss neigt er sich schon ...
+          schnittZeigen(b);
+          if (b.hp > 0.8 && !b.knackt) { b.knackt = true; ton(1500, 0, 0.05, 'square', 0.05); ton(900, 0.15, 0.05, 'square', 0.04); }   // Knack!
           const nx = (player.position.x - b.x), nz = (player.position.z - b.z), l = Math.hypot(nx, nz) || 1;
           if (Math.random() < 0.6) staub(b.x + nx / l * 0.5, b.z + nz / l * 0.5, 0xe8cf94, 0.8, 0.6, 0.35);   // Sägespäne
-          if (b.hp >= 1) baumFaellen(b, Math.atan2(b.x - player.position.x, b.z - player.position.z), Math.random().toString(36).slice(2, 8), true);
+          if (b.hp >= 1) baumFaellen(b, b.schnittW, Math.random().toString(36).slice(2, 8), true);
         }
       }
     } else saegeSprit = Math.max(0, saegeSprit - dt * 0.15);   // Im Leerlauf braucht sie nur ein bisschen
