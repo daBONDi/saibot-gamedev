@@ -2722,8 +2722,8 @@ function updateMonster(m, dt) {
     if (tu) { m.tuerZeit = (m.tuerZeit || 0) + dt; tempo = 0; if (m.tuerZeit > TUER_AUFBRECHEN) { m.tuerZeit = 0; tuerSetzen(tu, true, 'monster'); } }
     else m.tuerZeit = 0;
   }
-  // Laufen (durch die Türen und über die Treppen)
-  const wp = wegPunkt(m, m, m.ziel);
+  // Laufen (durch die Türen und über die Treppen) – ohne Ziel bleibt es kurz stehen
+  const wp = m.ziel ? wegPunkt(m, m, m.ziel) : m;
   const dx = wp.x - m.x, dz = wp.z - m.z, d = Math.hypot(dx, dz);
   m.laeuft = d > 0.2 && tempo > 0;
   if (m.laeuft) {
