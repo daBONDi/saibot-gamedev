@@ -101,7 +101,7 @@ const KARTE = {
   startzahl: 20261114,            // Damit das Haus jedes Mal genau gleich gebaut wird (andere Zahl = anderes Haus)
 };
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 1, jaeger: 1 };
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
 const ABGABE_ZEIT = 0.8;            // So lange muss ein Schatz in der Abgabe liegen, bis er verkauft ist
@@ -3067,11 +3067,11 @@ function zeichneTitel() {
   text('Automatische Roboter AufräumGruppe', W / 2, 132, 20, '#c9c3ff', 'center', false);
   zeichneRoboter(W / 2, 250, 1.5);
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
-  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🗿🤠', W / 2, 355, 17, '#fff', 'center', false);
+  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠', W / 2, 355, 17, '#fff', 'center', false);
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
-  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Den Starrer nicht aus den Augen lassen!', W / 2, 468, 12, '#8a8fb0', 'center', false);
+  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster! 📸', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
   text('🌐 Mit Freunden spielen? Oben rechts einen Raum erstellen oder einen Code eingeben!', W / 2, 548, 12, '#7cf5c6', 'center', false);
