@@ -101,7 +101,12 @@ const FISCHE = {
   goldfisch: { name: 'Goldener Fisch', emoji: '✨', preis: 250, chance: 3, schwer: 2.4 },
 };
 for (const [k, F] of Object.entries(FISCHE)) PRODUKTE['fisch_' + k] = { name: F.name, emoji: F.emoji, einheit: 'Stück', preis: F.preis };
-const TEICH_FISCHE_MAX = 8;      // So viele Fische schwimmen höchstens in einem Teich (alle 30 Sekunden kommt einer dazu)
+const TEICH_FISCHE_MAX = 8;
+// So schwer ist das Angel-Minispiel (größere/kleinere Zahlen = leichter/schwerer ausprobieren!)
+const ANGEL_FELD = 0.42;         // So groß ist das grüne Feld (0.42 = fast die Hälfte der Bahn)
+const ANGEL_FISCH_TEMPO = 0.55;  // So wild zappelt der Fisch (1 = wie vorher, kleiner = ruhiger)
+const ANGEL_FUELLEN = 0.42;      // So schnell füllt sich der Balken, wenn der Fisch im grünen Feld ist
+const ANGEL_LEEREN = 0.1;        // So schnell wird der Balken leer, wenn der Fisch draußen ist      // So viele Fische schwimmen höchstens in einem Teich (alle 30 Sekunden kommt einer dazu)
 // Salzmine: Salzsteine machen die Tiere glücklich – sie geben dann doppelt so viel!
 const SALZMINE = { x: 122, z: 12, eingangX: 109.5, eingangZ: 12 };
 const SALZ_MAX = 10;             // So viele Salzsteine kannst du tragen
@@ -1828,8 +1833,8 @@ function angelUpdate(dt) {
       let summe = 0; for (const F of Object.values(FISCHE)) summe += F.chance;
       let z = Math.random() * summe;
       a.fisch = Object.keys(FISCHE).find(k => (z -= FISCHE[k].chance) < 0) || 'rotauge';
-      Object.assign(a, { phase: 'kampf', fischPos: 0.4, ziel: 0.5, zielT: 0, zone: 0.3, zoneV: 0, fort: 0.3 });
-      a.groesse = 0.32 - FISCHE[a.fisch].schwer * 0.04;
+      Object.assign(a, { phase: 'kampf', fischPos: 0.4, ziel: 0.5, zielT: 0.8, zone: 0.25, zoneV: 0, fort: 0.45 });   // Der Fisch startet im grünen Feld
+      a.groesse = ANGEL_FELD - FISCHE[a.fisch].schwer * 0.025;
       $('angelFisch').textContent = FISCHE[a.fisch].emoji;
       $('angelZone').style.height = `${a.groesse * 100}%`;
       $('angeln').style.display = 'block';
@@ -1843,15 +1848,18 @@ function angelUpdate(dt) {
   const F = FISCHE[a.fisch];
   a.schwimmer.position.y = 0.05 + Math.sin(spielZeit * 20) * 0.04;
   a.zielT -= dt;
-  if (a.zielT <= 0) { a.zielT = (0.4 + Math.random()) / F.schwer; a.ziel = Math.random(); }
-  a.fischPos += (a.ziel - a.fischPos) * Math.min(1, dt * (1.2 + F.schwer * 1.6));
+  const wild = F.schwer * ANGEL_FISCH_TEMPO;
+  if (a.zielT <= 0) { a.zielT = (0.8 + Math.random() * 1.2) / wild; a.ziel = a.fischPos + (Math.random() - 0.5) * 0.7; a.ziel = begrenzt(a.ziel, 0, 1); }   // Kleinere Sprünge, seltener
+  a.fischPos += (a.ziel - a.fischPos) * Math.min(1, dt * (0.8 + wild * 1.2));
   const druck = keys[' '] || angelDruck || mouseDown;
-  a.zoneV = begrenzt(a.zoneV + (druck ? 3.0 : -2.6) * dt, -1.3, 1.3);
+  a.zoneV = begrenzt(a.zoneV + (druck ? 2.4 : -1.8) * dt, -0.9, 0.9);   // Ruhiger: steigt und fällt langsamer
+  if (druck !== a.druckVorher) a.zoneV *= 0.5;   // Beim Loslassen/Drücken nicht so stark nachschwingen
+  a.druckVorher = druck;
   a.zone += a.zoneV * dt;
   if (a.zone < 0) { a.zone = 0; a.zoneV = 0; }
   if (a.zone > 1 - a.groesse) { a.zone = 1 - a.groesse; a.zoneV = 0; }
   const fischMitte = a.fischPos * 0.9 + 0.05, drin = fischMitte > a.zone && fischMitte < a.zone + a.groesse;
-  a.fort = begrenzt(a.fort + (drin ? 0.3 : -0.22) * dt, 0, 1);
+  a.fort = begrenzt(a.fort + (drin ? ANGEL_FUELLEN : -ANGEL_LEEREN) * dt, 0, 1);
   $('angelZone').style.bottom = `${a.zone * 100}%`;
   $('angelFisch').style.bottom = `${a.fischPos * 90}%`;
   $('angelBalken').style.height = `${a.fort * 100}%`;
