@@ -63,6 +63,8 @@ const TUER_AUFBRECHEN = 0.8;     // So viele Sekunden braucht ein Monster, um ei
 const WALD_RAND = 22;            // So viele Meter Wald gibt es auf jeder Seite vom Haus
 const BAUM_ANZAHL = 170;         // So viele Bäume stehen im Wald
 const WALD_SCHAETZE = 8;         // So viele Schätze liegen am Anfang draußen im Wald
+const GARTENHAUS_ANZAHL = 3;     // 🛖 So viele Gartenhäuschen stehen im Wald (mit wertvollen Schätzen drin!)
+const GARTENHAUS_SCHAETZE = 2;   // So viele wertvolle Schätze liegen in jedem Gartenhäuschen
 const WALD_NEU_ANTEIL = 0.25;    // So oft taucht ein neuer Schatz draußen auf statt im Haus (0.25 = jeder vierte)
 const MONSTER_DRAUSSEN = true;   // true = Monster folgen dir nach draußen · false = sie bleiben im Haus und warten an der Tür
 
@@ -120,8 +122,17 @@ const SCHAETZE = [
   { id: 'goldbarren', name: 'Goldbarren',  emoji: '🪙', wert: [900, 1300],  zerbrechlich: 0.1,  masse: 8,   groesse: [0.3, 0.1, 0.15],   haeufig: 0.7 },   // Klein, aber schwer!
   { id: 'ei',       name: 'Juwelen-Ei',    emoji: '🥚', wert: [1400, 2000], zerbrechlich: 1.8,  masse: 0.8, groesse: [0.2, 0.28, 0.2],   haeufig: 0.35 },
   { id: 'krone',    name: 'Königskrone',   emoji: '👑', wert: [1600, 2400], zerbrechlich: 0.7,  masse: 2,   groesse: [0.3, 0.26, 0.3],   haeufig: 0.4 },
-  { id: 'diamant',  name: 'Riesendiamant', emoji: '💎', wert: [2500, 3500], zerbrechlich: 2.0,  masse: 0.5, groesse: [0.2, 0.2, 0.2],    haeufig: 0.25, rund: true },   // Das Wertvollste – und super zerbrechlich!
+  { id: 'diamant',  name: 'Riesendiamant', emoji: '💎', wert: [2500, 3500], zerbrechlich: 2.0,  masse: 0.5, groesse: [0.2, 0.2, 0.2],    haeufig: 0.25, rund: true },   // Super zerbrechlich!
+  // Noch wertvollere Schätze (die gibt es vor allem in den Gartenhäuschen!):
+  { id: 'perlen',   name: 'Perlenkette',   emoji: '📿', wert: [1500, 2200], zerbrechlich: 0.4,  masse: 0.4, groesse: [0.3, 0.06, 0.3],   haeufig: 0.4 },
+  { id: 'smaragd',  name: 'Smaragd',       emoji: '💚', wert: [1800, 2600], zerbrechlich: 1.5,  masse: 0.6, groesse: [0.18, 0.16, 0.18], haeufig: 0.3 },
+  { id: 'rubin',    name: 'Riesenrubin',   emoji: '❤️', wert: [2200, 3200], zerbrechlich: 1.6,  masse: 0.5, groesse: [0.18, 0.22, 0.18], haeufig: 0.25 },
+  { id: 'zepter',   name: 'Königszepter',  emoji: '🪄', wert: [2400, 3200], zerbrechlich: 0.5,  masse: 2,   groesse: [0.12, 0.75, 0.12], haeufig: 0.25 },
+  { id: 'schaedel', name: 'Kristallschädel', emoji: '💀', wert: [2800, 4000], zerbrechlich: 1.7, masse: 2,  groesse: [0.24, 0.28, 0.3],  haeufig: 0.18 },
+  { id: 'statue',   name: 'Goldene Statue', emoji: '🗽', wert: [3500, 4800], zerbrechlich: 0.2, masse: 22,  groesse: [0.4, 0.9, 0.4],    haeufig: 0.15, boden: true },   // Schwer!
+  { id: 'goldkiste', name: 'Kiste voller Gold', emoji: '💰', wert: [4500, 6500], zerbrechlich: 0.25, masse: 28, groesse: [0.7, 0.5, 0.45], haeufig: 0.1, boden: true },   // Das Wertvollste von allem!
 ];
+const WERTVOLL_AB = 1400;   // Schätze, die mindestens so viel wert sind, gelten als "wertvoll" (die liegen in den Gartenhäuschen)
 
 // ===== Die große Spukvilla (immer dieselbe Karte – keine Level mehr!) =====
 const KARTE = {
@@ -1192,6 +1203,13 @@ function wegPunkt(wer, pos, ziel) {
     else if (q) return q;
     else wer.tw = null;
   }
+  // Rein ins Gartenhäuschen oder raus? Dann durch seine Tür!
+  const sa = schuppenBei(pos.x, pos.z), sb = schuppenBei(ziel.x, ziel.z);
+  if (sa !== sb) {
+    if (sa) { wer.tw = { k: 0, reihe: [sa.innen, sa.aussen] }; return sa.innen; }
+    if (abstand2D(pos.x, pos.z, sb.aussen.x, sb.aussen.z) > 0.6) ziel = sb.aussen;
+    else { wer.tw = { k: 0, reihe: [sb.innen] }; return sb.innen; }
+  }
   // Drinnen <-> draußen? Dann durch die nächste Haustür!
   const drinnen = imHaus(pos.x, pos.z);
   if (!drinnen && !imHaus(ziel.x, ziel.z)) return umsHaus(pos, ziel);   // Beide draußen: hin (ums Haus herum, wenn es im Weg ist)
@@ -1385,10 +1403,50 @@ function waldPlatz(zz = zufall, zr = rnd) {   // Ein freier Platz im Wald (nicht
   for (let v = 0; v < 60; v++) {
     const x = zz(-M + 2, B + M - 2), z = zz(-M + 2, T + M - 2);
     if (x > -3 && x < B + 3 && z > -3 && z < T + 3) continue;
+    if ((haus.schuppen || []).some(S => x > S.x1 - 1.5 && x < S.x2 + 1.5 && z > S.z1 - 1.5 && z < S.z2 + 1.5)) continue;   // Nicht im Gartenhäuschen
     if ((haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 1.4)) continue;
+    if (schuppenBei(x, z, 1.5)) continue;
     return { x, z };
   }
   return null;
+}
+const schuppenTextur = malTextur(128, 128, (g, b, h) => {   // Alte, verwitterte Holzbretter
+  for (let k = 0; k < 8; k++) { g.fillStyle = ['#3d4a3a', '#36423a', '#414d3c', '#3a4536'][k % 4]; g.fillRect(k * 16, 0, 16, h); g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(k * 16, 0, 2, h); }
+  for (let k = 0; k < 60; k++) { g.fillStyle = 'rgba(20,15,10,0.25)'; g.fillRect(Math.random() * b, Math.random() * h, 1, 6 + Math.random() * 20); }
+});
+const schuppenMat = new THREE.MeshStandardMaterial({ map: schuppenTextur, roughness: 1 });
+function schuppenBei(x, z, rand = 0) {   // In welchem Gartenhäuschen ist dieser Punkt? (oder null)
+  for (const S of haus.schuppen || []) if (x > S.x1 - rand && x < S.x2 + rand && z > S.z1 - rand && z < S.z2 + rand) return S;
+  return null;
+}
+function baueGartenhaus(S) {
+  const { x1, z1, x2, z2, seite } = S, tb = 1.4;   // tb = Türbreite
+  wandStueck(x1, z1, x2, z1, 0, seite === 'n' ? tb : 0, schuppenMat);
+  wandStueck(x1, z2, x2, z2, 0, seite === 's' ? tb : 0, schuppenMat);
+  wandStueck(x1, z1, x1, z2, 0, seite === 'w' ? tb : 0, schuppenMat);
+  wandStueck(x2, z1, x2, z2, 0, seite === 'o' ? tb : 0, schuppenMat);
+  const b = x2 - x1, t = z2 - z1, cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
+  bodenFlaeche({ x0: x1, z0: z1 }, x1, z1, x2, z2, 0.01, new THREE.MeshStandardMaterial({ map: BOEDEN.holz, roughness: 0.9 }));   // Holzboden
+  // Spitzes Dach (eine Pyramide mit 4 Ecken)
+  const dach = new THREE.Mesh(new THREE.ConeGeometry(1, 1.5, 4), new THREE.MeshStandardMaterial({ color: '#4a1f1a', roughness: 0.9 }));
+  dach.rotation.y = Math.PI / 4; dach.scale.set((b / 2 + 0.4) / 0.7071, 1, (t / 2 + 0.4) / 0.7071);
+  dach.position.set(cx, WAND_HOEHE + 0.75, cz); dach.castShadow = true; hausGruppe.add(dach);
+  // Fenster auf der Rückseite (innen und außen)
+  const hinten = { n: 's', s: 'n', w: 'o', o: 'w' }[seite];
+  const [fx, fz, dreh] = { n: [cx, z1, Math.PI], s: [cx, z2, 0], w: [x1, cz, -Math.PI / 2], o: [x2, cz, Math.PI / 2] }[hinten];
+  for (const aus of [1, -1]) {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.7), new THREE.MeshBasicMaterial({ map: fensterTextur }));
+    f.position.set(fx + Math.sin(dreh) * 0.16 * aus, 1.7, fz + Math.cos(dreh) * 0.16 * aus); f.rotation.y = aus > 0 ? dreh : dreh + Math.PI; hausGruppe.add(f);
+  }
+  // Ein Regal an der Rückwand und die wertvollen Schätze
+  const wertvoll = SCHAETZE.filter(x => x.wert[0] >= WERTVOLL_AB);
+  for (let k = 0; k < GARTENHAUS_SCHAETZE; k++) {
+    const quer = (k - (GARTENHAUS_SCHAETZE - 1) / 2) * 1.5, typ = gewichtetWaehlen(wertvoll);
+    const px = cx - S.nx * 0.9 + (S.nz ? quer : 0), pz = cz - S.nz * 0.9 + (S.nx ? quer : 0);
+    neuerSchatz(typ, px, typ.groesse[1] / 2 + 0.05, pz);
+  }
+  const kiste = (x, z) => festerKlotz(x, 0.3, z, 0.6, 0.6, 0.6, kistenMat);   // Alte Kisten in den Ecken
+  kiste(x1 + 0.55, z1 + 0.55); kiste(x2 - 0.55, z2 - 0.55);
 }
 function baueWald() {
   const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
@@ -1452,12 +1510,27 @@ function baueWald() {
   const pfostenM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 1.6, 0.16), holz, pfosten.length);
   pfosten.forEach(([x, z], k) => { hilf.position.set(x, 0.8, z); hilf.rotation.set(0, 0, 0); hilf.scale.set(1, 1, 1); hilf.updateMatrix(); pfostenM.setMatrixAt(k, hilf.matrix); });
   hausGruppe.add(pfostenM);
-  // 4) Bäume: dunkle Tannen und ein paar tote, kahle Bäume
+  // 4) 🛖 Gartenhäuschen (Tür zeigt zum Haus)
+  haus.schuppen = [];
+  for (let v = 0; haus.schuppen.length < GARTENHAUS_ANZAHL && v < 500; v++) {
+    const b = 4.4, t = 3.6, x1 = zufall(-M + 3, B + M - 3 - b), z1 = zufall(-M + 3, T + M - 3 - t), x2 = x1 + b, z2 = z1 + t;
+    if (x2 > -7 && x1 < B + 7 && z2 > -7 && z1 < T + 7) continue;                                                          // Nicht zu nah am Haus
+    if (haus.schuppen.some(S => x2 > S.x1 - 7 && x1 < S.x2 + 7 && z2 > S.z1 - 7 && z1 < S.z2 + 7)) continue;              // Nicht zu nah aneinander
+    const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
+    if (haus.aussenTuerListe.some(a => abstand2D(cx, cz, a.weit.x, a.weit.z) < 7)) continue;                                // Nicht vor eine Haustür
+    const hx = B / 2 - cx, hz = T / 2 - cz;
+    const seite = Math.abs(hx) / B > Math.abs(hz) / T ? (hx > 0 ? 'o' : 'w') : (hz > 0 ? 's' : 'n');
+    const [tx, tz, nx, nz] = { n: [cx, z1, 0, -1], s: [cx, z2, 0, 1], w: [x1, cz, -1, 0], o: [x2, cz, 1, 0] }[seite];
+    haus.schuppen.push({ x1, z1, x2, z2, seite, tx, tz, nx, nz, innen: { x: tx - nx * 1.2, y: 0, z: tz - nz * 1.2 }, aussen: { x: tx + nx * 1.3, y: 0, z: tz + nz * 1.3 } });
+  }
+  for (const S of haus.schuppen) baueGartenhaus(S);
+  // 5) Bäume: dunkle Tannen und ein paar tote, kahle Bäume
   const baeume = [];
   const frei = (x, z) => {
     if (x > -3.5 && x < B + 3.5 && z > -3.5 && z < T + 3.5) return false;                       // Nicht zu nah ans Haus
     if (x < -M + 1.2 || x > B + M - 1.2 || z < -M + 1.2 || z > T + M - 1.2) return false;       // Nicht in den Zaun
     for (const a of haus.aussenTuerListe) if (abstand2D(x, z, a.weit.x, a.weit.z) < 3.5) return false;   // Weg vor der Haustür frei lassen
+    for (const S of haus.schuppen) if ((x > S.x1 - 2.5 && x < S.x2 + 2.5 && z > S.z1 - 2.5 && z < S.z2 + 2.5) || abstand2D(x, z, S.tx + S.nx * 3, S.tz + S.nz * 3) < 3) return false;   // Platz ums Gartenhäuschen
     return baeume.every(b => abstand2D(x, z, b.x, b.z) > 2.2);
   };
   for (let v = 0; baeume.length < BAUM_ANZAHL && v < BAUM_ANZAHL * 30; v++) {
@@ -2338,6 +2411,35 @@ function baueSchatzMesh(typ) {
     }
   } else if (typ.id === 'diamant') {   // 💎 Ein riesiger, funkelnder Diamant
     add(new THREE.OctahedronGeometry(0.1, 0), new THREE.MeshStandardMaterial({ color: '#d8f4ff', emissive: '#4fb7ff', emissiveIntensity: 0.6, metalness: 0.2, roughness: 0.05, transparent: true, opacity: 0.85, flatShading: true }));
+  } else if (typ.id === 'perlen') {   // 📿 Eine Kette aus Perlen mit rotem Anhänger
+    const perle = new THREE.MeshStandardMaterial({ color: '#f4efe6', roughness: 0.15, metalness: 0.3, emissive: '#4a4640' });
+    for (let k = 0; k < 16; k++) { const w = k / 16 * Math.PI * 2; add(new THREE.SphereGeometry(0.022, 8, 6), perle, Math.cos(w) * 0.12, 0, Math.sin(w) * 0.12); }
+    add(new THREE.OctahedronGeometry(0.035, 0), new THREE.MeshStandardMaterial({ color: '#e0115f', emissive: '#6a0020', flatShading: true }), 0, 0, 0.15);
+  } else if (typ.id === 'smaragd') {   // 💚 Ein grüner, geschliffener Edelstein
+    add(new THREE.CylinderGeometry(0.06, 0.09, 0.16, 6), new THREE.MeshStandardMaterial({ color: '#2ee07a', emissive: '#0d7a3a', emissiveIntensity: 0.7, roughness: 0.05, transparent: true, opacity: 0.85, flatShading: true }));
+  } else if (typ.id === 'rubin') {   // ❤️ Ein riesiger roter Rubin
+    add(new THREE.OctahedronGeometry(0.09, 0), new THREE.MeshStandardMaterial({ color: '#ff2a4a', emissive: '#8a0018', emissiveIntensity: 0.7, roughness: 0.05, transparent: true, opacity: 0.85, flatShading: true })).scale.y = 1.25;
+  } else if (typ.id === 'zepter') {   // 🪄 Goldener Stab mit Krone und blauem Edelstein
+    add(new THREE.CylinderGeometry(0.018, 0.025, 0.62, 8), goldMat, 0, -0.05, 0);
+    add(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshStandardMaterial({ color: '#3a7bff', emissive: '#103a9a', emissiveIntensity: 0.8, roughness: 0.1 }), 0, 0.3, 0);
+    for (let k = 0; k < 5; k++) { const w = k / 5 * Math.PI * 2; add(new THREE.ConeGeometry(0.012, 0.06, 4), goldMat, Math.cos(w) * 0.04, 0.27, Math.sin(w) * 0.04); }
+  } else if (typ.id === 'schaedel') {   // 💀 Ein durchsichtiger, leuchtender Kristallschädel
+    const kristall = new THREE.MeshStandardMaterial({ color: '#cfe9ff', emissive: '#4a90c8', emissiveIntensity: 0.5, roughness: 0.05, transparent: true, opacity: 0.7 });
+    add(new THREE.SphereGeometry(0.12, 14, 10), kristall, 0, 0.03, -0.01).scale.set(1, 1, 1.15);
+    add(new THREE.BoxGeometry(0.15, 0.08, 0.14), kristall, 0, -0.09, 0.06);
+    for (const sx of [-1, 1]) add(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: '#0a1a2a' }), sx * 0.045, 0.03, 0.11);
+  } else if (typ.id === 'statue') {   // 🗽 Eine kleine goldene Statue auf einem Sockel
+    add(new THREE.BoxGeometry(0.36, 0.1, 0.36), dunkelHolzMat, 0, -0.4, 0);
+    add(new THREE.CylinderGeometry(0.1, 0.14, 0.45, 10), goldMat, 0, -0.12, 0);
+    add(new THREE.SphereGeometry(0.09, 10, 8), goldMat, 0, 0.2, 0);
+    add(new THREE.BoxGeometry(0.05, 0.3, 0.05), goldMat, 0.12, 0.2, 0).rotation.z = -0.3;   // Arm hoch (mit Fackel)
+    add(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd166' }), 0.17, 0.37, 0);
+    for (let k = 0; k < 5; k++) { const w = k / 5 * Math.PI * 2; add(new THREE.ConeGeometry(0.02, 0.07, 4), goldMat, Math.cos(w) * 0.08, 0.3, Math.sin(w) * 0.08); }   // Strahlenkrone
+  } else if (typ.id === 'goldkiste') {   // 💰 Eine offene Holzkiste, randvoll mit Goldmünzen
+    add(new THREE.BoxGeometry(0.7, 0.38, 0.45), new THREE.MeshStandardMaterial({ color: '#5a3a1f', roughness: 0.8 }), 0, -0.06, 0);
+    for (const x of [-0.3, 0.3]) add(new THREE.BoxGeometry(0.05, 0.4, 0.47), goldMat, x, -0.06, 0);   // Goldbeschläge
+    add(new THREE.CylinderGeometry(0.3, 0.33, 0.1, 16), goldMat, 0, 0.15, 0).scale.z = 0.62;            // Der Goldberg
+    for (let k = 0; k < 10; k++) add(new THREE.CylinderGeometry(0.03, 0.03, 0.008, 10), goldMat, (Math.random() - 0.5) * 0.5, 0.2 + Math.random() * 0.03, (Math.random() - 0.5) * 0.28).rotation.set(Math.random(), 0, Math.random());
   }
   szene.add(g);
   return g;
@@ -2831,7 +2933,8 @@ function updateMonster(m, dt) {
     const loch = (x, z) => (!m.tw && haus.treppen.some(t => imLoch(t, x, z) && m.y > t.basis + ETAGE_HOEHE - 0.3 && !(aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - m.y) < 0.6))) ||
       (!schonDrin && !!bodenLochBei(x, z, m.y, 0.3)) ||
       (!imHaus(x, z) && !(m.art === 'maulwurf' && m.modus !== 'oben') && (haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.55)) ||   // Draußen: nicht durch Bäume (unter der Erde geht's!)
-      (m.art === 'maulwurf' && x > -1.2 && x < haus.breit * RAUM + 1.2 && z > -1.2 && z < haus.tief * RAUM + 1.2);   // Der Maulwurf kommt nicht ins Haus
+      (m.art === 'maulwurf' && x > -1.2 && x < haus.breit * RAUM + 1.2 && z > -1.2 && z < haus.tief * RAUM + 1.2) ||   // Der Maulwurf kommt nicht ins Haus
+      schuppenSperre(m, x, z);   // Gartenhäuschen: nur durch die Tür
     if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
     else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
     else if (!loch(m.x, nz)) m.z = nz;
@@ -2950,22 +3053,29 @@ function schrankUpdate(m, dt) {
   if (abstand2D(m.x, m.z, m.heim.x, m.heim.z) < 0.3 && Math.abs(m.y - m.heim.y) < 1) { m.modus = 'lauern'; return 0; }
   return info.tempo;
 }
+function schuppenSperre(m, x, z) {
+  const S = schuppenBei(x, z, 0.4);
+  if (!S) return false;
+  if (m.art === 'maulwurf') return true;                                  // Der Maulwurf kommt da nicht rein
+  if (schuppenBei(m.x, m.z, 0.4) === S) return false;                     // Schon drin: Weiterlaufen ist okay
+  return abstand2D(x, z, S.tx, S.tz) > 1.0;                               // Rein nur durch die Tür
+}
 // 🐾 Der Achtarm-Maulwurf: graben → (spürt Schritte) jagen → (direkt drunter) auftauchen → oben (haut zu!) → abtauchen → graben
 function maulwurfOpfer(m, weite, auchStill = false) {   // Wer läuft draußen herum? (Stillstehen oder Ducken = er spürt dich nicht!)
   let bestes = null, bestD = weite;
   const dranBleiben = (o, d) => { if (m.opferWer && o.wer === m.opferWer) d -= 4; return d; };   // Wen er schon jagt, den verfolgt er lieber weiter
   const p = spielerKoerper.position, v = spielerKoerper.velocity;
-  if (!tot && !imHaus(p.x, p.z) && p.y < 1.5 && (auchStill || (!geduckt && Math.hypot(v.x, v.z) > 0.6))) {
+  if (!tot && !imHaus(p.x, p.z) && !schuppenBei(p.x, p.z) && p.y < 1.5 && (auchStill || (!geduckt && Math.hypot(v.x, v.z) > 0.6))) {
     const o = { x: p.x, y: 0, z: p.z, spieler: true, wer: 'ich' }, d = dranBleiben(o, abstand2D(m.x, m.z, p.x, p.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   for (const g of mpGaeste()) {
     if (zeit - (g.mwT || 0) > 0.3) { g.mwBewegt = Math.hypot(g.x - (g.mwX ?? g.x), g.z - (g.mwZ ?? g.z)) > 0.15; g.mwX = g.x; g.mwZ = g.z; g.mwT = zeit; }
-    if (imHaus(g.x, g.z) || g.y > 1.5 || !(auchStill || (g.mwBewegt && !g.dk))) continue;
+    if (imHaus(g.x, g.z) || schuppenBei(g.x, g.z) || g.y > 1.5 || !(auchStill || (g.mwBewegt && !g.dk))) continue;
     const o = { x: g.x, y: 0, z: g.z, gast: g, wer: g.id }, d = dranBleiben(o, abstand2D(m.x, m.z, g.x, g.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   for (const h of helfer) {
     const hp = h.body.position;
-    if (h.kaputt > 0 || imHaus(hp.x, hp.z) || hp.y > 1.5 || !(auchStill || Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.5)) continue;
+    if (h.kaputt > 0 || imHaus(hp.x, hp.z) || schuppenBei(hp.x, hp.z) || hp.y > 1.5 || !(auchStill || Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.5)) continue;
     const o = { x: hp.x, y: 0, z: hp.z, helfer: h, wer: h.name }, d = dranBleiben(o, abstand2D(m.x, m.z, hp.x, hp.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   if (bestes) m.opferWer = bestes.wer;
@@ -4016,7 +4126,7 @@ function jaeger() {   // Welches Monster jagt dich gerade? (das nächste, oder n
   let bestes = null, bestD = 12;
   for (const m of monster) {
     const d = abstand3D(m, p);
-    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.modus === 'jagen' || (m.art === 'maulwurf' && (m.modus === 'auftauchen' || m.modus === 'oben' || m.modus === 'abtauchen')))) { bestes = m; bestD = d; }
+    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.art === 'maulwurf' ? ['auftauchen', 'oben', 'abtauchen'].includes(m.modus) : m.modus === 'jagen')) { bestes = m; bestD = d; }   // (Maulwurf: Musik erst, wenn er rausbricht!)
   }
   return bestes;
 }
@@ -4247,7 +4357,7 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  text(imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? '📍 🛖 Im Gartenhäuschen' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
   text(`🏆 Ziel: ${Math.min(verkauft, zielN)} / ${zielN} Schätze verkauft`, 24, 108, 13, fertig ? '#4ade80' : '#ffd166', 'left', false);
