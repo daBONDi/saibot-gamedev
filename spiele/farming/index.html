@@ -116,6 +116,36 @@ button:disabled { opacity: 0.5; cursor: default; }
 #haendler h3, #hofpanel h3 { margin: 0 0 8px; }
 #hofpanel button { display: block; margin: 4px 0; }
 .angebot { background: #ffffff14; border-radius: 8px; padding: 8px; margin-bottom: 8px; line-height: 1.5; }
+#angeln {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 12px 16px;
+    width: 230px;
+    text-align: center;
+    display: none;
+    z-index: 6;
+    line-height: 1.5;
+}
+#angelSpiel { display: flex; gap: 12px; justify-content: center; margin-top: 10px; }
+#angelBahn { position: relative; width: 64px; height: 300px; background: linear-gradient(#5fb0e0, #173f60); border-radius: 10px; overflow: hidden; }
+#angelZone { position: absolute; left: 4px; right: 4px; bottom: 30%; height: 30%; background: #7cf5a066; border: 2px solid #7cf5a0; border-radius: 8px; box-sizing: border-box; }
+#angelFisch { position: absolute; left: 0; right: 0; bottom: 40%; text-align: center; font-size: 28px; line-height: 30px; height: 30px; }
+#angelFortschritt { position: relative; width: 16px; height: 300px; background: #ffffff22; border-radius: 8px; overflow: hidden; }
+#angelBalken { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; background: #ffd166; }
+#schlaf {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    color: #fff;
+    font-size: 2em;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 1s;
+    z-index: 10;
+}
 #fadenkreuz {
     position: absolute;
     top: 50%;
@@ -138,6 +168,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 <h2>🌾 Farming Game</h2>
 💶 Geld: <b><span id="money">250000</span> €</b><br>
 🚜 Fahrzeug: <span id="fahrzeug">-</span><br>
+🕐 Uhrzeit: <b id="uhr"></b><br>
 📍 Modus: <span id="mode">Fahren</span> · <span id="ansicht" class="klein"></span><br>
 🔧 Gerät: <span id="geraet">-</span><br>
 ⏱️ Tempo: <b><span id="tempo">0</span> km/h</b><br>
@@ -164,6 +195,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   <button id="bau-apfelbaum">🍎 Apfelbaum 2.000 €</button>
   <button id="bau-birnbaum">🍐 Birnbaum 2.500 €</button>
   <button id="bau-kirschbaum">🍒 Kirschbaum 3.000 €</button>
+  <button id="bau-teich">🎣 Fischteich 5.000 €</button>
 </div>
 </div>
 
@@ -181,7 +213,8 @@ Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken · N = Händler<br>
 Beim Sägewerk: V = Holz verkaufen · Zu Fuß beim Landhandel/Tankstelle: T = Säge tanken<br>
 🦾 Harvester: X / Maus halten = Baum fällen · 🪵 Holzanhänger: L = Kran lädt Holz auf (zu Fuß: Holz drauflegen) · V beim Sägewerk<br>
 🪴🐄🍎 Beim Gewächshaus/Gehege: P = Menü · Beim Obstbaum: P = pflücken · Mit Korn beim Gehege: L = Futter · Beim Dorfladen 🛒: V = Gemüse, Milch, Eier, Wolle verkaufen<br>
-B = Baumodus (1–9, 0 = Gebäude) · R = Gebäude drehen · M = Ton an/aus · I = Anleitung ein/aus
+🎣 Beim Fischteich: P = Angeln · ⛏️ Salzmine (hinter dem Landhandel): X halten = Salz abbauen · 🏠 Mein Haus: am Bett Z = Schlafen<br>
+B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an/aus · I = Anleitung ein/aus
 </div>
 </div>
 
@@ -196,6 +229,17 @@ B = Baumodus (1–9, 0 = Gebäude) · R = Gebäude drehen · M = Ton an/aus · I
 <div id="hofpanelInhalt"></div>
 <button id="hofpanel-zu">✖ Schließen (P)</button>
 </div>
+
+<div id="angeln" class="box">
+<b>🎣 Fisch an der Angel!</b>
+<div class="klein">Leertaste oder Maus gedrückt halten = grünes Feld hoch.<br>Halt den Fisch im grünen Feld!</div>
+<div id="angelSpiel">
+  <div id="angelBahn"><div id="angelZone"></div><div id="angelFisch">🐟</div></div>
+  <div id="angelFortschritt"><div id="angelBalken"></div></div>
+</div>
+</div>
+
+<div id="schlaf">💤 Zzz ... Gute Nacht!</div>
 
 <div id="fadenkreuz"></div>
 
@@ -220,6 +264,6 @@ B = Baumodus (1–9, 0 = Gebäude) · R = Gebäude drehen · M = Ton an/aus · I
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=18"></script>
+<script type="module" src="spiel.js?v=19"></script>
 </body>
 </html>

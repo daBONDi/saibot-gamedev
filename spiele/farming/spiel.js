@@ -50,13 +50,13 @@ const GEBAEUDE_ARTEN = {
   silo: { name: 'Silo', emoji: '🛢️', preis: 25000, r: 3 },
   baum: { name: 'Baum', emoji: '🌳', preis: 500, r: 1.5 },
   gewaechshaus: { name: 'Gewächshaus', emoji: '🪴', preis: 15000, r: 5.6 },
-  teich: { name: 'Fischteich', emoji: '🎣', preis: 5000, r: 6 },
   kuhweide: { name: 'Kuhweide', emoji: '🐄', preis: 8000, r: 10, tier: 'kuh' },
   schafweide: { name: 'Schafweide', emoji: '🐑', preis: 6000, r: 8, tier: 'schaf' },
   huehnerhof: { name: 'Hühnerhof', emoji: '🐔', preis: 4000, r: 6, tier: 'huhn' },
   apfelbaum: { name: 'Apfelbaum', emoji: '🍎', preis: 2000, r: 1.6 },
   birnbaum: { name: 'Birnbaum', emoji: '🍐', preis: 2500, r: 1.6 },
   kirschbaum: { name: 'Kirschbaum', emoji: '🍒', preis: 3000, r: 1.6 },
+  teich: { name: 'Fischteich', emoji: '🎣', preis: 5000, r: 6 },   // (keine Zahl mehr frei: im Baumodus mit , und . auswählen oder Knopf)
 };
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
 // (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
@@ -1815,6 +1815,8 @@ function angelEnde(gefangen) {
   } else if (gefangen === false) { meldung('💨 Oh nein, der Fisch ist entwischt!', 2.5); sound.nein(); }
 }
 let angelDruck = false;   // Maus auf dem Angel-Spiel gedrückt?
+document.getElementById('angeln').addEventListener('pointerdown', e => { angelDruck = true; e.preventDefault(); });
+document.addEventListener('pointerup', () => { angelDruck = false; });
 function angelUpdate(dt) {
   if (!angel) return;
   const a = angel;
@@ -2330,7 +2332,8 @@ function balken(id, wert, max, text) {
 function updateHUD() {
   $('money').textContent = money.toLocaleString('de-DE');
   $('mode').textContent = building ? '🏗️ Baumodus' : aktiv ? '🚜 Fahren' : saegeAn ? '🪚 Motorsäge' : '🚶 Zu Fuß';
-  $('vorrat').textContent = vorratText();
+  $('vorrat').textContent = vorratText() + (salzsteine ? ` · 🧂 ${salzsteine}` : '');
+  $('uhr').textContent = uhrText();
   const ha = holzAnh(aktiv);
   $('holz').textContent = `${getragen} von ${HOLZ_TRAGEN_MAX} Stämmen${ha ? ` · Anhänger ${ha.inhalt}/${ha.typ.max}` : ''} · 🪚 Sprit ${Math.round(saegeSprit)} %`;
   $('ansicht').textContent = ansicht === 'ego' ? '👁️ First Person' : '🎥 Von hinten';
@@ -2908,7 +2911,7 @@ function speichern() {
       anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
-      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat,
+      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat, tageszeit, salzsteine,
       wald: waldDaten(), holz: holzDaten(), saege: { sprit: saegeSprit, getragen },
     }));
   } catch (e) { /* egal – dann eben nicht gespeichert */ }
@@ -2926,6 +2929,8 @@ function laden() {
   });
   for (const b of d.gebaeude || []) if (GEBAEUDE_ARTEN[b.art]) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0, b.d);
   if (d.vorrat) vorrat = d.vorrat;
+  if (typeof d.tageszeit === 'number') tageszeit = d.tageszeit;
+  salzsteine = d.salzsteine || 0;
   if (d.v === 1) {   // Alter Spielstand (nur ein Traktor)
     neuesFahrzeug('fendt', d.traktor.x, d.traktor.z, d.traktor.r, { saat: d.saat, tank: d.tank, diesel: d.diesel, werkzeug: d.werkzeug });
     einsteigen(fahrzeuge[0]);
@@ -3067,6 +3072,8 @@ document.addEventListener('keydown', e => {
   if (k === 'n') haendlerZeigen($('haendler').style.display !== 'block');
   if (k === 'h') kuppeln();
   if (k === 'q') saegeNehmen();
+  if (k === 'z') schlafen();
+  if (building && (k === '.' || k === ',')) { const arten = Object.keys(GEBAEUDE_ARTEN), n = arten.length; bauArt = arten[(arten.indexOf(bauArt) + (k === '.' ? 1 : n - 1)) % n]; updateHUD(); }
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
   if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
@@ -3118,6 +3125,7 @@ renderer.domElement.addEventListener('click', () => {
   sound.bauen();
   if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
   if (OBST[bauArt]) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gepflanzt! Erst blüht er, dann wachsen die ${OBST[bauArt].name}. Wenn sie reif sind: P = pflücken.`, 4);
+  if (bauArt === 'teich') meldung('🎣 Neuer Fischteich! Geh ans Ufer und drück P zum Angeln.', 4);
   if (bauArt === 'gewaechshaus') meldung('🪴 Neues Gewächshaus! Geh hin und drück P, um Gemüse zu pflanzen.', 4);
   if (GEBAEUDE_ARTEN[bauArt].tier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gebaut! Geh hin und drück P, um ${TIERE[GEBAEUDE_ARTEN[bauArt].tier].name} zu kaufen.`, 4);
   updateHUD();
@@ -3260,7 +3268,7 @@ function mpSpielerWeg(id, verbreiten) {
 }
 function weltSchnappschuss() {
   return {
-    t: 'welt', money, spielZeit, hofSilo: hofSilo.inhalt,
+    t: 'welt', money, spielZeit, tageszeit, hofSilo: hofSilo.inhalt,
     felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
     gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })),
     fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel,
@@ -3358,6 +3366,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
   panelZeigen(null);
   gebaute.length = 0;
   money = d.money; mp.geldBasis = money; spielZeit = d.spielZeit;
+  if (typeof d.tageszeit === 'number') tageszeit = d.tageszeit;
   hofSilo.inhalt = d.hofSilo; hofSilo.basis = d.hofSilo; siloSchild(hofSilo);
   d.felder.forEach((df, k) => {
     const f = felder[k];
@@ -3443,6 +3452,8 @@ function mpEmpfangen(d, vonGast) {
     }
     case 'faellt': { const b = baeume[d.nr]; if (b && (b.zustand === 'steht' || b.zustand === 'waechst')) baumFaellen(b, d.w, d.id, false); break; }
     case 'holzWeg': holzWeg(d.id); break;
+    case 'zeit': if (Math.abs(tageszeit - d.z) > 0.1) tageszeit = d.z; return;
+    case 'schlaf': zeitVorspulen(d.s); tageszeit = d.z; meldung(`💤 Jemand hat geschlafen – es ist jetzt ${d.z}:00 Uhr morgens! ☀️`, 4); break;
     case 'geb': { const b = gebaute.find(x => gebSchluessel(x) === d.k); if (b) gebDatenSetzen(b, d.d); break; }
     case 'gebStand': for (const e of d.l || []) { const b = gebaute.find(x => gebSchluessel(x) === e.k); if (b) gebDatenSetzen(b, e.d); } return;
     case 'neuesFz': if (!fahrzeuge.some(f => f.id === d.id) && FAHRZEUGE[d.typ]) { neuesFahrzeug(d.typ, d.x, d.z, d.r, { id: d.id }); meldung(`🚜 Neues Fahrzeug auf dem Hof: ${FAHRZEUGE[d.typ].name}!`); } break;
@@ -3474,7 +3485,7 @@ function mpTick(dt) {
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
-    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'zeit', z: tageszeit }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
   }
 }
 const weltDa = () => mp.geldBasis !== null;
@@ -3514,6 +3525,134 @@ $('mp-beitreten').addEventListener('click', () => { tonStart(); mpBeitreten(); }
 $('mp-code').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tonStart(); mpBeitreten(); } });
 $('mp-code').addEventListener('keyup', e => e.stopPropagation());
 
+// ===== Tag und Nacht =====
+let tageszeit = 8;   // Uhrzeit (0 bis 24). Das Spiel fängt morgens um 8 an.
+const mond = new THREE.Sprite(new THREE.SpriteMaterial({ map: glanzTextur('rgba(235,240,255,1)', 'rgba(200,215,255,0)'), fog: false, depthWrite: false, toneMapped: false }));
+mond.scale.set(40, 40, 1); scene.add(mond);
+const sterne = (() => {   // 700 Sterne am Himmel (nur nachts zu sehen)
+  const pos = [];
+  for (let k = 0; k < 700; k++) {
+    const w = Math.random() * Math.PI * 2, h = 0.05 + Math.random() * 0.95, rr = Math.sqrt(1 - h * h);
+    pos.push(Math.cos(w) * rr * 420, h * 420, Math.sin(w) * rr * 420);
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const p = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+  scene.add(p);
+  return p;
+})();
+// Licht in der Nacht: eine Laterne, wenn du zu Fuß bist, Scheinwerfer am Fahrzeug, eine Lampe auf dem Dorfplatz
+const laterne = new THREE.PointLight(0xffd9a0, 0, 16, 1.5); scene.add(laterne);
+const scheinwerfer = new THREE.SpotLight(0xfff4d6, 0, 60, 0.55, 0.5, 1.2); scene.add(scheinwerfer, scheinwerfer.target);
+const dorfLicht = new THREE.PointLight(0xffd88a, 0, 30, 1.4); dorfLicht.position.set(-8, 4.5, 76); scene.add(dorfLicht);
+const sonnenRichtung = new THREE.Vector3(), lichtRichtung = new THREE.Vector3();
+const nachtFarbe = new THREE.Color(0x101a3a), abendFarbe = new THREE.Color(0xffa070), weiss = new THREE.Color(0xffffff), himmelMal = new THREE.Color();
+const glatt = (a, b, x) => { const t = begrenzt((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+let tagHell = 1;   // 1 = heller Tag, 0 = dunkle Nacht
+function tagNachtUpdate(dt, ziel) {
+  tageszeit = (tageszeit + dt * 24 / TAG_DAUER) % 24;
+  const w = (tageszeit - 6) / 12 * Math.PI;   // 6 Uhr = Sonnenaufgang (Osten), 12 Uhr = oben, 18 Uhr = Untergang (Westen)
+  sonnenRichtung.set(Math.cos(w), Math.sin(w), 0.35).normalize();
+  const hoch = sonnenRichtung.y;
+  tagHell = glatt(-0.12, 0.25, hoch);
+  const abend = (1 - Math.min(1, Math.abs(hoch) / 0.3)) * 0.6;   // Morgen- und Abendrot
+  // Himmel, Nebel und Wolken
+  himmelMal.copy(nachtFarbe).lerp(weiss, tagHell).lerp(abendFarbe, abend);
+  himmel.material.color.copy(himmelMal);
+  scene.background.setHex(HORIZONT).multiply(himmelMal); scene.fog.color.copy(scene.background);
+  wolkenMat.color.copy(himmelMal); wolkenMat.emissive.setHex(0x8a96a8).multiplyScalar(0.15 + 0.85 * tagHell);
+  sterne.material.opacity = glatt(0.05, -0.15, hoch);
+  sterne.position.copy(camera.position);
+  // Sonne oder Mond geben das Licht (und die Schatten)
+  if (hoch > -0.05) {
+    lichtRichtung.copy(sonnenRichtung);
+    sun.intensity = 2.4 * glatt(-0.05, 0.2, hoch);
+    sun.color.setHex(0xff9a50).lerp(new THREE.Color(0xfff2d6), glatt(0, 0.4, hoch));
+  } else {
+    lichtRichtung.copy(sonnenRichtung).negate(); lichtRichtung.y = Math.abs(lichtRichtung.y);
+    sun.intensity = 0.5 * glatt(0, 0.2, -hoch);
+    sun.color.setHex(0x9fb4ff);
+  }
+  himmelLicht.intensity = 0.3 + 1.1 * tagHell;
+  himmelLicht.color.setHex(0x5566aa).lerp(new THREE.Color(0xd8ecff), tagHell);
+  himmelLicht.groundColor.setHex(0x1a2230).lerp(new THREE.Color(0x4a6b35), tagHell);
+  sonne.visible = hoch > -0.15; sonne.material.color.setHex(0xffb070).lerp(weiss, glatt(0, 0.3, hoch));
+  mond.visible = hoch < 0.1;
+  // Lampen und Fenster leuchten nachts
+  const nacht = 1 - tagHell;
+  fensterMat.emissive.setHex(0xffc070); fensterMat.emissiveIntensity = nacht * 0.9;
+  if (lampenMat) lampenMat.emissiveIntensity = 0.3 + nacht * 3;
+  dorfLicht.intensity = nacht * 40;
+  hausLicht.intensity = 10 + nacht * 14 + Math.sin(spielZeit * 13) * 1.5;   // flackert ein bisschen (Kaminfeuer)
+  kaminFeuer.material.emissiveIntensity = 1.6 + Math.sin(spielZeit * 17) * 0.4;
+  if (aktiv) {   // Scheinwerfer vorne am Fahrzeug
+    laterne.intensity = 0;
+    aktiv.g.updateMatrixWorld();
+    scheinwerfer.position.set(0, 2.2 * aktiv.typ.groesse, -2.5 * aktiv.typ.groesse).applyMatrix4(aktiv.g.matrixWorld);
+    scheinwerfer.target.position.set(0, 0, -20).applyMatrix4(aktiv.g.matrixWorld);
+    scheinwerfer.intensity = nacht * 120;
+  } else {
+    scheinwerfer.intensity = 0;
+    laterne.position.set(player.position.x, player.position.y + 2.6, player.position.z);
+    laterne.intensity = nacht * 10;
+  }
+  // Sonne und Mond am Himmel, Schatten-Licht wandert mit dir mit
+  sun.position.copy(ziel).addScaledVector(lichtRichtung, 70);
+  sun.target.position.set(ziel.x, 0, ziel.z);
+  sonne.position.copy(camera.position).addScaledVector(sonnenRichtung, 400);
+  mond.position.copy(camera.position).addScaledVector(tmp.copy(sonnenRichtung).negate().setY(Math.abs(sonnenRichtung.y) * 0.8 + 0.2).normalize(), 400);
+}
+const uhrText = () => `${String(Math.floor(tageszeit)).padStart(2, '0')}:${String(Math.floor(tageszeit % 1 * 60)).padStart(2, '0')} ${tagHell > 0.5 ? '☀️' : '🌙'}`;
+// Schlafen: Bildschirm wird schwarz, die Zeit springt auf den nächsten Morgen – und alles wächst weiter!
+let schlaeft = false;
+function zeitVorspulen(sek) {
+  for (const f of felder) {
+    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek / WACHS_ZEIT);
+    malFeld(f);
+  }
+  for (const b of gebaute) {
+    if (b.obst) { b.obst.w = Math.min(1, b.obst.w + sek / OBST[b.art].zeit); obstMalen(b); }
+    if (b.gh && GEMUESE[b.gh.art]) { b.gh.w = Math.min(1, b.gh.w + sek / GEMUESE[b.gh.art].zeit); ghMalen(b); }
+    if (b.teich) { b.teich.fische = Math.min(TEICH_FISCHE_MAX, b.teich.fische + sek / 30); teichSchild(b); }
+    if (b.geh) {
+      const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length;
+      if (n) {
+        const brauch = n * T.frisst * sek / 60, anteil = brauch > 0 ? Math.min(1, geh.futter / brauch) : 0;   // So lange reicht das Futter
+        const boostSek = Math.min(geh.salz, sek * anteil);
+        geh.futter = Math.max(0, geh.futter - brauch);
+        geh.lager = Math.min(n * T.proMin * 20, geh.lager + n * T.proMin * (sek * anteil + boostSek) / 60);
+      }
+      geh.salz = Math.max(0, geh.salz - sek);
+      gehegeSchild(b);
+    }
+  }
+  for (const b of baeume) {   // Bäume im Wald wachsen nach
+    if (b.zustand === 'stumpf') { b.zeit -= sek; if (b.zeit <= -BAUM_WACHS_DAUER) baumZustand(b, 'steht'); else if (b.zeit <= 0) baumZustand(b, 'waechst', Math.min(1, -b.zeit / BAUM_WACHS_DAUER)); }
+    else if (b.zustand === 'waechst') { b.wachs += sek / BAUM_WACHS_DAUER; if (b.wachs >= 1) baumZustand(b, 'steht'); else b.kipp.scale.setScalar(0.15 + 0.85 * b.wachs); }
+  }
+}
+function bisMorgenSekunden() { return ((AUFSTEH_ZEIT - tageszeit + 24) % 24 || 24) / 24 * TAG_DAUER; }
+function schlafen() {
+  if (schlaeft) return;
+  if (aktiv || !inHaus(player.position.x, player.position.z) || Math.hypot(player.position.x - HAUS.bett.x, player.position.z - HAUS.bett.z) > 2.6) { meldung('🛏️ Schlafen kannst du in deinem Haus 🏠 – stell dich ans Bett und drück Z!'); sound.nein(); return; }
+  schlaeft = true;
+  const sek = bisMorgenSekunden();
+  $('schlaf').style.display = 'flex';
+  requestAnimationFrame(() => { $('schlaf').style.opacity = '1'; });
+  for (let k = 0; k < 3; k++) ton(400 - k * 60, k * 0.5, 0.6, 'sine', 0.05);   // Gute-Nacht-Melodie
+  setTimeout(() => {
+    zeitVorspulen(sek);
+    tageszeit = AUFSTEH_ZEIT;
+    mpEvent({ t: 'schlaf', s: sek, z: AUFSTEH_ZEIT });
+    speichern();
+    setTimeout(() => {
+      $('schlaf').style.opacity = '0';
+      setTimeout(() => { $('schlaf').style.display = 'none'; schlaeft = false; }, 1000);
+      meldung(`☀️ Guten Morgen! Es ist ${AUFSTEH_ZEIT}:00 Uhr. Während du geschlafen hast, ist alles weitergewachsen! 🌱`, 5);
+      [523, 659, 784].forEach((f, k) => ton(f, k * 0.15, 0.4, 'triangle', 0.06));   // Hahn? Fast! 🐓
+    }, 1500);
+  }, 1300);
+}
+
 // ===== Spielschleife =====
 const clock = new THREE.Clock();
 const kamPos = new THREE.Vector3(0, 8, 20);
@@ -3531,15 +3670,16 @@ function animate() {
     const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const alt = player.position.clone();
-    const tempo = LAUF_TEMPO * (keys.shift ? 1.6 : 1) * dt;
-    if (keys.w || keys.arrowup) player.position.addScaledVector(forward, tempo);
-    if (keys.s || keys.arrowdown) player.position.addScaledVector(forward, -tempo);
-    if (keys.a || keys.arrowleft) player.position.addScaledVector(right, -tempo);
-    if (keys.d || keys.arrowright) player.position.addScaledVector(right, tempo);
+    const K = (angel && angel.phase === 'kampf') || schlaeft ? {} : keys;   // Beim Angeln und Schlafen nicht laufen
+    const tempo = LAUF_TEMPO * (K.shift ? 1.6 : 1) * dt;
+    if (K.w || K.arrowup) player.position.addScaledVector(forward, tempo);
+    if (K.s || K.arrowdown) player.position.addScaledVector(forward, -tempo);
+    if (K.a || K.arrowleft) player.position.addScaledVector(right, -tempo);
+    if (K.d || K.arrowright) player.position.addScaledVector(right, tempo);
     if (kollidiert(player.position.x, player.position.z, 0.4)) player.position.copy(alt);
     player.rotation.y = yaw;
     // Hüpfen mit der Leertaste
-    if (keys[' '] && amBoden) { spielerVy = SPRUNG_KRAFT; amBoden = false; sound.hupf(); }
+    if (K[' '] && amBoden) { spielerVy = SPRUNG_KRAFT; amBoden = false; sound.hupf(); }
     spielerVy -= SCHWERKRAFT * dt;
     player.position.y += spielerVy * dt;
     if (player.position.y <= 0) { player.position.y = 0; spielerVy = 0; amBoden = true; }
@@ -3548,9 +3688,13 @@ function animate() {
   }
   waldUpdate(dt);
   dorfUpdate(dt);
+  angelUpdate(dt);
+  salzUpdate(dt);
   gebUpdate(dt);
   panelUpdate();
   if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen);
+  if (hackt) { farmer.armR.rotation.x = 1.6 + Math.sin(spielZeit * 12) * 1.0; farmer.armL.rotation.x = 1.2 + Math.sin(spielZeit * 12) * 0.6; }   // Hacken!
+  if (angel && !aktiv) farmer.armR.rotation.x = farmer.armL.rotation.x = 0.9;   // Angel halten
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
     const fremd = fremdGefahren(fz);
@@ -3602,7 +3746,7 @@ function animate() {
 
   // Hinweis unten in der Mitte
   const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis(), hh = hofHinweis();
-  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–9, 0 = anderes Gebäude · B = fertig`);
+  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–9, 0 oder , . = anderes Gebäude · B = fertig`);
   else if (wh) zeigeHinweis(wh);
   else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
@@ -3673,16 +3817,19 @@ function animate() {
         ziel.y = Math.min(ziel.y, S.hoehe + 1.2);
       }
     }
+    if (inHaus(target.x, target.z)) {   // Im Haus: Kamera bleibt drinnen und unter der Decke
+      ziel.x = begrenzt(ziel.x, HAUS.x1 + 0.6, HAUS.x2 - 0.6);
+      ziel.z = begrenzt(ziel.z, HAUS.z1 + 0.6, HAUS.z2 - 0.6);
+      ziel.y = Math.min(ziel.y, HAUS.hoehe - 0.3);
+    }
     kamPos.lerp(ziel, 1 - Math.pow(0.002, dt));
     camera.position.copy(kamPos);
     camera.lookAt(target.x, target.y + 1.4, target.z);
   }
   // Die Sonne (und ihr Schatten) wandert mit dir mit
-  sun.position.set(target.x + 30, 60, target.z + 20);
-  sun.target.position.set(target.x, 0, target.z);
+  tagNachtUpdate(dt, target);
   egoSaegeUpdate(dt);
   himmel.position.copy(camera.position);   // Der Himmel ist immer gleich weit weg
-  sonne.position.copy(camera.position).addScaledVector(SONNEN_RICHTUNG, 400);
 
   renderer.render(scene, camera);
 }
