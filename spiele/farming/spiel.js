@@ -1092,7 +1092,7 @@ const player = meinFarmer.g, farmer = meinFarmer.t;
 // ===== First-Person-Motorsäge: Säge und Hände direkt vor der Kamera (wie in Ego-Spielen) =====
 scene.add(camera);   // Damit man Sachen an die Kamera hängen kann
 const egoSaege = new THREE.Group();
-egoSaege.visible = false; egoSaege.position.set(0.3, -0.24, -0.55);
+egoSaege.visible = false; egoSaege.position.set(0.38, -0.32, -0.65);
 camera.add(egoSaege);
 const egoKette = [];   // Die Zähne der Kette (die laufen beim Sägen rundherum!)
 {
@@ -1102,14 +1102,14 @@ const egoKette = [];   // Die Zähne der Kette (die laufen beim Sägen rundherum
   teil(new THREE.BoxGeometry(0.17, 0.04, 0.22), mat(0x222222), 0, 0.1, 0.02);                   // Deckel
   teil(new THREE.BoxGeometry(0.03, 0.05, 0.03), mat(0xd4af37), 0.09, 0.04, 0.06);              // Starter-Griff
   teil(new THREE.BoxGeometry(0.1, 0.05, 0.12), schwarz, 0, 0.06, 0.2);                          // Hinterer Griff
-  teil(new THREE.BoxGeometry(0.2, 0.035, 0.035), schwarz, -0.1, 0.15, -0.1);                    // Vorderer Bügel
+  teil(new THREE.BoxGeometry(0.15, 0.035, 0.035), schwarz, -0.075, 0.15, -0.1);                 // Vorderer Bügel
   teil(new THREE.BoxGeometry(0.035, 0.15, 0.035), schwarz, -0.01, 0.08, -0.1);
   teil(new THREE.BoxGeometry(0.03, 0.08, 0.75), mat(0xb5b9bf, { metalness: 0.6, roughness: 0.35 }), 0, -0.02, -0.52);   // Schwert
   // Hände und Ärmel (mit deinem karierten Hemd!)
   teil(new THREE.BoxGeometry(0.09, 0.08, 0.11), haut, 0.01, 0.1, 0.21);                         // Rechte Hand
-  teil(new THREE.BoxGeometry(0.11, 0.11, 0.45), farmer.hemd, 0.05, -0.02, 0.4).rotation.x = 0.5;    // Ärmel geht schräg nach unten aus dem Bild
-  teil(new THREE.BoxGeometry(0.09, 0.09, 0.09), haut, -0.17, 0.15, -0.1);                       // Linke Hand
-  { const a = teil(new THREE.BoxGeometry(0.11, 0.11, 0.5), farmer.hemd, -0.22, -0.02, 0.12); a.rotation.set(0.6, -0.3, 0); }
+  teil(new THREE.BoxGeometry(0.1, 0.1, 0.26), farmer.hemd, 0.02, -0.01, 0.33).rotation.x = 0.9;   // Kurzer Arm, geht schräg nach unten aus dem Bild
+  teil(new THREE.BoxGeometry(0.09, 0.09, 0.09), haut, -0.13, 0.15, -0.1);                       // Linke Hand
+  teil(new THREE.BoxGeometry(0.1, 0.1, 0.26), farmer.hemd, -0.15, 0.03, 0.0).rotation.x = 0.9;    // Linker Arm (kurz, damit er nicht vor der Kamera hängt)
   // Kette: kleine Zähne oben und unten am Schwert
   for (let k = 0; k < 28; k++) egoKette.push(teil(new THREE.BoxGeometry(0.042, 0.025, 0.022), schwarz, 0, 0, 0));
 }
@@ -1120,9 +1120,9 @@ function egoSaegeUpdate(dt) {
   if (!zeigen) return;
   const r = saegt ? Math.sin(spielZeit * 55) * 0.006 : 0;                  // Rütteln beim Sägen
   const wackeln = mp.laeuft ? Math.sin(farmer.phase) * 0.015 : 0;         // Beim Laufen wippt die Säge
-  const zielZ = saegt ? -0.7 : -0.55, zielKipp = saegt ? -0.05 : -0.15;  // Beim Sägen nach vorne in den Stamm drücken
-  egoSaege.position.x = 0.3 + r;
-  egoSaege.position.y = -0.24 + wackeln + r;
+  const zielZ = saegt ? -0.8 : -0.65, zielKipp = saegt ? -0.05 : -0.15;  // Beim Sägen nach vorne in den Stamm drücken
+  egoSaege.position.x = 0.38 + r;
+  egoSaege.position.y = -0.32 + wackeln + r;
   egoSaege.position.z += (zielZ - egoSaege.position.z) * Math.min(1, dt * 8);
   egoSaege.rotation.x += (zielKipp - egoSaege.rotation.x) * Math.min(1, dt * 8);
   egoSaege.rotation.z = r * 3;
