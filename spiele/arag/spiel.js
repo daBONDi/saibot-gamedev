@@ -3914,6 +3914,7 @@ function zeichneKaputt() {
 function zeichne() {
   mpMenueZeigen(zustand === 'titel');
   ctx.clearRect(0, 0, W, H);
+  zuschauRauschen(tot && zustand === 'spiel' && !pause && zeit - totSeit >= VERBINDUNG_WEG_ZEIT);   // Beim Zuschauen rauscht es immer
   if (zustand === 'titel') { zeichneTitel(); return; }
   zeichne3D();
   zeichneHUD();
@@ -3929,6 +3930,28 @@ function zeichne() {
 // eines anderen Roboters zu (links am Kopf festgemacht) – mit leichten Störungen im Bild.
 const VERBINDUNG_WEG_ZEIT = 2.5;   // So viele Sekunden rauscht es, bevor du zuschauen kannst
 const STOER_STAERKE = 1;           // Wie stark die Störungen beim Zuschauen sind (0 = gar keine, 2 = doppelt so stark)
+const ZUSCHAU_RAUSCHEN = 0.07;     // So laut rauscht es die ganze Zeit, während du zuschaust (0 = still)
+let dauerRauschen = null;          // Das Rauschen, das immer läuft (wird an- und ausgedreht)
+function zuschauRauschen(an) {
+  if (!audio) return;
+  try {
+    if (!dauerRauschen) {
+      if (!rauschPuffer) rauschen(0, 0.01, 0.002);   // (baut den Rausch-Puffer, falls es ihn noch nicht gibt)
+      if (!rauschPuffer) return;
+      const q = audio.createBufferSource(), hoch = audio.createBiquadFilter(), tief = audio.createBiquadFilter(), g = audio.createGain();
+      q.buffer = rauschPuffer; q.loop = true;
+      hoch.type = 'highpass'; hoch.frequency.value = 700;    // Kein Brummen, nur KSSSHHH
+      tief.type = 'lowpass'; tief.frequency.value = 6000;    // Nicht zu schrill
+      g.gain.value = 0;
+      q.connect(hoch).connect(tief).connect(g).connect(audio.destination);
+      q.start();
+      dauerRauschen = { g };
+    }
+    // Leise schwanken (wie ein echtes Funksignal), bei Störstreifen kurz lauter
+    const laut = an && tonAn ? ZUSCHAU_RAUSCHEN * (0.8 + Math.sin(zeit * 1.7) * 0.2 + (stoerBalken > 0 ? 0.8 : 0)) : 0;
+    dauerRauschen.g.gain.setTargetAtTime(laut, audio.currentTime, an ? 0.05 : 0.15);
+  } catch (e) { /* egal */ }
+}
 let totSeit = -99, zuschauNr = 0, stoerBalken = 0, naechsteStoerung = 0, rauschBilder = null;
 function verbindungWeg() {
   totSeit = zeit; zuschauNr = 0; stoerBalken = 0; naechsteStoerung = zeit + VERBINDUNG_WEG_ZEIT + 1;
@@ -3999,7 +4022,7 @@ function zeichneSignal() {
     return;
   }
   const st = STOER_STAERKE;
-  zeichneRauschen(0.05 * st);
+  zeichneRauschen((0.08 + Math.random() * 0.04) * st);   // Es rauscht immer ein bisschen
   zeichneZeilen(0.1 * st);
   if (zeit > naechsteStoerung) {   // Ab und zu: KRZZT! Ein Störstreifen
     naechsteStoerung = zeit + 1.5 + Math.random() * 3;
