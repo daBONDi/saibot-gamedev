@@ -1000,6 +1000,20 @@ function bodenHoeheBei(x, z, y) {
   for (const t of haus.treppen) if (aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - y) < 0.6) return rampenHoehe(t, x);
   return beste;
 }
+// Steht das Ziel AUF einer Treppe? Dann nicht geradeaus (sonst läuft man unter der Treppe durch!),
+// sondern erst zum Anfang der Treppe (unten oder oben) und dann die Treppe entlang.
+function rampenUmweg(wer, pos, ziel) {
+  for (const t of haus.treppen) {
+    if (!aufRampe(t, ziel.x, ziel.z) || Math.abs(rampenHoehe(t, ziel.x) - ziel.y) > 1.0) continue;
+    if (aufRampe(t, pos.x, pos.z) && Math.abs(rampenHoehe(t, pos.x) - pos.y) < 0.7) return ziel;   // Schon auf der Treppe: einfach weiter
+    const P = treppenPunkte(t), vonOben = pos.y > t.basis + ETAGE_HOEHE * 0.5;
+    const amAnfang = q => abstand2D(pos.x, pos.z, q.x, q.z) < 0.9 && Math.abs(pos.y - q.y) < 0.7;
+    if (amAnfang(P.unten) || amAnfang(P.oben)) return ziel;   // Steht schon am Treppenanfang: jetzt rauf (oder runter)!
+    wer.tw = { k: 0, reihe: vonOben ? [P.absatz, P.oben] : [P.vor, P.unten] };
+    return wer.tw.reihe[0];
+  }
+  return null;
+}
 // Wohin muss jemand (Monster oder Helfer) jetzt laufen, um zum Ziel zu kommen? (durch Türen und über Treppen!)
 // "wer" merkt sich, wie weit er auf einer Treppe schon ist (wer.tw)
 function wegPunkt(wer, pos, ziel) {
@@ -1014,7 +1028,7 @@ function wegPunkt(wer, pos, ziel) {
     wer.tw = null;
   }
   const ra = raumNrVon(pos.x, pos.y, pos.z), rb = raumNrVon(ziel.x, ziel.y, ziel.z);
-  if (ra === rb) return ziel;
+  if (ra === rb) return rampenUmweg(wer, pos, ziel) || ziel;
   const n = naechsterRaum(ra, rb);
   if (n === ra) return ziel;
   if (haus.raeume[n].e !== haus.raeume[ra].e) {   // Treppe hoch oder runter
@@ -2101,7 +2115,12 @@ function updateMonster(m, dt) {
   m.laeuft = d > 0.2 && tempo > 0;
   if (m.laeuft) {
     const schritt = Math.min(d, tempo * dt);
-    m.x += dx / d * schritt; m.z += dz / d * schritt;
+    const nx = m.x + dx / d * schritt, nz = m.z + dz / d * schritt;
+    // Oben nicht ins Treppenloch laufen (sonst fällt das Monster durch und hängt hinter der Treppe fest)
+    const loch = (x, z) => !m.tw && haus.treppen.some(t => imLoch(t, x, z) && m.y > t.basis + ETAGE_HOEHE - 0.3 && !(aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - m.y) < 0.6));
+    if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
+    else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
+    else if (!loch(m.x, nz)) m.z = nz;
     let diff = Math.atan2(dx, dz) - m.winkel;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
