@@ -51,6 +51,17 @@ const GEBAEUDE_ARTEN = {
   baum: { name: 'Baum', emoji: '🌳', preis: 500, r: 1.5 },
 };
 const LADEN = { x: 60, z: 12, r: 8 };   // Der Landhandel: Hier verkaufst du Korn und kaufst Saat
+// Der Wald mit der Motorsäge 🌲🪚
+const WALD = { x: 88, z: 60, r: 19 };   // Mitte und Größe vom Wald
+const WALD_BAEUME = 40;          // So viele Fichten stehen im Wald
+const SAEGEWERK = { x: 58, z: 53, platzX: 58, platzZ: 42, r: 6 };   // Hier verkaufst du das Holz
+const SAEGE_ZEIT = 3;            // So viele Sekunden musst du sägen, bis ein Baum umfällt
+const HOLZ_PRO_BAUM = 3;         // So viele Holzstämme gibt ein Baum
+const HOLZ_TRAGEN_MAX = 4;       // So viele Stämme kannst du auf einmal tragen
+const HOLZ_PREIS = 250;          // So viel bringt ein Stamm beim Sägewerk
+const SPRIT_PREIS = 0.1;         // Sprit für die Motorsäge kostet so viel pro Prozent (voll = 10 €)
+const NACHWACHS_ZEIT = 180;      // Nach so vielen Sekunden wächst aus dem Baumstumpf ein neuer Baum
+const BAUM_WACHS_DAUER = 25;     // ... und so lange braucht er, bis er groß ist
 
 // ===== Grundgerüst: Szene, Kamera, Licht =====
 const HORIZONT = 0xcfe3f0, ZENIT = 0x3f7fc8;
@@ -344,6 +355,7 @@ for (let i = 0; i < 90; i++) {   // Ein Wald-Ring rundherum
   const w = i / 90 * Math.PI * 2 + Math.sin(i * 7) * 0.03, r = 115 + Math.sin(i * 13) * 12;
   const x = Math.cos(w) * r, z = Math.sin(w) * r;
   if (FELDER.some(F => Math.abs(x - F.x) < F.b / 2 + 4 && Math.abs(z - F.z) < F.t / 2 + 4)) continue;   // Keine Bäume auf den Feldern!
+  if (Math.hypot(x - WALD.x, z - WALD.z) < WALD.r + 6) continue;   // Da ist jetzt der Fichtenwald
   baumOrte.push([x, z]);
 }
 for (const [x, z] of [[8, 30], [12, 38], [-10, 18], [40, 40], [-15, 5], [75, 0], [80, 35], [-80, 0]]) baumOrte.push([x, z]);
@@ -367,6 +379,88 @@ const kronen = new THREE.InstancedMesh(kroneGeo, windMaterial(mat(0xffffff, { fl
   });
 }
 for (const t of [staemme, kronen]) { t.castShadow = true; t.receiveShadow = true; scene.add(t); }
+
+// ===== Der Fichtenwald (hier kannst du mit der Motorsäge Holz machen) =====
+// Wege zum Wald: vom Landhandel nach Norden und dann zum Sägewerk  [x, z, Breite, Tiefe]
+const WALDWEGE = [[68.5, 12, 13, 5], [75, 26, 5, 33], [66.5, 42, 22, 5]];
+for (const [x, z, b, t] of WALDWEGE) weg(x, z, b, t);
+const aufWaldweg = (x, z, rand = 0) => WALDWEGE.some(([wx, wz, b, t]) => Math.abs(x - wx) < b / 2 + rand && Math.abs(z - wz) < t / 2 + rand);
+{   // Waldboden: dunkler, mit Nadeln
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#4b4a2a'; g.fillRect(0, 0, 128, 128);
+  for (let k = 0; k < 1200; k++) { g.fillStyle = `hsl(${30 + Math.random() * 50}, 35%, ${18 + Math.random() * 20}%)`; g.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 3, 1); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 10); t.colorSpace = THREE.SRGBColorSpace;
+  const boden = new THREE.Mesh(new THREE.CircleGeometry(WALD.r + 3, 40), new THREE.MeshStandardMaterial({ map: t, roughness: 1 }));
+  boden.rotation.x = -Math.PI / 2; boden.position.set(WALD.x, 0.02, WALD.z); boden.receiveShadow = true;
+  scene.add(boden);
+}
+// Eine Fichte: Stamm + 3 Kegel übereinander (alle Fichten teilen sich die gleichen Formen – das spart Speicher)
+const fichteStammGeo = new THREE.CylinderGeometry(0.25, 0.4, 3, 8).translate(0, 1.5, 0);
+const fichteKroneGeo = mergeGeometries([
+  new THREE.ConeGeometry(2.3, 4, 9).translate(0, 3.6, 0),
+  new THREE.ConeGeometry(1.8, 3.6, 9).translate(0, 5.6, 0),
+  new THREE.ConeGeometry(1.2, 3, 9).translate(0, 7.6, 0),
+]);
+const fichteStumpfGeo = new THREE.CylinderGeometry(0.33, 0.42, 0.5, 10).translate(0, 0.25, 0);
+const rindeMat = mat(0x5a3a1e), nadelMat = windMaterial(mat(0x2a5a2c, { flatShading: true }), 0.12), schnittMat = mat(0xe0c48a);
+const baeume = [];   // Alle Fichten: { nr, x, z, s, g, kipp, stumpf, h, zustand, hp, zeit, wachs }
+{
+  // "Zufall", der aber bei allen Spielern genau gleich ist (wichtig für Multiplayer!)
+  let saat = 4711;
+  const zz = () => { saat = (saat * 16807) % 2147483647; return (saat - 1) / 2147483646; };
+  for (let versuch = 0; versuch < 3000 && baeume.length < WALD_BAEUME; versuch++) {
+    const w = zz() * Math.PI * 2, r = Math.sqrt(zz()) * WALD.r;
+    const x = WALD.x + Math.cos(w) * r, z = WALD.z + Math.sin(w) * r;
+    if (aufWaldweg(x, z, 3) || baeume.some(b => Math.hypot(b.x - x, b.z - z) < 3.6)) continue;
+    if (Math.hypot(x - SAEGEWERK.x - 9.5, z - SAEGEWERK.z - 1) < 5) continue;   // Nicht auf den Holzstapel
+    const s = 0.85 + zz() * 0.35;
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); g.rotation.y = zz() * 6;
+    const kipp = new THREE.Group(); g.add(kipp);   // Der Teil, der umfällt
+    for (const [geo, m] of [[fichteStammGeo, rindeMat], [fichteKroneGeo, nadelMat]]) {
+      const t = new THREE.Mesh(geo, m); t.castShadow = true; t.receiveShadow = true; kipp.add(t);
+    }
+    const stumpf = new THREE.Mesh(fichteStumpfGeo, [rindeMat, schnittMat, rindeMat]);   // Oben sieht man das helle Holz
+    stumpf.castShadow = true; stumpf.visible = false; g.add(stumpf);
+    scene.add(g);
+    const h = { x, z, r: 0.7 * s };
+    hindernisse.push(h);
+    baeume.push({ nr: baeume.length, x, z, s, g, kipp, stumpf, h, zustand: 'steht', hp: 0, zeit: 0, wachs: 1 });
+  }
+}
+// Das Sägewerk: hinten eine Halle, vorne ein Dach auf Pfosten mit der großen Kreissäge
+{
+  const S = SAEGEWERK;
+  const holzWand = new THREE.MeshStandardMaterial({ map: bretterTextur('#8a5a32'), roughness: 0.95 });
+  kasten(scene, S.x, 3, S.z + 2, 14, 6, 4, holzWand);                    // Halle
+  kasten(scene, S.x, 6.2, S.z, 14.8, 0.4, 8.8, 0x4a3020);                // Dach
+  for (const x of [-6.8, 0, 6.8]) {                                      // Pfosten vorne
+    kasten(scene, S.x + x, 3, S.z - 4, 0.35, 6, 0.35, 0x6b4a2b);
+    hindernisse.push({ x: S.x + x, z: S.z - 4, r: 0.3 });
+  }
+  hindernisse.push({ x: S.x, z: S.z + 2, hb: 7, ht: 2 });
+  // Sägetisch mit Kreissägeblatt und einem Stamm drauf
+  kasten(scene, S.x, 0.85, S.z - 1.2, 6, 0.25, 1.3, 0x6b4a2b);
+  for (const x of [-2.7, 2.7]) kasten(scene, S.x + x, 0.4, S.z - 1.2, 0.25, 0.8, 1.1, 0x4a3020);
+  const blatt = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.05, 32), mat(0xcfd3d8, { metalness: 0.8, roughness: 0.3 }));
+  blatt.rotation.x = Math.PI / 2; blatt.position.set(S.x + 1.2, 1.25, S.z - 1.2); scene.add(blatt);
+  const tischStamm = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 3.2, 12), [rindeMat, schnittMat, schnittMat]);
+  tischStamm.rotation.z = Math.PI / 2; tischStamm.position.set(S.x - 1.2, 1.3, S.z - 1.2); tischStamm.castShadow = true; scene.add(tischStamm);
+  hindernisse.push({ x: S.x, z: S.z - 1.2, hb: 3, ht: 0.65 });
+  // Holzstapel rechts (Stämme) und Bretterstapel links
+  for (let reihe = 0; reihe < 3; reihe++) for (let k = 0; k < 4 - reihe; k++) {
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 4, 12), [rindeMat, schnittMat, schnittMat]);
+    st.rotation.x = Math.PI / 2; st.position.set(S.x + 8.3 + k * 0.72 + reihe * 0.36, 0.35 + reihe * 0.62, S.z + 1);
+    st.castShadow = true; scene.add(st);
+  }
+  hindernisse.push({ x: S.x + 9.4, z: S.z + 1, hb: 1.6, ht: 2.1 });
+  for (let k = 0; k < 6; k++) kasten(scene, S.x - 9.5, 0.1 + k * 0.18, S.z + 1, 2, 0.16, 4, k % 2 ? 0xd9b77a : 0xcda86a);
+  hindernisse.push({ x: S.x - 9.5, z: S.z + 1, hb: 1.1, ht: 2.1 });
+  const sw = schild('🪚 Sägewerk', '#f5b971', 9);
+  sw.position.set(S.x, 8.2, S.z - 4); scene.add(sw);
+  const platz = new THREE.Mesh(new THREE.CircleGeometry(S.r, 32), new THREE.MeshBasicMaterial({ color: 0xf5b971, transparent: true, opacity: 0.35 }));
+  platz.rotation.x = -Math.PI / 2; platz.position.set(S.platzX, 0.08, S.platzZ); scene.add(platz);
+}
 
 // ===== Die Felder =====
 // Jedes Feld besteht aus vielen kleinen Stücken (Zellen). Jede Zelle hat einen Zustand:
@@ -423,7 +517,7 @@ const felder = FELDER.map((F, nr) => {
   for (let versuch = 0; versuch < anzahl * 3 && n < anzahl; versuch++) {
     const w = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 110;
     const x = Math.cos(w) * r, z = Math.sin(w) * r;
-    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62)) continue;
+    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62) || aufWaldweg(x, z, 0.5)) continue;
     d.position.set(x, 0, z); d.rotation.y = Math.random() * 6; d.scale.setScalar(0.7 + Math.random() * 0.9); d.updateMatrix();
     gras.setMatrixAt(n, d.matrix);
     gras.setColorAt(n, c.setHSL(0.22 + Math.random() * 0.08, 0.5, 0.25 + Math.random() * 0.15));
@@ -957,7 +1051,32 @@ function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die 
   teil(kopf, new THREE.CylinderGeometry(0.17, 0.2, 0.16, 16), hut, 0, 0.31, 0);
   teil(kopf, new THREE.CylinderGeometry(0.205, 0.205, 0.04, 16), hutband, 0, 0.26, 0);
   farmer.kopf = kopf;
+  // Motorsäge in der rechten Hand (erst mal versteckt)
+  const saege = new THREE.Group(); saege.position.set(0, -0.62, 0); saege.visible = false;
+  farmer.armR.add(saege);
+  teil(saege, new THREE.BoxGeometry(0.17, 0.32, 0.24), mat(0xf07f13), 0, -0.14, 0);                 // Motor (orange)
+  teil(saege, new THREE.BoxGeometry(0.05, 0.12, 0.22), schwarz, 0, 0.04, 0.02);                      // Griff
+  teil(saege, new THREE.BoxGeometry(0.035, 0.62, 0.09), mat(0xb5b9bf, { metalness: 0.6, roughness: 0.4 }), 0, -0.6, -0.03);   // Schwert
+  teil(saege, new THREE.BoxGeometry(0.045, 0.64, 0.02), schwarz, 0, -0.6, -0.085);                   // Kette
+  farmer.saege = saege;
+  // Holzstämme auf dem Rücken (erst mal versteckt)
+  farmer.holz = [];
+  for (let k = 0; k < HOLZ_TRAGEN_MAX; k++) {
+    const st = teil(player, new THREE.CylinderGeometry(0.11, 0.11, 0.95, 8), mat(0x6b4a2b), 0, 1.12 + k * 0.2, 0.28);
+    st.rotation.z = Math.PI / 2; st.visible = false;
+    farmer.holz.push(st);
+  }
   return { g: player, t: farmer };
+}
+// Motorsäge und Holz zeigen (und die Arme richtig halten)
+function farmerWerkzeug(t, saege, saegt, holz) {
+  t.saege.visible = saege;
+  t.holz.forEach((h, k) => { h.visible = k < holz; });
+  if (holz > 0 && !saegt) t.armL.rotation.x = -2.3;   // Mit links die Stämme auf dem Rücken festhalten
+  if (saege) {
+    t.armR.rotation.x = saegt ? 1.15 + Math.sin(spielZeit * 60) * 0.03 : 0.4;   // Beim Sägen nach vorne – und es rüttelt!
+    if (saegt) t.armL.rotation.x = 1.0;
+  }
 }
 const meinFarmer = baueFarmer('#b3261e');
 const player = meinFarmer.g, farmer = meinFarmer.t;
@@ -988,6 +1107,7 @@ let building = false, bauArt = 'schuppen';
 let ansicht = 'dritte';   // 'dritte' = von hinten · 'ego' = First Person (mit den Augen des Farmers)
 let rotation = 0, yaw = 0, pitch = 0.25, blickHoch = 0, zoom = 1, kamOffset = 0, spielZeit = 0;
 let rauchTakt = 0, spurTakt = 0;
+let saegeAn = false, saegt = false, saegeSprit = 100, getragen = 0;   // Motorsäge in der Hand? Sägst du gerade? Sprit in %, Holzstämme auf dem Rücken
 const keys = {};
 const gebaute = [];   // Was du gebaut hast: { art, x, z, rot, mesh, h, silo }
 const silos = [];     // Alle Silos: { x, z, inhalt, schild }
@@ -1079,7 +1199,25 @@ function tonStart() {
     o.connect(f); o2.connect(f); f.connect(g).connect(audio.destination);
     o.start(); o2.start();
     motor = { o, o2, g };
+    // Motorsäge: ein schnelles, kreischendes Knattern
+    const so = audio.createOscillator(), so2 = audio.createOscillator(), sf = audio.createBiquadFilter(), sg = audio.createGain();
+    so.type = 'sawtooth'; so.frequency.value = 100;
+    so2.type = 'square'; so2.frequency.value = 50;
+    sf.type = 'bandpass'; sf.frequency.value = 900; sf.Q.value = 0.7;
+    sg.gain.value = 0;
+    so.connect(sf); so2.connect(sf); sf.connect(sg).connect(audio.destination);
+    so.start(); so2.start();
+    saegeTon = { o: so, o2: so2, f: sf, g: sg };
   } catch (e) { audio = null; }
+}
+let saegeTon = null;
+function tonGleiten(von, bis, start, dauer, klang = 'sawtooth', laut = 0.05) {   // Ein Ton, der höher oder tiefer rutscht
+  if (!audio || !tonAn || laut < 0.002) return;
+  const t = audio.currentTime + start, o = audio.createOscillator(), g = audio.createGain();
+  o.type = klang;
+  o.frequency.setValueAtTime(von, t); o.frequency.exponentialRampToValueAtTime(bis, t + dauer);
+  g.gain.setValueAtTime(0.001, t); g.gain.linearRampToValueAtTime(laut, t + 0.04); g.gain.exponentialRampToValueAtTime(0.001, t + dauer);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dauer + 0.05);
 }
 function ton(hoehe, start, dauer, klang = 'sine', laut = 0.1) {
   if (!audio || !tonAn) return;
@@ -1098,6 +1236,17 @@ const sound = {
   korn() { for (let k = 0; k < 12; k++) ton(2000 + Math.random() * 3000, k * 0.04, 0.05, 'square', 0.015); },   // Rieseln
   tuer() { ton(300, 0, 0.08, 'square', 0.05); ton(220, 0.08, 0.1, 'square', 0.05); },
   hupf() { ton(330, 0, 0.12, 'sine', 0.06); ton(520, 0.05, 0.1, 'sine', 0.05); },
+  anwerfen() { tonGleiten(60, 170, 0, 0.25, 'sawtooth', 0.06); tonGleiten(60, 190, 0.3, 0.3, 'sawtooth', 0.07); },   // Motorsäge: ritsch, ratsch!
+  knarren(laut = 1) {   // Der Baum knarzt und kracht, wenn er umfällt
+    ton(1800, 0, 0.04, 'square', 0.05 * laut);
+    tonGleiten(150, 90, 0.05, 0.5, 'sawtooth', 0.05 * laut);
+    tonGleiten(120, 55, 0.5, 0.7, 'sawtooth', 0.05 * laut);
+  },
+  aufprall(laut = 1) {   // Rumms! Der Baum liegt
+    ton(48, 0, 0.8, 'sine', 0.45 * laut); ton(85, 0, 0.35, 'triangle', 0.25 * laut);
+    for (let k = 0; k < 10; k++) ton(1500 + Math.random() * 2500, 0.05 + k * 0.03, 0.06, 'square', 0.012 * laut);   // Äste rascheln
+  },
+  holz() { ton(260, 0, 0.08, 'triangle', 0.12); ton(180, 0.06, 0.1, 'triangle', 0.1); },
 };
 
 // ===== Staub- und Rauch-Wolken =====
