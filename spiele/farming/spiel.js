@@ -1597,6 +1597,26 @@ function baueGebaeudeMesh(art) {
       kasten(g, x, 0.35, 0, 1.6, 0.3, L - 1, 0x7a5230);
       kasten(g, x, 0.42, 0, 1.4, 0.06, L - 1.2, 0x4f331c, false);
     }
+  } else if (art === 'teich') {   // Fischteich: Wasser, Ufer aus Sand und Steinen, Schilf und Seerosen
+    const ufer = new THREE.Mesh(new THREE.RingGeometry(4.9, 6, 40), mat(0xb8a47a)); ufer.rotation.x = -Math.PI / 2; ufer.position.y = 0.05; ufer.receiveShadow = true; g.add(ufer);
+    const grund = new THREE.Mesh(new THREE.CircleGeometry(5, 40), mat(0x2a3f2a)); grund.rotation.x = -Math.PI / 2; grund.position.y = 0.02; g.add(grund);
+    const wasser = new THREE.Mesh(new THREE.CircleGeometry(5, 40), new THREE.MeshStandardMaterial({ color: 0x2f7fb0, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.72, depthWrite: false }));
+    wasser.rotation.x = -Math.PI / 2; wasser.position.y = 0.1; wasser.renderOrder = 1; g.add(wasser);
+    for (let k = 0; k < 14; k++) {   // Steine am Ufer
+      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.25 + (k % 3) * 0.12), mat(0x8a8a8a, { flatShading: true }));
+      const w = k / 14 * Math.PI * 2 + 0.2; st.position.set(Math.cos(w) * 5.4, 0.1, Math.sin(w) * 5.4); st.castShadow = true; g.add(st);
+    }
+    const schilf = [];
+    for (const w0 of [0.8, 2.6, 4.3]) for (let k = 0; k < 9; k++) {
+      const w = w0 + (k - 4) * 0.05, rr = 4.7 + (k % 3) * 0.25, h = 1 + (k % 4) * 0.3;
+      schilf.push(new THREE.BoxGeometry(0.04, h, 0.04).translate(Math.cos(w) * rr, h / 2, Math.sin(w) * rr));
+      if (k % 3 === 0) schilf.push(new THREE.BoxGeometry(0.09, 0.3, 0.09).translate(Math.cos(w) * rr, h, Math.sin(w) * rr));   // Rohrkolben
+    }
+    g.add(new THREE.Mesh(mergeGeometries(schilf), windMaterial(mat(0x6b7a2a), 1)));
+    for (const [x, z] of [[1.5, -2], [-2.2, 1], [2.5, 1.8]]) {   // Seerosen
+      const blatt = new THREE.Mesh(new THREE.CircleGeometry(0.45, 12), mat(0x3f8f2a)); blatt.rotation.x = -Math.PI / 2; blatt.position.set(x, 0.12, z); g.add(blatt);
+      const bl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mat(0xffd6e8)); bl.position.set(x + 0.1, 0.17, z); g.add(bl);
+    }
   } else if (OBST[art]) {   // Obstbaum: Stamm + Krone (die Früchte kommen später dazu)
     const stamm = new THREE.Mesh(stammGeo, mat(0x6b4423)); stamm.castShadow = true; g.add(stamm);
     const krone = new THREE.Mesh(kroneGeo, windMaterial(mat(OBST[art].krone, { flatShading: true }), 0.15)); krone.castShadow = true; g.add(krone);
@@ -1626,6 +1646,8 @@ function baueGebaeudeMesh(art) {
     kasten(g, R * 0.55, 0.3, R * 0.35, 2.2, 0.5, 0.7, 0x7a5230);
     const futter = kasten(g, R * 0.55, 0.52, R * 0.35, 2.0, 0.06, 0.5, 0xe3c46a, false);
     g.userData.trog = futter;
+    const salz = kasten(g, -R * 0.55, 0.25, R * 0.35, 0.5, 0.45, 0.5, mat(0xf2b8c6, { roughness: 0.4 })); salz.visible = false;   // Salz-Leckstein
+    g.userData.salz = salz;
   } else {
     const stamm = new THREE.Mesh(stammGeo, mat(0x694020)); stamm.castShadow = true; g.add(stamm);
     const krone = new THREE.Mesh(kroneGeo, mat(0x1f7a30, { flatShading: true })); krone.castShadow = true; g.add(krone);
@@ -1651,6 +1673,8 @@ function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   if (art === 'gewaechshaus') ghEinrichten(b);
   if (GEBAEUDE_ARTEN[art].tier) gehegeEinrichten(b);
   if (OBST[art]) obstEinrichten(b);
+  if (art === 'teich') teichEinrichten(b);
+  if (art === 'teich' || art === 'gewaechshaus') grasWeg(x, z, GEBAEUDE_ARTEN[art].r + 0.3);
   if (daten) gebDatenSetzen(b, daten);
   gebaute.push(b);
 }
@@ -1742,6 +1766,130 @@ function obstPfluecken(b) {
   sound.korn(); speichern();
 }
 
+// ===== Fischteich und Angeln =====
+function teichEinrichten(b) {
+  b.teich = { fische: TEICH_FISCHE_MAX, takt: 0, fischG: new THREE.Group() };
+  for (let k = 0; k < 5; k++) {   // Fische, die unter Wasser im Kreis schwimmen
+    const f = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), mat(k === 0 ? 0xf0a020 : 0x4a5a5a));
+    f.scale.set(0.12, 0.08, 0.35); const w = k * 1.3, rr = 1.2 + k * 0.6;
+    f.position.set(Math.cos(w) * rr, 0.05, Math.sin(w) * rr); f.rotation.y = -w;
+    b.teich.fischG.add(f);
+  }
+  b.mesh.add(b.teich.fischG);
+  b.schild = schild('', '#fff', 6); b.schild.position.set(b.x, 3.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  teichSchild(b);
+}
+function teichSchild(b) {
+  const n = Math.floor(b.teich.fische);
+  b.schild.userData.malen(n > 0 ? `🎣 ${n} Fische · P = Angeln` : '🎣 Leer – warte ein bisschen', n > 0 ? '#9fd8ff' : '#ff9a6b');
+  b.teich.fischG.children.forEach((f, k) => { f.visible = k < n; });
+}
+let angel = null;   // Gerade am Angeln? { b, phase: 'warten' | 'kampf', ... }
+const schwimmerMat = mat(0xd8221e);
+function angeln(b) {
+  if (angel) return;
+  if (aktiv) { meldung('🎣 Steig erst aus (E), dann kannst du angeln!'); sound.nein(); return; }
+  if (Math.floor(b.teich.fische) < 1) { meldung('🎣 Im Teich sind gerade keine Fische. Alle 30 Sekunden kommt einer dazu!'); sound.nein(); return; }
+  if (saegeAn) { saegeAn = false; }
+  // Die Angel auswerfen: Der Schwimmer landet im Wasser zwischen dir und der Teich-Mitte
+  const dx = player.position.x - b.x, dz = player.position.z - b.z, l = Math.hypot(dx, dz) || 1;
+  const schwimmer = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), schwimmerMat);
+  schwimmer.position.set(b.x + dx / l * 2.5, 0.15, b.z + dz / l * 2.5); scene.add(schwimmer);
+  yaw = Math.atan2(dx, dz);   // Zum Wasser schauen
+  angel = { b, phase: 'warten', t: 1.5 + Math.random() * 3, schwimmer };
+  tonGleiten(900, 300, 0, 0.25, 'sine', 0.06); ton(180, 0.3, 0.15, 'sine', 0.08);   // Wuuusch – plopp!
+  meldung('🎣 Angel ausgeworfen! Warte auf einen Biss ...', 2);
+}
+function angelEnde(gefangen) {
+  const a = angel;
+  scene.remove(a.schwimmer);
+  $('angeln').style.display = 'none';
+  angel = null;
+  if (gefangen) {
+    const F = FISCHE[a.fisch], k = 'fisch_' + a.fisch;
+    vorrat[k] = (vorrat[k] || 0) + 1;
+    a.b.teich.fische = Math.max(0, a.b.teich.fische - 1);
+    teichSchild(a.b); gebSenden(a.b);
+    meldung(`🎣🎉 Du hast ${a.fisch === 'goldfisch' ? 'den' : 'einen'} ${F.emoji} ${F.name} gefangen! (${euro(F.preis)} im Dorfladen)`, 4);
+    sound.kaufen(); speichern();
+  } else if (gefangen === false) { meldung('💨 Oh nein, der Fisch ist entwischt!', 2.5); sound.nein(); }
+}
+let angelDruck = false;   // Maus auf dem Angel-Spiel gedrückt?
+function angelUpdate(dt) {
+  if (!angel) return;
+  const a = angel;
+  if (aktiv || Math.hypot(player.position.x - a.b.x, player.position.z - a.b.z) > GEBAEUDE_ARTEN.teich.r + 5 || !gebaute.includes(a.b)) { angelEnde(null); return; }
+  if (a.phase === 'warten') {
+    a.schwimmer.position.y = 0.15 + Math.sin(spielZeit * 3) * 0.03;   // Der Schwimmer wippt
+    a.t -= dt;
+    if (a.t <= 0) {   // Biss! Welcher Fisch? (seltene Fische kommen seltener)
+      let summe = 0; for (const F of Object.values(FISCHE)) summe += F.chance;
+      let z = Math.random() * summe;
+      a.fisch = Object.keys(FISCHE).find(k => (z -= FISCHE[k].chance) < 0) || 'rotauge';
+      Object.assign(a, { phase: 'kampf', fischPos: 0.4, ziel: 0.5, zielT: 0, zone: 0.3, zoneV: 0, fort: 0.3 });
+      a.groesse = 0.32 - FISCHE[a.fisch].schwer * 0.04;
+      $('angelFisch').textContent = FISCHE[a.fisch].emoji;
+      $('angelZone').style.height = `${a.groesse * 100}%`;
+      $('angeln').style.display = 'block';
+      if (document.pointerLockElement) document.exitPointerLock();
+      ton(1200, 0, 0.08, 'square', 0.06); ton(1500, 0.1, 0.08, 'square', 0.06);
+      meldung('❗ Biss! Halt den Fisch im grünen Feld!', 2);
+    }
+    return;
+  }
+  // Das Minispiel: Der Fisch zappelt hoch und runter, du hältst das grüne Feld mit Leertaste/Maus nach oben
+  const F = FISCHE[a.fisch];
+  a.schwimmer.position.y = 0.05 + Math.sin(spielZeit * 20) * 0.04;
+  a.zielT -= dt;
+  if (a.zielT <= 0) { a.zielT = (0.4 + Math.random()) / F.schwer; a.ziel = Math.random(); }
+  a.fischPos += (a.ziel - a.fischPos) * Math.min(1, dt * (1.2 + F.schwer * 1.6));
+  const druck = keys[' '] || angelDruck || mouseDown;
+  a.zoneV = begrenzt(a.zoneV + (druck ? 3.0 : -2.6) * dt, -1.3, 1.3);
+  a.zone += a.zoneV * dt;
+  if (a.zone < 0) { a.zone = 0; a.zoneV = 0; }
+  if (a.zone > 1 - a.groesse) { a.zone = 1 - a.groesse; a.zoneV = 0; }
+  const fischMitte = a.fischPos * 0.9 + 0.05, drin = fischMitte > a.zone && fischMitte < a.zone + a.groesse;
+  a.fort = begrenzt(a.fort + (drin ? 0.3 : -0.22) * dt, 0, 1);
+  $('angelZone').style.bottom = `${a.zone * 100}%`;
+  $('angelFisch').style.bottom = `${a.fischPos * 90}%`;
+  $('angelBalken').style.height = `${a.fort * 100}%`;
+  $('angelBalken').style.background = drin ? '#7cf5a0' : '#ffd166';
+  if (drin && Math.random() < dt * 8) ton(2200, 0, 0.02, 'square', 0.015);   // Die Rolle surrt
+  if (a.fort >= 1) angelEnde(true);
+  else if (a.fort <= 0) angelEnde(false);
+}
+// ===== Salzmine: Salzsteine abbauen =====
+let salzsteine = 0, hackt = false, hackFort = 0, hackTon = 0;
+const beiDerMine = () => !aktiv && Math.hypot(player.position.x - SALZMINE.eingangX, player.position.z - SALZMINE.eingangZ) < 3.5;
+function salzUpdate(dt) {
+  hackt = false;
+  if (!beiDerMine() || saegeAn || building || angel || !(mouseDown || keys.x)) return;
+  if (salzsteine >= SALZ_MAX) { meldungSelten(`🧂 Du kannst nur ${SALZ_MAX} Salzsteine tragen! Leg sie in ein Tiergehege (P).`); return; }
+  hackt = true;
+  yaw = Math.atan2(player.position.x - SALZMINE.x, player.position.z - SALZMINE.z);   // Zum Felsen schauen
+  hackFort += dt / SALZ_ZEIT;
+  hackTon -= dt;
+  if (hackTon <= 0) {   // Tink! Tink!
+    hackTon = 0.35;
+    ton(1900 + Math.random() * 400, 0, 0.06, 'triangle', 0.08); ton(140, 0, 0.08, 'square', 0.04);
+    for (let k = 0; k < 3; k++) staub(SALZMINE.eingangX + 1, SALZMINE.eingangZ + zufall(-1, 1), k ? 0xf2b8c6 : 0xbbbbbb, 1.2, 0.8, 0.4);
+  }
+  if (hackFort >= 1) {
+    hackFort = 0; salzsteine++;
+    meldung(`🧂 Salzstein abgebaut! (${salzsteine} von ${SALZ_MAX}) Leg ihn ins Tiergehege: P → Salzstein.`, 2.5);
+    sound.holz(); speichern();
+  }
+}
+function salzHinlegen(b) {
+  if (salzsteine < 1) return;
+  salzsteine--;
+  b.geh.salz = Math.min(SALZ_BOOST * 3, (b.geh.salz || 0) + SALZ_BOOST);
+  gebSenden(b); gehegeSchild(b);
+  meldung(`🧂 Salzstein hingelegt! Die ${TIERE[b.geh.tier].name} geben jetzt ${Math.round(b.geh.salz / 60)} Minuten lang DOPPELT so viel! 🎉`, 4);
+  tierLaute[b.geh.tier](1); speichern(); panelMalen();
+}
+const minSek = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
 // ===== Nutztiere im Gehege =====
 const fleckTex = (() => {   // Weißes Fell mit schwarzen Flecken (für Kühe)
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -1795,7 +1943,7 @@ function baueTier(art) {
 }
 function gehegeEinrichten(b) {
   const A = GEBAEUDE_ARTEN[b.art];
-  b.geh = { tier: A.tier, R: A.r - 1.6, futter: 0, lager: 0, tiere: [], takt: 0 };
+  b.geh = { tier: A.tier, R: A.r - 1.6, futter: 0, lager: 0, tiere: [], takt: 0, salz: 0 };
   b.schild = schild('', '#fff', 8); b.schild.position.set(b.x, 4.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
   gehegeSchild(b);
 }
@@ -1813,7 +1961,7 @@ function gehegeSchild(b) {
   const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length;
   if (!n) { b.schild.userData.malen(`${T.emoji} Leer – P drücken`, '#b9f5a0'); return; }
   const hunger = geh.futter <= 0;
-  b.schild.userData.malen(`${T.emoji} ${n} · ${P.emoji} ${Math.floor(geh.lager)} ${P.einheit}${hunger ? ' · ⚠️ Hunger!' : ''}`, hunger ? '#ff9a6b' : '#ffd166');
+  b.schild.userData.malen(`${T.emoji} ${n} · ${P.emoji} ${Math.floor(geh.lager)} ${P.einheit}${hunger ? ' · ⚠️ Hunger!' : geh.salz > 0 ? ' · 🧂×2' : ''}`, hunger ? '#ff9a6b' : '#ffd166');
 }
 const tierLaute = {
   kuh: l => tonGleiten(150, 105, 0, 1.3, 'sawtooth', 0.05 * l),
@@ -1822,6 +1970,14 @@ const tierLaute = {
 };
 function gebUpdate(dt) {
   for (const b of gebaute) {
+    if (b.teich) {
+      b.teich.fischG.rotation.y += dt * 0.25;
+      if (b.teich.fische < TEICH_FISCHE_MAX) {
+        const vorher = Math.floor(b.teich.fische);
+        b.teich.fische = Math.min(TEICH_FISCHE_MAX, b.teich.fische + dt / 30);
+        if (Math.floor(b.teich.fische) !== vorher) teichSchild(b);
+      }
+    }
     if (b.obst && b.obst.w < 1) {   // Obst wächst
       b.obst.w = Math.min(1, b.obst.w + dt / OBST[b.art].zeit);
       b.obst.takt -= dt;
@@ -1837,9 +1993,12 @@ function gebUpdate(dt) {
     if (b.geh) {
       const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length;
       // Fressen und Milch/Wolle/Eier geben (nur wenn Futter da ist!). Das Lager fasst so viel wie 10 Minuten.
+      const boost = geh.salz > 0 ? 2 : 1;   // Mit Salzstein: doppelt so viel!
+      if (geh.salz > 0) geh.salz = Math.max(0, geh.salz - dt);
+      b.mesh.userData.salz.visible = geh.salz > 0;
       if (n && geh.futter > 0) {
         geh.futter = Math.max(0, geh.futter - n * T.frisst * dt / 60);
-        geh.lager = Math.min(n * T.proMin * 10, geh.lager + n * T.proMin * dt / 60);
+        geh.lager = Math.min(n * T.proMin * 20, geh.lager + n * T.proMin * boost * dt / 60);
       }
       const trog = b.mesh.userData.trog;
       trog.visible = geh.futter > 0; trog.scale.y = 0.3 + 2 * geh.futter / FUTTER_MAX;
@@ -1873,14 +2032,16 @@ function gebUpdate(dt) {
 function gebDaten(b) {
   if (b.obst) return { o: Math.round(b.obst.w * 1000) / 1000 };
   if (b.gh) return { a: b.gh.art, w: Math.round(b.gh.w * 1000) / 1000 };
-  if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10 };
+  if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10, s: Math.round(b.geh.salz) };
+  if (b.teich) return { t: Math.round(b.teich.fische * 100) / 100 };
   return null;
 }
 function gebDatenSetzen(b, d) {
   if (!d) return;
   if (b.obst) { b.obst.w = d.o || 0; obstMalen(b); }
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
-  if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; gehegeSchild(b); }
+  if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0; gehegeSchild(b); }
+  if (b.teich) { b.teich.fische = d.t ?? TEICH_FISCHE_MAX; teichSchild(b); }
 }
 const gebSchluessel = b => `${b.x.toFixed(1)},${b.z.toFixed(1)}`;
 function gebSenden(b) { mpEvent({ t: 'geb', k: gebSchluessel(b), d: gebDaten(b) }); }
@@ -1903,7 +2064,7 @@ function nahesHofGebaeude() {
   const p = wo();
   let bestes = null, bestD = Infinity;
   for (const b of gebaute) {
-    if (!b.gh && !b.geh && !b.obst) continue;
+    if (!b.gh && !b.geh && !b.obst && !b.teich) continue;
     const d = Math.hypot(p.x - b.x, p.z - b.z) - GEBAEUDE_ARTEN[b.art].r;
     if (d < 3.5 && d < bestD) { bestD = d; bestes = b; }
   }
@@ -1928,9 +2089,9 @@ function panelStatus() {   // Der Text oben im Menü (wird ständig neu geschrie
   const b = panelGeb;
   if (b.gh) { const G = GEMUESE[b.gh.art]; return G ? (b.gh.w >= 1 ? `${G.emoji} ${G.name} sind reif!` : `${G.emoji} ${G.name} wachsen: ${Math.floor(b.gh.w * 100)} %`) : 'Das Gewächshaus ist leer. Was willst du anbauen?'; }
   const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt];
-  return `${T.emoji} ${geh.tiere.length} von ${T.max} ${T.name} · 🌾 Futter: ${kg(geh.futter)} · ${P.emoji} ${P.name}: ${Math.floor(geh.lager)} ${P.einheit}${geh.futter <= 0 && geh.tiere.length ? ' · ⚠️ Die Tiere haben Hunger!' : ''}`;
+  return `${T.emoji} ${geh.tiere.length} von ${T.max} ${T.name} · 🌾 Futter: ${kg(geh.futter)} · ${P.emoji} ${P.name}: ${Math.floor(geh.lager)} ${P.einheit}${geh.salz > 0 ? ` · 🧂 Salz-Boost ×2 noch ${minSek(geh.salz)}` : ''}${geh.futter <= 0 && geh.tiere.length ? ' · ⚠️ Die Tiere haben Hunger!' : ''}`;
 }
-const panelZustandJetzt = b => b.gh ? `${b.gh.art}-${b.gh.w >= 1}` : `${b.geh.tiere.length}-${Math.floor(b.geh.lager) > 0}-${Math.round(b.geh.futter / 50)}-${money}`;
+const panelZustandJetzt = b => b.gh ? `${b.gh.art}-${b.gh.w >= 1}` : `${b.geh.tiere.length}-${Math.floor(b.geh.lager) > 0}-${Math.round(b.geh.futter / 50)}-${money}-${salzsteine}`;
 function panelMalen() {
   const b = panelGeb, A = GEBAEUDE_ARTEN[b.art], box = $('hofpanelInhalt');
   $('hofpanelTitel').textContent = `${A.emoji} ${A.name}`;
@@ -1951,6 +2112,7 @@ function panelMalen() {
     const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length;
     knopf(box, n >= T.max ? `${T.emoji} Gehege ist voll` : `➕ 1 ${T.einzeln} kaufen (${euro(T.preis)})`, n < T.max && money >= T.preis, () => tierKaufen(b));
     knopf(box, `🧺 Einsammeln: ${Math.floor(geh.lager)} ${P.einheit} ${P.name}`, geh.lager >= 1, () => einsammeln(b));
+    knopf(box, `🧂 Salzstein hinlegen → ×2 für 10 Min. (du hast ${salzsteine})`, salzsteine > 0, () => salzHinlegen(b));
     knopf(box, `🌾 1.000 kg Futter kaufen (${euro(1000 * FUTTER_PREIS)})`, geh.futter < FUTTER_MAX - 1 && money >= 1000 * FUTTER_PREIS, () => futterKaufen(b));
     const tipp = document.createElement('div'); tipp.className = 'klein'; tipp.style.marginTop = '6px';
     tipp.textContent = `💡 Jedes ${T.einzeln} gibt ${T.proMin} ${P.einheit} ${P.name} pro Minute (${euro(T.proMin * P.preis)}) – aber nur mit Futter! Gratis-Futter: Fahr mit Korn im Tank her und drück L.`;
@@ -2014,9 +2176,12 @@ function futterAbladen(b) {   // Korn vom Fahrzeug als Futter in den Trog
   sound.korn(); speichern();
 }
 function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächshaus und Gehege
+  if (inHaus(wo().x, wo().z) && !aktiv && Math.hypot(player.position.x - HAUS.bett.x, player.position.z - HAUS.bett.z) < 2.6) return `🛏️ Z = Schlafen (bis morgen ${AUFSTEH_ZEIT}:00 Uhr)`;
+  if (beiDerMine()) return saegeAn ? '⛏️ Pack erst die Motorsäge weg (Q)!' : `⛏️ Salzmine: X oder Maus halten = Salzstein abbauen (${salzsteine} von ${SALZ_MAX}${hackt ? ` · ${Math.round(hackFort * 100)} %` : ''})`;
   if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText()} = ${euro(vorratWert())})`;
   const b = nahesHofGebaeude();
   if (!b) return '';
+  if (b.teich) return angel ? (angel.phase === 'warten' ? '🎣 Warte auf einen Biss ...' : '') : aktiv ? '🎣 Zum Angeln aussteigen (E)' : `🎣 P = Angeln (${Math.floor(b.teich.fische)} Fische im Teich)`;
   if (b.obst) { const O = OBST[b.art]; return b.obst.w >= 1 ? `${O.emoji} P = ${O.menge} kg ${O.name} pflücken` : `${O.emoji} ${GEBAEUDE_ARTEN[b.art].name}: ${b.obst.w < 0.25 ? 'blüht' : 'Früchte wachsen'} (${Math.floor(b.obst.w * 100)} %)`; }
   if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `🌾 L = Korn als Futter abladen (${kg(kornDrin(aktiv))})` : '';
   return panelGeb ? '' : `${GEBAEUDE_ARTEN[b.art].emoji} P = ${GEBAEUDE_ARTEN[b.art].name}-Menü öffnen`;
@@ -2903,9 +3068,9 @@ document.addEventListener('keydown', e => {
   if (k === 'h') kuppeln();
   if (k === 'q') saegeNehmen();
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
-  if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
+  if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
-  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); }
+  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
   if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; updateHUD(); }
   else if (['1', '2', '3'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
@@ -3309,7 +3474,7 @@ function mpTick(dt) {
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
-    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
   }
 }
 const weltDa = () => mp.geldBasis !== null;
