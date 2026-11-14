@@ -2442,8 +2442,8 @@ const MONSTER_ARTEN = {
   // Stillstehen oder Ducken (C) = er spürt dich nicht. fuehlWeite: so weit spürt er Schritte · auftauchWeite: so nah, dann bricht er raus
   // auftauchen: so lange bebt der Boden vorher (Warnung!) · obenZeit: so lange krabbelt er oben herum und jagt dich mit seinen 8 Armen
   // krabbelTempo: so schnell krabbelt er oben (du läufst 4, rennst 6.5) · krabbelWeite: so weit riecht er dich oben (auch wenn du stillstehst!)
-  maulwurf: { name: 'Achtarm-Maulwurf', emoji: '🐾', tempo: 2.0, jagdTempo: 5.0, schaden: 40, pause: 1.2, betaeubbar: true,
-              fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 8, abtauchen: 0.6, schubs: 11, krabbelTempo: 3.6, krabbelWeite: 14 },
+  maulwurf: { name: 'Achtarm-Maulwurf', emoji: '🐾', tempo: 2.5, jagdTempo: 5.8, schaden: 40, pause: 1.2, betaeubbar: true,
+              fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 8, abtauchen: 0.6, schubs: 11, krabbelTempo: 5.2, krabbelWeite: 14 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
