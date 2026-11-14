@@ -1089,6 +1089,52 @@ function farmerWerkzeug(t, saege, saegt, holz) {
 }
 const meinFarmer = baueFarmer('#b3261e');
 const player = meinFarmer.g, farmer = meinFarmer.t;
+// ===== First-Person-Motorsäge: Säge und Hände direkt vor der Kamera (wie in Ego-Spielen) =====
+scene.add(camera);   // Damit man Sachen an die Kamera hängen kann
+const egoSaege = new THREE.Group();
+egoSaege.visible = false; egoSaege.position.set(0.22, -0.33, -0.45);
+camera.add(egoSaege);
+const egoKette = [];   // Die Zähne der Kette (die laufen beim Sägen rundherum!)
+{
+  const E = egoSaege, haut = mat(0xe8b896), schwarz = mat(0x111111);
+  const teil = (geo, m, x, y, z) => { const t = new THREE.Mesh(geo, m); t.position.set(x, y, z); E.add(t); return t; };
+  teil(new THREE.BoxGeometry(0.16, 0.2, 0.3), mat(0xf07f13), 0, 0, 0);                          // Motor (orange)
+  teil(new THREE.BoxGeometry(0.17, 0.04, 0.22), mat(0x222222), 0, 0.1, 0.02);                   // Deckel
+  teil(new THREE.BoxGeometry(0.03, 0.05, 0.03), mat(0xd4af37), 0.09, 0.04, 0.06);              // Starter-Griff
+  teil(new THREE.BoxGeometry(0.1, 0.05, 0.12), schwarz, 0, 0.06, 0.2);                          // Hinterer Griff
+  teil(new THREE.BoxGeometry(0.4, 0.035, 0.035), schwarz, -0.2, 0.15, -0.1);                    // Vorderer Bügel
+  teil(new THREE.BoxGeometry(0.035, 0.15, 0.035), schwarz, -0.01, 0.08, -0.1);
+  teil(new THREE.BoxGeometry(0.03, 0.08, 0.75), mat(0xb5b9bf, { metalness: 0.6, roughness: 0.35 }), 0, -0.02, -0.52);   // Schwert
+  // Hände und Ärmel (mit deinem karierten Hemd!)
+  teil(new THREE.BoxGeometry(0.09, 0.08, 0.11), haut, 0.01, 0.1, 0.21);                         // Rechte Hand
+  teil(new THREE.BoxGeometry(0.11, 0.11, 0.45), farmer.hemd, 0.04, 0.06, 0.48).rotation.x = -0.25;
+  teil(new THREE.BoxGeometry(0.09, 0.09, 0.09), haut, -0.3, 0.15, -0.1);                        // Linke Hand
+  teil(new THREE.BoxGeometry(0.11, 0.11, 0.5), farmer.hemd, -0.33, 0.1, 0.18).rotation.x = -0.25;
+  // Kette: kleine Zähne oben und unten am Schwert
+  for (let k = 0; k < 28; k++) egoKette.push(teil(new THREE.BoxGeometry(0.042, 0.025, 0.022), schwarz, 0, 0, 0));
+}
+const KETTE_LANG = 0.72;
+function egoSaegeUpdate(dt) {
+  const zeigen = ansicht === 'ego' && saegeAn && !aktiv && !building;
+  egoSaege.visible = zeigen;
+  if (!zeigen) return;
+  const r = saegt ? Math.sin(spielZeit * 55) * 0.006 : 0;                  // Rütteln beim Sägen
+  const wackeln = mp.laeuft ? Math.sin(farmer.phase) * 0.015 : 0;         // Beim Laufen wippt die Säge
+  const zielZ = saegt ? -0.72 : -0.45, zielKipp = saegt ? -0.08 : -0.28;  // Beim Sägen nach vorne in den Stamm drücken
+  egoSaege.position.x = 0.22 + r;
+  egoSaege.position.y = -0.33 + wackeln + r;
+  egoSaege.position.z += (zielZ - egoSaege.position.z) * Math.min(1, dt * 8);
+  egoSaege.rotation.x += (zielKipp - egoSaege.rotation.x) * Math.min(1, dt * 8);
+  egoSaege.rotation.z = r * 3;
+  if (saegt && baumVorMir()) blickHoch += (-0.45 - blickHoch) * Math.min(1, dt * 3);   // Beim Sägen auf den Schnitt runterschauen
+  // Die Kette läuft rundherum: unten nach vorne, oben zurück
+  egoSaege.userData.kette = ((egoSaege.userData.kette || 0) + dt * (saegt ? 3 : saegeSprit > 0 ? 0.25 : 0)) % (KETTE_LANG * 2);
+  egoKette.forEach((z, k) => {
+    const pos = (k / egoKette.length * KETTE_LANG * 2 + egoSaege.userData.kette) % (KETTE_LANG * 2);
+    const unten = pos < KETTE_LANG;
+    z.position.set(0, unten ? -0.065 : 0.025, unten ? -0.16 - pos : -0.16 - (KETTE_LANG * 2 - pos));
+  });
+}
 player.visible = false;
 scene.add(player);
 let spielerVy = 0, amBoden = true;   // Hüpfen: Geschwindigkeit nach oben, und ob du gerade auf dem Boden stehst
@@ -2494,6 +2540,7 @@ function animate() {
   // Die Sonne (und ihr Schatten) wandert mit dir mit
   sun.position.set(target.x + 30, 60, target.z + 20);
   sun.target.position.set(target.x, 0, target.z);
+  egoSaegeUpdate(dt);
   himmel.position.copy(camera.position);   // Der Himmel ist immer gleich weit weg
   sonne.position.copy(camera.position).addScaledVector(SONNEN_RICHTUNG, 400);
 
