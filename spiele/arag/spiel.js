@@ -2953,20 +2953,22 @@ function schrankUpdate(m, dt) {
 // 🐾 Der Achtarm-Maulwurf: graben → (spürt Schritte) jagen → (direkt drunter) auftauchen → oben (haut zu!) → abtauchen → graben
 function maulwurfOpfer(m, weite, auchStill = false) {   // Wer läuft draußen herum? (Stillstehen oder Ducken = er spürt dich nicht!)
   let bestes = null, bestD = weite;
+  const dranBleiben = (o, d) => { if (m.opferWer && o.wer === m.opferWer) d -= 4; return d; };   // Wen er schon jagt, den verfolgt er lieber weiter
   const p = spielerKoerper.position, v = spielerKoerper.velocity;
   if (!tot && !imHaus(p.x, p.z) && p.y < 1.5 && (auchStill || (!geduckt && Math.hypot(v.x, v.z) > 0.6))) {
-    const d = abstand2D(m.x, m.z, p.x, p.z); if (d < bestD) { bestD = d; bestes = { x: p.x, y: 0, z: p.z, spieler: true }; }
+    const o = { x: p.x, y: 0, z: p.z, spieler: true, wer: 'ich' }, d = dranBleiben(o, abstand2D(m.x, m.z, p.x, p.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   for (const g of mpGaeste()) {
     if (zeit - (g.mwT || 0) > 0.3) { g.mwBewegt = Math.hypot(g.x - (g.mwX ?? g.x), g.z - (g.mwZ ?? g.z)) > 0.15; g.mwX = g.x; g.mwZ = g.z; g.mwT = zeit; }
     if (imHaus(g.x, g.z) || g.y > 1.5 || !(auchStill || (g.mwBewegt && !g.dk))) continue;
-    const d = abstand2D(m.x, m.z, g.x, g.z); if (d < bestD) { bestD = d; bestes = { x: g.x, y: 0, z: g.z, gast: g }; }
+    const o = { x: g.x, y: 0, z: g.z, gast: g, wer: g.id }, d = dranBleiben(o, abstand2D(m.x, m.z, g.x, g.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   for (const h of helfer) {
     const hp = h.body.position;
     if (h.kaputt > 0 || imHaus(hp.x, hp.z) || hp.y > 1.5 || !(auchStill || Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.5)) continue;
-    const d = abstand2D(m.x, m.z, hp.x, hp.z); if (d < bestD) { bestD = d; bestes = { x: hp.x, y: 0, z: hp.z, helfer: h }; }
+    const o = { x: hp.x, y: 0, z: hp.z, helfer: h, wer: h.name }, d = dranBleiben(o, abstand2D(m.x, m.z, hp.x, hp.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
+  if (bestes) m.opferWer = bestes.wer;
   return bestes;
 }
 function maulwurfUpdate(m, dt) {
@@ -2997,17 +2999,32 @@ function maulwurfUpdate(m, dt) {
     }
     return info.tempo;
   }
-  if (m.modus === 'auftauchen') { m.warnZeit -= dt; if (m.warnZeit <= 0) { m.modus = 'oben'; m.obenZeit = info.obenZeit; } return 0; }
+  if (m.modus === 'auftauchen') {
+    m.warnZeit -= dt;
+    if (m.warnZeit <= 0) {
+      m.modus = 'oben'; m.obenZeit = info.obenZeit;
+      if (m.opferWer === 'ich') zeigeNachricht('🐾🕷️ Er KRABBELT hinter dir her! RENN (Shift)!', 2.5, '#ff6b6b');
+    }
+    return 0;
+  }
   if (m.modus === 'oben') {   // Oben! Er krabbelt auf seinen acht Armen hinter dir her und haut zu!
     m.obenZeit -= dt;
     const o = maulwurfOpfer(m, info.krabbelWeite, true);   // Oben riecht er dich – Stillstehen hilft jetzt nicht mehr!
     m.alleinZeit = o ? 0 : (m.alleinZeit || 0) + dt;
     if (m.obenZeit <= 0 || m.alleinZeit > 1.5) { m.modus = 'abtauchen'; m.warnZeit = info.abtauchen; m.alleinZeit = 0; return 0; }   // Müde (oder keiner mehr da): wieder runter
     if (!o) { m.ziel = { x: m.x, y: 0, z: m.z }; return 0; }
-    m.ziel = { x: o.x, y: 0, z: o.z };
+    m.ziel = { x: o.x, y: 0, z: o.z }; m.letzteSpur = { ...m.ziel };
     return abstand2D(m.x, m.z, o.x, o.z) < 1.0 ? 0 : info.krabbelTempo;
   }
-  if (m.modus === 'abtauchen') { m.warnZeit -= dt; if (m.warnZeit <= 0) { m.modus = 'graben'; m.ziel = null; m.ruhe = 2; } return 0; }
+  if (m.modus === 'abtauchen') {
+    m.warnZeit -= dt;
+    if (m.warnZeit <= 0) {   // Unten weiterjagen! Er wühlt zur letzten Stelle, wo er dich gerochen hat
+      if (m.letzteSpur) { m.modus = 'jagen'; m.ziel = m.letzteSpur; m.jagdZeit = 4; m.letzteSpur = null; }
+      else { m.modus = 'graben'; m.ziel = null; }
+      m.ruhe = 0.8;   // (ganz kurz, sonst taucht er sofort wieder auf)
+    }
+    return 0;
+  }
   m.modus = 'graben';
   return 0;
 }
@@ -3999,7 +4016,7 @@ function jaeger() {   // Welches Monster jagt dich gerade? (das nächste, oder n
   let bestes = null, bestD = 12;
   for (const m of monster) {
     const d = abstand3D(m, p);
-    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.modus === 'jagen' || (m.art === 'maulwurf' && (m.modus === 'auftauchen' || m.modus === 'oben')))) { bestes = m; bestD = d; }
+    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.modus === 'jagen' || (m.art === 'maulwurf' && (m.modus === 'auftauchen' || m.modus === 'oben' || m.modus === 'abtauchen')))) { bestes = m; bestD = d; }
   }
   return bestes;
 }
