@@ -50,6 +50,7 @@ const GEBAEUDE_ARTEN = {
   silo: { name: 'Silo', emoji: '🛢️', preis: 25000, r: 3 },
   baum: { name: 'Baum', emoji: '🌳', preis: 500, r: 1.5 },
   gewaechshaus: { name: 'Gewächshaus', emoji: '🪴', preis: 15000, r: 5.6 },
+  teich: { name: 'Fischteich', emoji: '🎣', preis: 5000, r: 6 },
   kuhweide: { name: 'Kuhweide', emoji: '🐄', preis: 8000, r: 10, tier: 'kuh' },
   schafweide: { name: 'Schafweide', emoji: '🐑', preis: 6000, r: 8, tier: 'schaf' },
   huehnerhof: { name: 'Hühnerhof', emoji: '🐔', preis: 4000, r: 6, tier: 'huhn' },
@@ -88,6 +89,26 @@ const OBST = {
   kirschbaum: { frucht: 'kirsche', name: 'Kirschen', emoji: '🍒', zeit: 90, menge: 50, preis: 8, bluete: 0xfff0f5, farbe: 0x8e0f1e, groesse: 0.07, laenglich: 1, krone: 0x2a6e2a },
 };
 for (const O of Object.values(OBST)) PRODUKTE[O.frucht] = { name: O.name, emoji: O.emoji, einheit: 'kg', preis: O.preis };
+// Tag und Nacht
+const TAG_DAUER = 720;           // So viele Sekunden dauert ein ganzer Tag (24 Stunden) im Spiel = 12 Minuten
+const AUFSTEH_ZEIT = 7;          // Um diese Uhrzeit wachst du nach dem Schlafen auf
+// Fischteich: Welche Fische gibt es? chance = wie oft (größer = öfter), schwer = wie wild der Fisch zappelt
+const FISCHE = {
+  rotauge: { name: 'Rotauge', emoji: '🐟', preis: 8, chance: 40, schwer: 0.6 },
+  karpfen: { name: 'Karpfen', emoji: '🐟', preis: 20, chance: 30, schwer: 1.0 },
+  forelle: { name: 'Forelle', emoji: '🐠', preis: 30, chance: 18, schwer: 1.3 },
+  hecht: { name: 'Hecht', emoji: '🦈', preis: 60, chance: 9, schwer: 1.8 },
+  goldfisch: { name: 'Goldener Fisch', emoji: '✨', preis: 250, chance: 3, schwer: 2.4 },
+};
+for (const [k, F] of Object.entries(FISCHE)) PRODUKTE['fisch_' + k] = { name: F.name, emoji: F.emoji, einheit: 'Stück', preis: F.preis };
+const TEICH_FISCHE_MAX = 8;      // So viele Fische schwimmen höchstens in einem Teich (alle 30 Sekunden kommt einer dazu)
+// Salzmine: Salzsteine machen die Tiere glücklich – sie geben dann doppelt so viel!
+const SALZMINE = { x: 122, z: 12, eingangX: 109.5, eingangZ: 12 };
+const SALZ_MAX = 10;             // So viele Salzsteine kannst du tragen
+const SALZ_ZEIT = 1.5;           // So viele Sekunden brauchst du für einen Salzstein
+const SALZ_BOOST = 600;          // So viele Sekunden wirkt ein Salzstein (10 Minuten)
+// Dein eigenes Haus (neben dem Hof, die Tür zeigt zur Straße)
+const HAUS = { x1: -19, x2: -9, z1: 24, z2: 32, hoehe: 3.2, tuerZ: 28, tuerBreite: 2.4, tuerHoehe: 2.4, bett: { x: -17.4, z: 25.3 } };
 const FUTTER_MAX = 5000;         // So viel Futter (kg) passt in einen Futtertrog
 const FUTTER_PREIS = 0.5;        // Futter kaufen kostet so viel pro kg (Korn vom eigenen Feld ist gratis!)
 const LADEN = { x: 60, z: 12, r: 8 };   // Der Landhandel: Hier verkaufst du Korn und kaufst Saat
@@ -194,7 +215,8 @@ for (let k = 0; k < 16; k++) {
   wolken.push(wolke);
 }
 
-scene.add(new THREE.HemisphereLight(0xd8ecff, 0x4a6b35, 1.4));
+const himmelLicht = new THREE.HemisphereLight(0xd8ecff, 0x4a6b35, 1.4);
+scene.add(himmelLicht);
 const sun = new THREE.DirectionalLight(0xfff2d6, 2.4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -405,6 +427,7 @@ for (let i = 0; i < 90; i++) {   // Ein Wald-Ring rundherum
   if (FELDER.some(F => Math.abs(x - F.x) < F.b / 2 + 4 && Math.abs(z - F.z) < F.t / 2 + 4)) continue;   // Keine Bäume auf den Feldern!
   if (Math.hypot(x - WALD.x, z - WALD.z) < WALD.r + 6) continue;   // Da ist jetzt der Fichtenwald
   if (x > -60 && x < 50 && z > 50 && z < 115) continue;             // Da ist das Dorf
+  if (Math.hypot(x - SALZMINE.x, z - SALZMINE.z) < 20) continue;    // Da ist die Salzmine
   baumOrte.push([x, z]);
 }
 for (const [x, z] of [[8, 30], [12, 38], [-10, 18], [40, 40], [-15, 5], [75, 0], [80, 35], [-80, 0]]) baumOrte.push([x, z]);
@@ -432,7 +455,7 @@ for (const t of [staemme, kronen]) { t.castShadow = true; t.receiveShadow = true
 
 // ===== Der Fichtenwald (hier kannst du mit der Motorsäge Holz machen) =====
 // Wege zum Wald: vom Landhandel nach Norden und dann zum Sägewerk  [x, z, Breite, Tiefe]
-const WALDWEGE = [[68.5, 12, 13, 5], [75, 26, 5, 33], [66.5, 42, 22, 5]];
+const WALDWEGE = [[68.5, 12, 13, 5], [75, 26, 5, 33], [66.5, 42, 22, 5], [92, 12, 34, 5]];   // (der letzte führt zur Salzmine)
 for (const [x, z, b, t] of WALDWEGE) weg(x, z, b, t);
 const aufWaldweg = (x, z, rand = 0) => WALDWEGE.some(([wx, wz, b, t]) => Math.abs(x - wx) < b / 2 + rand && Math.abs(z - wz) < t / 2 + rand);
 {   // Waldboden: dunkler, mit Nadeln
@@ -594,6 +617,7 @@ const KIRCHE = { x: -8, z: 88 };
   hindernisse.push({ x: K.x, z: K.z + 8, hb: 4.1, ht: 6.1 }, { x: K.x, z: K.z, hb: 2.2, ht: 2.2 });
 }
 // Brunnen auf dem Dorfplatz, Bänke, Laternen und das Ortsschild
+let lampenMat = null;
 {
   const stein = mat(0xa8a39a);
   const rand = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.8, 0.7, 24), stein); rand.position.set(-8, 0.35, 80); rand.castShadow = true; scene.add(rand);
@@ -607,7 +631,7 @@ const KIRCHE = { x: -8, z: 88 };
     kasten(scene, -8 + s * 4.75, 0.75, 80, 0.08, 0.5, 1.8, 0x8a5a32);
     for (const z of [-0.7, 0.7]) kasten(scene, -8 + s * 4.5, 0.2, 80 + z, 0.4, 0.4, 0.08, 0x333333, false);
   }
-  const lampenMat = new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffd88a, emissiveIntensity: 0.6 });
+  lampenMat = new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffd88a, emissiveIntensity: 0.6 });
   for (const x of [-46, -34, -22, -12, 8, 20, 32]) {
     kasten(scene, x, 2, 68.4, 0.15, 4, 0.15, 0x2a2a2a);
     kasten(scene, x, 4.1, 68.4, 0.45, 0.4, 0.45, lampenMat, false);
@@ -617,6 +641,104 @@ const KIRCHE = { x: -8, z: 88 };
   kasten(scene, 3.6, 2.3, 55, 0.08, 0.7, 1.8, 0xffd23c);
   const ort = schild(`🏡 ${DORF_NAME}`, '#ffd166', 8); ort.position.set(3.6, 4.2, 55); scene.add(ort);
 }
+// ===== Dein eigenes Haus: man kann reingehen, und im Bett kann man schlafen =====
+const inHaus = (x, z, rand = 0) => x > HAUS.x1 - rand && x < HAUS.x2 + rand && z > HAUS.z1 - rand && z < HAUS.z2 + rand;
+let hausLicht = null, kaminFeuer = null;
+{
+  const H = HAUS, d = 0.25, mx = (H.x1 + H.x2) / 2, mz = (H.z1 + H.z2) / 2, B = H.x2 - H.x1, T = H.z2 - H.z1, W = H.hoehe;
+  const putz = new THREE.MeshStandardMaterial({ color: 0xf6ead2, map: fachwerkTex, roughness: 0.95 });
+  const innen = mat(0xf3ecdc);
+  const wand = (x, y, z, b, h, t, hindernis = true) => { kasten(scene, x, y, z, b, h, t, putz); if (hindernis) hindernisse.push({ x, z, hb: b / 2, ht: t / 2 }); };
+  wand(mx, W / 2, H.z1 + d / 2, B, W, d);                      // Wand Norden
+  wand(mx, W / 2, H.z2 - d / 2, B, W, d);                      // Wand Süden
+  wand(H.x1 + d / 2, W / 2, mz, d, W, T);                      // Wand Westen
+  const oben = H.tuerZ - H.tuerBreite / 2 - H.z1, unten = H.z2 - H.tuerZ - H.tuerBreite / 2;   // Ostwand mit Tür
+  wand(H.x2 - d / 2, W / 2, H.z1 + oben / 2, d, W, oben);
+  wand(H.x2 - d / 2, W / 2, H.z2 - unten / 2, d, W, unten);
+  wand(H.x2 - d / 2, (W + H.tuerHoehe) / 2, H.tuerZ, d, W - H.tuerHoehe, H.tuerBreite, false);
+  // Offene Haustür (zur Seite gedreht) und Türschild
+  const tuer = kasten(scene, H.x2 + 0.55, H.tuerHoehe / 2, H.tuerZ - H.tuerBreite / 2 - 0.05, 1.1, H.tuerHoehe, 0.08, 0x7a3b1d);
+  tuer.rotation.y = -0.2;
+  const hs = schild('🏠 Mein Haus', '#ffd166', 5); hs.position.set(H.x2 + 0.4, W + 2.6, H.tuerZ); scene.add(hs);
+  // Dach (innen sieht man die Decke)
+  const form = new THREE.Shape([new THREE.Vector2(-T / 2 - 0.5, 0), new THREE.Vector2(T / 2 + 0.5, 0), new THREE.Vector2(0, 2.6)]);
+  const dachGeo = new THREE.ExtrudeGeometry(form, { depth: B + 0.8, bevelEnabled: false }); dachGeo.translate(0, 0, -(B + 0.8) / 2); dachGeo.rotateY(Math.PI / 2);
+  const dach = new THREE.Mesh(dachGeo, [mat(0xf6ead2), mat(0x9c3b28, { side: THREE.DoubleSide })]);
+  dach.position.set(mx, W, mz); dach.castShadow = dach.receiveShadow = true; scene.add(dach);
+  kasten(scene, H.x1 + 1.3, W + 1.6, H.z1 + 2, 0.7, 2.4, 0.7, 0x8b4a3a);   // Schornstein (über dem Kamin)
+  // Fußboden aus Holzdielen und ein Teppich
+  const dielen = bretterTextur('#b08a5a'); dielen.repeat.set(4, 3);
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(B - 2 * d, T - 2 * d), new THREE.MeshStandardMaterial({ map: dielen, roughness: 0.8 }));
+  boden.rotation.x = -Math.PI / 2; boden.position.set(mx, 0.04, mz); boden.receiveShadow = true; scene.add(boden);
+  const teppich = new THREE.Mesh(new THREE.PlaneGeometry(3, 2.2), new THREE.MeshStandardMaterial({ map: karoTextur('#2457a6'), roughness: 1 }));
+  teppich.rotation.x = -Math.PI / 2; teppich.position.set(mx + 0.5, 0.05, mz + 0.2); teppich.receiveShadow = true; scene.add(teppich);
+  // Fenster (außen und innen)
+  const fe = [];
+  for (const fx of [H.x1 + 2.5, mx + 1.5]) for (const [fz, ry] of [[H.z1 - 0.01, Math.PI], [H.z1 + d + 0.01, 0], [H.z2 + 0.01, 0], [H.z2 - d - 0.01, Math.PI]]) fe.push(new THREE.PlaneGeometry(1.1, 1.2).rotateY(ry).translate(fx, 1.7, fz));
+  for (const [fx, ry] of [[H.x1 - 0.01, -Math.PI / 2], [H.x1 + d + 0.01, Math.PI / 2]]) fe.push(new THREE.PlaneGeometry(1.1, 1.2).rotateY(ry).translate(fx, 1.7, mz + 1.5));
+  scene.add(new THREE.Mesh(mergeGeometries(fe), fensterMat));
+  // Das Bett: Holzrahmen, Matratze, Kissen und eine karierte Decke
+  const Bt = H.bett;
+  kasten(scene, Bt.x, 0.25, Bt.z, 2.3, 0.5, 1.5, 0x7a4a2a);
+  kasten(scene, Bt.x - 1.15, 0.6, Bt.z, 0.12, 1.2, 1.5, 0x7a4a2a);                                  // Kopfteil
+  kasten(scene, Bt.x, 0.58, Bt.z, 2.15, 0.18, 1.38, 0xf4f4f0);                                      // Matratze
+  kasten(scene, Bt.x - 0.8, 0.75, Bt.z, 0.45, 0.14, 1.0, 0xffffff);                                 // Kissen
+  kasten(scene, Bt.x + 0.3, 0.7, Bt.z, 1.4, 0.1, 1.44, new THREE.MeshStandardMaterial({ map: karoTextur('#b3261e'), roughness: 1 }));   // Bettdecke
+  hindernisse.push({ x: Bt.x, z: Bt.z, hb: 1.15, ht: 0.75 });
+  kasten(scene, Bt.x - 0.6, 0.3, Bt.z + 1.15, 0.5, 0.6, 0.5, 0x8a5a32);                             // Nachttisch ...
+  kasten(scene, Bt.x - 0.6, 0.75, Bt.z + 1.15, 0.2, 0.3, 0.2, new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffd88a, emissiveIntensity: 0.8 }));   // ... mit Lampe
+  // Kamin an der Westwand (mit Feuer!)
+  kasten(scene, H.x1 + 0.6, 1.0, H.z1 + 4.2, 0.8, 2.0, 1.8, 0x9a8a7a);
+  kasten(scene, H.x1 + 1.02, 0.55, H.z1 + 4.2, 0.05, 0.8, 1.0, 0x1a1a1a, false);
+  kaminFeuer = kasten(scene, H.x1 + 1.0, 0.4, H.z1 + 4.2, 0.1, 0.45, 0.7, new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff5a00, emissiveIntensity: 2 }), false);
+  hindernisse.push({ x: H.x1 + 0.6, z: H.z1 + 4.2, hb: 0.5, ht: 0.95 });
+  // Tisch mit zwei Stühlen
+  kasten(scene, mx + 0.8, 0.75, H.z2 - 2.3, 1.6, 0.08, 1.0, 0x8a5a32);
+  for (const sx of [-0.65, 0.65]) for (const sz of [-0.4, 0.4]) kasten(scene, mx + 0.8 + sx, 0.37, H.z2 - 2.3 + sz, 0.08, 0.74, 0.08, 0x6b4a2b);
+  for (const sx of [-1.3, 1.3]) { kasten(scene, mx + 0.8 + sx, 0.45, H.z2 - 2.3, 0.45, 0.06, 0.45, 0x6b4a2b); kasten(scene, mx + 0.8 + sx * 1.18, 0.75, H.z2 - 2.3, 0.06, 0.6, 0.45, 0x6b4a2b); }
+  kasten(scene, mx + 0.8, 0.85, H.z2 - 2.3, 0.3, 0.12, 0.3, 0xd4af37);                             // Obstschale
+  hindernisse.push({ x: mx + 0.8, z: H.z2 - 2.3, hb: 1.0, ht: 0.6 });
+  // Küche an der Südwand: Schrank, Herd, Spüle
+  kasten(scene, H.x1 + 2.2, 0.45, H.z2 - 0.6, 3.2, 0.9, 0.7, 0xe8e2d4);
+  kasten(scene, H.x1 + 1.4, 0.92, H.z2 - 0.6, 0.8, 0.04, 0.6, 0x222222, false);                    // Herdplatte
+  kasten(scene, H.x1 + 3.0, 0.91, H.z2 - 0.6, 0.7, 0.04, 0.5, 0xa8b4bf, false);                    // Spüle
+  hindernisse.push({ x: H.x1 + 2.2, z: H.z2 - 0.6, hb: 1.6, ht: 0.4 });
+  // Bücherregal an der Nordwand
+  kasten(scene, mx + 2, 1.1, H.z1 + 0.45, 2, 2.2, 0.5, 0x6b4a2b);
+  for (let k = 0; k < 14; k++) kasten(scene, mx + 1.15 + (k % 7) * 0.25, 0.7 + Math.floor(k / 7) * 0.8, H.z1 + 0.62, 0.16, 0.5, 0.05, [0xc23b22, 0x2457a6, 0x2f8f3a, 0xffd166][k % 4], false);
+  hindernisse.push({ x: mx + 2, z: H.z1 + 0.45, hb: 1.0, ht: 0.3 });
+  // Licht unter der Decke
+  hausLicht = new THREE.PointLight(0xffd9a0, 12, 14, 1.6); hausLicht.position.set(mx, W - 0.4, mz); scene.add(hausLicht);
+  weg((H.x2 + 2.5) / 2, H.tuerZ, 2.5 - H.x2, 2.5);   // Weg von der Haustür zur Straße
+}
+// ===== Die Salzmine: ein Felsen mit Stollen, Schienen und einer Lore voller rosa Salz =====
+{
+  const M = SALZMINE;
+  const felsGeo = new THREE.IcosahedronGeometry(11, 1);
+  felsGeo.scale(1, 0.6, 1.1);
+  const fels = new THREE.Mesh(felsGeo, mat(0x8a7f74, { flatShading: true }));
+  fels.position.set(M.x, 0, M.z); fels.castShadow = fels.receiveShadow = true; scene.add(fels);
+  const salzMat = mat(0xf2b8c6, { flatShading: true, roughness: 0.4 });
+  for (let k = 0; k < 9; k++) {   // Rosa Salzkristalle am Felsen
+    const kr = new THREE.Mesh(new THREE.OctahedronGeometry(0.5 + (k % 3) * 0.3), salzMat);
+    const w = Math.PI * 0.7 + k * 0.25;
+    kr.position.set(M.x + Math.cos(w) * 10, 1 + (k % 4) * 0.8, M.z + Math.sin(w) * 9); kr.rotation.set(k, k * 2, 0); kr.castShadow = true; scene.add(kr);
+  }
+  hindernisse.push({ x: M.x, z: M.z, r: 10.5 });
+  // Stolleneingang mit Holzrahmen
+  const ex = M.eingangX + 1.2;
+  kasten(scene, ex + 0.2, 1.4, M.z, 0.1, 2.8, 2.6, 0x0a0a0a, false);
+  for (const s of [-1, 1]) kasten(scene, ex, 1.5, M.z + s * 1.45, 0.3, 3.0, 0.3, 0x6b4a2b);
+  kasten(scene, ex, 3.1, M.z, 0.35, 0.3, 3.4, 0x6b4a2b);
+  // Schienen und Lore
+  for (const s of [-1, 1]) kasten(scene, M.eingangX - 3, 0.08, M.z + s * 0.45, 9, 0.08, 0.08, 0x555555, false);
+  for (let k = 0; k < 9; k++) kasten(scene, M.eingangX - 7 + k, 0.04, M.z, 0.2, 0.06, 1.3, 0x5a3a20, false);
+  kasten(scene, M.eingangX - 4, 0.75, M.z, 1.3, 0.75, 0.95, 0x666a70);
+  for (let k = 0; k < 5; k++) { const kr = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), salzMat); kr.position.set(M.eingangX - 4.4 + k * 0.2, 1.25, M.z - 0.2 + (k % 2) * 0.4); scene.add(kr); }
+  hindernisse.push({ x: M.eingangX - 4, z: M.z, r: 0.9 });
+  const ms = schild('⛏️ Salzmine', '#f2b8c6', 7); ms.position.set(M.eingangX, 5.5, M.z); scene.add(ms);
+}
+
 // Dorfbewohner, die auf der Straße spazieren gehen
 const dorfLeute = [];
 {
@@ -689,6 +811,15 @@ const felder = FELDER.map((F, nr) => {
   scene.add(f.schild);
   return f;
 });
+let grasMesh = null;
+function grasWeg(x, z, r) {   // Gras unter einem Gebäude wegmachen (z. B. damit es nicht durch den Teich wächst)
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), null0 = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < grasMesh.count; i++) {
+    grasMesh.getMatrixAt(i, m); p.setFromMatrixPosition(m);
+    if (Math.hypot(p.x - x, p.z - z) < r) grasMesh.setMatrixAt(i, null0);
+  }
+  grasMesh.instanceMatrix.needsUpdate = true;
+}
 // Grasbüschel auf der Wiese (wieder ein InstancedMesh: 5000 Büschel, aber nur ein Zeichen-Befehl!)
 {
   const halme = [];
@@ -703,7 +834,7 @@ const felder = FELDER.map((F, nr) => {
   for (let versuch = 0; versuch < anzahl * 3 && n < anzahl; versuch++) {
     const w = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 110;
     const x = Math.cos(w) * r, z = Math.sin(w) * r;
-    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62) || aufWaldweg(x, z, 0.5) || aufDorfweg(x, z, 0.5)) continue;
+    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || inHaus(x, z, 1) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62) || aufWaldweg(x, z, 0.5) || aufDorfweg(x, z, 0.5)) continue;
     d.position.set(x, 0, z); d.rotation.y = Math.random() * 6; d.scale.setScalar(0.7 + Math.random() * 0.9); d.updateMatrix();
     gras.setMatrixAt(n, d.matrix);
     gras.setColorAt(n, c.setHSL(0.22 + Math.random() * 0.08, 0.5, 0.25 + Math.random() * 0.15));
@@ -712,6 +843,7 @@ const felder = FELDER.map((F, nr) => {
   gras.count = n;
   gras.receiveShadow = true;
   scene.add(gras);
+  grasMesh = gras;
 }
 function schildMalen(f) {
   if (f.gekauft) f.schild.userData.malen(`✅ Feld ${f.nr + 1}`, '#b9f5a0');
