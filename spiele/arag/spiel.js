@@ -100,6 +100,20 @@ const KARTE = {
   breit: 6, tief: 4, etagen: 3,   // 6 × 4 Räume, 3 Stockwerke = 72 Räume!
   startzahl: 20261114,            // Damit das Haus jedes Mal genau gleich gebaut wird (andere Zahl = anderes Haus)
 };
+// Große Säle: Zwischen diesen Räumen gibt es keine Wände – sie werden zu einem riesigen Saal!
+//   etage: 0 = Erdgeschoss, 1 = 1. Stock, 2 = 2. Stock · i/j: Spalte/Reihe vom ersten Raum (0 = ganz links/ganz vorne)
+//   breit/tief: wie viele Räume nebeneinander/hintereinander · frei: true = die Mitte bleibt frei (keine Möbel)
+//   (Die Abgabe ist im Raum i: 0, j: 2 im Erdgeschoss – darum ist der Eingangssaal dort)
+const SAELE = [
+  { id: 'eingang', name: 'Eingangssaal', emoji: '🏛️', etage: 0, i: 0, j: 1, breit: 2, tief: 2, frei: true,
+    boden: 'fliesen', ecken: ['standuhr', 'sessel', 'kamin', 'regal'], teppich: true, kronleuchter: true },
+  { id: 'ballsaal', name: 'Ballsaal', emoji: '💃', etage: 0, i: 3, j: 1, breit: 2, tief: 2, frei: true,
+    boden: 'holz', ecken: ['standuhr', 'sessel', 'anrichte', 'kamin'], kronleuchter: true },
+  { id: 'bibliothek', name: 'Riesen-Bibliothek', emoji: '📚', etage: 1, i: 2, j: 0, breit: 3, tief: 1, frei: false,
+    boden: 'holz', ecken: ['regal', 'regal', 'regal', 'lesen'], teppich: true },
+];
+const OFFEN = RAUM;   // "Tür" so breit wie die ganze Wand = keine Wand
+const saalVon = (i, j, e) => SAELE.find(S => S.etage === e && i >= S.i && i < S.i + S.breit && j >= S.j && j < S.j + S.tief) || null;
 // Jedes Monster gibt es genau EINMAL im Haus
 const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
@@ -1044,6 +1058,7 @@ function wandStueck(x1, z1, x2, z2, basis, tuer, mat) {
     if (entlangX) festerKlotz(x1 + mitte, basis + (unten + oben) / 2, z1, l, oben - unten, D, mat);
     else festerKlotz(x1, basis + (unten + oben) / 2, z1 + mitte, D, oben - unten, l, mat);
   };
+  if (tuer >= OFFEN) return;   // Großer Saal: hier ist gar keine Wand
   if (!tuer) { stueck(0, laenge, 0, WAND_HOEHE); return; }
   const a = laenge / 2 - tuer / 2, b = laenge / 2 + tuer / 2;
   stueck(0, a, 0, WAND_HOEHE);
@@ -1385,7 +1400,7 @@ function baueHaus() {
   const gesperrt = new Set();   // Türen, die es wegen der Treppe nicht geben darf (an der Nordwand)
   for (let e = 0; e < haus.etagen - 1; e++) {
     let i, j;
-    do { i = zufallGanz(0, haus.breit - 1); j = zufallGanz(0, haus.tief - 1); } while (benutzt.has(`${i},${j}`));
+    do { i = zufallGanz(0, haus.breit - 1); j = zufallGanz(0, haus.tief - 1); } while (benutzt.has(`${i},${j}`) || saalVon(i, j, e) || saalVon(i, j, e + 1));   // (keine Treppe mitten im Saal)
     benutzt.add(`${i},${j}`);
     const unten = raumNr(i, j, e), oben = raumNr(i, j, e + 1);
     const t = { e, i, j, unten, oben, x0: i * RAUM, z0: j * RAUM, basis: e * ETAGE_HOEHE };
@@ -1410,6 +1425,12 @@ function baueHaus() {
     }
   }
   for (let r = 0; r < anzahl; r++) for (const n of gleicheEtage(r)) if (n > r && !verbunden(r, n) && rnd() < 0.3) verbinde(r, n);
+  for (const R of haus.raeume) {   // Große Säle: Wände zwischen den Räumen eines Saals fallen weg
+    const S = saalVon(R.i, R.j, R.e);
+    if (!S) continue;
+    if (R.i + 1 < S.i + S.breit) haus.tueren.set(tuerSchluessel(R.nr, R.nr + 1), OFFEN);
+    if (R.j + 1 < S.j + S.tief) haus.tueren.set(tuerSchluessel(R.nr, R.nr + haus.breit), OFFEN);
+  }
   for (const t of haus.treppen) haus.tueren.set(tuerSchluessel(t.unten, t.oben), -1);   // Treppe = Verbindung nach oben
   // Wie breit sind die Türen an jeder Seite? (0 = keine Tür)
   for (const R of haus.raeume) {
@@ -1419,7 +1440,9 @@ function baueHaus() {
 
   // 3. Räume mit Thema: Böden und Zwischendecken
   for (const R of haus.raeume) {
-    R.art = R.nr === haus.start ? { id: 'garage', name: 'Garage', emoji: '🚚', boden: 'beton', ecken: [] } : gewichtetWaehlen(RAUM_ARTEN);
+    R.saal = saalVon(R.i, R.j, R.e);
+    R.art = R.saal ? { ...R.saal, immerLicht: true } : gewichtetWaehlen(RAUM_ARTEN);
+    if (R.nr === haus.start) R.art = { id: 'garage', name: R.saal ? R.saal.name : 'Garage', emoji: R.saal ? R.saal.emoji : '🚚', boden: R.saal ? R.saal.boden : 'beton', ecken: [] };
     const t = BOEDEN[R.art.boden].clone(); t.needsUpdate = true;
     t.repeat.set(R.art.boden === 'holz' ? 3.3 : 5, R.art.boden === 'holz' ? 3.3 : 5);
     const bodenMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 });
@@ -1471,6 +1494,7 @@ function baueHaus() {
   // 6. Möbel, Deko und Schätze in allen anderen Räumen
   for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
   for (const R of haus.raeume) wandDeko(R);
+  for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
 
   // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
   const weit = [];
@@ -1499,7 +1523,10 @@ function raumEinrichten(R) {
   const treppe = R.treppeHoch || R.treppeRunter;
   if (treppe) R.belegt.push([R.x0 + 0.1, R.z0 + 0.1, R.x0 + RAUM - 0.1, R.z0 + 2.8]);
   // Möbel: 3 oder 4 Viertel bekommen etwas aus der Liste des Raumes (bei Treppen nur die südlichen)
-  const viertel = mischen(treppe ? [2, 3] : [0, 1, 2, 3]).slice(0, treppe ? 2 : zufallGanz(3, 4));
+  const offen = w => (R.tuer[w] || 0) >= OFFEN;
+  const beruehrtOffen = q => (q % 2 === 0 ? offen('w') : offen('o')) || ((q >> 1) === 0 ? offen('n') : offen('s'));
+  const erlaubt = [0, 1, 2, 3].filter(q => !(treppe && q < 2) && !(R.saal && R.saal.frei && beruehrtOffen(q)));   // Im Saal bleibt die Mitte frei
+  const viertel = mischen(erlaubt).slice(0, treppe ? 2 : R.saal ? erlaubt.length : zufallGanz(3, 4));
   const liste = mischen(art.ecken);
   viertel.forEach((q, k) => inViertel(R, q, MOEBEL[liste[k % liste.length]]()));
   // Teppich in der Mitte
@@ -1509,7 +1536,7 @@ function raumEinrichten(R) {
     hausGruppe.add(t);
   }
   // Licht: Kronleuchter oder einfache Glühbirne (nicht überall – manche Räume sind stockdunkel!)
-  if (rnd() < 0.5 && lampeHinzu(cx, b0 + WAND_HOEHE - 0.5, cz, art.kronleuchter ? '#ffd9a0' : '#ffcf8a', 1.4, 11, rnd() < 0.4)) {
+  if (R.saal || (rnd() < 0.5 && lampeHinzu(cx, b0 + WAND_HOEHE - 0.5, cz, art.kronleuchter ? '#ffd9a0' : '#ffcf8a', 1.4, 11, rnd() < 0.4))) {   // (Säle: eine große Lampe für den ganzen Saal, siehe baueHaus)
     if (art.kronleuchter) {
       const k = new THREE.Group();
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 6, 20), goldMat);
