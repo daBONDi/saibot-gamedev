@@ -101,7 +101,7 @@ const KARTE = {
   startzahl: 20261114,            // Damit das Haus jedes Mal genau gleich gebaut wird (andere Zahl = anderes Haus)
 };
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1 };   // Starrer: 0 = gibt es nicht mehr
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
 const ABGABE_ZEIT = 0.8;            // So lange muss ein Schatz in der Abgabe liegen, bis er verkauft ist
@@ -327,6 +327,14 @@ const monsterSound = {
     if (jagt) { ton(65, 0, 0.18, 'sine', 0.5 * laut, 40); rauschen(0, 0.12, 0.25 * laut, 'lowpass', 900); }
     else { gruselTon(190, 0, 0.8, 'sawtooth', 0.05 * laut, 150, 25); rauschen(0, 0.8, 0.05 * laut, 'bandpass', 1200, null, 900); }
   },
+  formwandler(laut, jagt) {   // 👾 Getarnt: kaputtes Piepsen (Hinweis!) · Jagd: metallisches Kreischen und Stampfen
+    if (jagt) { gruselTon(700, 0, 0.5, 'sawtooth', 0.07 * laut, 300, 30); ton(120, 0, 0.12, 'square', 0.15 * laut, 60); }
+    else { for (let k = 0; k < 4; k++) ton(400 + Math.random() * 900, k * 0.07, 0.05, 'square', 0.04 * laut); rauschen(0.3, 0.12, 0.08 * laut, 'highpass', 3000); }
+  },
+  formwandlerGlitch(laut) {   // BZZZRT – die Tarnung fällt!
+    rauschen(0, 0.6, 0.35 * laut, 'highpass', 2500, null, 400);
+    gruselTon(1200, 0, 0.7, 'square', 0.1 * laut, 80, 40);
+  },
   schrankWach(laut) {   // KNAAARZ + Türen rütteln: Gleich springt er raus!
     gruselTon(140, 0, 0.9, 'sawtooth', 0.12 * laut, 260, 40);
     for (let k = 0; k < 6; k++) ton(300 + Math.random() * 200, k * 0.13, 0.05, 'square', 0.06 * laut);
@@ -343,6 +351,10 @@ function monsterLautstaerke(m) {
   return n * n * MONSTER_GERAEUSCH_LAUT;   // Mal-sich-selbst, damit es nah viel lauter ist als fern
 }
 function monsterGeraeusche(m, dt) {
+  if (m.art === 'formwandler') {
+    if (m.modus === 'verwandeln' && !m.warnTon) { m.warnTon = true; monsterSound.formwandlerGlitch(Math.max(0.5, monsterLautstaerke(m))); }
+    if (m.modus !== 'verwandeln') m.warnTon = false;
+  }
   if (m.art === 'schrank') {   // Warnung: Das hört man immer (auch etwas weiter weg), damit du eine Chance hast
     if (m.modus === 'warnen' && !m.warnTon) { m.warnTon = true; monsterSound.schrankWach(Math.max(0.5, monsterLautstaerke(m))); }
     if (m.modus !== 'warnen') m.warnTon = false;
@@ -359,6 +371,7 @@ function monsterGeraeusche(m, dt) {
   if (m.art === 'geist') m.geraeuschZeit = jagt ? zufall(1.2, 2) : zufall(3, 6);
   else if (m.art === 'jaeger') m.geraeuschZeit = jagt ? zufall(2.5, 4) : zufall(4, 7);
   else if (m.art === 'schrank') m.geraeuschZeit = jagt ? zufall(0.35, 0.5) : zufall(5, 9);
+  else if (m.art === 'formwandler') { m.geraeuschZeit = jagt ? zufall(0.6, 1) : zufall(7, 13); if (m.modus === 'tarnPokal' || m.modus === 'abhauen') return; }   // Als Pokal ist er still
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
   if (laut > 0) monsterSound[m.art](laut, jagt);
 }
@@ -416,6 +429,17 @@ const MUSIK_LIEDER = {
     kick: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
     snare: [4, 12],
     melodie: [12, 12, 17, 17, 12, 12, 19, 18],
+  },
+  // 👾 Formwandler: Kaputte Roboter-Elektro-Musik – alles zuckt und springt (Oktav-Sprünge!)
+  formwandler: {
+    tempo: 155, grund: 98, verzerrung: 70, gitarre: 0.4, melodieKlang: 'kreischen', becken: 'sechzehntel',
+    riff: [
+      0, 12, 0, null,  0, 12, 1, 13,   0, 12, 0, null,  6, 18, 5, 17,
+      0, 12, 0, null,  0, 12, 3, 15,   1, 13, 1, null,  -1, 11, -2, null,
+    ],
+    kick: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    snare: [4, 12],
+    melodie: [24, null, 25, 24, 30, null, 29, 25],
   },
   // 👹 Schrank-Monster: Polternder Gruselwalzer – wie eine kaputte Spieluhr in einem alten Schrank
   schrank: {
@@ -538,6 +562,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     monsterSound.schuss(0.6);
     gruselTon(300, 0.3, 0.5, 'sawtooth', 0.12, 900, 14);
     gruselTon(900, 0.8, 0.6, 'sawtooth', 0.1, 400, 14);
+  } else if (art === 'formwandler') { // 👾 Glitch-Schrei
+    rauschen(0, 0.5, 0.5, 'highpass', 2000, null, 300);
+    gruselTon(1500, 0, 0.9, 'square', 0.12, 100, 50);
+    gruselTon(100, 0.2, 1.0, 'sawtooth', 0.2, 50, 8);
   } else if (art === 'schrank') { // 👹 Türen knallen auf + Brüllen
     rauschen(0, 0.4, 0.8, 'lowpass', 2500, null, 100);
     ton(80, 0, 0.5, 'sine', 0.7, 40);
@@ -1453,6 +1481,7 @@ function baueHaus() {
   for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
   for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
   for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
+  for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnPokal'; }
   for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
 
   // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
@@ -1743,10 +1772,50 @@ const MONSTER_ARTEN = {
   // warnen: so lange knarzt und rüttelt es, bevor es rausspringt (deine Chance wegzurennen!) · jagdDauer: so lange jagt es dich
   schrank:  { name: 'Schrank-Monster', emoji: '👹', tempo: 2.0, jagdTempo: 4.3, schaden: 40, pause: 2, betaeubbar: true,
               lauerWeite: 3.5, warnen: 0.9, jagdDauer: 7 },
+  // 🤖👾 Der Formwandler-Bot tarnt sich als Helfer-Bot oder als goldener Pokal. aufwachWeite: so nah darfst du ran
+  // verwandeln: so lange glitcht er, bevor er losjagt · jagdDauer: so lange jagt er · tarnTempo: so schnell fährt er als falscher Bot herum
+  formwandler: { name: 'Formwandler', emoji: '👾', tempo: 2.4, jagdTempo: 4.5, schaden: 35, pause: 2, betaeubbar: true,
+              aufwachWeite: 2.3, verwandeln: 0.7, jagdDauer: 8, tarnTempo: 1.4 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
-  if (art === 'schrank') {   // 👹 Sieht aus wie ein Kleiderschrank ... bis die Türen aufgehen!
+  if (art === 'formwandler') {
+    // 1) Tarnung als Helfer-Bot (ein Bot, der in deiner Helfer-Liste gar nicht vorkommt ...)
+    const falsch = HELFER[HELFER_ANZAHL % HELFER.length];
+    const T = baueHelferMesh({ name: falsch.name, farbe: falsch.farbe });
+    if (T.g.parent) T.g.parent.remove(T.g);
+    g.add(T.g); T.blase.visible = false;
+    g.userData.bot = T;
+    g.userData.botGesicht = { gesicht: T.gesicht, farbe: falsch.farbe, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: 1.3 };
+    // 2) Tarnung als goldener Pokal
+    const pokal = baueSchatzMesh(SCHAETZE.find(t => t.id === 'pokal'));
+    if (pokal.parent) pokal.parent.remove(pokal);
+    pokal.position.y = 0.25; g.add(pokal); g.userData.pokal = pokal;
+    // 3) Die echte Form: ein dunkles Roboter-Monster mit vielen roten Augen und Krallen
+    const echt = new THREE.Group(); g.add(echt); g.userData.echt = echt;
+    const metall = new THREE.MeshStandardMaterial({ color: '#1d1f26', metalness: 0.8, roughness: 0.35 });
+    const glut = new THREE.MeshStandardMaterial({ color: '#400', emissive: '#ff1f3d', emissiveIntensity: 1.2 });
+    const teil = (geo, mat, x, y, z, eltern = echt) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); eltern.add(m); return m; };
+    teil(new THREE.CylinderGeometry(0.28, 0.4, 1.3, 8), metall, 0, 1.15, 0);                 // Körper
+    for (let k = 0; k < 4; k++) teil(new THREE.BoxGeometry(0.62, 0.035, 0.62), glut, 0, 0.75 + k * 0.28, 0).rotation.y = k * 0.4;   // Glühende Ringe
+    const kopf = teil(new THREE.BoxGeometry(0.62, 0.5, 0.55), metall, 0, 2.0, 0.05); kopf.rotation.z = 0.12;   // Schiefer Kopf
+    const auge = new THREE.MeshBasicMaterial({ color: '#ff2a2a', fog: false });
+    for (const [x, y, gr] of [[-0.17, 2.08, 0.07], [0.15, 2.1, 0.08], [0, 1.95, 0.05], [-0.06, 2.2, 0.04], [0.22, 1.92, 0.045]]) teil(new THREE.SphereGeometry(gr, 8, 6), auge, x, y, 0.33);
+    for (let k = 0; k < 5; k++) teil(new THREE.ConeGeometry(0.06, 0.3, 5), metall, -0.24 + k * 0.12, 2.35, -0.05).rotation.z = (k - 2) * 0.25;   // Stacheln
+    g.userData.arme = [];
+    for (const sx of [-1, 1]) {   // Lange Arme mit Krallen
+      const arm = new THREE.Group(); arm.position.set(sx * 0.42, 1.65, 0); echt.add(arm);
+      teil(new THREE.BoxGeometry(0.1, 0.95, 0.1), metall, 0, -0.45, 0, arm);
+      for (const kx of [-0.05, 0, 0.05]) teil(new THREE.ConeGeometry(0.025, 0.22, 4), glut, kx, -1.0, 0.04, arm).rotation.x = Math.PI;
+      g.userData.arme.push(arm);
+    }
+    g.userData.beine = [];
+    for (const sx of [-1, 1]) {
+      const bein = new THREE.Group(); bein.position.set(sx * 0.2, 0.55, 0); echt.add(bein);
+      teil(new THREE.BoxGeometry(0.12, 0.55, 0.12), metall, 0, -0.27, 0, bein);
+      g.userData.beine.push(bein);
+    }
+  } else if (art === 'schrank') {   // 👹 Sieht aus wie ein Kleiderschrank ... bis die Türen aufgehen!
     const holz = new THREE.MeshStandardMaterial({ color: '#4a2e1c', roughness: 0.8 }), dunkel = new THREE.MeshStandardMaterial({ color: '#3a2214', roughness: 0.9 });
     const knauf = new THREE.MeshStandardMaterial({ color: '#c9a227', metalness: 0.7, roughness: 0.3 });
     const kasten = (b, h, t, mat, x, y, z, eltern = g) => { const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat); m.position.set(x, y, z); eltern.add(m); return m; };
@@ -1948,6 +2017,8 @@ function updateMonster(m, dt) {
   let tempo;
   if (m.art === 'schrank') {
     tempo = schrankUpdate(m, dt);
+  } else if (m.art === 'formwandler') {
+    tempo = formwandlerUpdate(m, dt);
   } else if (m.art === 'starrer') {
     // 🗿 Der Starrer friert ein, sobald du hinschaust
     m.gesehen = starrerGesehen(m);
@@ -2107,6 +2178,46 @@ function schrankUpdate(m, dt) {
   if (abstand2D(m.x, m.z, m.heim.x, m.heim.z) < 0.3 && Math.abs(m.y - m.heim.y) < 1) { m.modus = 'lauern'; return 0; }
   return info.tempo;
 }
+// 🤖👾 Der Formwandler: tarnBot / tarnPokal → (jemand kommt nah) verwandeln → jagen → abhauen (in einen anderen Raum) → neue Tarnung
+function formwandlerUpdate(m, dt) {
+  const info = m.info;
+  if (m.modus === 'wandern' || m.modus === 'nachsehen') { m.modus = 'abhauen'; m.ziel = null; }   // (nach dem Betäuben)
+  if (m.modus === 'tarnBot' || m.modus === 'tarnPokal') {
+    if (schrankOpfer(m, info.aufwachWeite)) { m.modus = 'verwandeln'; m.warnZeit = info.verwandeln; return 0; }
+    if (m.modus === 'tarnPokal') { m.ziel = { x: m.x, y: m.y, z: m.z }; return 0; }   // Ein Pokal bewegt sich nicht ... meistens
+    m.zielZeit -= dt;   // Als falscher Helfer-Bot langsam durchs Haus fahren
+    if (!m.ziel || m.zielZeit <= 0 || abstand3D(m, m.ziel) < 0.5) { m.ziel = zufallsZiel(m); m.zielZeit = zufall(5, 10); }
+    return info.tarnTempo;
+  }
+  if (m.modus === 'verwandeln') {   // Bzzzrt! Er glitcht ...
+    m.warnZeit -= dt;
+    if (m.warnZeit <= 0) {
+      const opfer = schrankOpfer(m, 12);
+      m.modus = 'jagen'; m.jagdZeit = info.jagdDauer;
+      if (opfer && opfer.spieler) zeigeNachricht('👾 DAS WAR KEIN FREUND! Ein FORMWANDLER! LAUF!', 2.5, '#ff6b6b');
+      if (opfer && opfer.helfer) { opfer.helfer.angst = 3; sagen(opfer.helfer, 'hilfe', { monster: info.name }, 1); }
+    }
+    return 0;
+  }
+  if (m.modus === 'jagen') {
+    m.jagdZeit -= dt;
+    const opfer = schrankOpfer(m, 14);
+    if (!opfer || m.jagdZeit <= 0) { m.modus = 'abhauen'; m.ziel = null; return info.tempo; }
+    m.ziel = { x: opfer.x, y: opfer.y, z: opfer.z };
+    return info.jagdTempo;
+  }
+  // Abhauen: in einen anderen Raum (weit weg von allen), dort neu tarnen
+  if (!m.ziel) {
+    const raeume = haus.raeume.filter(R => R.nr !== haus.start && raumAbstand(haus.start, R.nr) >= 2 && raumNrVon(m.x, m.y + 0.5, m.z) !== R.nr);
+    const R = raeume.length ? auswahl(raeume) : haus.raeume[0];
+    m.ziel = { x: R.x0 + RAUM / 2 + zufall(-1.5, 1.5), y: R.basis, z: R.z0 + RAUM / 2 + zufall(-1.5, 1.5) };
+  }
+  if (abstand2D(m.x, m.z, m.ziel.x, m.ziel.z) < 0.4 && Math.abs(m.y - m.ziel.y) < 1) {
+    m.modus = Math.random() < 0.5 ? 'tarnBot' : 'tarnPokal'; m.ziel = null; m.zielZeit = 0;
+    return 0;
+  }
+  return info.tempo;
+}
 // 🤠 Der Jäger: Sieht er jemanden in Schussweite, bleibt er stehen, zielt (roter Laser!) und ballert los.
 let schussSpuren = [];   // Die kurzen Striche der Schrotkugeln
 function jaegerZielt(m, dt) {
@@ -2211,6 +2322,33 @@ function zeigeMonster(m) {
       const pos = L.geometry.attributes.position;
       pos.setXYZ(1, 0, ziel.y + 0.1 - m.y, abstand2D(m.x, m.z, ziel.x, ziel.z));
       pos.needsUpdate = true;
+    }
+  } else if (m.art === 'formwandler') {
+    const U = g.userData, glitch = m.modus === 'verwandeln';
+    // Welche Form sieht man? Beim Verwandeln flackert es zwischen allen Formen hin und her!
+    const form = glitch ? ['bot', 'echt', 'pokal', 'echt'][Math.floor(zeit * 14) % 4]
+      : m.modus === 'tarnBot' ? 'bot' : m.modus === 'tarnPokal' ? 'pokal' : 'echt';
+    U.bot.g.visible = form === 'bot'; U.pokal.visible = form === 'pokal'; U.echt.visible = form === 'echt';
+    const zucken = glitch ? (Math.random() - 0.5) * 0.15 : 0;
+    g.position.set(m.x + zucken, m.y, m.z - zucken);
+    g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel, glitch ? zucken : 0);
+    g.scale.setScalar(glitch ? 1 + Math.sin(zeit * 50) * 0.12 : 1);
+    if (form === 'bot') {   // Sieht aus wie ein normaler Helfer ... aber manchmal flackert das Gesicht (X-Augen!)
+      const F = U.botGesicht;
+      F.kaputt = Math.sin(zeit * 1.7 + m.phase) > 0.985 ? 1 : 0;
+      beineAnimieren(U.bot, BEIN_LAENGE, m.laeuft, 1 / 60);
+      U.bot.arme.forEach((a, k) => { a.rotation.x = 0.9 + (m.laeuft ? Math.sin(zeit * 8 + k * Math.PI) * 0.15 : 0); });
+      U.bot.antenne.visible = (zeit * 2) % 1.5 < 1.2;
+      U.bot.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
+      U.bot.g.visible = F.kaputt ? Math.random() < 0.5 : true;
+      malGesicht(F);
+    } else if (form === 'pokal') {   // Ein Pokal ... der ganz selten ein bisschen wackelt
+      U.pokal.rotation.z = Math.sin(zeit * 1.3 + m.phase) > 0.97 ? Math.sin(zeit * 40) * 0.08 : 0;
+    } else {
+      const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 13 : 7)) : 0;
+      U.beine[0].rotation.x = schritt * 0.6; U.beine[1].rotation.x = -schritt * 0.6;
+      U.arme.forEach((a, k) => { a.rotation.x = m.modus === 'jagen' ? -1.2 + Math.sin(m.phase * 9 + k) * 0.4 : -schritt * 0.5; });
+      U.echt.position.y = Math.abs(schritt) * 0.05;
     }
   } else if (m.art === 'schrank') {
     const U = g.userData, versteckt = m.modus === 'lauern' || m.modus === 'warnen';
@@ -3207,7 +3345,7 @@ function zeichneTitel() {
   text('Automatische Roboter AufräumGruppe', W / 2, 132, 20, '#c9c3ff', 'center', false);
   zeichneRoboter(W / 2, 250, 1.5);
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
-  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠👹', W / 2, 355, 17, '#fff', 'center', false);
+  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠👹👾', W / 2, 355, 17, '#fff', 'center', false);
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
