@@ -1311,14 +1311,19 @@ function streckeSchneidet(a, b, x1, z1, x2, z2) {
   }
   return true;
 }
-function umsHaus(pos, ziel) {   // Draußen: Steht das Haus im Weg? Dann außen um eine Ecke herum laufen
+function umsHaus(pos, ziel) {   // Draußen: Steht das Haus im Weg? Dann außen um die Ecken herum laufen (der kürzeste Weg)
   const B = haus.breit * RAUM, T = haus.tief * RAUM, r = 1.8, k = 0.6;
-  if (!streckeSchneidet(pos, ziel, -k, -k, B + k, T + k)) return ziel;
+  const frei = (a, b) => !streckeSchneidet(a, b, -k, -k, B + k, T + k);
+  if (frei(pos, ziel)) return ziel;
+  const ecken = [{ x: -r, z: -r }, { x: B + r, z: -r }, { x: B + r, z: T + r }, { x: -r, z: T + r }];
+  const ab = (a, b) => abstand2D(a.x, a.z, b.x, b.z);
   let beste = null, bestW = Infinity;
-  for (const e of [{ x: -r, z: -r }, { x: B + r, z: -r }, { x: -r, z: T + r }, { x: B + r, z: T + r }]) {
-    if (abstand2D(pos.x, pos.z, e.x, e.z) < 0.6 || streckeSchneidet(pos, e, -k, -k, B + k, T + k)) continue;
-    const w = abstand2D(pos.x, pos.z, e.x, e.z) + abstand2D(e.x, e.z, ziel.x, ziel.z);
-    if (w < bestW) { bestW = w; beste = e; }
+  for (const e1 of ecken) {
+    if (ab(pos, e1) < 0.6 || !frei(pos, e1)) continue;   // (An dieser Ecke sind wir schon)
+    let w = Infinity;
+    if (frei(e1, ziel)) w = ab(pos, e1) + ab(e1, ziel);
+    else for (const e2 of ecken) if (e2 !== e1 && frei(e1, e2) && frei(e2, ziel)) w = Math.min(w, ab(pos, e1) + ab(e1, e2) + ab(e2, ziel));   // Zwei Ecken
+    if (w < bestW) { bestW = w; beste = e1; }
   }
   return beste ? { x: beste.x, y: 0, z: beste.z } : ziel;
 }
@@ -2732,6 +2737,10 @@ function updateMonster(m, dt) {
     if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
     else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
     else if (!loch(m.x, nz)) m.z = nz;
+    else for (const w of [0.9, -0.9, 1.6, -1.6, 2.3, -2.3]) {   // Ganz verbaut (z. B. ein Baum)? Schräg daran vorbei!
+      const c = Math.cos(w), si = Math.sin(w), ax = m.x + (dx * c - dz * si) / d * schritt, az = m.z + (dx * si + dz * c) / d * schritt;
+      if (!loch(ax, az)) { m.x = ax; m.z = az; break; }
+    }
     let diff = Math.atan2(dx, dz) - m.winkel;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
