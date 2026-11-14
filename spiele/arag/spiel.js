@@ -1141,8 +1141,13 @@ function wegPunkt(wer, pos, ziel) {
       const q = tw.reihe[tw.k];
       if (abstand2D(pos.x, pos.z, q.x, q.z) < 0.6 && Math.abs(pos.y - q.y) < 1.6) tw.k++; else break;
     }
-    if (tw.k < tw.reihe.length) return tw.reihe[tw.k];
-    wer.tw = null;
+    const q = tw.reihe[tw.k];
+    // Von der Treppe gefallen? (Das Ziel ist viel höher/tiefer, wir sind nicht auf der Treppe und auch nicht gerade am letzten Wegpunkt)
+    // Dann den Weg nochmal ganz neu suchen – sonst läuft man ewig unter der Treppe gegen die Wand.
+    if (q && tw.k > 0 && Math.abs(q.y - pos.y) > 1.6 && abstand2D(pos.x, pos.z, tw.reihe[tw.k - 1].x, tw.reihe[tw.k - 1].z) > 1.0 &&
+      !haus.treppen.some(t => aufRampe(t, pos.x, pos.z) && Math.abs(rampenHoehe(t, pos.x) - pos.y) < 1.0)) wer.tw = null;
+    else if (q) return q;
+    else wer.tw = null;
   }
   // Drinnen <-> draußen? Dann durch die nächste Haustür!
   const drinnen = imHaus(pos.x, pos.z);
