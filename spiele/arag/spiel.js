@@ -56,6 +56,12 @@ const MAUSELOCH = { breit: 0.72, hoch: 0.62 };   // So groß ist ein Mauseloch (
 const BODENLOCH_ANZAHL = 2;      // So viele Bodenlöcher pro Stockwerk
 const BODENLOCH = 1.6;           // So groß ist ein Bodenloch (in Metern)
 const GRUBE_TIEFE = 0.8;         // So tief ist eine Grube im Erdgeschoss
+// 🚪 Türen: Mit E auf- und zumachen. Helfer machen sie selbst auf, Monster brechen sie auf (dauert kurz!)
+const TUER_OFFEN_ANTEIL = 0.5;   // So viele Türen sind am Anfang offen (0.5 = die Hälfte)
+const TUER_AUFBRECHEN = 0.8;     // So viele Sekunden braucht ein Monster, um eine zue Tür aufzubrechen
+// 🌲 Draußen: ein dunkler Wald rund ums Haus, mit einem Zaun außen herum
+const WALD_RAND = 22;            // So viele Meter Wald gibt es auf jeder Seite vom Haus
+const BAUM_ANZAHL = 170;         // So viele Bäume stehen im Wald
 
 // ===== Die Helfer-Bots =====
 const HELFER_ANZAHL = 2;         // So viele Kollegen helfen dir (0 bis 3)
@@ -1034,7 +1040,7 @@ const RAUM_ARTEN = [
 ];
 const hausGruppe = new THREE.Group();
 szene.add(hausGruppe);
-let wandKoerper = [], sichtBlocker = [];   // sichtBlocker: Dadurch kann man nicht durchsehen (Wände, Decken, große Möbel)
+let wandKoerper = [], sichtBlocker = [], tuerListe = [];   // sichtBlocker: Dadurch kann man nicht durchsehen (Wände, Decken, große Möbel)
 
 // ----- Räume, Stockwerke und Wege -----
 const proEtage = () => haus.breit * haus.tief;
@@ -1135,6 +1141,15 @@ function wegPunkt(wer, pos, ziel) {
     if (tw.k < tw.reihe.length) return tw.reihe[tw.k];
     wer.tw = null;
   }
+  // Drinnen <-> draußen? Dann durch die nächste Haustür!
+  const drinnen = imHaus(pos.x, pos.z);
+  if (!drinnen && !imHaus(ziel.x, ziel.z)) return ziel;   // Beide draußen: einfach hin
+  if (drinnen !== imHaus(ziel.x, ziel.z) && haus.aussenTuerListe.length) {
+    if (!drinnen) { const a = naechsteHaustuer(pos); wer.tw = { k: 0, reihe: [a.aussen, a.innen] }; return a.aussen; }
+    const a = naechsteHaustuer(ziel);
+    if (raumNrVon(pos.x, pos.y, pos.z) === a.raum) { wer.tw = { k: 0, reihe: [a.innen, a.aussen] }; return a.innen; }
+    ziel = a.innen;   // Erst mal zum Raum mit der Haustür
+  }
   const ra = raumNrVon(pos.x, pos.y, pos.z), rb = raumNrVon(ziel.x, ziel.y, ziel.z);
   if (ra === rb) return rampenUmweg(wer, pos, ziel) || ziel;
   const n = naechsterRaum(ra, rb);
@@ -1172,8 +1187,9 @@ function festerKlotz(x, y, z, b, h, t, mat, sicht = true) {
   return mesh;
 }
 // Ein Wandstück von (x1,z1) nach (x2,z2) auf Höhe "basis", auf Wunsch mit Tür (tuer = Breite der Tür, 0 = keine)
-function wandStueck(x1, z1, x2, z2, basis, tuer, mat, maus = 0) {
+function wandStueck(x1, z1, x2, z2, basis, tuer, mat, maus = 0, aussen = -1) {
   const D = 0.3, laenge = Math.hypot(x2 - x1, z2 - z1), entlangX = z1 === z2;
+  if (aussen >= 0) { const innenMat = mat; mat = [0, 1, 2, 3, 4, 5].map(k => k === aussen ? fassadeMat : innenMat); }   // Außenwand: draußen Holzfassade, drinnen Tapete
   const stueck = (von, bis, unten, oben) => {
     const mitte = (von + bis) / 2, l = bis - von;
     if (l <= 0.01) return;
@@ -1198,7 +1214,195 @@ function wandStueck(x1, z1, x2, z2, basis, tuer, mat, maus = 0) {
     if (entlangX) festerKlotz(x1 + p, basis + TUER_HOEHE / 2, z1, 0.12, TUER_HOEHE, D + 0.08, dunkelHolzMat, false);
     else festerKlotz(x1, basis + TUER_HOEHE / 2, z1 + p, D + 0.08, TUER_HOEHE, 0.12, dunkelHolzMat, false);
   }
+  if (tuer <= TUER_BREITE) neueTuer(x1, z1, basis, entlangX, a, tuer);   // Eine echte Tür rein! (Große Durchgänge bleiben offen)
 }
+// ----- 🚪 Türen -----
+const tuerHolzMat = new THREE.MeshStandardMaterial({ color: '#5a3a22', roughness: 0.75 });
+const fassadeMat = new THREE.MeshStandardMaterial({ color: '#2e2620', roughness: 0.95 });
+const TUER_AUF_WINKEL = Math.PI / 2 * 0.95;
+function neueTuer(x1, z1, basis, entlangX, a, breite) {
+  const b = breite - 0.06, h = TUER_HOEHE - 0.04;
+  const angel = new THREE.Group();   // Das Scharnier: Um diesen Punkt dreht sich die Tür
+  angel.position.set(entlangX ? x1 + a + 0.03 : x1, basis, entlangX ? z1 : z1 + a + 0.03);
+  const grund = entlangX ? 0 : -Math.PI / 2;
+  const blatt = new THREE.Mesh(new THREE.BoxGeometry(b, h, 0.07), tuerHolzMat);
+  blatt.position.set(b / 2, h / 2 + 0.02, 0); blatt.castShadow = blatt.receiveShadow = true; angel.add(blatt);
+  for (const y of [0.6, 1.65]) for (const s of [-1, 1]) {   // Verzierte Felder
+    const f = new THREE.Mesh(new THREE.BoxGeometry(b * 0.7, 0.75, 0.02), dunkelHolzMat); f.position.set(b / 2, y, s * 0.042); angel.add(f);
+  }
+  for (const s of [-1, 1]) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), goldMat); k.position.set(b - 0.15, 1.05, s * 0.07); angel.add(k); }   // Türknauf
+  hausGruppe.add(angel);
+  const mitte = { x: entlangX ? x1 + a + breite / 2 : x1, z: entlangX ? z1 : z1 + a + breite / 2 };
+  const body = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(entlangX ? breite / 2 : 0.05, TUER_HOEHE / 2, entlangX ? 0.05 : breite / 2)), material: standardMat, collisionFilterGroup: G_WAND });
+  body.position.set(mitte.x, basis + TUER_HOEHE / 2, mitte.z);
+  body.aabbNeedsUpdate = true;
+  const d = { id: tuerListe.length, x: mitte.x, z: mitte.z, basis, angel, grund, blatt, body, auf: rnd() < TUER_OFFEN_ANTEIL, richtung: rnd() < 0.5 ? 1 : -1, winkel: 0 };
+  if (d.auf) d.winkel = TUER_AUF_WINKEL; else { welt.addBody(body); sichtBlocker.push(blatt); }
+  angel.rotation.y = grund + d.winkel * d.richtung;
+  tuerListe.push(d);
+}
+// Tür auf oder zu machen. wer: 'spieler', 'helfer', 'monster' (KRACH!) oder 'sync' (still, nur abgleichen)
+function tuerSetzen(d, auf, wer = 'spieler', vomHost = false) {
+  if (!d || d.auf === auf) return;
+  if (mp.rolle === 'gast' && !vomHost) { mpSende({ t: 'tuerE', id: d.id, auf }); return; }   // Gast: Der Gastgeber entscheidet
+  d.auf = auf;
+  if (auf) {   // Sofort durchlässig (beim Zumachen wird sie erst fest, wenn sie ganz zu ist)
+    if (d.body.world) welt.removeBody(d.body);
+    const i = sichtBlocker.indexOf(d.blatt); if (i >= 0) sichtBlocker.splice(i, 1);
+  }
+  const laut = lautBei({ x: d.x, y: d.basis + 1, z: d.z });
+  if (wer === 'monster') {   // RUMMS! Aufgebrochen!
+    rauschen(0, 0.3, 0.7 * laut, 'lowpass', 1800); ton(70, 0, 0.35, 'sine', 0.7 * laut, 35);
+    wackeln = Math.max(wackeln, 0.12 * laut);
+  } else if (wer !== 'sync') gruselTon(auf ? 260 : 210, 0, 0.5, 'sawtooth', 0.05 * laut, auf ? 170 : 300, 10);   // Knaaarz
+  if (mp.rolle !== 'gast') {
+    if (wer === 'spieler') laerm(d.x, d.basis, d.z, 4);   // Türen knarzen – das hört der Lauscher!
+    if (mp.rolle === 'host') mpAnAlle({ t: 'tuer', id: d.id, auf, w: wer });
+  }
+}
+function tuerenZeigen(dt) {   // Türen langsam auf- und zuschwingen lassen
+  for (const d of tuerListe) {
+    const ziel = d.auf ? TUER_AUF_WINKEL : 0;
+    if (d.winkel === ziel) continue;
+    d.winkel += begrenzt(ziel - d.winkel, -dt * 3.5, dt * 3.5);
+    d.angel.rotation.y = d.grund + d.winkel * d.richtung;
+    if (!d.auf && d.winkel === 0 && !d.body.world) {   // Ganz zu: Jetzt ist sie fest – RUMS
+      welt.addBody(d.body); sichtBlocker.push(d.blatt);
+      ton(90, 0, 0.15, 'sine', 0.4 * lautBei({ x: d.x, y: d.basis + 1, z: d.z }), 50);
+    }
+  }
+}
+function geschlosseneTuer(x, z, y, weite) {   // Ist hier in der Nähe eine zue Tür?
+  for (const d of tuerListe) if (!d.auf && Math.abs(y - d.basis) < 1.2 && abstand2D(x, z, d.x, d.z) < weite) return d;
+  return null;
+}
+function tuerBeiMir() {   // Die nächste Tür, die du mit E bedienen kannst
+  const p = spielerKoerper.position;
+  let beste = null, bestD = 2.1;
+  for (const d of tuerListe) {
+    const ab = abstand2D(p.x, p.z, d.x, d.z);
+    if (ab < bestD && Math.abs(p.y - d.basis - 0.5) < 1.4) { beste = d; bestD = ab; }
+  }
+  return beste;
+}
+
+// ----- 🌲 Der Wald draußen -----
+const grasTextur = malTextur(256, 256, (g, b, h) => {
+  g.fillStyle = '#1b2716'; g.fillRect(0, 0, b, h);
+  for (let k = 0; k < 2600; k++) { g.fillStyle = ['#283a1f', '#141f0e', '#30442a', '#22301a'][k % 4]; g.fillRect(Math.random() * b, Math.random() * h, 2, 4 + Math.random() * 6); }   // Grashalme
+  for (let k = 0; k < 45; k++) { g.fillStyle = 'rgba(80,55,30,0.45)'; g.beginPath(); g.arc(Math.random() * b, Math.random() * h, 3 + Math.random() * 8, 0, 7); g.fill(); }   // Altes Laub
+});
+const imHaus = (x, z) => x > 0 && x < haus.breit * RAUM && z > 0 && z < haus.tief * RAUM;
+function naechsteHaustuer(p) {
+  let beste = null, bestD = Infinity;
+  for (const a of haus.aussenTuerListe || []) { const d = abstand2D(p.x, p.z, a.aussen.x, a.aussen.z); if (d < bestD) { bestD = d; beste = a; } }
+  return beste;
+}
+function baueWald() {
+  const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
+  // 1) Boden: Waldboden rund ums Haus (dicke Platten, wie im Erdgeschoss)
+  for (const [xa, za, xb, zb] of [[-M, -M, B + M, 0], [-M, T, B + M, T + M], [-M, 0, 0, T], [B, 0, B + M, T]]) {
+    const b = xb - xa, t = zb - za;
+    festerKoerper((xa + xb) / 2, -GRUBE_TIEFE / 2, (za + zb) / 2, b, GRUBE_TIEFE, t);
+    const tex = grasTextur.clone(); tex.needsUpdate = true; tex.repeat.set(b / 4, t / 4);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(b, t), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+    m.rotation.x = -Math.PI / 2; m.position.set((xa + xb) / 2, 0, (za + zb) / 2); m.receiveShadow = true;
+    hausGruppe.add(m);
+  }
+  // 2) Das Haus von außen: Gesimse zwischen den Stockwerken, Dach, Fenster, Laternen an den Haustüren
+  const leiste = new THREE.MeshStandardMaterial({ color: '#1c1714', roughness: 0.9 });
+  const ring = (y, h, dicke) => {
+    for (const [x, z, b, t] of [[B / 2, -0.15 - dicke / 2, B + 0.3 + dicke * 2, dicke], [B / 2, T + 0.15 + dicke / 2, B + 0.3 + dicke * 2, dicke],
+      [-0.15 - dicke / 2, T / 2, dicke, T + 0.3], [B + 0.15 + dicke / 2, T / 2, dicke, T + 0.3]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), leiste); m.position.set(x, y, z); hausGruppe.add(m);
+    }
+  };
+  for (let e = 1; e < haus.etagen; e++) ring(e * ETAGE_HOEHE - 0.1, 0.35, 0.12);
+  const dachM = new THREE.Mesh(new THREE.BoxGeometry(B + 1.2, 0.4, T + 1.2), leiste); dachM.position.set(B / 2, dach + 0.2, T / 2); hausGruppe.add(dachM);
+  for (let k = 0; k < 6; k++) {   // Schornsteine
+    const sch = new THREE.Mesh(new THREE.BoxGeometry(0.9, zufall(1.5, 3), 0.9), fassadeMat);
+    sch.position.set(zufall(2, B - 2), dach + 1, zufall(2, T - 2)); hausGruppe.add(sch);
+  }
+  const fenster = new THREE.MeshBasicMaterial({ map: fensterTextur });
+  for (const R of haus.raeume) {
+    for (const [seite, ok, x, z, dreh] of [['n', R.j === 0, R.x0 + RAUM / 2, -0.16, Math.PI], ['s', R.j === haus.tief - 1, R.x0 + RAUM / 2, T + 0.16, 0],
+      ['w', R.i === 0, -0.16, R.z0 + RAUM / 2, -Math.PI / 2], ['o', R.i === haus.breit - 1, B + 0.16, R.z0 + RAUM / 2, Math.PI / 2]]) {
+      if (!ok || haus.aussenTueren.has(`${R.nr}|${seite}`)) continue;
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), fenster); f.position.set(x, R.basis + 1.7, z); f.rotation.y = dreh; hausGruppe.add(f);
+    }
+  }
+  for (const a of haus.aussenTuerListe) {   // Eine Laterne über jeder Haustür
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.2), new THREE.MeshBasicMaterial({ color: '#ffcf7a' }));
+    l.position.set(a.x + a.nx * 0.35 + (a.nz ? 1.5 : 0), 2.7, a.z + a.nz * 0.35 + (a.nx ? 1.5 : 0)); hausGruppe.add(l);
+    lampeHinzu(l.position.x + a.nx * 0.5, 2.6, l.position.z + a.nz * 0.5, '#ffb84d', 1.2, 9, true);
+  }
+  // 3) Der Zaun außen herum (unsichtbar höher, damit niemand drüberspringt)
+  const holz = new THREE.MeshStandardMaterial({ color: '#3b2c20', roughness: 1 });
+  const latten = [], pfosten = [];
+  for (const [xa, za, xb, zb] of [[-M, -M, B + M, -M], [-M, T + M, B + M, T + M], [-M, -M, -M, T + M], [B + M, -M, B + M, T + M]]) {
+    const l = Math.hypot(xb - xa, zb - za), entlangX = za === zb;
+    festerKoerper((xa + xb) / 2, 2, (za + zb) / 2, entlangX ? l : 0.3, 4, entlangX ? 0.3 : l);
+    for (const y of [0.45, 1.05]) {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(entlangX ? l : 0.06, 0.08, entlangX ? 0.06 : l), holz);
+      r.position.set((xa + xb) / 2, y, (za + zb) / 2); hausGruppe.add(r);
+    }
+    for (let d = 0; d <= l; d += 0.28) latten.push([xa + (xb - xa) * d / l, za + (zb - za) * d / l, entlangX]);
+    for (let d = 0; d <= l; d += 2.5) pfosten.push([xa + (xb - xa) * d / l, za + (zb - za) * d / l]);
+  }
+  const hilf = new THREE.Object3D();
+  const lattenM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 1, 0.03), holz, latten.length);
+  latten.forEach(([x, z, entlangX], k) => {
+    const h = 1.1 + Math.random() * 0.35;   // Schiefe, unterschiedlich hohe Latten – gruselig!
+    hilf.position.set(x, h / 2, z); hilf.rotation.set(0, entlangX ? 0 : Math.PI / 2, (Math.random() - 0.5) * 0.12); hilf.scale.set(1, h, 1);
+    hilf.updateMatrix(); lattenM.setMatrixAt(k, hilf.matrix);
+  });
+  hausGruppe.add(lattenM);
+  const pfostenM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 1.6, 0.16), holz, pfosten.length);
+  pfosten.forEach(([x, z], k) => { hilf.position.set(x, 0.8, z); hilf.rotation.set(0, 0, 0); hilf.scale.set(1, 1, 1); hilf.updateMatrix(); pfostenM.setMatrixAt(k, hilf.matrix); });
+  hausGruppe.add(pfostenM);
+  // 4) Bäume: dunkle Tannen und ein paar tote, kahle Bäume
+  const baeume = [];
+  const frei = (x, z) => {
+    if (x > -3.5 && x < B + 3.5 && z > -3.5 && z < T + 3.5) return false;                       // Nicht zu nah ans Haus
+    if (x < -M + 1.2 || x > B + M - 1.2 || z < -M + 1.2 || z > T + M - 1.2) return false;       // Nicht in den Zaun
+    for (const a of haus.aussenTuerListe) if (abstand2D(x, z, a.weit.x, a.weit.z) < 3.5) return false;   // Weg vor der Haustür frei lassen
+    return baeume.every(b => abstand2D(x, z, b.x, b.z) > 2.2);
+  };
+  for (let v = 0; baeume.length < BAUM_ANZAHL && v < BAUM_ANZAHL * 30; v++) {
+    const x = zufall(-M, B + M), z = zufall(-M, T + M);
+    if (frei(x, z)) baeume.push({ x, z, h: zufall(6, 12), tot: rnd() < 0.25, dreh: zufall(0, 6.3) });
+  }
+  const stammMat = new THREE.MeshStandardMaterial({ color: '#2a1e16', roughness: 1 }), nadelMat = new THREE.MeshStandardMaterial({ color: '#13241a', roughness: 1 });
+  const lebend = baeume.filter(b => !b.tot), kahl = baeume.filter(b => b.tot);
+  const staemme = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.28, 1, 7), stammMat, baeume.length);
+  const kronen = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 8), nadelMat, lebend.length * 3);
+  const aeste = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.08, 1, 5), stammMat, kahl.length * 4);
+  baeume.forEach((b, k) => {
+    hilf.position.set(b.x, b.h * 0.5, b.z); hilf.rotation.set(0, b.dreh, b.tot ? 0.05 : 0); hilf.scale.set(1, b.h, 1);
+    hilf.updateMatrix(); staemme.setMatrixAt(k, hilf.matrix);
+    festerKoerper(b.x, 2, b.z, 0.45, 4, 0.45);
+  });
+  lebend.forEach((b, k) => {
+    for (let s = 0; s < 3; s++) {   // Drei Lagen Nadeln, oben immer schmaler
+      const r = (2.2 - s * 0.6) * (b.h / 10), hoehe = b.h * 0.38;
+      hilf.position.set(b.x, b.h * (0.35 + s * 0.2) + hoehe / 2, b.z); hilf.rotation.set(0, b.dreh, 0); hilf.scale.set(r, hoehe, r);
+      hilf.updateMatrix(); kronen.setMatrixAt(k * 3 + s, hilf.matrix);
+    }
+  });
+  kahl.forEach((b, k) => {
+    for (let s = 0; s < 4; s++) {   // Krumme, kahle Äste
+      const l = zufall(1.2, 2.4), w = b.dreh + s * 1.6;
+      hilf.position.set(b.x + Math.sin(w) * l * 0.4, b.h * (0.5 + s * 0.11), b.z + Math.cos(w) * l * 0.4);
+      hilf.rotation.set(Math.cos(w) * 0.9, 0, -Math.sin(w) * 0.9); hilf.scale.set(1, l, 1);
+      hilf.updateMatrix(); aeste.setMatrixAt(k * 4 + s, hilf.matrix);
+    }
+  });
+  for (const m of [staemme, kronen, aeste]) { m.castShadow = true; hausGruppe.add(m); }
+  // 5) Der Mond
+  const mond = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: '#e9e6cf', fog: false }));
+  mond.position.set(B / 2 + 40, 70, -110); hausGruppe.add(mond);
+}
+
 // Ein Mauseloch soll rund aussehen: Oben wird die Ecke mit Tapete zugemacht, dazu ein dunkler Holzrahmen
 const mausDunkel = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
 function mausLochDeko(x, basis, z, entlangX, mat) {
@@ -1581,6 +1785,8 @@ function hausAufraeumen() {
   for (const s of splitter) szene.remove(s.mesh);
   for (const s of schussSpuren) szene.remove(s.mesh);
   schussSpuren = [];
+  for (const d of tuerListe) if (d.body.world) welt.removeBody(d.body);
+  tuerListe = [];
   wandKoerper = []; sichtBlocker = []; schaetze = []; monster = []; helfer = []; splitter = []; schwebeTexte = []; funk = [];
   gegriffen = null; schwebend = null; schatzNummer = 0;
 }
@@ -1637,6 +1843,20 @@ function baueHaus() {
   for (const R of haus.raeume) {
     const breite = n => haus.tueren.get(tuerSchluessel(R.nr, n)) || 0;
     R.tuer = { n: R.j > 0 ? breite(R.nr - haus.breit) : 0, s: R.j < haus.tief - 1 ? breite(R.nr + haus.breit) : 0, w: R.i > 0 ? breite(R.nr - 1) : 0, o: R.i < haus.breit - 1 ? breite(R.nr + 1) : 0 };
+  }
+
+  // 2a. 🚪 Haustüren nach draußen: auf jeder Seite vom Haus eine (im Erdgeschoss)
+  haus.aussenTueren = new Set(); haus.aussenTuerListe = [];
+  const kanten = { n: R => R.j === 0 && !R.treppeHoch && !R.treppeRunter, s: R => R.j === haus.tief - 1, w: R => R.i === 0 && R.nr !== haus.start, o: R => R.i === haus.breit - 1 };
+  for (const seite of ['n', 's', 'w', 'o']) {
+    const liste = haus.raeume.filter(R => R.e === 0 && kanten[seite](R));
+    if (!liste.length) continue;
+    const R = auswahl(liste);
+    haus.aussenTueren.add(`${R.nr}|${seite}`); R.tuer[seite] = TUER_BREITE;
+    const cx = R.x0 + RAUM / 2, cz = R.z0 + RAUM / 2;
+    const [tx, tz, nx, nz] = { n: [cx, R.z0, 0, -1], s: [cx, R.z0 + RAUM, 0, 1], w: [R.x0, cz, -1, 0], o: [R.x0 + RAUM, cz, 1, 0] }[seite];
+    haus.aussenTuerListe.push({ raum: R.nr, seite, x: tx, z: tz, nx, nz,
+      innen: { x: tx - nx * 1.3, y: 0, z: tz - nz * 1.3 }, aussen: { x: tx + nx * 1.3, y: 0, z: tz + nz * 1.3 }, weit: { x: tx + nx * 5, y: 0, z: tz + nz * 5 } });
   }
 
   // 2b. 🐭 Mauselöcher (in Wänden ohne Tür) und 🕳️ Bodenlöcher aussuchen
@@ -1700,13 +1920,15 @@ function baueHaus() {
     const basis = e * ETAGE_HOEHE;
     for (let j = 0; j <= haus.tief; j++) for (let i = 0; i < haus.breit; i++) {   // Wände entlang x
       const innen = j > 0 && j < haus.tief, schl = innen ? tuerSchluessel(raumNr(i, j - 1, e), raumNr(i, j, e)) : '';
-      const tuer = innen ? haus.tueren.get(schl) || 0 : 0;
-      wandStueck(i * RAUM, j * RAUM, (i + 1) * RAUM, j * RAUM, basis, tuer, tapete(), innen ? haus.mauseloecher.get(schl) || 0 : 0);
+      let tuer = innen ? haus.tueren.get(schl) || 0 : 0;
+      if (!innen && haus.aussenTueren.has(`${raumNr(i, j === 0 ? 0 : haus.tief - 1, e)}|${j === 0 ? 'n' : 's'}`)) tuer = TUER_BREITE;   // Haustür!
+      wandStueck(i * RAUM, j * RAUM, (i + 1) * RAUM, j * RAUM, basis, tuer, tapete(), innen ? haus.mauseloecher.get(schl) || 0 : 0, innen ? -1 : j === 0 ? 5 : 4);
     }
     for (let i = 0; i <= haus.breit; i++) for (let j = 0; j < haus.tief; j++) {   // Wände entlang z
       const innen = i > 0 && i < haus.breit, schl = innen ? tuerSchluessel(raumNr(i - 1, j, e), raumNr(i, j, e)) : '';
-      const tuer = innen ? haus.tueren.get(schl) || 0 : 0;
-      wandStueck(i * RAUM, j * RAUM, i * RAUM, (j + 1) * RAUM, basis, tuer, tapete(), innen ? haus.mauseloecher.get(schl) || 0 : 0);
+      let tuer = innen ? haus.tueren.get(schl) || 0 : 0;
+      if (!innen && haus.aussenTueren.has(`${raumNr(i === 0 ? 0 : haus.breit - 1, j, e)}|${i === 0 ? 'w' : 'o'}`)) tuer = TUER_BREITE;   // Haustür!
+      wandStueck(i * RAUM, j * RAUM, i * RAUM, (j + 1) * RAUM, basis, tuer, tapete(), innen ? haus.mauseloecher.get(schl) || 0 : 0, innen ? -1 : i === 0 ? 1 : 0);
     }
   }
   for (const t of haus.treppen) baueTreppe(t);
@@ -1731,6 +1953,7 @@ function baueHaus() {
   for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
   for (const R of haus.raeume) wandDeko(R);
   for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
+  baueWald();   // 🌲 Draußen (nach den Lampen drinnen – die sind wichtiger)
 
   // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
   const weit = [];
@@ -1840,6 +2063,7 @@ function wandDeko(R) {
     if (s.nachbar >= 0 && verbunden(R.nr, s.nachbar)) continue;    // Da ist eine Tür
     if (R.nr === haus.start && s.dreh === Math.PI / 2) continue;  // Da ist der Transporter
     if (treppe && s.nord) continue;                               // Da ist die Treppe
+    if (s.aussen && R.e === 0 && haus.aussenTueren.has(`${R.nr}|${['n', 's', 'w', 'o'][seiten.indexOf(s)]}`)) continue;   // Da ist die Haustür
     let deko;
     if (s.aussen) {
       deko = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), new THREE.MeshBasicMaterial({ map: fensterTextur }));
@@ -2443,6 +2667,14 @@ function updateMonster(m, dt) {
     tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
     if (m.art === 'jaeger' && jaegerZielt(m, dt)) tempo = 0;   // Beim Zielen bleibt er stehen
   }
+  // Monster bleiben im Haus! Ist das Ziel draußen, lauern sie an der Haustür ...
+  if (m.ziel && !imHaus(m.ziel.x, m.ziel.z)) { const a = naechsteHaustuer(m.ziel); m.ziel = a ? { ...a.innen } : { x: m.x, y: m.y, z: m.z }; }
+  // 🚪 Eine zue Tür im Weg? Aufbrechen! (Das dauert kurz – deine Chance!)
+  if (tempo > 0) {
+    const tu = geschlosseneTuer(m.x, m.z, m.y, 1.15);
+    if (tu) { m.tuerZeit = (m.tuerZeit || 0) + dt; tempo = 0; if (m.tuerZeit > TUER_AUFBRECHEN) { m.tuerZeit = 0; tuerSetzen(tu, true, 'monster'); } }
+    else m.tuerZeit = 0;
+  }
   // Laufen (durch die Türen und über die Treppen)
   const wp = wegPunkt(m, m, m.ziel);
   const dx = wp.x - m.x, dz = wp.z - m.z, d = Math.hypot(dx, dz);
@@ -2464,6 +2696,7 @@ function updateMonster(m, dt) {
   } else if (m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) {
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
+  m.x = begrenzt(m.x, 0.4, haus.breit * RAUM - 0.4); m.z = begrenzt(m.z, 0.4, haus.tief * RAUM - 0.4);   // Nicht durch die Außenwand
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
   // Angriff! Auf dich ... (Die Oma schlägt nur zu, wenn sie wütend ist)
   const reichweite = m.art === 'oma' ? 1.3 : 1.0, schubs = info.schubs || 9;
@@ -3159,6 +3392,8 @@ function updateHelfer(h, dt) {
     const seite = -az * dx + ax * dz >= 0 ? 1 : -1;   // Links oder rechts herum – wie es näher ist
     dx = -az * seite * 0.85 + ax * 0.5; dz = ax * seite * 0.85 + az * 0.5;
   }
+  // 🚪 Zue Tür vor der Nase? Aufmachen!
+  if (tempo > 0) { const tu = geschlosseneTuer(p.x, p.z, p.y - 0.35, 1.5); if (tu) tuerSetzen(tu, true, 'helfer'); }
   // In die Grube gefallen? Hopp, rausspringen!
   if (p.y < -0.1 && Math.abs(v.y) < 0.3 && !bodenLochBei(ziel.x, ziel.z, 0, 0.3)) v.y = 5.5;
   if (h.ausweichen > 0) {   // Seitlich ausweichen
@@ -3673,6 +3908,7 @@ function zeichne3D() {
   for (const m of monster) zeigeMonster(m);
   for (const h of helfer) zeigeHelfer(h);
   mpZeigeAndere();
+  tuerenZeigen(1 / 60);
   if (tot && zeit - totSeit >= VERBINDUNG_WEG_ZEIT) zuschauKamera();   // Kaputt: Du schaust bei einem anderen Roboter mit zu
   // Flackernde Lampen, Kaminfeuer und Pendel
   hausGruppe.children.forEach(o => {
@@ -3742,7 +3978,8 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(`📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}`, 24, 86, 13, '#c9c3ff', 'left', false);
+  text(imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
   text(`🏆 Ziel: ${Math.min(verkauft, zielN)} / ${zielN} Schätze verkauft`, 24, 108, 13, fertig ? '#4ade80' : '#ffd166', 'left', false);
   balken(24, 120, 256, 10, verkauft / zielN, fertig ? '#4ade80' : '#ffd166');
@@ -4069,6 +4306,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (k === 'm') tonAn = !tonAn;
   if (k === 'f') blitzen();
+  if (k === 'e' && zustand === 'spiel' && !tot && !pause) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
@@ -4239,6 +4477,7 @@ function mpVomGast(g, d) {
   if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
+  else if (d.t === 'tuerE') tuerSetzen(tuerListe[d.id], !!d.auf, 'spieler');   // Ein Gast hat E gedrückt
   else if (d.t === 'tot') {   // Ein Gast ist kaputt: Sein Kopf fällt hin
     neuerKopf(g.id, g.farbe, d.x, d.y + 0.3, d.z);
     const t = `💀 ${g.name} ist kaputt (${d.von})! Bringt den Kopf 🤖 zur Abgabe 🚚`;
@@ -4292,7 +4531,7 @@ function mpHostSendet() {
     const alt = s.mpAlt;
     if (alle || !alt || a.some((v, i) => Math.abs(v - alt[i]) > 0.004)) { sc.push(a); s.mpAlt = a; }
   }
-  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, ids: alle ? schaetze.map(x => x.id) : null,
+  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, tu: alle ? tuerListe.filter(x => x.auf).map(x => x.id) : null, ids: alle ? schaetze.map(x => x.id) : null,
     koepfe: alle ? schaetze.filter(x => x.typ.id === 'kopf').map(x => [x.id, x.besitzer, x.typ.farbe]) : null,
     neu: alle ? schaetze.filter(x => x.typ.id !== 'kopf').map(x => [x.id, x.typ.id]) : null });
 }
@@ -4353,6 +4592,7 @@ function mpVomHost(d) {
   }
   if (zustand !== 'spiel') return;
   if (d.t === 's') mpSchnappschuss(d);
+  else if (d.t === 'tuer') tuerSetzen(tuerListe[d.id], d.auf, d.w, true);
   else if (d.t === 'kaputt') { const s = schatzMitId(d.id); if (s && !s.kaputt) zerbrechen(s); }
   else if (d.t === 'sag') { const h = helfer[d.h]; if (h) helferSpricht(h, d.satz); }
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
@@ -4397,6 +4637,7 @@ function mpSchnappschuss(d) {
   });
   // Schätze
   if (typeof d.vk === 'number') verkauft = d.vk;
+  if (d.tu) { const offen = new Set(d.tu); for (const t of tuerListe) if (t.auf !== offen.has(t.id)) tuerSetzen(t, offen.has(t.id), 'sync', true); }
   if (typeof d.ko === 'number') { konto = d.ko; if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } } }
   // Neue Schätze und Köpfe, die der Gastgeber hat, ich aber noch nicht
   for (const [id, typId] of d.neu || []) if (!schatzMitId(id)) { const typ = SCHAETZE.find(t => t.id === typId); if (typ) neuerSchatz(typ, 0, -40, 0).id = id; }
