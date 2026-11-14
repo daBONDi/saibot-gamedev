@@ -62,6 +62,9 @@ const TUER_AUFBRECHEN = 0.8;     // So viele Sekunden braucht ein Monster, um ei
 // 🌲 Draußen: ein dunkler Wald rund ums Haus, mit einem Zaun außen herum
 const WALD_RAND = 22;            // So viele Meter Wald gibt es auf jeder Seite vom Haus
 const BAUM_ANZAHL = 170;         // So viele Bäume stehen im Wald
+const WALD_SCHAETZE = 8;         // So viele Schätze liegen am Anfang draußen im Wald
+const WALD_NEU_ANTEIL = 0.25;    // So oft taucht ein neuer Schatz draußen auf statt im Haus (0.25 = jeder vierte)
+const MONSTER_DRAUSSEN = true;   // true = Monster folgen dir nach draußen · false = sie bleiben im Haus und warten an der Tür
 
 // ===== Die Helfer-Bots =====
 const HELFER_ANZAHL = 2;         // So viele Kollegen helfen dir (0 bis 3)
@@ -1143,9 +1146,13 @@ function wegPunkt(wer, pos, ziel) {
   }
   // Drinnen <-> draußen? Dann durch die nächste Haustür!
   const drinnen = imHaus(pos.x, pos.z);
-  if (!drinnen && !imHaus(ziel.x, ziel.z)) return ziel;   // Beide draußen: einfach hin
+  if (!drinnen && !imHaus(ziel.x, ziel.z)) return umsHaus(pos, ziel);   // Beide draußen: hin (ums Haus herum, wenn es im Weg ist)
   if (drinnen !== imHaus(ziel.x, ziel.z) && haus.aussenTuerListe.length) {
-    if (!drinnen) { const a = naechsteHaustuer(pos); wer.tw = { k: 0, reihe: [a.aussen, a.innen] }; return a.aussen; }
+    if (!drinnen) {   // Draußen -> rein: erst zur Haustür (ums Haus herum), dann durch
+      const a = naechsteHaustuer(ziel.y < 1.5 ? ziel : pos);
+      if (abstand2D(pos.x, pos.z, a.aussen.x, a.aussen.z) > 0.6) return umsHaus(pos, a.aussen);
+      wer.tw = { k: 0, reihe: [a.innen] }; return a.innen;
+    }
     const a = naechsteHaustuer(ziel);
     if (raumNrVon(pos.x, pos.y, pos.z) === a.raum) { wer.tw = { k: 0, reihe: [a.innen, a.aussen] }; return a.innen; }
     ziel = a.innen;   // Erst mal zum Raum mit der Haustür
@@ -1293,10 +1300,42 @@ const grasTextur = malTextur(256, 256, (g, b, h) => {
   for (let k = 0; k < 45; k++) { g.fillStyle = 'rgba(80,55,30,0.45)'; g.beginPath(); g.arc(Math.random() * b, Math.random() * h, 3 + Math.random() * 8, 0, 7); g.fill(); }   // Altes Laub
 });
 const imHaus = (x, z) => x > 0 && x < haus.breit * RAUM && z > 0 && z < haus.tief * RAUM;
+// Schneidet die Strecke von a nach b das Rechteck? (Liang-Barsky – so prüft man das schnell)
+function streckeSchneidet(a, b, x1, z1, x2, z2) {
+  let t0 = 0, t1 = 1;
+  const dx = b.x - a.x, dz = b.z - a.z;
+  for (const [p, q] of [[-dx, a.x - x1], [dx, x2 - a.x], [-dz, a.z - z1], [dz, z2 - a.z]]) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const r = q / p;
+    if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+  }
+  return true;
+}
+function umsHaus(pos, ziel) {   // Draußen: Steht das Haus im Weg? Dann außen um eine Ecke herum laufen
+  const B = haus.breit * RAUM, T = haus.tief * RAUM, r = 1.8, k = 0.6;
+  if (!streckeSchneidet(pos, ziel, -k, -k, B + k, T + k)) return ziel;
+  let beste = null, bestW = Infinity;
+  for (const e of [{ x: -r, z: -r }, { x: B + r, z: -r }, { x: -r, z: T + r }, { x: B + r, z: T + r }]) {
+    if (abstand2D(pos.x, pos.z, e.x, e.z) < 0.6 || streckeSchneidet(pos, e, -k, -k, B + k, T + k)) continue;
+    const w = abstand2D(pos.x, pos.z, e.x, e.z) + abstand2D(e.x, e.z, ziel.x, ziel.z);
+    if (w < bestW) { bestW = w; beste = e; }
+  }
+  return beste ? { x: beste.x, y: 0, z: beste.z } : ziel;
+}
 function naechsteHaustuer(p) {
   let beste = null, bestD = Infinity;
   for (const a of haus.aussenTuerListe || []) { const d = abstand2D(p.x, p.z, a.aussen.x, a.aussen.z); if (d < bestD) { bestD = d; beste = a; } }
   return beste;
+}
+function waldPlatz(zz = zufall, zr = rnd) {   // Ein freier Platz im Wald (nicht in einem Baum, nicht am Haus, nicht am Zaun)
+  const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND;
+  for (let v = 0; v < 60; v++) {
+    const x = zz(-M + 2, B + M - 2), z = zz(-M + 2, T + M - 2);
+    if (x > -3 && x < B + 3 && z > -3 && z < T + 3) continue;
+    if ((haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 1.4)) continue;
+    return { x, z };
+  }
+  return null;
 }
 function baueWald() {
   const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
@@ -1398,7 +1437,10 @@ function baueWald() {
     }
   });
   for (const m of [staemme, kronen, aeste]) { m.castShadow = true; hausGruppe.add(m); }
-  // 5) Der Mond
+  haus.baeume = baeume;
+  // 5) Schätze im Wald (im Laub versteckt ...)
+  for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
+  // 6) Der Mond
   const mond = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: '#e9e6cf', fog: false }));
   mond.position.set(B / 2 + 40, 70, -110); hausGruppe.add(mond);
 }
@@ -2667,8 +2709,8 @@ function updateMonster(m, dt) {
     tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
     if (m.art === 'jaeger' && jaegerZielt(m, dt)) tempo = 0;   // Beim Zielen bleibt er stehen
   }
-  // Monster bleiben im Haus! Ist das Ziel draußen, lauern sie an der Haustür ...
-  if (m.ziel && !imHaus(m.ziel.x, m.ziel.z)) { const a = naechsteHaustuer(m.ziel); m.ziel = a ? { ...a.innen } : { x: m.x, y: m.y, z: m.z }; }
+  // Ist das Ziel draußen und MONSTER_DRAUSSEN aus, lauern sie an der Haustür ...
+  if (!MONSTER_DRAUSSEN && m.ziel && !imHaus(m.ziel.x, m.ziel.z)) { const a = naechsteHaustuer(m.ziel); m.ziel = a ? { ...a.innen } : { x: m.x, y: m.y, z: m.z }; }
   // 🚪 Eine zue Tür im Weg? Aufbrechen! (Das dauert kurz – deine Chance!)
   if (tempo > 0) {
     const tu = geschlosseneTuer(m.x, m.z, m.y, 1.15);
@@ -2685,7 +2727,8 @@ function updateMonster(m, dt) {
     // Oben nicht ins Treppenloch laufen (sonst fällt das Monster durch und hängt hinter der Treppe fest)
     const schonDrin = bodenLochBei(m.x, m.z, m.y, 0.3);   // (Monster laufen um Bodenlöcher herum)
     const loch = (x, z) => (!m.tw && haus.treppen.some(t => imLoch(t, x, z) && m.y > t.basis + ETAGE_HOEHE - 0.3 && !(aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - m.y) < 0.6))) ||
-      (!schonDrin && !!bodenLochBei(x, z, m.y, 0.3));
+      (!schonDrin && !!bodenLochBei(x, z, m.y, 0.3)) ||
+      (!imHaus(x, z) && (haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.55));   // Draußen: nicht durch Bäume
     if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
     else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
     else if (!loch(m.x, nz)) m.z = nz;
@@ -2696,7 +2739,8 @@ function updateMonster(m, dt) {
   } else if (m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) {
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
-  m.x = begrenzt(m.x, 0.4, haus.breit * RAUM - 0.4); m.z = begrenzt(m.z, 0.4, haus.tief * RAUM - 0.4);   // Nicht durch die Außenwand
+  const zaun = MONSTER_DRAUSSEN ? WALD_RAND - 0.5 : -0.4;   // Nicht durch den Zaun (oder: nicht durch die Außenwand)
+  m.x = begrenzt(m.x, -zaun, haus.breit * RAUM + zaun); m.z = begrenzt(m.z, -zaun, haus.tief * RAUM + zaun);
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
   // Angriff! Auf dich ... (Die Oma schlägt nur zu, wenn sie wütend ist)
   const reichweite = m.art === 'oma' ? 1.3 : 1.0, schubs = info.schubs || 9;
@@ -3803,7 +3847,11 @@ function abgeben(s) {
   if (mp.rolle === 'host') mpAnAlle({ t: 'verkauft', id: s.id, text: `+${euro(s.wert)} 💰`, x: r2(p.x), y: r2(p.y), z: r2(p.z) });
   schatzEntfernen(s);
 }
-function neuerSchatzIrgendwo() {   // Ein neuer Schatz in einem zufälligen Raum (nicht in der Garage)
+function neuerSchatzIrgendwo() {   // Ein neuer Schatz in einem zufälligen Raum (nicht in der Garage) – oder draußen im Wald
+  if (haus.baeume && Math.random() < WALD_NEU_ANTEIL) {
+    const pl = waldPlatz((a, b) => a + Math.random() * (b - a));
+    if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); return; }
+  }
   const raeume = haus.raeume.filter(R => R.nr !== haus.start);
   const R = raeume[Math.floor(Math.random() * raeume.length)];
   const typ = gewichtetWaehlen(SCHAETZE), sh = typ.groesse[1];
