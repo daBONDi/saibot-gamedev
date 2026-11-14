@@ -95,21 +95,21 @@ const SCHAETZE = [
   { id: 'ruestung', name: 'Ritterrüstung', emoji: '🛡️', wert: [1500, 2200], zerbrechlich: 0.15, masse: 35,  groesse: [0.6, 1.7, 0.45],  haeufig: 0.5, boden: true },
 ];
 
-// ===== Die Level =====
-// Jedes Level hat ein größeres Haus, ein höheres Ziel und mehr Monster
-function levelDaten(n) {
-  return {
-    breit: Math.min(6, 3 + Math.floor(n / 2)),         // Räume nebeneinander
-    tief: Math.min(4, 3 + Math.floor((n - 1) / 3)),     // Räume hintereinander
-    etagen: n >= 4 ? 3 : 2,                             // Stockwerke
-    ziel: 3000 + (n - 1) * 2000,                        // So viel Geld musst du abliefern
-    // Monster: Hier kannst du einstellen, wie viele es gibt!
-    geister: 1 + Math.floor((n - 1) / 3),               // 👻 Staubgeister (ab Level 4 zwei)
-    lauscher: n >= 3 ? 1 + Math.floor((n - 3) / 4) : 0, // 👂 Lauscher (ab Level 3)
-    starrer: n >= 5 ? 1 + Math.floor((n - 5) / 4) : 0,  // 🗿 Starrer (ab Level 5)
-    jaeger: n >= 2 ? 1 + Math.floor((n - 2) / 4) : 0,   // 🤠 Verrückter Jäger (ab Level 2)
-  };
+// ===== Die große Spukvilla (immer dieselbe Karte – keine Level mehr!) =====
+const KARTE = {
+  breit: 6, tief: 4, etagen: 3,   // 6 × 4 Räume, 3 Stockwerke = 72 Räume!
+  startzahl: 20261114,            // Damit das Haus jedes Mal genau gleich gebaut wird (andere Zahl = anderes Haus)
+};
+// Jedes Monster gibt es genau EINMAL im Haus
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 1, jaeger: 1 };
+const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
+const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
+const ABGABE_ZEIT = 0.8;            // So lange muss ein Schatz in der Abgabe liegen, bis er verkauft ist
+function levelDaten() {
+  return { breit: KARTE.breit, tief: KARTE.tief, etagen: KARTE.etagen, ziel: 0, ...MONSTER_ANZAHL };
 }
+// Der Kopf eines kaputten Roboters (wird wie ein Schatz getragen – aber er ist unzerbrechlich und wertlos)
+const KOPF_TYP = { id: 'kopf', name: 'Roboter-Kopf', emoji: '🤖', wert: [0, 0], zerbrechlich: 0, masse: 1.5, groesse: [0.44, 0.4, 0.44], haeufig: 0 };
 
 // ===== Hilfsfunktionen =====
 // Zufall: Normalerweise echter Zufall. Beim Haus-Bauen aber "Zufall mit Startzahl" (Seed):
@@ -1561,7 +1561,14 @@ function baueSchatzMesh(typ) {
   const g = new THREE.Group();
   const [b, h, t] = typ.groesse;
   const add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
-  if (typ.id === 'vase') {
+  if (typ.id === 'kopf') {   // Roboter-Kopf mit dunklem Bildschirm und X-Augen
+    add(new THREE.BoxGeometry(b, h, t), new THREE.MeshStandardMaterial({ color: typ.farbe || '#7cf5c6', roughness: 0.4, metalness: 0.3, emissive: typ.farbe || '#7cf5c6', emissiveIntensity: 0.25 }));
+    add(new THREE.BoxGeometry(b * 0.8, h * 0.6, 0.02), new THREE.MeshBasicMaterial({ color: '#111' }), 0, 0, t / 2 + 0.01);
+    const xMat = new THREE.MeshBasicMaterial({ color: '#ff5555' });
+    for (const sx of [-1, 1]) for (const w of [0.7, -0.7]) { const strich = add(new THREE.BoxGeometry(0.1, 0.02, 0.01), xMat, sx * 0.09, 0.03, t / 2 + 0.025); strich.rotation.z = w; }
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 6), new THREE.MeshStandardMaterial({ color: '#888' }), 0, h / 2 + 0.11, 0);
+    add(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: '#ff5555' }), 0, h / 2 + 0.23, 0);
+  } else if (typ.id === 'vase') {
     const profil = [[0.08, -0.3], [0.15, -0.25], [0.17, -0.05], [0.12, 0.12], [0.07, 0.22], [0.1, 0.3]].map(([x, y]) => new THREE.Vector2(x, y));
     add(new THREE.LatheGeometry(profil, 16), glanz(auswahl(['#e8e4d8', '#4a7bd1', '#c94f4f', '#3aa38f']), 0.25));
     add(new THREE.TorusGeometry(0.165, 0.012, 6, 20), goldMat, 0, -0.08, 0).rotation.x = Math.PI / 2;
@@ -2293,7 +2300,7 @@ function waehleSchatz(h) {
     if (s.kaputt || s.reserviert || s.getragenVon || gegriffen === s || s.gastHaelt || imLaster(s)) continue;
     const sp = s.body.position;
     if (sp.y - (etageVon(sp.y) * ETAGE_HOEHE) > 1.6) continue;   // Zu hoch (z. B. auf einem Schrank)
-    const wertung = s.wert / (abstand3D(p, sp) * 1.5 + 8);
+    const wertung = (s.typ.id === 'kopf' ? 5000 : s.wert) / (abstand3D(p, sp) * 1.5 + 8);   // Köpfe von kaputten Freunden zuerst!
     if (wertung > punkte) { punkte = wertung; bester = s; }
   }
   return bester;
@@ -2679,22 +2686,18 @@ function update(dt) {
   blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
   if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
 
-  // Neue Schätze im Transporter?
-  for (const s of schaetze) {
-    const drin = imLaster(s);
-    if (drin && !s.warDrin) {
-      sound.abgabe();
-      const wer = s.getragenVon ? ` (${s.getragenVon.name})` : '';
-      schwebeText(s.body.position.x, s.body.position.y + 0.6, s.body.position.z, `+${euro(s.wert)} 🚚${wer}`, '#7cf5c6');
-    }
-    s.warDrin = drin;
+  // Schätze in der Abgabe werden verkauft (wenn sie kurz still drin liegen und keiner sie mehr festhält)
+  for (const s of [...schaetze]) {
+    const drin = imLaster(s) && !s.kaputt && gegriffen !== s && !s.gastHaelt && !s.getragenVon;
+    s.drinZeit = drin ? (s.drinZeit || 0) + dt : 0;
+    if (s.drinZeit > ABGABE_ZEIT) abgeben(s);
   }
-  if (!zielGemeldet && lasterWert() >= ld.ziel) { zielGemeldet = true; if (helfer.length) sagen(auswahl(helfer), 'genug', {}, 2); }
+  // Ab und zu taucht ein neuer Schatz im Haus auf
+  neuerSchatzZeit -= dt;
+  if (neuerSchatzZeit <= 0) { neuerSchatzZeit = NEUER_SCHATZ_ALLE; if (schaetze.filter(x => x.typ.id !== 'kopf').length < schatzStartAnzahl) neuerSchatzIrgendwo(); }
   // Herzklopfen, wenn ein Monster dich jagt
   herzZeit -= dt;
   if (gejagt() && herzZeit <= 0) { herzZeit = 0.7; sound.herz(0.8); }
-  // Abfahren!
-  if (tasten['e'] && spielerImLaster() && lasterWert() >= ld.ziel) levelGeschafft();
   updateEffekte(dt);
 }
 function updateEffekte(dt) {
@@ -2724,6 +2727,86 @@ function jaeger() {   // Welches Monster jagt dich gerade? (das nächste, oder n
   }
   return bestes;
 }
+// ===== Abgabe, neue Schätze, Köpfe und Wiederbeleben =====
+let tot = false, meinKopfId = null, neuerSchatzZeit = NEUER_SCHATZ_ALLE, schatzStartAnzahl = 0;
+function schatzEntfernen(s) {   // Einen Schatz ganz aus dem Spiel nehmen
+  for (const h of helfer) if (h.auftrag === s) helferLoslassen(h);
+  mpSchatzWeg(s);
+}
+function abgeben(s) {
+  const p = s.body.position;
+  if (s.typ.id === 'kopf') {   // Ein Kopf! Genug Geld zum Wiederbeleben?
+    if (konto < WIEDERBELEBEN_PREIS) {
+      if (zeit - (s.hinweisZeit || -99) > 4) {
+        s.hinweisZeit = zeit;
+        const t = `🤖 Noch ${euro(WIEDERBELEBEN_PREIS - konto)} fürs Wiederbeleben! Bringt mehr Schätze!`;
+        zeigeNachricht(t, 3, '#ffd166'); if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: t, farbe: '#ffd166' });
+      }
+      return;
+    }
+    konto -= WIEDERBELEBEN_PREIS;
+    schwebeText(p.x, p.y + 0.6, p.z, `🔧 Wiederbelebt! -${euro(WIEDERBELEBEN_PREIS)}`, '#7cf5c6');
+    if (mp.rolle === 'host') mpAnAlle({ t: 'verkauft', id: s.id, text: `🔧 Wiederbelebt! -${euro(WIEDERBELEBEN_PREIS)}`, x: r2(p.x), y: r2(p.y), z: r2(p.z) });
+    wiederbeleben(s.besitzer);
+    schatzEntfernen(s);
+    return;
+  }
+  konto += s.wert;
+  if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } }
+  sound.abgabe();
+  schwebeText(p.x, p.y + 0.6, p.z, `+${euro(s.wert)} 💰`, '#7cf5c6');
+  if (mp.rolle === 'host') mpAnAlle({ t: 'verkauft', id: s.id, text: `+${euro(s.wert)} 💰`, x: r2(p.x), y: r2(p.y), z: r2(p.z) });
+  schatzEntfernen(s);
+}
+function neuerSchatzIrgendwo() {   // Ein neuer Schatz in einem zufälligen Raum (nicht in der Garage)
+  const raeume = haus.raeume.filter(R => R.nr !== haus.start);
+  const R = raeume[Math.floor(Math.random() * raeume.length)];
+  const typ = gewichtetWaehlen(SCHAETZE), sh = typ.groesse[1];
+  if (!typ.boden && R.ablagen.length && Math.random() < 0.6) {
+    const a = R.ablagen[Math.floor(Math.random() * R.ablagen.length)];
+    neuerSchatz(typ, a.x + zufall(-a.b / 2, a.b / 2) * 0.7, a.y + sh / 2 + 0.03, a.z + zufall(-a.t / 2, a.t / 2) * 0.7);
+  } else neuerSchatz(typ, R.x0 + RAUM / 2 + zufall(-1.5, 1.5), R.basis + sh / 2 + 0.05, R.z0 + RAUM / 2 + zufall(-1.5, 1.5));
+}
+function neuerKopf(besitzer, farbe, x, y, z, id = null) {
+  const s = neuerSchatz({ ...KOPF_TYP, farbe }, x, y, z);
+  if (id !== null) s.id = id;
+  s.besitzer = besitzer;
+  if (besitzer === meineId()) meinKopfId = s.id;
+  return s;
+}
+const meineId = () => mp.aktiv && mp.peer ? mp.peer.id : 'ich';
+const meineFarbe = () => mp.aktiv ? MP_ROBOTER[mp.nr || 0].farbe : '#7cf5c6';
+const TOT_PLATZ = { x: -60, y: 5, z: -60 };   // Hier "parkt" der Körper, solange du kaputt bist (außerhalb vom Haus)
+function spielerStirbt(von) {
+  const p = spielerKoerper.position, x = p.x, y = p.y, z = p.z;
+  tot = true; energie = 0; kaputtGrund = von;
+  loslassen(); gepackt = null;
+  if (geduckt) ducken(false);
+  if (mp.rolle === 'gast') mpSende({ t: 'tot', x: r2(x), y: r2(y), z: r2(z), von });
+  else {
+    neuerKopf(meineId(), meineFarbe(), x, y + 0.3, z);
+    if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: `💀 ${MP_ROBOTER[0].name} ist kaputt! Bringt den Kopf 🤖 zur Abgabe 🚚`, farbe: '#ff6b6b' });
+  }
+  spielerKoerper.position.set(TOT_PLATZ.x, TOT_PLATZ.y, TOT_PLATZ.z); spielerKoerper.velocity.set(0, 0, 0);
+  zeigeNachricht(`💀 Kaputt! (${von}) Dein Kopf 🤖 liegt im Haus ...`, 4, '#ff6b6b');
+}
+function wiederbeleben(besitzer) {   // Beim Gastgeber: Wer bekommt sein Leben zurück?
+  if (besitzer === meineId()) { spielerWiederbeleben(); return; }
+  const g = mp.andere.get(besitzer);
+  if (g) { mpSendeAn(g, { t: 'leben' }); const t = `🔧 ${g.name} ist wieder da!`; zeigeNachricht(t, 3); mpAnAlle({ t: 'info', text: t }); }
+}
+function spielerWiederbeleben() {
+  tot = false; meinKopfId = null; energie = 100; ausdauer = AUSDAUER_MAX;
+  const L = haus.laster;
+  spielerKoerper.position.set(RAUM / 2 + zufall(-1, 1), KOERPER_RADIUS + 0.3, L.z1 + 2.5);
+  spielerKoerper.velocity.set(0, 0, 0);
+  sound.geschafft();
+  zeigeNachricht('🔧 Du bist wiederbelebt! Danke, Team! 🤖💚', 4);
+}
+function totParken() {   // Solange du kaputt bist, bleibt dein Körper weit weg (dann sehen dich die Monster nicht)
+  if (!tot) return;
+  spielerKoerper.position.set(TOT_PLATZ.x, TOT_PLATZ.y, TOT_PLATZ.z); spielerKoerper.velocity.set(0, 0, 0);
+}
 function spielerImLaster() {
   const p = spielerKoerper.position, L = haus.laster;
   return p.x > L.x1 - 1 && p.x < L.x2 + 1.5 && p.z > L.z1 && p.z < L.z2 && p.y < 1.5;
@@ -2739,14 +2822,15 @@ function neuesSpiel() {
   level = 1; konto = 0;
   starteLevel();
 }
-function starteLevel(startzahl = Math.floor(Math.random() * 1e9)) {
+function starteLevel(startzahl = KARTE.startzahl) {
   mitStartzahl(startzahl, baueHaus);   // Gleiche Startzahl = gleiches Haus
   if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto }); }
   if (mp.rolle === 'gast') mpGastVorbereiten();
   energie = 100; ausdauer = AUSDAUER_MAX;
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
+  tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length;
   zustand = 'spiel';
-  zeigeNachricht(`Level ${level}: Bring Schätze für ${euro(ld.ziel)} zum Transporter! 🚚`, 4);
+  zeigeNachricht('🏚️ Die große Spukvilla! Bring Schätze zur Abgabe 🚚 – jeder Schatz wird sofort zu Geld!', 5);
   mausFangen();
 }
 function levelGeschafft() {
@@ -3207,7 +3291,6 @@ function mpVomGast(g, d) {
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
     g.hg = -1;
   } else if (d.t === 'blitz') blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
-  else if (d.t === 'abfahren') { if (lasterWert() >= ld.ziel) levelGeschafft(); }
   else if (d.t === 'wirf') {   // Ein Gast wirft jemanden: Bin ich das? Sonst weiterleiten
     if (d.ziel === mp.peer.id) geworfenWerden(d.v, g.name);
     else { const z = mp.andere.get(d.ziel); if (z) mpSendeAn(z, { t: 'wirf', v: d.v, von: g.name }); }
@@ -3393,14 +3476,8 @@ function updateAlsGast(dt) {
   updateSchussSpuren(dt);
   blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
   if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
-  for (const s of schaetze) {
-    const drin = imLaster(s);
-    if (drin && !s.warDrin && spielZeit > 2) { sound.abgabe(); schwebeText(s.body.position.x, s.body.position.y + 0.6, s.body.position.z, `+${euro(s.wert)} 🚚`, '#7cf5c6'); }
-    s.warDrin = drin;
-  }
   herzZeit -= dt;
   if (gejagt() && herzZeit <= 0) { herzZeit = 0.7; sound.herz(0.8); }
-  if (tasten['e'] && spielerImLaster() && lasterWert() >= ld.ziel && zeit - mp.abfahrZeit > 1) { mp.abfahrZeit = zeit; mpSende({ t: 'abfahren' }); }
   updateEffekte(dt);
 }
 function mpGastSendet() {
