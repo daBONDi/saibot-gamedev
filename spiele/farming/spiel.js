@@ -49,7 +49,36 @@ const GEBAEUDE_ARTEN = {
   schuppen: { name: 'Schuppen', emoji: '🏠', preis: 10000, r: 5.5 },
   silo: { name: 'Silo', emoji: '🛢️', preis: 25000, r: 3 },
   baum: { name: 'Baum', emoji: '🌳', preis: 500, r: 1.5 },
+  gewaechshaus: { name: 'Gewächshaus', emoji: '🪴', preis: 15000, r: 5.6 },
+  kuhweide: { name: 'Kuhweide', emoji: '🐄', preis: 8000, r: 10, tier: 'kuh' },
+  schafweide: { name: 'Schafweide', emoji: '🐑', preis: 6000, r: 8, tier: 'schaf' },
+  huehnerhof: { name: 'Hühnerhof', emoji: '🐔', preis: 4000, r: 6, tier: 'huhn' },
 };
+// Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
+// (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
+const GEMUESE = {
+  salat: { name: 'Salat', emoji: '🥬', kosten: 200, zeit: 60, menge: 100, einheit: 'Köpfe', preis: 3, blatt: 0x6fbf3a, frucht: 0xb5e86a, n: 1, fy: 0.12, fg: 0.26, hoehe: 0.35 },
+  karotte: { name: 'Karotten', emoji: '🥕', kosten: 150, zeit: 75, menge: 200, einheit: 'kg', preis: 2, blatt: 0x3f9a2a, frucht: 0xf07f13, n: 3, fy: 0.02, fg: 0.07, hoehe: 0.6 },
+  gurke: { name: 'Gurken', emoji: '🥒', kosten: 250, zeit: 90, menge: 120, einheit: 'Stück', preis: 4, blatt: 0x2f7d2a, frucht: 0x3f8f2a, n: 4, fy: 0.45, fg: 0.09, hoehe: 1.3 },
+  tomate: { name: 'Tomaten', emoji: '🍅', kosten: 300, zeit: 120, menge: 150, einheit: 'kg', preis: 5, blatt: 0x2f7d2a, frucht: 0xe0301e, n: 6, fy: 0.55, fg: 0.09, hoehe: 1.5 },
+  erdbeere: { name: 'Erdbeeren', emoji: '🍓', kosten: 500, zeit: 150, menge: 100, einheit: 'kg', preis: 12, blatt: 0x3f9a2a, frucht: 0xe8202e, n: 5, fy: 0.1, fg: 0.06, hoehe: 0.35 },
+  kuerbis: { name: 'Kürbisse', emoji: '🎃', kosten: 400, zeit: 180, menge: 40, einheit: 'Stück', preis: 30, blatt: 0x4a8f2a, frucht: 0xf08a1e, n: 1, fy: 0.22, fg: 0.3, hoehe: 0.5 },
+};
+// Nutztiere: brauchen ein Gehege! proMin = so viel geben sie pro Minute, frisst = so viel Futter (kg) pro Minute
+const TIERE = {
+  kuh: { name: 'Kühe', einzeln: 'Kuh', emoji: '🐄', preis: 1500, max: 6, produkt: 'milch', proMin: 30, frisst: 15, tempo: 0.7 },
+  schaf: { name: 'Schafe', einzeln: 'Schaf', emoji: '🐑', preis: 600, max: 8, produkt: 'wolle', proMin: 2, frisst: 6, tempo: 0.9 },
+  huhn: { name: 'Hühner', einzeln: 'Huhn', emoji: '🐔', preis: 50, max: 12, produkt: 'eier', proMin: 3, frisst: 1, tempo: 1.3 },
+};
+// Alles, was du im Dorfladen verkaufen kannst (Preis pro Stück/kg/Liter)
+const PRODUKTE = {
+  milch: { name: 'Milch', emoji: '🥛', einheit: 'L', preis: 2 },
+  wolle: { name: 'Wolle', emoji: '🧶', einheit: 'kg', preis: 15 },
+  eier: { name: 'Eier', emoji: '🥚', einheit: 'Stück', preis: 2 },
+};
+for (const [k, G] of Object.entries(GEMUESE)) PRODUKTE[k] = { name: G.name, emoji: G.emoji, einheit: G.einheit, preis: G.preis };
+const FUTTER_MAX = 5000;         // So viel Futter (kg) passt in einen Futtertrog
+const FUTTER_PREIS = 0.5;        // Futter kaufen kostet so viel pro kg (Korn vom eigenen Feld ist gratis!)
 const LADEN = { x: 60, z: 12, r: 8 };   // Der Landhandel: Hier verkaufst du Korn und kaufst Saat
 // Der Wald mit der Motorsäge 🌲🪚
 const WALD = { x: 88, z: 60, r: 19 };   // Mitte und Größe vom Wald
