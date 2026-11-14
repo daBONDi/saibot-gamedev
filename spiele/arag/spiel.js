@@ -3549,6 +3549,7 @@ function spielerStirbt(von) {
   }
   spielerKoerper.position.set(TOT_PLATZ.x, TOT_PLATZ.y, TOT_PLATZ.z); spielerKoerper.velocity.set(0, 0, 0);
   zeigeNachricht(`💀 Kaputt! (${von}) Dein Kopf 🤖 liegt im Haus ...`, 4, '#ff6b6b');
+  verbindungWeg();
 }
 function wiederbeleben(besitzer) {   // Beim Gastgeber: Wer bekommt sein Leben zurück?
   if (besitzer === meineId()) { spielerWiederbeleben(); return; }
@@ -3622,6 +3623,7 @@ function zeichne3D() {
   for (const m of monster) zeigeMonster(m);
   for (const h of helfer) zeigeHelfer(h);
   mpZeigeAndere();
+  if (tot && zeit - totSeit >= VERBINDUNG_WEG_ZEIT) zuschauKamera();   // Kaputt: Du schaust bei einem anderen Roboter mit zu
   // Flackernde Lampen, Kaminfeuer und Pendel
   hausGruppe.children.forEach(o => {
     if (!o.isPointLight || !o.userData.flackern) return;
@@ -3865,8 +3867,110 @@ function zeichne() {
   if (zustand === 'titel') { zeichneTitel(); return; }
   zeichne3D();
   zeichneHUD();
+  if (tot && zustand === 'spiel') zeichneSignal();
   if (zustand === 'geschafft') zeichneGeschafft();
   if (zustand === 'kaputt') zeichneKaputt();
+}
+
+// =====================================================================
+// ===== 📡 Verbindung verloren – und dann zuschauen =====
+// =====================================================================
+// Wirst du erwischt, bricht die Verbindung ab: Rauschen! Danach schaust du über die Kopf-Kamera
+// eines anderen Roboters zu (links am Kopf festgemacht) – mit leichten Störungen im Bild.
+const VERBINDUNG_WEG_ZEIT = 2.5;   // So viele Sekunden rauscht es, bevor du zuschauen kannst
+const STOER_STAERKE = 1;           // Wie stark die Störungen beim Zuschauen sind (0 = gar keine, 2 = doppelt so stark)
+let totSeit = -99, zuschauNr = 0, stoerBalken = 0, naechsteStoerung = 0, rauschBilder = null;
+function verbindungWeg() {
+  totSeit = zeit; zuschauNr = 0; stoerBalken = 0; naechsteStoerung = zeit + VERBINDUNG_WEG_ZEIT + 1;
+  // Piiiu – KRRRRSCHHHH
+  ton(1200, 0, 0.12, 'square', 0.12, 150);
+  rauschen(0.08, VERBINDUNG_WEG_ZEIT, 0.3, 'highpass', 900);
+  rauschen(0.08, VERBINDUNG_WEG_ZEIT, 0.15, 'bandpass', 3500, null, 500);
+}
+function rauschBild() {   // 4 fertige Rausch-Bilder (einmal malen, dann nur noch zufällig auswählen – das geht schnell)
+  if (!rauschBilder) rauschBilder = [0, 1, 2, 3].map(() => {
+    const c = document.createElement('canvas'); c.width = 240; c.height = 150;
+    const g = c.getContext('2d'), bild = g.createImageData(c.width, c.height);
+    for (let i = 0; i < bild.data.length; i += 4) { const v = Math.random() * 255; bild.data[i] = bild.data[i + 1] = bild.data[i + 2] = v; bild.data[i + 3] = 255; }
+    g.putImageData(bild, 0, 0);
+    return c;
+  });
+  return rauschBilder[Math.floor(Math.random() * 4)];
+}
+function zeichneRauschen(deckkraft, y = 0, h = H) {
+  if (deckkraft <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, deckkraft); ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(rauschBild(), Math.random() * 60, Math.random() * 40, 180, 110 * h / H, 0, y, W, h);
+  ctx.restore();
+}
+function zeichneZeilen(deckkraft) {   // Streifen wie bei einem alten Fernseher
+  ctx.fillStyle = `rgba(0,0,0,${deckkraft})`;
+  for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2);
+}
+function zuschauZiel() {   // Wem schaust du gerade zu? (Erst die Mitspieler, dann die Helfer-Bots – nur die, die noch heil sind)
+  const ziele = [];
+  for (const o of mp.andere.values()) if (o.teile && o.teile.g.visible && o.y > -10) ziele.push({ name: o.name, farbe: o.farbe, T: o.teile });
+  for (const h of helfer) if (h.kaputt <= 0) ziele.push({ name: h.name, farbe: h.farbe, T: h.teile });
+  return ziele.length ? ziele[zuschauNr % ziele.length] : null;
+}
+function zuschauKamera() {   // Die Kamera klebt links am Kopf vom anderen Roboter und schaut nach vorne
+  const z = zuschauZiel();
+  if (!z) return;
+  const T = z.T;
+  T.g.updateMatrixWorld(true);
+  const pos = T.kopf.localToWorld(new THREE.Vector3(0.33, 0.03, 0.02));   // +x = links vom Roboter (neben dem Ohr)
+  const vor = new THREE.Vector3(0, 0, 1).transformDirection(T.kopf.matrixWorld);
+  const zucken = stoerBalken > 0 ? (Math.random() - 0.5) * 0.05 * STOER_STAERKE : 0;   // Bei Störungen ruckelt das Bild
+  kamera.position.set(pos.x + zucken, pos.y, pos.z);
+  kamera.rotation.set(-0.08 + zucken, Math.atan2(-vor.x, -vor.z), zucken * 2);
+  kamera.updateMatrixWorld();
+}
+function zeichneSignal() {
+  const seit = zeit - totSeit;
+  // 1) Verbindung verloren: alles rauscht!
+  if (seit < VERBINDUNG_WEG_ZEIT) {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    zeichneRauschen(seit < 0.15 ? 1 : 0.85);
+    zeichneZeilen(0.3);
+    const balkenY = (zeit * 260) % (H + 80) - 40;   // Ein heller Streifen läuft durchs Bild
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, balkenY, W, 40);
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'; rr(W / 2 - 270, H / 2 - 75, 540, 140, 12); ctx.fill();
+    if (Math.sin(zeit * 14) > -0.4) text('📡 VERBINDUNG VERLOREN', W / 2 + (Math.random() - 0.5) * 8, H / 2 - 28, 38, '#ff4d4d');
+    text(`Erwischt von: ${kaputtGrund}`, W / 2, H / 2 + 14, 16, '#fff', 'center', false);
+    text('Suche Signal' + '.'.repeat(1 + Math.floor(zeit * 3) % 3), W / 2, H / 2 + 42, 14, '#c9c3ff', 'center', false);
+    return;
+  }
+  // 2) Zuschauen über die Kopf-Kamera eines anderen Roboters – mit leichten Störungen
+  const z = zuschauZiel();
+  if (!z) {   // Niemand mehr da ...
+    zeichneRauschen(0.4); zeichneZeilen(0.2);
+    text('📡 KEIN SIGNAL – keine Kamera mehr an', W / 2, 140, 20, '#ff6b6b');
+    return;
+  }
+  const st = STOER_STAERKE;
+  zeichneRauschen(0.05 * st);
+  zeichneZeilen(0.1 * st);
+  if (zeit > naechsteStoerung) {   // Ab und zu: KRZZT! Ein Störstreifen
+    naechsteStoerung = zeit + 1.5 + Math.random() * 3;
+    stoerBalken = 0.15 + Math.random() * 0.15;
+    if (st > 0) rauschen(0, stoerBalken, 0.05 * st, 'highpass', 2000);
+  }
+  if (stoerBalken > 0) {
+    stoerBalken -= 1 / 60;
+    const by = Math.random() * H, bh = 20 + Math.random() * 60;
+    zeichneRauschen(0.5 * st, by, bh);
+    ctx.fillStyle = `rgba(124,245,198,${0.08 * st})`; ctx.fillRect(0, by + bh, W, 6);
+  }
+  // Dunkler Rand (wie bei einer kleinen Kamera)
+  const rand = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
+  rand.addColorStop(0, 'rgba(0,0,0,0)'); rand.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = rand; ctx.fillRect(0, 0, W, H);
+  // Kamera-Schild
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(W / 2 - 200, H - 214, 400, 56, 10); ctx.fill();
+  if (Math.sin(zeit * 5) > 0) { ctx.fillStyle = '#ff3030'; ctx.beginPath(); ctx.arc(W / 2 - 180, H - 196, 6, 0, 7); ctx.fill(); }
+  text(`LIVE · 📷 Kopf-Kamera: ${z.name}`, W / 2 + 8, H - 196, 16, z.farbe);
+  text('🖱️ Klick = anderer Kamera zuschauen', W / 2, H - 172, 11, '#c9c3ff', 'center', false);
 }
 
 // =====================================================================
@@ -3901,7 +4005,11 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'geschafft') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
-  if (tot) { if (!mp.aktiv && e.button === 2) { zustand = 'kaputt'; if (document.pointerLockElement) document.exitPointerLock(); } return; }   // Allein: Rechtsklick = aufgeben
+  if (tot) {
+    if (!mp.aktiv && e.button === 2) { zustand = 'kaputt'; if (document.pointerLockElement) document.exitPointerLock(); }   // Allein: Rechtsklick = aufgeben
+    else if (e.button === 0 && zeit - totSeit > VERBINDUNG_WEG_ZEIT) { zuschauNr++; stoerBalken = 0.3; rauschen(0, 0.3, 0.12, 'highpass', 1500); }   // Klick: anderer Kamera zuschauen
+    return;
+  }
   if (e.button === 0 && schwebend && !gegriffen && !(mp.aktiv && mpVonAnderemGehalten(schwebend))) greifen(schwebend);
   else if (e.button === 0 && schwebendSpieler && !gegriffen && !gepackt) spielerPacken(schwebendSpieler);
   if (e.button === 2) werfen();
