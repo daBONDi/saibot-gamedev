@@ -961,6 +961,53 @@ function baueDrescher(typ, K) {
   }
   return { raeder, auspuff: [0.9, 6.0, 2.6], sitz: [0, 4.75, -1.15], radstand: 4.4 };
 }
+// Der Harvester: 8 Räder, Glas-Kabine, Motor hinten – und vorne ein langer Kran mit Fällkopf!
+function baueHarvester(typ, K) {
+  const farbe = typ.farbe, dunkel = 0x2a2a2a;
+  kasten(K, 0, 1.25, 0.4, 2.3, 0.7, 7.2, dunkel);                 // Rahmen
+  kasten(K, 0, 1.75, -1.6, 2.5, 0.35, 3.0, farbe);                // Vorderwagen
+  kasten(K, 0, 2.3, 2.3, 2.5, 1.5, 2.8, farbe);                   // Motor hinten
+  kasten(K, 0, 3.07, 2.3, 2.2, 0.06, 2.4, 0x222222, false);       // Lüftungsgitter
+  kasten(K, 0, 1.8, 0.55, 1.0, 0.6, 0.7, 0x333333);               // Knick-Gelenk in der Mitte
+  // Kabine (rundum Glas – man muss ja den Kran sehen!)
+  kasten(K, 0, 1.97, -0.9, 1.9, 0.1, 1.9, farbe);
+  for (const [x, z] of [[-0.9, -1.8], [0.9, -1.8], [-0.9, 0], [0.9, 0]]) kasten(K, x, 2.75, z, 0.09, 1.5, 0.09, 0x222222);
+  kasten(K, 0, 2.75, -0.9, 1.8, 1.45, 1.8, glasMat, false);
+  kasten(K, 0, 3.55, -0.9, 2.1, 0.14, 2.1, farbe);                 // Dach
+  const licht = new THREE.MeshBasicMaterial({ color: 0xfff6c0 });
+  for (const x of [-0.7, -0.25, 0.25, 0.7]) kasten(K, x, 3.7, -1.85, 0.25, 0.15, 0.12, licht, false);   // Arbeitsscheinwerfer
+  kasten(K, 0, 2.08, -0.6, 0.55, 0.14, 0.55, 0x222222, false);     // Sitz
+  kasten(K, 0, 2.45, -0.33, 0.5, 0.6, 0.1, 0x222222, false);       // Lehne
+  kasten(K, 0.85, 3.5, 3.2, 0.14, 1.0, 0.14, 0x222222);            // Auspuff
+  const raeder = [];
+  for (const x of [-1.35, 1.35]) {
+    for (const [z, lenkt] of [[-2.5, 1], [-1.3, 1], [1.7, 0], [2.9, 0]]) raeder.push(baueRad(K, x, 0.65, z, 0.65, 0.55, lenkt));
+    for (const z of [-1.9, 2.3]) kasten(K, x * 0.85, 0.75, z, 0.2, 0.3, 1.5, dunkel);   // Schwingen (Bogie)
+  }
+  // Der Kran: dreht sich (turm), der Arm geht schräg runter, vorne hängt der Fällkopf
+  const turm = new THREE.Group(); turm.position.set(0, 2.0, -2.7); K.add(turm);
+  const sockel = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.6, 12), mat(farbe)); sockel.castShadow = true; turm.add(sockel);
+  const armG = new THREE.Group(); armG.position.y = 0.3; turm.add(armG);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 1).translate(0, 0, -0.5), mat(farbe)); arm.castShadow = true; armG.add(arm);
+  const kopf = new THREE.Group(); turm.add(kopf);
+  kasten(kopf, 0, 0, 0, 0.75, 1.0, 0.6, 0xf0a020);                       // Fällkopf
+  kasten(kopf, 0, 0.6, 0, 0.3, 0.25, 0.3, 0x333333);                     // Rotator
+  for (const sx of [-1, 1]) kasten(kopf, sx * 0.45, 0.05, -0.3, 0.12, 0.75, 0.12, 0x222222);   // Greifarme
+  for (const sx of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.35, 10), mat(0x222222)); w.position.set(sx * 0.3, -0.2, -0.35); kopf.add(w); }   // Vorschubwalzen
+  kasten(kopf, 0, -0.45, -0.55, 0.06, 0.1, 0.9, 0xb5b9bf, false);        // Sägeschwert unten
+  return { raeder, auspuff: [0.85, 4.05, 3.2], sitz: [0, 2.95, -0.65], radstand: 4.2, kran: { turm, armG, arm, kopf, phi: 0, d: 2.6, h: -0.2 } };
+}
+function kranStellen(fz, phi, d, h, dt) {   // Den Kran langsam zum Ziel bewegen (phi = Drehung, d = Weite, h = Höhe)
+  const k = fz.kran, f = Math.min(1, dt * 4);
+  let dp = phi - k.phi;
+  while (dp > Math.PI) dp -= Math.PI * 2;
+  while (dp < -Math.PI) dp += Math.PI * 2;
+  k.phi += dp * f; k.d += (d - k.d) * f; k.h += (h - k.h) * f;
+  k.turm.rotation.y = k.phi;
+  const dy = k.h + 0.95 - 0.3, len = Math.hypot(k.d, dy);
+  k.armG.rotation.x = Math.atan2(dy, k.d); k.arm.scale.z = len;
+  k.kopf.position.set(0, k.h + 0.45, -k.d);
+}
 // Anbaugeräte
 function baueGeraet(art) {
   const g = new THREE.Group();
@@ -989,11 +1036,11 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   const typ = FAHRZEUGE[typName];
   const g = new THREE.Group(); scene.add(g);
   const K = new THREE.Group(); K.scale.setScalar(typ.groesse); g.add(K);   // Der Körper (größer oder kleiner je nach Fahrzeug)
-  const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : baueTraktor(typ, K);
+  const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : typ.art === 'harvester' ? baueHarvester(typ, K) : baueTraktor(typ, K);
   const fz = {
     typName, typ, g, K, ...teile, speed: 0, lenkWinkel: 0, arbeitet: false, geraete: {},
     id: daten.id || `${mp.ich}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, fahrer: null, fahrerZeit: 0, ziel: null,
-    radius: (typ.art === 'drescher' ? 2.8 : 1.8) * typ.groesse,
+    radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' ? 2.4 : 1.8) * typ.groesse,
     werkzeug: typ.geraete.includes(daten.werkzeug) ? daten.werkzeug : typ.geraete[typ.geraete.length - 1],
     diesel: daten.diesel ?? typ.dieselMax, tank: daten.tank ?? 0, saat: daten.saat ?? typ.saatMax,
   };
@@ -1005,6 +1052,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
     fz.geraete[art] = m;
   }
   fz.schild = schild(`${typ.emoji} ${typ.name}`, '#ffffff', 5);
+  if (fz.kran) kranStellen(fz, 0, 2.6, -0.2, 1);
   fz.schild.position.y = (typ.art === 'drescher' ? 6.8 : 4.2) * typ.groesse;
   g.add(fz.schild);
   g.position.set(x, 0, z); g.rotation.y = rot;
@@ -1020,6 +1068,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
 const ANHAENGER = {
   kipper: { name: 'Kipper', emoji: '🛻', preis: 15000, max: 12000, farbe: 0x2a6fb0, laenge: 5 },
   grosskipper: { name: 'Großer Kipper', emoji: '🚛', preis: 30000, max: 25000, farbe: 0xb0302a, laenge: 7 },
+  holz: { name: 'Holzanhänger', emoji: '🪵', preis: 25000, max: 24, farbe: 0x3d6b2a, laenge: 6, art: 'holz' },   // max = Holzstämme
 };
 const KUPPLUNG = 2.2;   // So weit hinter der Traktor-Mitte ist die Anhängerkupplung (mal Größe)
 function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
@@ -1027,9 +1076,24 @@ function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
   const g = new THREE.Group(); scene.add(g);
   kasten(g, 0, 0.95, 0.3, 2.3, 0.25, L, 0x333333);                                  // Rahmen
   kasten(g, 0, 1.1, 0.3, 2.4, 0.1, L + 0.1, typ.farbe);                              // Boden
-  for (const s of [-1, 1]) kasten(g, s * 1.17, 1.75, 0.3, 0.08, 1.2, L, typ.farbe);  // Seitenwände
-  for (const s of [-1, 1]) kasten(g, 0, 1.75, 0.3 + s * L / 2, 2.4, 1.2, 0.08, typ.farbe);   // Vorne und hinten
-  const korn = kasten(g, 0, 1.2, 0.3, 2.2, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);   // Das Korn drin
+  let korn, holzTeile = null;
+  if (typ.art === 'holz') {   // Holzanhänger: Rungen (senkrechte Stangen) statt Wänden, und Platz für Stämme
+    for (const s of [-1, 1]) for (let k = 0; k < 3; k++) kasten(g, s * 1.12, 1.95, 0.3 - L / 2 + 0.4 + k * (L - 0.8) / 2, 0.1, 1.7, 0.1, 0x222222);
+    kasten(g, 0, 1.95, 0.3 - L / 2, 2.4, 1.7, 0.12, typ.farbe);   // Stirnwand vorne (Schutzgitter)
+    korn = new THREE.Group(); g.add(korn);   // (kein Korn)
+    holzTeile = [];
+    const stammGeo = new THREE.CylinderGeometry(0.26, 0.26, (L - 0.4) / 2 - 0.05, 10);
+    for (let lage = 0; lage < 3; lage++) for (const hz of [-1, 1]) for (let i = 0; i < 4; i++) {
+      const st = new THREE.Mesh(stammGeo, [rindeMat, schnittMat, schnittMat]);
+      st.rotation.x = Math.PI / 2; st.position.set(-0.81 + i * 0.54, 1.42 + lage * 0.48, 0.3 + hz * (L - 0.4) / 4);
+      st.castShadow = true; st.visible = false; g.add(st); holzTeile.push(st);
+    }
+    holzTeile.sort((a, b) => a.position.y - b.position.y);   // Erst die unterste Lage füllen
+  } else {
+    for (const s of [-1, 1]) kasten(g, s * 1.17, 1.75, 0.3, 0.08, 1.2, L, typ.farbe);  // Seitenwände
+    for (const s of [-1, 1]) kasten(g, 0, 1.75, 0.3 + s * L / 2, 2.4, 1.2, 0.08, typ.farbe);   // Vorne und hinten
+    korn = kasten(g, 0, 1.2, 0.3, 2.2, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);   // Das Korn drin
+  }
   const deichsel = L / 2 + 1.4;   // Abstand von der Achse bis zur Kupplung vorne
   kasten(g, 0, 0.75, -(L / 2 + 1.4) / 2 - 0.1, 0.15, 0.15, deichsel - 0.4, 0x222222);   // Deichsel
   kasten(g, 0, 0.75, -deichsel + 0.1, 0.25, 0.2, 0.25, 0x555555);                   // Öse
@@ -1037,7 +1101,7 @@ function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
   const achsen = L > 6 ? [-0.7, 0.7] : [0];
   for (const az of achsen) for (const x of [-1.25, 1.25]) raeder.push(baueRad(g, x, 0.6, az, 0.6, 0.45, 0));
   for (const r of raeder) r.rad.parent.position.y = 0.6;
-  const a = { id: daten.id || `${mp.ich}-a-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, typName, typ, g, korn, raeder, deichsel,
+  const a = { id: daten.id || `${mp.ich}-a-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, typName, typ, g, korn, holzTeile, raeder, deichsel,
     inhalt: daten.inhalt || 0, basis: daten.inhalt || 0, an: null };
   a.schild = schild(`${typ.emoji} ${typ.name}`, '#ffffff', 4.5);
   a.schild.position.y = 3.3; g.add(a.schild);
@@ -1072,15 +1136,17 @@ function anhaengerFolgen(a) {
   for (const r of a.raeder) r.rad.rotation.x -= weg / r.r;
 }
 // Korn-Rechnung: Fahrzeug + angehängter Anhänger zusammen
-const kornPlatz = fz => fz.typ.tankMax + (fz.anh ? fz.anh.typ.max : 0);
-const kornDrin = fz => fz.tank + (fz.anh ? fz.anh.inhalt : 0);
+const kornAnh = fz => fz.anh && fz.anh.typ.art !== 'holz' ? fz.anh : null;   // Nur Kipper fassen Korn (kein Holzanhänger)
+const holzAnh = fz => fz && fz.anh && fz.anh.typ.art === 'holz' ? fz.anh : null;
+const kornPlatz = fz => fz.typ.tankMax + (kornAnh(fz) ? fz.anh.typ.max : 0);
+const kornDrin = fz => fz.tank + (kornAnh(fz) ? fz.anh.inhalt : 0);
 function kornDazu(fz, menge) {   // Erst in den eigenen Tank, dann in den Anhänger
   const inTank = Math.min(menge, fz.typ.tankMax - fz.tank);
   fz.tank += inTank;
-  if (fz.anh) fz.anh.inhalt += menge - inTank;
+  if (kornAnh(fz)) fz.anh.inhalt += menge - inTank;
 }
 function kornWeg(fz, menge) {   // Erst aus dem Anhänger, dann aus dem Tank
-  if (fz.anh) { const ausAnh = Math.min(menge, fz.anh.inhalt); fz.anh.inhalt -= ausAnh; menge -= ausAnh; }
+  if (kornAnh(fz)) { const ausAnh = Math.min(menge, fz.anh.inhalt); fz.anh.inhalt -= ausAnh; menge -= ausAnh; }
   fz.tank -= menge;
 }
 function naheAnhaengerZumKuppeln(fz) {
@@ -1090,11 +1156,12 @@ function naheAnhaengerZumKuppeln(fz) {
 function kuppeln() {
   if (!aktiv) { meldung('🔗 Steig in einen Traktor, um einen Anhänger anzukuppeln!'); sound.nein(); return; }
   if (aktiv.typ.art === 'drescher') { meldung('🌾 Der Mähdrescher kann keinen Anhänger ziehen – lade mit O in einen Anhänger über!'); sound.nein(); return; }
+  if (aktiv.typ.art === 'harvester') { meldung('🦾 Der Harvester zieht keinen Anhänger – nimm einen Traktor!'); sound.nein(); return; }
   if (aktiv.anh) { const a = aktiv.anh; abkuppeln(aktiv); meldung(`🔓 ${a.typ.name} abgekuppelt.`); sound.klick(); return; }
   const a = naheAnhaengerZumKuppeln(aktiv);
   if (!a) { meldung('🔗 Fahr rückwärts mit der Kupplung an die Deichsel eines Anhängers (näher ran!)'); sound.nein(); return; }
   ankuppeln(aktiv, a);
-  meldung(`🔗 ${a.typ.name} angekuppelt! Jetzt passen ${kg(kornPlatz(aktiv))} Korn rein.`, 3);
+  meldung(a.typ.art === 'holz' ? `🔗 ${a.typ.name} angekuppelt! Fahr zum Holz und drück L – der Kran lädt auf.` : `🔗 ${a.typ.name} angekuppelt! Jetzt passen ${kg(kornPlatz(aktiv))} Korn rein.`, 3);
   sound.tuer();
 }
 function ueberladenZiel() {   // Wohin kann der Mähdrescher sein Korn laden? (Fahrzeug oder Anhänger in der Nähe)
@@ -1107,7 +1174,7 @@ function ueberladenZiel() {   // Wohin kann der Mähdrescher sein Korn laden? (F
     if (d < bestD && kornDrin(fz) < kornPlatz(fz)) { bestD = d; bestes = { fz }; }
   }
   for (const a of anhaenger) {
-    if (a.an) continue;
+    if (a.an || a.typ.art === 'holz') continue;
     const d = Math.hypot(a.g.position.x - p.x, a.g.position.z - p.z);
     if (d < bestD && a.inhalt < a.typ.max) { bestD = d; bestes = { a }; }
   }
@@ -1311,6 +1378,7 @@ let building = false, bauArt = 'schuppen';
 let ansicht = 'dritte';   // 'dritte' = von hinten · 'ego' = First Person (mit den Augen des Farmers)
 let rotation = 0, yaw = 0, pitch = 0.25, blickHoch = 0, zoom = 1, kamOffset = 0, spielZeit = 0;
 let rauchTakt = 0, spurTakt = 0;
+let harvSaegt = false;   // Sägt der Harvester gerade?
 let saegeAn = false, saegt = false, saegeSprit = 100, getragen = 0;   // Motorsäge in der Hand? Sägst du gerade? Sprit in %, Holzstämme auf dem Rücken
 const keys = {};
 const gebaute = [];   // Was du gebaut hast: { art, x, z, rot, mesh, h, silo }
@@ -1503,18 +1571,19 @@ function balken(id, wert, max, text) {
 function updateHUD() {
   $('money').textContent = money.toLocaleString('de-DE');
   $('mode').textContent = building ? '🏗️ Baumodus' : aktiv ? '🚜 Fahren' : saegeAn ? '🪚 Motorsäge' : '🚶 Zu Fuß';
-  $('holz').textContent = `${getragen} von ${HOLZ_TRAGEN_MAX} Stämmen · 🪚 Sprit ${Math.round(saegeSprit)} %`;
+  const ha = holzAnh(aktiv);
+  $('holz').textContent = `${getragen} von ${HOLZ_TRAGEN_MAX} Stämmen${ha ? ` · Anhänger ${ha.inhalt}/${ha.typ.max}` : ''} · 🪚 Sprit ${Math.round(saegeSprit)} %`;
   $('ansicht').textContent = ansicht === 'ego' ? '👁️ First Person' : '🎥 Von hinten';
   const fz = aktiv || letztes;
   if (fz) {
     const G = GERAETE[fz.werkzeug];
     $('fahrzeug').textContent = `${fz.typ.emoji} ${fz.typ.name}${aktiv ? '' : ' (geparkt)'}`;
-    $('geraet').textContent = `${G.emoji} ${G.name}`;
+    $('geraet').textContent = G ? `${G.emoji} ${G.name}` : '🦾 Kran mit Fällkopf';
     $('tempo').textContent = Math.round(Math.abs(fz.speed) * 3.6);
     balken('diesel', fz.diesel, fz.typ.dieselMax, `${Math.round(fz.diesel)} Liter`);
     $('diesel').style.background = fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0';
     balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? kg(fz.saat) : '– (kann nicht säen)');
-    balken('tank', kornDrin(fz), kornPlatz(fz), fz.anh ? `${kg(kornDrin(fz))} (mit ${fz.anh.typ.name})` : kg(fz.tank));
+    balken('tank', kornDrin(fz), kornPlatz(fz), kornAnh(fz) ? `${kg(kornDrin(fz))} (mit ${fz.anh.typ.name})` : fz.typ.tankMax ? kg(fz.tank) : '– (kein Korntank)');
   }
   const steigt = Math.cos(spielZeit / 45) > 0;
   $('preis').textContent = `${kornPreis().toFixed(2).replace('.', ',')} €/kg ${steigt ? '📈' : '📉'}`;
@@ -1590,6 +1659,7 @@ function brauchtFahrzeug(text) {
 }
 function verkaufen() {
   if (beimSaegewerk()) { holzVerkaufen(); return; }
+  if (holzAnh(aktiv) && anhBeimSaegewerk(aktiv)) { holzVomAnhaengerVerkaufen(); return; }
   if (brauchtFahrzeug('Korn zu verkaufen')) return;
   if (!imLaden()) { meldung('🏪 Fahr auf den gelben Platz beim Landhandel!'); sound.nein(); return; }
   const drin = kornDrin(aktiv);
@@ -1626,6 +1696,8 @@ function tanken() {
   speichern();
 }
 function einlagern() {   // Korn vom Fahrzeug ins Silo
+  if (!aktiv) { holzAufAnhaenger(); return; }               // Zu Fuß: Holz auf den Holzanhänger legen
+  if (holzAnh(aktiv) && !nahesSilo()) { holzKran(); return; }   // Mit Holzanhänger: Kran lädt Holz auf
   if (brauchtFahrzeug('Korn einzulagern')) return;
   const s = nahesSilo();
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
@@ -1675,7 +1747,7 @@ function baumZustand(b, zustand, wert) {   // Einen Baum stehen, liegen oder wac
   if (b.schnitt) b.schnitt.visible = false;
   b.kipp.rotation.set(0, 0, 0);
   if (zustand === 'stumpf') {
-    b.kipp.visible = false; b.stumpf.visible = true; b.h.r = 0.45;
+    b.kipp.visible = false; b.stumpf.visible = true; b.h.r = -100;   // Über Stümpfe kann man drüberfahren
     b.zeit = wert ?? NACHWACHS_ZEIT;
   } else {
     b.kipp.visible = true; b.stumpf.visible = false; b.h.r = 0.7 * b.s;
@@ -1688,7 +1760,7 @@ function baumFaellen(b, w, id, ich) {   // w = Richtung, in die der Baum fällt
   b.zustand = 'faellt'; b.hp = 0; b.fallW = 0; b.fallV = 0.15; b.kipp.rotation.z = 0;
   if (b.schnitt) b.schnitt.visible = false;
   b.g.rotation.y = w + Math.PI;   // So kippt er von dir weg
-  b.stumpf.visible = true; b.h.r = 0.45;
+  b.stumpf.visible = true; b.h.r = -100;
   // Die Holzstämme liegen schon bereit – man sieht sie aber erst, wenn der Baum unten ist
   b.holz = [];
   for (let k = 0; k < HOLZ_PRO_BAUM; k++) {
@@ -1772,7 +1844,78 @@ function holzVerkaufen() {
   sound.kasse();
   speichern();
 }
+const tmpH = new THREE.Vector3();
+function harvesterZiel(fz) {   // Die nächste große Fichte, die der Kran erreicht
+  fz.g.updateMatrixWorld();
+  let bester = null, bestD = 9.5;
+  for (const b of baeume) {
+    if (b.zustand !== 'steht' || Math.abs(b.x - fz.g.position.x) > 14 || Math.abs(b.z - fz.g.position.z) > 14) continue;
+    const l = fz.g.worldToLocal(tmpH.set(b.x, 0, b.z)), rz = l.z + 2.7, d = Math.hypot(l.x, rz);
+    if (rz < 1.5 && d > 1.5 && d < bestD) { bestD = d; bester = b; }   // Nur vorne und seitlich, nicht hinten
+  }
+  return bester;
+}
+function harvesterUpdate(fz, dt) {
+  const b = harvesterZiel(fz);
+  if (!b) { kranStellen(fz, 0, 2.6, -0.2, dt); return; }   // Kran einklappen
+  const l = fz.g.worldToLocal(tmpH.set(b.x, 0, b.z)), rx = l.x, rz = l.z + 2.7;
+  const greift = !building && (mouseDown || keys.x);
+  kranStellen(fz, Math.atan2(-rx, -rz), Math.max(1.5, Math.hypot(rx, rz) - 0.35), greift || b.hp > 0 ? SCHNITT_HOEHE - 2.0 : 0.2, dt);
+  if (!greift) return;
+  if (fz.diesel <= 0) { meldungSelten('⛽ Der Harvester hat keinen Diesel mehr! Tanken mit T beim Landhandel oder an der Hof-Tankstelle.'); return; }
+  harvSaegt = true;
+  fz.diesel = Math.max(0, fz.diesel - dt * 0.4);
+  if (b.hp === 0) b.schnittW = Math.atan2(b.x - fz.g.position.x, b.z - fz.g.position.z);   // Fällt vom Harvester weg
+  b.hp = Math.min(1, b.hp + dt / HARVESTER_ZEIT);
+  b.g.rotation.y = b.schnittW + Math.PI;
+  b.kipp.rotation.z = Math.sin(spielZeit * 70) * 0.006;
+  b.kipp.rotation.x = -Math.max(0, b.hp - 0.8) * 0.25;
+  schnittZeigen(b);
+  if (Math.random() < 0.7) staub(b.x - Math.sin(b.schnittW) * 0.5, b.z - Math.cos(b.schnittW) * 0.5, 0xe8cf94, 0.9, 0.7, 0.45);
+  if (b.hp >= 1) baumFaellen(b, b.schnittW, Math.random().toString(36).slice(2, 8), true);
+}
+// Holzanhänger: mit dem Kran Holz aufladen (L), zu Fuß Holz drauflegen (L), beim Sägewerk verkaufen (V)
+const holzInKranNaehe = a => holzStuecke.filter(h => h.bereit && Math.hypot(h.x - a.g.position.x, h.z - a.g.position.z) < 10);
+const naherHolzAnhaenger = () => anhaenger.find(a => a.typ.art === 'holz' && Math.hypot(a.g.position.x - player.position.x, a.g.position.z - player.position.z) < a.typ.laenge / 2 + 2.5) || null;
+function anhBeimSaegewerk(fz) {
+  const P = SAEGEWERK, a = fz.anh.g.position, f = fz.g.position;
+  return Math.min(Math.hypot(a.x - P.platzX, a.z - P.platzZ), Math.hypot(f.x - P.platzX, f.z - P.platzZ)) < P.r + 8;
+}
+function holzKran() {
+  const a = holzAnh(aktiv), liste = holzInKranNaehe(a);
+  if (a.inhalt >= a.typ.max) { meldung('🪵 Der Holzanhänger ist voll! Ab zum Sägewerk 🪚 und drück V.'); sound.nein(); return; }
+  if (!liste.length) { meldung('🏗️ Keine Holzstämme in der Nähe! Fahr mit dem Anhänger näher ans Holz.'); sound.nein(); return; }
+  const stuecke = liste.slice(0, a.typ.max - a.inhalt);
+  for (const h of stuecke) { staub(h.x, h.z, 0x8a7a5a, 0.5, 1, 1.2); holzWeg(h.id); mpEvent({ t: 'holzWeg', id: h.id }); }
+  a.inhalt += stuecke.length;
+  meldung(`🏗️ Der Kran hat ${stuecke.length} Holzstämme aufgeladen! (${a.inhalt} von ${a.typ.max})`, 3);
+  sound.holz(); setTimeout(() => sound.holz(), 200);
+  speichern();
+}
+function holzAufAnhaenger() {
+  const a = naherHolzAnhaenger();
+  if (!a) { meldung('🪵 Geh näher an einen Holzanhänger! (Den gibt es beim Händler 🛒)'); sound.nein(); return; }
+  if (getragen <= 0) { meldung('🪵 Du trägst kein Holz! Fäll einen Baum und heb die Stämme auf.'); sound.nein(); return; }
+  const n = Math.min(getragen, a.typ.max - a.inhalt);
+  if (n <= 0) { meldung('🪵 Der Holzanhänger ist voll!'); sound.nein(); return; }
+  a.inhalt += n; getragen -= n;
+  meldung(`🪵 ${n} Stämme auf den Anhänger gelegt (${a.inhalt} von ${a.typ.max})`);
+  sound.holz();
+  speichern();
+}
+function holzVomAnhaengerVerkaufen() {
+  const a = holzAnh(aktiv);
+  if (a.inhalt <= 0) { meldung('🪵 Der Holzanhänger ist leer!'); sound.nein(); return; }
+  const erloes = a.inhalt * HOLZ_PREIS;
+  money += erloes;
+  meldung(`🪚💶 ${a.inhalt} Holzstämme verkauft für ${euro(erloes)}!`, 4);
+  a.inhalt = 0;
+  sound.kasse();
+  speichern();
+}
 function waldUpdate(dt) {
+  harvSaegt = false;
+  if (aktiv && aktiv.kran) harvesterUpdate(aktiv, dt);
   // Sägen: Motorsäge in der Hand + Maus gedrückt (oder X)
   saegt = false;
   if (saegeAn && !aktiv) {
@@ -1816,7 +1959,7 @@ function waldUpdate(dt) {
       b.wachs = Math.min(1, b.wachs + dt / BAUM_WACHS_DAUER);
       b.kipp.scale.setScalar(0.15 + 0.85 * b.wachs);
       if (b.wachs >= 1) b.zustand = 'steht';
-    } else if (b.kipp.rotation.z !== 0 && !saegt) b.kipp.rotation.z = 0;
+    } else if (b.kipp.rotation.z !== 0 && !saegt && !harvSaegt) b.kipp.rotation.z = 0;
   }
   // Holz aufheben: einfach drüberlaufen
   if (!aktiv) {
@@ -1831,9 +1974,22 @@ function waldUpdate(dt) {
     }
   }
 }
-function waldHinweis() {   // Was steht unten in der Mitte, wenn du zu Fuß im Wald bist?
-  if (aktiv) return '';
+function waldHinweis() {   // Was steht unten in der Mitte, wenn du zu Fuß im Wald bist (oder mit Harvester/Holzanhänger)?
+  if (aktiv) {
+    if (aktiv.kran) {
+      const b = harvesterZiel(aktiv);
+      if (b) return `🦾 X oder Maus gedrückt halten = Baum fällen! (${Math.round(b.hp * 100)} %)`;
+      return Math.hypot(aktiv.g.position.x - WALD.x, aktiv.g.position.z - WALD.z) < WALD.r + 15 ? '🌲 Fahr mit dem Harvester nah an eine große Fichte!' : '';
+    }
+    const a = holzAnh(aktiv);
+    if (!a) return '';
+    if (anhBeimSaegewerk(aktiv)) return a.inhalt > 0 ? `🪚 Sägewerk: V = Holz verkaufen (${a.inhalt} Stämme = ${euro(a.inhalt * HOLZ_PREIS)})` : '🪚 Sägewerk: Der Holzanhänger ist noch leer!';
+    const n = holzInKranNaehe(a).length;
+    if (n && a.inhalt < a.typ.max) return `🏗️ L = ${n} Holzstämme mit dem Kran aufladen (${a.inhalt} von ${a.typ.max})`;
+    return '';
+  }
   if (beimSaegewerk()) return getragen > 0 ? `🪚 Sägewerk: V = Holz verkaufen (${getragen} Stämme = ${euro(getragen * HOLZ_PREIS)})` : '🪚 Sägewerk: Bring Holzstämme 🪵 her und drück V!';
+  if (getragen > 0 && naherHolzAnhaenger()) return '🪵 L = Holz auf den Holzanhänger legen';
   if (beimSpritHolen() && saegeAn && saegeSprit < 99) return `⛽ T = Motorsäge tanken (${Math.round(saegeSprit)} %)`;
   if (saegeAn) {
     const b = baumVorMir();
@@ -1893,7 +2049,7 @@ function haendlerZeigen(an) {
     const zeile = document.createElement('div');
     zeile.className = 'angebot';
     zeile.innerHTML = `<b>${typ.emoji} ${typ.name}</b> – ${euro(typ.preis)}${anzahl ? ` <span class="klein">(du hast ${anzahl})</span>` : ''}<br>
-      <span class="klein">⭐ ${typ.faehigkeit}<br>🏁 ${Math.round(typ.tempo * 3.6)} km/h · 🌾 Tank ${kg(typ.tankMax)} · ⛽ ${typ.dieselMax} l</span><br>`;
+      <span class="klein">⭐ ${typ.faehigkeit}<br>🏁 ${Math.round(typ.tempo * 3.6)} km/h${typ.tankMax ? ` · 🌾 Tank ${kg(typ.tankMax)}` : ''} · ⛽ ${typ.dieselMax} l</span><br>`;
     const knopf = document.createElement('button');
     knopf.textContent = money >= typ.preis ? '🛒 Kaufen' : '💸 Zu teuer';
     knopf.disabled = money < typ.preis;
@@ -1906,7 +2062,7 @@ function haendlerZeigen(an) {
     const zeile = document.createElement('div');
     zeile.className = 'angebot';
     zeile.innerHTML = `<b>${typ.emoji} ${typ.name}</b> (Anhänger) – ${euro(typ.preis)}${anzahl ? ` <span class="klein">(du hast ${anzahl})</span>` : ''}<br>
-      <span class="klein">🌾 Fasst ${kg(typ.max)} Korn · Ankuppeln mit H · Der Mähdrescher kann mit O hineinladen</span><br>`;
+      <span class="klein">${typ.art === 'holz' ? `🪵 Fasst ${typ.max} Holzstämme · Ankuppeln mit H · L = Kran lädt Holz auf · V beim Sägewerk = verkaufen` : `🌾 Fasst ${kg(typ.max)} Korn · Ankuppeln mit H · Der Mähdrescher kann mit O hineinladen`}</span><br>`;
     const knopf = document.createElement('button');
     knopf.textContent = money >= typ.preis ? '🛒 Kaufen' : '💸 Zu teuer';
     knopf.disabled = money < typ.preis;
@@ -2042,6 +2198,7 @@ function neuesSpiel() {
 // ===== Steuerung =====
 function geraetWaehlen(art) {
   if (!aktiv || aktiv.werkzeug === art) return;
+  if (aktiv.kran) { meldung('🦾 Der Harvester hat einen Kran mit Fällkopf – fahr an eine Fichte und halt X!'); sound.nein(); return; }
   if (!aktiv.typ.geraete.includes(art)) { meldung(`🌾 Der ${aktiv.typ.name} kann nur ernten!`); sound.nein(); return; }
   if (aktiv.anh && GERAETE[art].hinten) { meldung('🔗 Hinten hängt der Anhänger! Erst abkuppeln (H), dann geht der Pflug/die Sämaschine.'); sound.nein(); return; }
   aktiv.werkzeug = art;
@@ -2186,7 +2343,7 @@ function fahren(fz, dt) {
     r.rad.rotation.x -= fz.speed * dt / (r.r * typ.groesse);   // Räder drehen sich
     if (r.lenkt) r.lenker.rotation.y = fz.lenkWinkel * r.lenkt;
   }
-  arbeiten(fz);
+  if (typ.geraete.length) arbeiten(fz);
   // Reifenspuren auf dem Feld
   spurTakt -= Math.abs(fz.speed) * dt;
   if (spurTakt <= 0) {
@@ -2561,6 +2718,7 @@ function animate() {
     farmerPose(farmer, false, mp.laeuft, dt, !amBoden);
   }
   waldUpdate(dt);
+  dorfUpdate(dt);
   if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen);
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
@@ -2601,6 +2759,7 @@ function animate() {
     a.korn.scale.y = Math.max(0.01, voll * 1.15);
     a.korn.position.y = 1.15 + voll * 0.575;
     a.schild.visible = !a.an;
+    if (a.holzTeile) a.holzTeile.forEach((h, k) => { h.visible = k < a.inhalt; });
   }
   mpAndereZeigen(dt);
   mpTick(dt);
@@ -2642,12 +2801,12 @@ function animate() {
     motor.g.gain.setTargetAtTime(an && tonAn ? (0.05 + (gasGeben ? 0.03 : 0)) * (ansicht === 'ego' ? 1.3 : 1) : 0, t, 0.2);
   }
   if (saegeTon) {   // Motorsäge: im Leerlauf blubbern, beim Sägen laut kreischen
-    const t = audio.currentTime, an = saegeAn && !aktiv && saegeSprit > 0 && tonAn;
-    const f = saegt ? 175 + Math.random() * 20 : 92 + Math.sin(spielZeit * 9) * 6;
+    const t = audio.currentTime, an = ((saegeAn && !aktiv && saegeSprit > 0) || harvSaegt) && tonAn;
+    const f = saegt || harvSaegt ? 175 + Math.random() * 20 : 92 + Math.sin(spielZeit * 9) * 6;
     saegeTon.o.frequency.setTargetAtTime(f, t, 0.08);
     saegeTon.o2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
-    saegeTon.f.frequency.setTargetAtTime(saegt ? 1400 : 700, t, 0.1);
-    saegeTon.g.gain.setTargetAtTime(an ? (saegt ? 0.09 : 0.03) : 0, t, 0.1);
+    saegeTon.f.frequency.setTargetAtTime(saegt || harvSaegt ? 1400 : 700, t, 0.1);
+    saegeTon.g.gain.setTargetAtTime(an ? (saegt || harvSaegt ? 0.09 : 0.03) : 0, t, 0.1);
   }
 
   // Kamera
