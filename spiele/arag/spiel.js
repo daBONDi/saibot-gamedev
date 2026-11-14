@@ -101,7 +101,7 @@ const KARTE = {
   startzahl: 20261114,            // Damit das Haus jedes Mal genau gleich gebaut wird (andere Zahl = anderes Haus)
 };
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1 };   // Starrer: 0 = gibt es nicht mehr
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
 const ABGABE_ZEIT = 0.8;            // So lange muss ein Schatz in der Abgabe liegen, bis er verkauft ist
@@ -323,6 +323,14 @@ const monsterSound = {
     ton(110, 0, 0.35, 'sine', 0.7 * laut, 35);
     rauschen(0.05, 1.2, 0.15 * laut, 'bandpass', 600, null, 150);   // Echo im Haus
   },
+  schrank(laut, jagt) {   // 👹 Knarzende Schranktür – und beim Jagen: RUMS, RUMS (schwere Holzfüße)
+    if (jagt) { ton(65, 0, 0.18, 'sine', 0.5 * laut, 40); rauschen(0, 0.12, 0.25 * laut, 'lowpass', 900); }
+    else { gruselTon(190, 0, 0.8, 'sawtooth', 0.05 * laut, 150, 25); rauschen(0, 0.8, 0.05 * laut, 'bandpass', 1200, null, 900); }
+  },
+  schrankWach(laut) {   // KNAAARZ + Türen rütteln: Gleich springt er raus!
+    gruselTon(140, 0, 0.9, 'sawtooth', 0.12 * laut, 260, 40);
+    for (let k = 0; k < 6; k++) ton(300 + Math.random() * 200, k * 0.13, 0.05, 'square', 0.06 * laut);
+  },
   starrer(laut) {   // 🗿 Stein schabt über den Boden
     rauschen(0, 0.45, 0.12 * laut, 'lowpass', 400, null, 150);
     ton(48, 0, 0.4, 'sawtooth', 0.04 * laut, 40);
@@ -335,6 +343,10 @@ function monsterLautstaerke(m) {
   return n * n * MONSTER_GERAEUSCH_LAUT;   // Mal-sich-selbst, damit es nah viel lauter ist als fern
 }
 function monsterGeraeusche(m, dt) {
+  if (m.art === 'schrank') {   // Warnung: Das hört man immer (auch etwas weiter weg), damit du eine Chance hast
+    if (m.modus === 'warnen' && !m.warnTon) { m.warnTon = true; monsterSound.schrankWach(Math.max(0.5, monsterLautstaerke(m))); }
+    if (m.modus !== 'warnen') m.warnTon = false;
+  }
   m.geraeuschZeit = (m.geraeuschZeit ?? zufall(0, 2)) - dt;
   if (m.geraeuschZeit > 0 || m.betaeubt > 0) return;
   const laut = monsterLautstaerke(m), jagt = m.modus === 'jagen';
@@ -346,6 +358,7 @@ function monsterGeraeusche(m, dt) {
   }
   if (m.art === 'geist') m.geraeuschZeit = jagt ? zufall(1.2, 2) : zufall(3, 6);
   else if (m.art === 'jaeger') m.geraeuschZeit = jagt ? zufall(2.5, 4) : zufall(4, 7);
+  else if (m.art === 'schrank') m.geraeuschZeit = jagt ? zufall(0.35, 0.5) : zufall(5, 9);
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
   if (laut > 0) monsterSound[m.art](laut, jagt);
 }
@@ -403,6 +416,17 @@ const MUSIK_LIEDER = {
     kick: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
     snare: [4, 12],
     melodie: [12, 12, 17, 17, 12, 12, 19, 18],
+  },
+  // 👹 Schrank-Monster: Polternder Gruselwalzer – wie eine kaputte Spieluhr in einem alten Schrank
+  schrank: {
+    tempo: 165, grund: 82, verzerrung: 45, gitarre: 0.4, melodieKlang: 'orgel', becken: 'tick',
+    riff: [
+      0, null, 1, null,  0, null, 6, null,   0, null, 1, null,  3, null, 1, null,
+      0, null, 1, null,  0, null, 6, null,   5, 5, 4, 4,  3, 3, 1, null,
+    ],
+    kick: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    snare: [4, 12],
+    melodie: [12, 13, null, 12, 18, 17, null, 13],
   },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
@@ -514,6 +538,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     monsterSound.schuss(0.6);
     gruselTon(300, 0.3, 0.5, 'sawtooth', 0.12, 900, 14);
     gruselTon(900, 0.8, 0.6, 'sawtooth', 0.1, 400, 14);
+  } else if (art === 'schrank') { // 👹 Türen knallen auf + Brüllen
+    rauschen(0, 0.4, 0.8, 'lowpass', 2500, null, 100);
+    ton(80, 0, 0.5, 'sine', 0.7, 40);
+    gruselTon(500, 0.25, 1.0, 'sawtooth', 0.12, 150, 20);
   } else if (art === 'starrer') { // 🗿 Riesiger Steingong + Krachen
     for (const [f, laut] of [[55, 0.5], [151.8, 0.2], [297, 0.1]]) ton(f, 0, 3, 'sine', laut, f * 0.9);
     rauschen(0, 1.5, 0.5, 'lowpass', 1500, null, 60);
@@ -1425,6 +1453,7 @@ function baueHaus() {
   for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
   for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
   for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
+  for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
 
   // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
   ducken(false);
@@ -1710,10 +1739,53 @@ const MONSTER_ARTEN = {
   // zielen: so lange zielt er, bevor er schießt (dann hast du Zeit, dich zu verstecken!) · nachladen: so lange braucht er zum Nachladen
   jaeger:   { name: 'Jäger',      emoji: '🤠', tempo: 1.4, jagdTempo: 2.6, schaden: 20, sicht: 16, augen: 1.6, pause: 2, betaeubbar: true,
               schussWeite: 12, schussSchaden: 35, zielen: 0.8, nachladen: 2.5 },
+  // 👹 Das Schrank-Monster versteckt sich als Kleiderschrank. lauerWeite: so nah darfst du ran, bevor es aufwacht
+  // warnen: so lange knarzt und rüttelt es, bevor es rausspringt (deine Chance wegzurennen!) · jagdDauer: so lange jagt es dich
+  schrank:  { name: 'Schrank-Monster', emoji: '👹', tempo: 2.0, jagdTempo: 4.3, schaden: 40, pause: 2, betaeubbar: true,
+              lauerWeite: 3.5, warnen: 0.9, jagdDauer: 7 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
-  if (art === 'geist') {
+  if (art === 'schrank') {   // 👹 Sieht aus wie ein Kleiderschrank ... bis die Türen aufgehen!
+    const holz = new THREE.MeshStandardMaterial({ color: '#4a2e1c', roughness: 0.8 }), dunkel = new THREE.MeshStandardMaterial({ color: '#3a2214', roughness: 0.9 });
+    const knauf = new THREE.MeshStandardMaterial({ color: '#c9a227', metalness: 0.7, roughness: 0.3 });
+    const kasten = (b, h, t, mat, x, y, z, eltern = g) => { const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat); m.position.set(x, y, z); eltern.add(m); return m; };
+    kasten(1.2, 2.0, 0.55, holz, 0, 1.0, -0.02);                 // Korpus
+    kasten(1.32, 0.12, 0.66, dunkel, 0, 2.06, 0);                // Krone oben
+    kasten(1.25, 0.08, 0.6, dunkel, 0, 0.04, 0);                 // Sockel
+    kasten(1.12, 1.88, 0.02, new THREE.MeshBasicMaterial({ color: '#050203' }), 0, 1.0, 0.25);   // Innen: stockdunkel
+    // Im Inneren: Augen und Zähne
+    const auge = new THREE.MeshBasicMaterial({ color: '#ffd23a', fog: false });
+    for (const sx of [-1, 1]) { const a = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), auge); a.position.set(sx * 0.22, 1.45, 0.22); g.add(a); }
+    const zahn = new THREE.MeshStandardMaterial({ color: '#f2efe2', roughness: 0.4 });
+    for (let k = 0; k < 7; k++) {
+      for (const [y, dreh] of [[1.08, Math.PI], [0.72, 0]]) {
+        const z = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 6), zahn);
+        z.position.set(-0.42 + k * 0.14, y, 0.2); z.rotation.z = dreh; g.add(z);
+      }
+    }
+    // Zwei Türen (drehen sich an den Scharnieren außen)
+    const spalt = new THREE.MeshStandardMaterial({ color: '#300', emissive: '#ff2a2a', emissiveIntensity: 0.4 });
+    kasten(0.03, 1.8, 0.02, spalt, 0, 1.0, 0.29);                // Roter Schimmer im Türspalt
+    const tuer = seite => {
+      const scharnier = new THREE.Group(); scharnier.position.set(seite * 0.6, 0, 0.27); g.add(scharnier);
+      kasten(0.59, 1.9, 0.05, holz, -seite * 0.295, 1.0, 0, scharnier);
+      kasten(0.45, 0.6, 0.02, dunkel, -seite * 0.295, 1.45, 0.03, scharnier);   // Verzierung
+      kasten(0.45, 0.6, 0.02, dunkel, -seite * 0.295, 0.65, 0.03, scharnier);
+      const k = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), knauf); k.position.set(-seite * 0.53, 1.0, 0.05); scharnier.add(k);
+      return scharnier;
+    };
+    g.userData.tuerL = tuer(-1); g.userData.tuerR = tuer(1);
+    // Beine (sind eingefahren, solange er lauert)
+    g.userData.beineG = [];
+    const beinMat = new THREE.MeshStandardMaterial({ color: '#1c120c', roughness: 0.7 });
+    for (const [x, z] of [[-0.48, -0.2], [0.48, -0.2], [-0.48, 0.18], [0.48, 0.18]]) {
+      const b = new THREE.Group(); b.position.set(x, 0, z); g.add(b);
+      kasten(0.09, 0.4, 0.09, beinMat, 0, -0.2, 0, b);
+      g.userData.beineG.push(b);
+    }
+    g.userData.beine = 0; g.userData.spalt = spalt;
+  } else if (art === 'geist') {
     const staub = new THREE.MeshStandardMaterial({ color: '#8d8a86', transparent: true, opacity: 0.55, roughness: 1, depthWrite: false });
     for (let k = 0; k < 7; k++) {
       const m = new THREE.Mesh(new THREE.SphereGeometry(zufall(0.25, 0.45), 12, 10), staub);
@@ -1874,7 +1946,9 @@ function updateMonster(m, dt) {
   m.angriffPause -= dt;
   if (m.betaeubt > 0) { m.betaeubt -= dt; m.laeuft = false; m.zielen = 0; return; }
   let tempo;
-  if (m.art === 'starrer') {
+  if (m.art === 'schrank') {
+    tempo = schrankUpdate(m, dt);
+  } else if (m.art === 'starrer') {
     // 🗿 Der Starrer friert ein, sobald du hinschaust
     m.gesehen = starrerGesehen(m);
     if (m.gesehen) {
@@ -1978,6 +2052,60 @@ function updateMonster(m, dt) {
       if (zeuge) sagen(zeuge, 'volltreffer', {}, 1);
     }
   }
+}
+// 👹 Das Schrank-Monster: lauern → (jemand kommt nah) warnen → jagen → heimweg (zu einem neuen Versteck) → lauern
+function schrankNeuesVersteck(m, sofortHin = false) {
+  // Ein Raum ohne Treppe, mit einer Wand ohne Tür (da steht der Schrank, ohne den Weg zu versperren)
+  const raeume = haus.raeume.filter(R => R.nr !== haus.start && !R.treppeHoch && !R.treppeRunter && raumAbstand(haus.start, R.nr) >= 2 &&
+    ['n', 's', 'w', 'o'].some(w => !R.tuer[w]) && raumNrVon(m.x, m.y + 0.5, m.z) !== R.nr);
+  if (!raeume.length) return;
+  const R = auswahl(raeume), seite = auswahl(['n', 's', 'w', 'o'].filter(w => !R.tuer[w]));
+  const cx = R.x0 + RAUM / 2, cz = R.z0 + RAUM / 2, rand = 0.45;
+  const pos = { n: [cx, R.z0 + rand, 0], s: [cx, R.z0 + RAUM - rand, Math.PI], w: [R.x0 + rand, cz, Math.PI / 2], o: [R.x0 + RAUM - rand, cz, -Math.PI / 2] }[seite];
+  m.heim = { x: pos[0], y: R.basis, z: pos[1], w: pos[2] };
+  if (sofortHin) { m.x = m.heim.x; m.y = m.heim.y; m.z = m.heim.z; m.winkel = m.heim.w; m.modus = 'lauern'; m.ziel = { ...m.heim }; }
+}
+function schrankOpfer(m, weite) {   // Wer ist am nächsten dran? (du, ein Mitspieler oder ein Helfer – im gleichen Stockwerk)
+  let bestes = null, bestD = weite;
+  const p = spielerKoerper.position;
+  if (!tot && Math.abs(p.y - KOERPER_RADIUS - m.y) < 1.5) { const d = abstand2D(m.x, m.z, p.x, p.z); if (d < bestD) { bestD = d; bestes = { x: p.x, y: p.y, z: p.z, spieler: true }; } }
+  for (const g of mpGaeste()) if (Math.abs(g.y - m.y) < 1.5) { const d = abstand2D(m.x, m.z, g.x, g.z); if (d < bestD) { bestD = d; bestes = { x: g.x, y: g.y, z: g.z, gast: g }; } }
+  for (const h of helfer) {
+    const hp = h.body.position;
+    if (h.kaputt <= 0 && Math.abs(hp.y - 0.35 - m.y) < 1.5) { const d = abstand2D(m.x, m.z, hp.x, hp.z); if (d < bestD) { bestD = d; bestes = { x: hp.x, y: hp.y, z: hp.z, helfer: h }; } }
+  }
+  return bestes;
+}
+function schrankUpdate(m, dt) {
+  const info = m.info;
+  if (!m.heim) schrankNeuesVersteck(m);
+  if (m.modus === 'wandern' || m.modus === 'nachsehen') m.modus = 'heimweg';   // (nach dem Betäuben)
+  if (m.modus === 'lauern') {   // Ganz still an der Wand stehen ...
+    m.x = m.heim.x; m.z = m.heim.z; m.winkel = m.heim.w; m.ziel = { ...m.heim };
+    if (schrankOpfer(m, info.lauerWeite)) { m.modus = 'warnen'; m.warnZeit = info.warnen; }
+    return 0;
+  }
+  if (m.modus === 'warnen') {   // Knaaarz! Rüttel, rüttel ...
+    m.warnZeit -= dt;
+    if (m.warnZeit <= 0) {
+      const opfer = schrankOpfer(m, 12);
+      m.modus = 'jagen'; m.jagdZeit = info.jagdDauer;
+      if (opfer && opfer.spieler) zeigeNachricht('👹 DER SCHRANK LEBT! LAUF!', 2.5, '#ff6b6b');
+      if (opfer && opfer.helfer) { opfer.helfer.angst = 3; sagen(opfer.helfer, 'hilfe', { monster: info.name }, 1); }
+    }
+    return 0;
+  }
+  if (m.modus === 'jagen') {
+    m.jagdZeit -= dt;
+    const opfer = schrankOpfer(m, 14);
+    if (!opfer || m.jagdZeit <= 0) { m.modus = 'heimweg'; schrankNeuesVersteck(m); return info.tempo; }   // Genug gejagt: neues Versteck suchen
+    m.ziel = { x: opfer.x, y: opfer.y, z: opfer.z };
+    return info.jagdTempo;
+  }
+  // Heimweg: zum neuen Versteck laufen
+  m.ziel = { x: m.heim.x, y: m.heim.y, z: m.heim.z };
+  if (abstand2D(m.x, m.z, m.heim.x, m.heim.z) < 0.3 && Math.abs(m.y - m.heim.y) < 1) { m.modus = 'lauern'; return 0; }
+  return info.tempo;
 }
 // 🤠 Der Jäger: Sieht er jemanden in Schussweite, bleibt er stehen, zielt (roter Laser!) und ballert los.
 let schussSpuren = [];   // Die kurzen Striche der Schrotkugeln
@@ -2084,6 +2212,18 @@ function zeigeMonster(m) {
       pos.setXYZ(1, 0, ziel.y + 0.1 - m.y, abstand2D(m.x, m.z, ziel.x, ziel.z));
       pos.needsUpdate = true;
     }
+  } else if (m.art === 'schrank') {
+    const U = g.userData, versteckt = m.modus === 'lauern' || m.modus === 'warnen';
+    U.beine += ((versteckt ? 0 : 0.4) - U.beine) * 0.12;   // Beine aus- oder einfahren
+    const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 13 : 7)) : 0;
+    const ruetteln = m.modus === 'warnen' ? Math.sin(zeit * 60) * 0.035 : 0;
+    g.position.set(m.x + ruetteln, m.y + U.beine + Math.abs(schritt) * 0.06, m.z);
+    g.rotation.set(m.betaeubt > 0 ? 0.2 : 0, m.winkel, schritt * 0.05 + ruetteln);
+    const auf = m.betaeubt > 0 ? 0.25 : m.modus === 'jagen' ? 1.5 + Math.sin(m.phase * 10) * 0.25 : m.modus === 'heimweg' ? 0.35 : m.modus === 'warnen' ? 0.1 + Math.abs(Math.sin(zeit * 25)) * 0.15 : 0;
+    U.tuerL.rotation.y += (-auf - U.tuerL.rotation.y) * 0.25;
+    U.tuerR.rotation.y += (auf - U.tuerR.rotation.y) * 0.25;
+    U.beineG.forEach((b, k) => { b.scale.y = Math.max(0.01, U.beine / 0.4); b.rotation.x = schritt * 0.6 * (k % 2 ? 1 : -1); });
+    U.spalt.emissiveIntensity = m.modus === 'lauern' ? 0.35 + Math.sin(zeit * 2 + m.phase) * 0.25 : 1.5;
   } else {
     g.position.set(m.x, m.y, m.z);
     g.rotation.set(0, m.winkel, 0);   // Eine Statue wackelt nicht ...
@@ -3067,7 +3207,7 @@ function zeichneTitel() {
   text('Automatische Roboter AufräumGruppe', W / 2, 132, 20, '#c9c3ff', 'center', false);
   zeichneRoboter(W / 2, 250, 1.5);
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
-  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠', W / 2, 355, 17, '#fff', 'center', false);
+  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🤠👹', W / 2, 355, 17, '#fff', 'center', false);
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
