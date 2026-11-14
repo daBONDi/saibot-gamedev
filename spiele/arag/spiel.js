@@ -94,6 +94,17 @@ const SCHAETZE = [
   { id: 'kanne',    name: 'Teekanne',      emoji: '🫖', wert: [120, 260],   zerbrechlich: 0.9,  masse: 1,   groesse: [0.38, 0.3, 0.26], haeufig: 3 },
   { id: 'truhe',    name: 'Schatztruhe',   emoji: '🧰', wert: [800, 1200],  zerbrechlich: 0.3,  masse: 15,  groesse: [0.8, 0.55, 0.5],  haeufig: 0.8, boden: true },
   { id: 'ruestung', name: 'Ritterrüstung', emoji: '🛡️', wert: [1500, 2200], zerbrechlich: 0.15, masse: 35,  groesse: [0.6, 1.7, 0.45],  haeufig: 0.5, boden: true },
+  // Neue Schätze:
+  { id: 'teddy',    name: 'Teddybär',      emoji: '🧸', wert: [80, 160],    zerbrechlich: 0.05, masse: 0.8, groesse: [0.35, 0.42, 0.28], haeufig: 2.5 },   // Fast unkaputtbar – aber billig
+  { id: 'sanduhr',  name: 'Sanduhr',       emoji: '⏳', wert: [200, 400],   zerbrechlich: 1.1,  masse: 1.5, groesse: [0.2, 0.35, 0.2],   haeufig: 1.8 },
+  { id: 'kerze',    name: 'Kerzenleuchter', emoji: '🕯️', wert: [300, 550],  zerbrechlich: 0.4,  masse: 2.5, groesse: [0.36, 0.5, 0.12],  haeufig: 2 },
+  { id: 'spieluhr', name: 'Spieluhr',      emoji: '🎶', wert: [400, 700],   zerbrechlich: 1.2,  masse: 1,   groesse: [0.3, 0.32, 0.22],  haeufig: 1.5 },
+  { id: 'geige',    name: 'Geige',         emoji: '🎻', wert: [500, 900],   zerbrechlich: 1.3,  masse: 1,   groesse: [0.22, 0.6, 0.08],  haeufig: 1.2 },
+  { id: 'grammophon', name: 'Grammophon',  emoji: '📯', wert: [700, 1100],  zerbrechlich: 0.9,  masse: 6,   groesse: [0.45, 0.62, 0.45], haeufig: 1 },
+  { id: 'goldbarren', name: 'Goldbarren',  emoji: '🪙', wert: [900, 1300],  zerbrechlich: 0.1,  masse: 8,   groesse: [0.3, 0.1, 0.15],   haeufig: 0.7 },   // Klein, aber schwer!
+  { id: 'ei',       name: 'Juwelen-Ei',    emoji: '🥚', wert: [1400, 2000], zerbrechlich: 1.8,  masse: 0.8, groesse: [0.2, 0.28, 0.2],   haeufig: 0.35 },
+  { id: 'krone',    name: 'Königskrone',   emoji: '👑', wert: [1600, 2400], zerbrechlich: 0.7,  masse: 2,   groesse: [0.3, 0.26, 0.3],   haeufig: 0.4 },
+  { id: 'diamant',  name: 'Riesendiamant', emoji: '💎', wert: [2500, 3500], zerbrechlich: 2.0,  masse: 0.5, groesse: [0.2, 0.2, 0.2],    haeufig: 0.25, rund: true },   // Das Wertvollste – und super zerbrechlich!
 ];
 
 // ===== Die große Spukvilla (immer dieselbe Karte – keine Level mehr!) =====
@@ -1723,6 +1734,75 @@ function baueSchatzMesh(typ) {
       add(new THREE.BoxGeometry(0.13, 0.75, 0.13), metallMat, s * 0.1, -0.45, 0);        // Beine
     }
     add(new THREE.BoxGeometry(0.06, 1.2, 0.02), metallMat, 0.36, -0.1, 0.1);            // Schwert
+  } else if (typ.id === 'teddy') {   // 🧸 Kuscheliger Teddy aus Kugeln
+    const fell = new THREE.MeshStandardMaterial({ color: '#9a6a3a', roughness: 1 }), hell = new THREE.MeshStandardMaterial({ color: '#d9b48a', roughness: 1 });
+    add(new THREE.SphereGeometry(0.13, 12, 10), fell, 0, -0.06, 0).scale.set(1, 1.15, 0.9);          // Bauch
+    add(new THREE.SphereGeometry(0.07, 10, 8), hell, 0, -0.06, 0.1);
+    add(new THREE.SphereGeometry(0.1, 12, 10), fell, 0, 0.12, 0);                                    // Kopf
+    add(new THREE.SphereGeometry(0.045, 8, 6), hell, 0, 0.1, 0.09);                                  // Schnauze
+    add(new THREE.SphereGeometry(0.015, 6, 5), schwarzMat, 0, 0.11, 0.135);
+    for (const sx of [-1, 1]) {
+      add(new THREE.SphereGeometry(0.04, 8, 6), fell, sx * 0.08, 0.2, 0);                            // Ohren
+      add(new THREE.SphereGeometry(0.014, 6, 5), schwarzMat, sx * 0.04, 0.15, 0.085);               // Augen
+      add(new THREE.SphereGeometry(0.05, 8, 6), fell, sx * 0.13, -0.02, 0.03).scale.set(1, 1.4, 1);  // Arme
+      add(new THREE.SphereGeometry(0.06, 8, 6), fell, sx * 0.08, -0.17, 0.05);                       // Beine
+    }
+  } else if (typ.id === 'sanduhr') {   // ⏳ Zwei Glaskegel zwischen Holzscheiben
+    const glas = new THREE.MeshStandardMaterial({ color: '#cfe8ff', transparent: true, opacity: 0.35, roughness: 0.05 });
+    const sand = new THREE.MeshStandardMaterial({ color: '#e3c27a', roughness: 1 });
+    for (const sy of [-1, 1]) add(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 16), holzMat, 0, sy * 0.16, 0);
+    add(new THREE.ConeGeometry(0.08, 0.14, 16), glas, 0, 0.075, 0).rotation.x = Math.PI;
+    add(new THREE.ConeGeometry(0.08, 0.14, 16), glas, 0, -0.075, 0);
+    add(new THREE.ConeGeometry(0.06, 0.08, 16), sand, 0, -0.1, 0);
+    for (const [x, z] of [[0.08, 0], [-0.08, 0], [0, 0.08], [0, -0.08]]) add(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 6), holzMat, x, 0, z);
+  } else if (typ.id === 'kerze') {   // 🕯️ Goldener Leuchter mit drei Kerzen
+    add(new THREE.CylinderGeometry(0.07, 0.09, 0.03, 14), goldMat, 0, -0.235, 0);
+    add(new THREE.CylinderGeometry(0.015, 0.02, 0.3, 8), goldMat, 0, -0.08, 0);
+    add(new THREE.BoxGeometry(0.3, 0.02, 0.02), goldMat, 0, 0.06, 0);
+    const flamme = new THREE.MeshBasicMaterial({ color: '#ffb347' });
+    for (const x of [-0.14, 0, 0.14]) {
+      add(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 10), goldMat, x, 0.08, 0);
+      add(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 10), weissMat, x, 0.15, 0);
+      add(new THREE.ConeGeometry(0.012, 0.035, 6), flamme, x, 0.23, 0);
+    }
+  } else if (typ.id === 'spieluhr') {   // 🎶 Holzkästchen mit kleiner Tänzerin obendrauf
+    add(new THREE.BoxGeometry(b, 0.14, t), glanz('#7a3b2a', 0.4), 0, -0.09, 0);
+    add(new THREE.BoxGeometry(b + 0.01, 0.015, t + 0.01), goldMat, 0, -0.015, 0);
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 12), goldMat, 0, 0, 0);
+    const rosa = new THREE.MeshStandardMaterial({ color: '#f4a6c8', roughness: 0.6 });
+    add(new THREE.ConeGeometry(0.045, 0.07, 10), rosa, 0, 0.045, 0);                                // Tutu
+    add(new THREE.CylinderGeometry(0.008, 0.008, 0.06, 6), weissMat, 0, 0.1, 0);
+    add(new THREE.SphereGeometry(0.018, 8, 6), weissMat, 0, 0.14, 0);
+    add(new THREE.BoxGeometry(0.015, 0.05, 0.015), goldMat, b / 2 + 0.01, -0.09, 0).rotation.z = 0.4;   // Aufzieh-Schlüssel
+  } else if (typ.id === 'geige') {   // 🎻 Geige mit Hals und Schnecke
+    const lack = glanz('#8a3d14', 0.35);
+    add(new THREE.SphereGeometry(0.1, 14, 10), lack, 0, -0.15, 0).scale.set(1, 1.1, 0.3);
+    add(new THREE.SphereGeometry(0.08, 14, 10), lack, 0, -0.01, 0).scale.set(1, 1, 0.3);
+    add(new THREE.BoxGeometry(0.03, 0.22, 0.02), schwarzMat, 0, 0.18, 0.01);                          // Hals
+    add(new THREE.TorusGeometry(0.02, 0.008, 6, 10), lack, 0, 0.29, 0.01);                            // Schnecke
+    for (const x of [-0.01, 0, 0.01]) add(new THREE.BoxGeometry(0.002, 0.42, 0.002), weissMat, x, 0.04, 0.035);   // Saiten
+  } else if (typ.id === 'grammophon') {   // 📯 Holzkasten, Schallplatte und großer Goldtrichter
+    add(new THREE.BoxGeometry(0.4, 0.14, 0.4), holzMat, 0, -0.24, 0);
+    add(new THREE.CylinderGeometry(0.16, 0.16, 0.01, 24), schwarzMat, 0, -0.165, 0);
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 6), goldMat, 0.12, -0.03, -0.1).rotation.z = 0.3;
+    const trichter = add(new THREE.CylinderGeometry(0.2, 0.02, 0.3, 20, 1, true), new THREE.MeshStandardMaterial({ color: '#d4a537', metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }), -0.02, 0.15, 0.05);
+    trichter.rotation.x = 0.6;
+  } else if (typ.id === 'goldbarren') {   // 🪙 Glänzender Goldbarren
+    add(new THREE.BoxGeometry(b, h, t), goldMat);
+    add(new THREE.BoxGeometry(b * 0.8, 0.01, t * 0.7), new THREE.MeshStandardMaterial({ color: '#f2c94c', metalness: 1, roughness: 0.15 }), 0, h / 2, 0);
+  } else if (typ.id === 'ei') {   // 🥚 Ein kostbares Juwelen-Ei mit Goldbändern
+    add(new THREE.SphereGeometry(0.1, 18, 14), glanz(auswahl(['#1f6f8b', '#8b1f3a', '#2f7a3a']), 0.2, 0.3), 0, 0, 0).scale.set(1, 1.35, 1);
+    for (const y of [-0.05, 0.03]) add(new THREE.TorusGeometry(0.098 - Math.abs(y) * 0.2, 0.008, 6, 24), goldMat, 0, y, 0).rotation.x = Math.PI / 2;
+    add(new THREE.OctahedronGeometry(0.025), new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#88ccff', emissiveIntensity: 0.8 }), 0, 0.14, 0);
+  } else if (typ.id === 'krone') {   // 👑 Goldkrone mit Zacken und Edelsteinen
+    add(new THREE.CylinderGeometry(0.14, 0.13, 0.1, 20, 1, true), new THREE.MeshStandardMaterial({ color: '#d4a537', metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide, emissive: '#3a2a05' }), 0, -0.07, 0);
+    for (let k = 0; k < 6; k++) {
+      const w = k / 6 * Math.PI * 2;
+      add(new THREE.ConeGeometry(0.03, 0.1, 6), goldMat, Math.cos(w) * 0.13, 0.03, Math.sin(w) * 0.13);
+      add(new THREE.SphereGeometry(0.015, 8, 6), new THREE.MeshStandardMaterial({ color: k % 2 ? '#e0115f' : '#1e5bd8', emissive: k % 2 ? '#5a0020' : '#0a2060' }), Math.cos(w) * 0.14, -0.06, Math.sin(w) * 0.14);
+    }
+  } else if (typ.id === 'diamant') {   // 💎 Ein riesiger, funkelnder Diamant
+    add(new THREE.OctahedronGeometry(0.1, 0), new THREE.MeshStandardMaterial({ color: '#d8f4ff', emissive: '#4fb7ff', emissiveIntensity: 0.6, metalness: 0.2, roughness: 0.05, transparent: true, opacity: 0.85, flatShading: true }));
   }
   szene.add(g);
   return g;
