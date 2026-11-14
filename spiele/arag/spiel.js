@@ -2358,7 +2358,7 @@ function updateHelfer(h, dt) {
   if (h.modus === 'tragen' && imLaster(h.auftrag)) {
     h.abgeliefert++;
     h.froh = 2.5;
-    sagen(h, 'abgeliefert', { wert: euro(h.auftrag.wert) }, 1);
+    if (h.auftrag.typ.id === 'kopf') helferSpricht(h, 'Kopf abgeliefert! Halt durch, Kollege! 🔧'); else sagen(h, 'abgeliefert', { wert: euro(h.auftrag.wert) }, 1);
     helferLoslassen(h);
   }
   // Fahren (durch Türen und über Treppen), mit Ausweichen, falls er irgendwo festhängt
@@ -2527,7 +2527,7 @@ function zieheSchatz(s, ziel) {   // Zieht einen Schatz zum Ziel. false = zu wei
   return true;
 }
 function getroffen(menge, von) {
-  if (zustand !== 'spiel') return;
+  if (zustand !== 'spiel' || tot) return;
   energie -= menge;
   schadenBlitz = 0.6;
   wackeln = 0.3;
@@ -2535,12 +2535,8 @@ function getroffen(menge, von) {
   loslassen();   // Vor Schreck lässt du alles fallen!
   const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, spielerKoerper.position) < 15);
   if (zeuge) sagen(zeuge, 'aufpassen', {}, 1);
-  if (energie <= 0 && mp.aktiv) {   // Im Multiplayer ist nicht Schluss – du startest neu beim Transporter
-    energie = 100;
-    const L = haus.laster;
-    spielerKoerper.position.set(RAUM / 2 + zufall(-1, 1), KOERPER_RADIUS + 0.3, L.z1 + 2.5);
-    spielerKoerper.velocity.set(0, 0, 0);
-    zeigeNachricht(`🔧 Kaputt (${von})! Neustart beim Transporter ...`, 3, '#ff6b6b');
+  if (energie <= 0 && (mp.aktiv || HELFER_ANZAHL > 0)) {   // Nicht Schluss: Dein Kopf fällt runter – jemand muss ihn zur Abgabe bringen!
+    spielerStirbt(von);
     return;
   }
   if (energie <= 0) {
@@ -2552,6 +2548,7 @@ function getroffen(menge, von) {
 }
 // 📸 Blitzlampe: Ein superheller Blitz nach vorne. Alle Monster, die du anleuchtest, sind kurz geblendet!
 function blitzen() {
+  if (tot) return;
   if (zustand !== 'spiel' || pause) return;
   if (blitzLadung < 1) { zeigeNachricht(`🔦 Blitzlampe lädt noch ... (${Math.ceil((1 - blitzLadung) * BLITZ_LADEN)} s)`, 1, '#ffd166'); return; }
   blitzLadung = 0; blitzHell = 1;
@@ -2617,6 +2614,7 @@ function pruefeBoden() {
   }
 }
 function updateSpieler(dt) {
+  if (tot) { totParken(); return; }   // Kaputt: nur zuschauen
   // Ducken mit C (aufstehen nur, wenn über dir Platz ist)
   if (tasten['c'] && !geduckt) ducken(true);
   if (!tasten['c'] && geduckt && kannAufstehen()) ducken(false);
@@ -2672,6 +2670,7 @@ function update(dt) {
   haltenPhysik();
   mpGastSchaetzeHalten();
   welt.step(1 / 60, dt, 3);
+  totParken();
   pruefeBoden();
   for (const s of [...schaetze]) {
     if (s.zerbrechen && !s.kaputt) zerbrechen(s);
@@ -2853,6 +2852,11 @@ function zeichne3D() {
   const wippen = amBoden && Math.hypot(spielerKoerper.velocity.x, spielerKoerper.velocity.z) > 0.5 ? Math.sin(zeit * 11) * (geduckt ? 0.015 : 0.03) : 0;
   const ruckeln = wackeln > 0 ? (Math.random() - 0.5) * 0.08 : 0;
   kamera.position.set(p.x + ruckeln, p.y + (geduckt ? DUCK_AUGEN : AUGEN_HOEHE) + wippen, p.z);
+  if (tot) {   // Kaputt: Du schaust aus deinem Kopf (so siehst du, wer dich trägt!)
+    const kopf = meinKopfId !== null ? schatzMitId(meinKopfId) : null, L = haus.laster;
+    if (kopf) kamera.position.set(kopf.body.position.x, kopf.body.position.y + 0.45, kopf.body.position.z);
+    else kamera.position.set((L.x1 + L.x2) / 2 + 3, 2, (L.z1 + L.z2) / 2);
+  }
   kamera.rotation.set(blick.hoch, blick.links, 0);
   kamera.updateMatrixWorld();
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
@@ -2870,6 +2874,7 @@ function zeichne3D() {
     if (d.userData.pendel) d.position.x = Math.sin(zeit * 2.5) * 0.12;
   }
   // Dein Greifer: Ring dreht sich, Zinken schließen sich beim Greifen, alles leuchtet heller
+  greifer.visible = !tot;
   greifer.position.y = -0.27 + wippen * 0.5;
   const haeltWas = gegriffen || gepackt, siehtWas = schwebend || schwebendSpieler;
   greiferRing.rotation.z += haeltWas ? 0.3 : siehtWas ? 0.08 : 0.02;
@@ -2919,13 +2924,13 @@ function zeichneHUD() {
     ctx.globalAlpha = 1;
   }
   // Oben links: Level, Ziel, Raum und Stockwerk
-  const imLasterJetzt = lasterWert();
-  const p = spielerKoerper.position;
+  const p = tot ? kamera.position : spielerKoerper.position;
   ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 12, 280, 92, 12); ctx.fill();
-  text(`LEVEL ${level}`, 24, 30, 16, '#7cf5c6', 'left');
-  text(`🚚 ${euro(imLasterJetzt)} / ${euro(ld.ziel)}`, 280, 30, 15, imLasterJetzt >= ld.ziel ? '#4ade80' : '#fff', 'right');
-  balken(24, 50, 256, 14, imLasterJetzt / ld.ziel, imLasterJetzt >= ld.ziel ? '#4ade80' : '#7cf5c6');
-  const raum = haus.raeume[raumNrVon(p.x, p.y, p.z)];
+  text('🏚️ SPUKVILLA', 24, 30, 16, '#7cf5c6', 'left');
+  const genug = konto >= WIEDERBELEBEN_PREIS;
+  text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
+  balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
+  const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
   text(`📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}`, 24, 86, 13, '#c9c3ff', 'left', false);
   // Oben rechts: Konto und Helfer
   ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(W - 282, 12, 270, 40 + helfer.length * 22, 12); ctx.fill();
@@ -2937,6 +2942,13 @@ function zeichneHUD() {
   });
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68 + helfer.length * 22, 13, '#fff', 'center', false);
   mpHUD();
+  if (tot) {
+    ctx.fillStyle = 'rgba(40,0,0,0.75)'; rr(W / 2 - 330, H - 150, 660, 112, 14); ctx.fill();
+    text(`💀 KAPUTT! (${kaputtGrund})`, W / 2, H - 122, 24, '#ff6b6b');
+    text(mp.aktiv ? 'Ein Mitspieler (oder Helfer-Bot) muss deinen Kopf 🤖 zur Abgabe 🚚 bringen!' : 'Deine Helfer-Bots bringen deinen Kopf 🤖 zur Abgabe 🚚!', W / 2, H - 92, 15, '#fff', 'center', false);
+    text(konto >= WIEDERBELEBEN_PREIS ? `💰 Genug Geld da (${euro(konto)}) – sobald der Kopf in der Abgabe liegt, geht's weiter!` : `💰 Noch ${euro(WIEDERBELEBEN_PREIS - konto)} sammeln fürs Wiederbeleben (${euro(WIEDERBELEBEN_PREIS)})`, W / 2, H - 68, 14, '#ffd166', 'center', false);
+    if (!mp.aktiv) text('Rechtsklick = aufgeben', W / 2, H - 48, 12, '#c9c3ff', 'center', false);
+  }
   // Oben Mitte: Pfeil zum Transporter (oder zur Treppe, wenn du oben bist)
   const L = haus.laster;
   let zielX = (L.x1 + L.x2) / 2, zielZ = (L.z1 + L.z2) / 2, zielText = '🚚';
@@ -3055,10 +3067,10 @@ function zeichneTitel() {
   text('Automatische Roboter AufräumGruppe', W / 2, 132, 20, '#c9c3ff', 'center', false);
   zeichneRoboter(W / 2, 250, 1.5);
   HELFER.slice(0, HELFER_ANZAHL).forEach((h, k) => zeichneRoboter(W / 2 + (k === 0 ? -150 : 150), 275, 1.0, h.farbe));
-  text('Hol die Schätze aus dem Spukhaus und bring sie zum Transporter 🚚', W / 2, 355, 17, '#fff', 'center', false);
-  text('Deine Kollegen helfen mit 🤖 – aber jeder Stoß kostet Geld! Und pass auf die Monster auf ... 👻👂🗿🤠', W / 2, 380, 14, '#ffb4b4', 'center', false);
+  text('Die große Spukvilla: 72 Räume, 3 Stockwerke – und jedes Monster gibt es nur EINMAL! 👻👂🗿🤠', W / 2, 355, 17, '#fff', 'center', false);
+  text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische!) · F: Blitzlampe 📸', W / 2, 425, 13, '#c9c3ff', 'center', false);
-  text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter · E: Abfahren', W / 2, 446, 13, '#c9c3ff', 'center', false);
+  text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
   text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Den Starrer nicht aus den Augen lassen!', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
@@ -3083,7 +3095,6 @@ function zeichneKaputt() {
   ctx.fillStyle = 'rgba(25,0,0,0.85)'; ctx.fillRect(0, 0, W, H);
   text('🔧 ROBOTER KAPUTT! 🔧', W / 2, 170, 46, '#ff6b6b');
   text(`Erwischt von: ${kaputtGrund}`, W / 2, 240, 20, '#fff');
-  text(`Du hast Level ${level} erreicht`, W / 2, 300, 22, '#fff');
   text(`💰 Gesammelt: ${euro(konto)}`, W / 2, 340, 24, '#ffd166');
   text(`🏆 Rekord: ${euro(rekord)}`, W / 2, 380, 18, '#ffd166');
   text('▶ Klicken für ein neues Spiel', W / 2, 470, 24, '#7cf5c6');
@@ -3130,6 +3141,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'geschafft') { if (mp.rolle !== 'gast') { level++; starteLevel(); } return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
+  if (tot) { if (!mp.aktiv && e.button === 2) { zustand = 'kaputt'; if (document.pointerLockElement) document.exitPointerLock(); } return; }   // Allein: Rechtsklick = aufgeben
   if (e.button === 0 && schwebend && !gegriffen && !(mp.aktiv && mpVonAnderemGehalten(schwebend))) greifen(schwebend);
   else if (e.button === 0 && schwebendSpieler && !gegriffen && !gepackt) spielerPacken(schwebendSpieler);
   if (e.button === 2) werfen();
@@ -3286,6 +3298,11 @@ function mpVomGast(g, d) {
   if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
+  else if (d.t === 'tot') {   // Ein Gast ist kaputt: Sein Kopf fällt hin
+    neuerKopf(g.id, g.farbe, d.x, d.y + 0.3, d.z);
+    const t = `💀 ${g.name} ist kaputt (${d.von})! Bringt den Kopf 🤖 zur Abgabe 🚚`;
+    zeigeNachricht(t, 4, '#ff6b6b'); mpAnAlle({ t: 'info', text: t, farbe: '#ff6b6b' });
+  }
   else if (d.t === 'wurf') {
     const s = schatzMitId(d.id);
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
@@ -3317,7 +3334,7 @@ function mpHostSendet() {
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const hz = gepackt ? halteZiel() : null;
-  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
   for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
@@ -3334,7 +3351,9 @@ function mpHostSendet() {
     const alt = s.mpAlt;
     if (alle || !alt || a.some((v, i) => Math.abs(v - alt[i]) > 0.004)) { sc.push(a); s.mpAlt = a; }
   }
-  mpAnAlle({ t: 's', sp, mo, he, sc, ids: alle ? schaetze.map(x => x.id) : null });
+  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, ids: alle ? schaetze.map(x => x.id) : null,
+    koepfe: alle ? schaetze.filter(x => x.typ.id === 'kopf').map(x => [x.id, x.besitzer, x.typ.farbe]) : null,
+    neu: alle ? schaetze.filter(x => x.typ.id !== 'kopf').map(x => [x.id, x.typ.id]) : null });
 }
 
 // ----- Gast -----
@@ -3401,6 +3420,12 @@ function mpVomHost(d) {
     const l = Math.hypot(d.wx, d.wz) || 1;
     spielerKoerper.velocity.set(d.wx / l * d.sb, 3, d.wz / l * d.sb);
   } else if (d.t === 'wirf') geworfenWerden(d.v, d.von);
+  else if (d.t === 'leben') spielerWiederbeleben();
+  else if (d.t === 'info') { if (!(tot && d.text.startsWith('💀'))) zeigeNachricht(d.text, 4, d.farbe || '#7cf5c6'); }
+  else if (d.t === 'verkauft') {
+    sound.abgabe(); schwebeText(d.x, d.y + 0.6, d.z, d.text, '#7cf5c6');
+    const s = schatzMitId(d.id); if (s) mpSchatzWeg(s);
+  }
   else if (d.t === 'los') { loslassen(); if (d.abgerissen) zeigeNachricht('Der Strahl ist abgerissen!', 1.5, '#ffd166'); }
 }
 function mpSchnappschuss(d) {
@@ -3430,6 +3455,10 @@ function mpSchnappschuss(d) {
     if (!h.auftrag) h.modus = 'suchen';
   });
   // Schätze
+  if (typeof d.ko === 'number') { konto = d.ko; if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } } }
+  // Neue Schätze und Köpfe, die der Gastgeber hat, ich aber noch nicht
+  for (const [id, typId] of d.neu || []) if (!schatzMitId(id)) { const typ = SCHAETZE.find(t => t.id === typId); if (typ) neuerSchatz(typ, 0, -40, 0).id = id; }
+  for (const [id, besitzer, farbe] of d.koepfe || []) if (!schatzMitId(id)) neuerKopf(besitzer, farbe, 0, -40, 0, id);
   for (const a of d.sc) { const s = schatzMitId(a[0]); if (s) { s.ziel = a; s.wert = a[8]; } }
   if (d.ids) { const gibt = new Set(d.ids); for (const s of [...schaetze]) if (!gibt.has(s.id)) mpSchatzWeg(s); }
 }
@@ -3471,6 +3500,7 @@ function updateAlsGast(dt) {
   }
   if (gegriffen && gegriffen.kaputt) loslassen();
   welt.step(1 / 60, dt, 3);
+  totParken();
   pruefeBoden();
   if (spielerKoerper.position.y < -2) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
   updateSchussSpuren(dt);
@@ -3485,7 +3515,7 @@ function mpGastSendet() {
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const r = new THREE.Vector3(); kamera.getWorldDirection(r);
   const k = kamera.position, hz = gegriffen || gepackt ? halteZiel() : null;
-  mpSende({ t: 'p', x: r2(p.x), y: r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
+  mpSende({ t: 'p', x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
     hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)] });
 }
 
@@ -3499,13 +3529,14 @@ function mpUpdate(dt) {
 }
 function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
   for (const o of mp.andere.values()) {
-    if (o.y === undefined || o.y < -10) continue;
+    if (o.y === undefined || o.y < -10) { if (o.teile) { o.teile.g.visible = false; o.strahl.g.visible = false; } continue; }   // Kaputt oder noch nicht da
     if (!o.teile) {
       o.teile = baueHelferMesh({ name: o.name, farbe: o.farbe });
       o.strahl = neuerStrahl(o.farbe, 0.025);
       o.teile.g.traverse(k => { k.userData.spielerId = o.id; });   // Damit der Greifstrahl weiß, wer das ist
       Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
     }
+    o.teile.g.visible = true;
     const f = 0.25;
     const laeuft = Math.hypot(o.x - o.ax, o.z - o.az) > 0.03;
     o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
