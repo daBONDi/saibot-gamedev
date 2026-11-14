@@ -445,6 +445,28 @@ const MUSIK_LAUT = 0.5;      // Wie laut die Musik ist
 //   becken:    'achtel', 'sechzehntel', 'tick' (Uhr-Ticken) oder 'glocke' (Geisterglöckchen)
 //   melodie:   Hohe Noten, eine pro halben Takt (null = Pause)
 //   verzerrung: Wie dreckig die Gitarre klingt (0 = sauber, 100 = ganz kaputt)
+//   takt:      (Wenn nicht 16) So viele Sechzehntel hat ein Takt – 12 ist ein Walzer (3/4-Takt)
+//   stimme:    Eine ganze Melodie, eine Zahl pro Sechzehntel (statt "melodie") – siehe walzerNoten
+const NOTEN_NAMEN = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };   // Halbtöne ab C
+function notenZahl(name) {   // "F#5" -> Halbtöne über dem tiefen A (A3 = 220 Hz)
+  const m = name.match(/^([A-G])(#|b)?(\d)$/);
+  if (!m) return 0;
+  return 12 * Number(m[3]) + NOTEN_NAMEN[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) - (12 * 3 + 9);
+}
+function walzerNoten(text) {   // Eine Note pro Viertel: "D4" = spielen, "-" = weiterklingen, "." = Pause
+  const liste = [];
+  for (const w of text.split(/\s+/).filter(w => w && w !== '|')) liste.push(w === '-' ? null : w === '.' ? 'pause' : notenZahl(w), null, null, null);
+  return liste;
+}
+function walzerBegleitung(akkorde) {   // Pro Takt: tiefer Grundton (BUM), dann zweimal der Akkord (tschak, tschak)
+  const GRUND = { D: 0, E: 2, F: 3, G: 5, A: 7, B: 9, C: 10 };
+  const liste = [];
+  for (const a of akkorde.split(/\s+/).filter(Boolean)) {
+    const g = GRUND[a[0]] ?? 0;
+    liste.push(g, null, null, null, g + 12, null, null, null, g + 12, null, null, null);
+  }
+  return liste;
+}
 const MUSIK_LIEDER = {
   // 👻 Staubgeist: Spuk-Orgel mit Geisterchor und Glöckchen – unheimlich und schwebend
   geist: {
@@ -508,16 +530,19 @@ const MUSIK_LIEDER = {
     snare: [4, 12],
     melodie: [12, 13, null, 12, 18, 17, null, 13],
   },
-  // 👵 Böse Oma: Ein wütender Kaffeeklatsch-Walzer auf der Kirchenorgel – mit Gehstock-Klopfen!
+  // 👵 Böse Oma: Der Donauwalzer (Johann Strauss) – aber VERZERRT wie auf einer kaputten E-Gitarre! (3/4-Takt: 12 Sechzehntel pro Takt)
   oma: {
-    tempo: 175, grund: 73, verzerrung: 30, gitarre: 0.35, melodieKlang: 'orgel', becken: 'tick',
-    riff: [
-      0, null, 7, null,  7, null, 0, null,   8, null, 7, null,   0, null, 3, null,
-      0, null, 7, null,  7, null, 0, null,   8, 8, 7, 7,   3, 2, 0, null,
-    ],
-    kick: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    snare: [4, 12],
-    melodie: [12, 15, 14, 12, 11, null, 7, 8],
+    tempo: 200, grund: 73.42, verzerrung: 75, gitarre: 0.3, becken: 'tick', takt: 12, stimmeKlang: 'verzerrt',
+    // Begleitung: BUM-tschak-tschak (ein Akkord pro Takt)
+    riff: walzerBegleitung('D D D D D D D A  A A A A A A A D'),
+    kick: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    snare: [4, 8],
+    // Die Melodie: eine Note pro Viertel (3 pro Takt). - = Note weiterklingen lassen · . = Pause
+    stimme: walzerNoten(`
+      D4 F#4 A4 | A4 - - | A5 A5 . | F#5 F#5 D4 |
+      D4 F#4 A4 | A4 - - | A5 A5 . | G5 G5 C#4 |
+      C#4 E4 B4 | B4 - - | B5 B5 . | G5 G5 C#4 |
+      C#4 E4 B4 | B4 - - | B5 B5 . | F#5 F#5 D4 |`),
   },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
@@ -554,7 +579,7 @@ function verzerrer(art) {   // Jedes Lied hat seinen eigenen Verzerrer (einmal b
   return musik.dreck[art];
 }
 function musikNote(art, schritt, t) {
-  const L = MUSIK_LIEDER[art], ziel = musik.gain, s16 = 60 / L.tempo / 4, imTakt = schritt % 16;
+  const L = MUSIK_LIEDER[art], ziel = musik.gain, s16 = 60 / L.tempo / 4, takt = L.takt || 16, imTakt = schritt % takt;
   const i = schritt % L.riff.length, neuStart = t - audio.currentTime;
   try {
     // 🎸 Gitarre (bzw. Orgel beim Geist): Power-Akkord durch den Verzerrer
@@ -600,7 +625,32 @@ function musikNote(art, schritt, t) {
   if (L.becken === 'sechzehntel') rauschen(neuStart, 0.04, 0.12, 'highpass', 8000, ziel);
   if (L.becken === 'tick' && schritt % 4 === 0) ton(schritt % 8 === 0 ? 1600 : 1200, neuStart, 0.04, 'square', 0.12, null, ziel);   // Tick ... tack ...
   if (L.becken === 'glocke' && schritt % 4 === 2) ton(halbton(L.riff[i] ?? 0, 1760), neuStart, 0.6, 'sine', 0.06, null, ziel);   // Geisterglöckchen
-  if (schritt % 64 === 0) rauschen(neuStart, 1.6, 0.4, 'highpass', 4000, ziel, 2500);   // Großes Becken alle 4 Takte
+  if (schritt % (takt * 4) === 0) rauschen(neuStart, 1.6, 0.4, 'highpass', 4000, ziel, 2500);   // Großes Becken alle 4 Takte
+  // Eine ganze Melodie ("stimme"): verzerrte Lead-Gitarre
+  if (L.stimme) {
+    const k = schritt % L.stimme.length, n = L.stimme[k];
+    if (n === null || n === 'pause') return;
+    let weiter = 0;   // Wie lange klingt die Note? Bis zur nächsten Note oder Pause
+    while (weiter < 15 && L.stimme[(k + 1 + weiter) % L.stimme.length] === null) weiter++;
+    const dauer = (weiter + 1) * s16 * 0.92, f = halbton(n, 220);
+    try {
+      const fl = audio.createBiquadFilter(), g = audio.createGain();
+      fl.type = 'lowpass'; fl.frequency.setValueAtTime(4500, t); fl.frequency.exponentialRampToValueAtTime(1800, t + dauer);
+      g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.01);
+      g.gain.setValueAtTime(0.5, t + dauer * 0.8); g.gain.exponentialRampToValueAtTime(0.001, t + dauer);
+      fl.connect(g).connect(verzerrer(art));
+      const zittern = audio.createOscillator(), zg = audio.createGain();   // Vibrato (wie eine jaulende Gitarre)
+      zittern.frequency.value = 6; zg.gain.value = f * 0.012; zittern.connect(zg);
+      for (const [mal, verstimmt, typ] of [[1, -7, 'sawtooth'], [1, 7, 'sawtooth'], [2, 0, 'square']]) {
+        const o = audio.createOscillator();
+        o.type = typ; o.frequency.value = f * mal; o.detune.value = verstimmt;
+        zg.connect(o.frequency);
+        o.connect(fl); o.start(t); o.stop(t + dauer + 0.02);
+      }
+      zittern.start(t); zittern.stop(t + dauer + 0.02);
+    } catch (e) { /* egal */ }
+    return;
+  }
   // Melodie
   if (imTakt % 8 === 0) {
     const m = L.melodie[Math.floor(schritt / 8) % L.melodie.length];
