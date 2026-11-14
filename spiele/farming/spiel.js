@@ -59,10 +59,17 @@ const SAEGE_ZEIT = 8;            // So viele Sekunden musst du sägen, bis ein B
 const SCHNITT_HOEHE = 0.9;       // In dieser Höhe (Meter) sägst du den Stamm durch
 const HOLZ_PRO_BAUM = 3;         // So viele Holzstämme gibt ein Baum
 const HOLZ_TRAGEN_MAX = 4;       // So viele Stämme kannst du auf einmal tragen
-const HOLZ_PREIS = 250;          // So viel bringt ein Stamm beim Sägewerk
+const HOLZ_PREIS = 1000;         // So viel bringt ein Stamm beim Sägewerk (gesägtes Holz ist wertvoll!)
+const HARVESTER_ZEIT = 2;        // So viele Sekunden braucht der Harvester für einen Baum
 const SPRIT_PREIS = 0.1;         // Sprit für die Motorsäge kostet so viel pro Prozent (voll = 10 €)
 const NACHWACHS_ZEIT = 180;      // Nach so vielen Sekunden wächst aus dem Baumstumpf ein neuer Baum
 const BAUM_WACHS_DAUER = 25;     // ... und so lange braucht er, bis er groß ist
+// Das Dorf "Sonnenfeld": [x, z, Tür nach Norden? (0 = Süden, 1 = Norden), Wandfarbe, Fachwerk?, Schild]
+const DORF_NAME = 'Sonnenfeld';
+const DORF_HAEUSER = [
+  [-44, 62, 0, '#f3e9d2', 1], [-32, 62, 0, '#f6d7b0', 0, '🥨 Bäckerei'], [-20, 62, 0, '#e8eef2', 1], [12, 62, 0, '#f2c9b8', 0], [24, 62, 0, '#fff4c4', 1], [36, 62, 0, '#f3e9d2', 0],
+  [-44, 84, 1, '#f6d7b0', 0], [-32, 84, 1, '#f3e9d2', 1, '🍺 Gasthaus'], [-20, 84, 1, '#fff4c4', 0], [8, 84, 1, '#e8eef2', 1], [20, 84, 1, '#f2c9b8', 0, '🛒 Dorfladen'], [32, 84, 1, '#f3e9d2', 1],
+];
 
 // ===== Grundgerüst: Szene, Kamera, Licht =====
 const HORIZONT = 0xcfe3f0, ZENIT = 0x3f7fc8;
@@ -357,9 +364,11 @@ for (let i = 0; i < 90; i++) {   // Ein Wald-Ring rundherum
   const x = Math.cos(w) * r, z = Math.sin(w) * r;
   if (FELDER.some(F => Math.abs(x - F.x) < F.b / 2 + 4 && Math.abs(z - F.z) < F.t / 2 + 4)) continue;   // Keine Bäume auf den Feldern!
   if (Math.hypot(x - WALD.x, z - WALD.z) < WALD.r + 6) continue;   // Da ist jetzt der Fichtenwald
+  if (x > -60 && x < 50 && z > 50 && z < 115) continue;             // Da ist das Dorf
   baumOrte.push([x, z]);
 }
 for (const [x, z] of [[8, 30], [12, 38], [-10, 18], [40, 40], [-15, 5], [75, 0], [80, 35], [-80, 0]]) baumOrte.push([x, z]);
+for (const [x, z, r] of DORF_HAEUSER) baumOrte.push([x + 4.5, z + (r ? 9 : -9)]);   // Ein Baum im Garten hinter jedem Haus
 const stammGeo = new THREE.CylinderGeometry(0.35, 0.5, 3); stammGeo.translate(0, 1.5, 0);
 const kroneGeo = mergeGeometries([   // Eine Krone aus 4 Kugeln sieht viel echter aus als eine einzige
   new THREE.IcosahedronGeometry(2.0, 1).translate(0, 4.2, 0),
@@ -464,6 +473,141 @@ const baeume = [];   // Alle Fichten: { nr, x, z, s, g, kipp, stumpf, h, zustand
   platz.rotation.x = -Math.PI / 2; platz.position.set(S.platzX, 0.08, S.platzZ); scene.add(platz);
 }
 
+// ===== Das Dorf (Häuser, Kirche, Brunnen, Laternen und Dorfbewohner) =====
+// Wege: vom Hof nach Süden ins Dorf, die Dorfstraße und der Dorfplatz  [x, z, Breite, Tiefe]
+const DORFWEGE = [[0, 45, 5, 46], [-6, 72, 92, 6], [-8, 80, 14, 10]];
+for (const [x, z, b, t] of DORFWEGE) weg(x, z, b, t);
+const aufDorfweg = (x, z, rand = 0) => DORFWEGE.some(([wx, wz, b, t]) => Math.abs(x - wx) < b / 2 + rand && Math.abs(z - wz) < t / 2 + rand);
+const fachwerkTex = (() => {   // Weiße Wand mit dunklen Holzbalken
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'), B = 14;
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#4a2e1a';
+  for (const [x, y, w, h] of [[0, 0, 256, B], [0, 256 - B, 256, B], [0, 0, B, 256], [256 - B, 0, B, 256], [0, 121, 256, B], [80, 0, B, 256], [162, 0, B, 256]]) g.fillRect(x, y, w, h);
+  g.strokeStyle = '#4a2e1a'; g.lineWidth = B;
+  for (const [x1, y1, x2, y2] of [[B, 250, 84, 130], [250, 250, 170, 130]]) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const fensterMat = new THREE.MeshStandardMaterial({ roughness: 0.4, map: (() => {   // Fenster mit Rahmen, Kreuz und Vorhängen
+  const c = document.createElement('canvas'); c.width = 64; c.height = 80;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 64, 80);
+  const v = g.createLinearGradient(0, 0, 64, 80); v.addColorStop(0, '#9cc8e8'); v.addColorStop(1, '#2d4f6e');
+  g.fillStyle = v; g.fillRect(6, 6, 52, 68);
+  g.fillStyle = '#f2e3c6'; g.fillRect(6, 6, 10, 68); g.fillRect(48, 6, 10, 68);   // Vorhänge
+  g.fillStyle = '#ffffff'; g.fillRect(29, 6, 6, 68); g.fillRect(6, 34, 52, 5);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})() });
+const dachMats = [mat(0x9c3b28), mat(0x6e3a2a), mat(0x4a4a52), mat(0xb5532e)];
+function baueHaus([x, z, nord, farbe, fachwerk, name], nr) {
+  const W = 7, D = 6, H = 4.6, DH = 3.2;
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = nord ? Math.PI : 0; scene.add(g);   // Vorne (+z) ist die Tür
+  const wandMat = new THREE.MeshStandardMaterial({ color: farbe, map: fachwerk ? fachwerkTex : null, roughness: 0.95 });
+  kasten(g, 0, H / 2, 0, W, H, D, wandMat);
+  kasten(g, 0, 0.2, 0, W + 0.2, 0.4, D + 0.2, 0x8a8a8a);                       // Sockel aus Stein
+  const form = new THREE.Shape([new THREE.Vector2(-W / 2 - 0.5, 0), new THREE.Vector2(W / 2 + 0.5, 0), new THREE.Vector2(0, DH)]);
+  const dachGeo = new THREE.ExtrudeGeometry(form, { depth: D + 0.8, bevelEnabled: false }); dachGeo.translate(0, 0, -(D + 0.8) / 2);
+  const dach = new THREE.Mesh(dachGeo, [mat(farbe), dachMats[nr % dachMats.length]]);   // Giebel in Wandfarbe, Dach in Ziegelfarbe
+  dach.position.y = H; dach.castShadow = dach.receiveShadow = true; g.add(dach);
+  kasten(g, W / 4, H + DH * 0.6, -D / 4, 0.6, 2.2, 0.6, 0x8b4a3a);              // Schornstein
+  kasten(g, 0, 1.15, D / 2 + 0.04, 1.2, 2.3, 0.1, 0x6b3a1e);                   // Haustür
+  kasten(g, 0.4, 1.15, D / 2 + 0.1, 0.08, 0.08, 0.06, 0xd4af37, false);         // Türklinke
+  kasten(g, 0, 0.1, D / 2 + 0.5, 1.8, 0.2, 0.8, 0x9a9a9a);                     // Treppenstufe
+  // Alle Fenster zu einem Stück zusammengeklebt (schneller!)
+  const fe = [];
+  const fenster = (fx, fy, fz, ry) => fe.push(new THREE.PlaneGeometry(1.0, 1.25).rotateY(ry).translate(fx, fy, fz));
+  for (const fx of [-2.2, 2.2]) for (const fy of [1.8, 3.6]) fenster(fx, fy, D / 2 + 0.02, 0);
+  fenster(0, H + 1.0, D / 2 + 0.42, 0);                                         // Giebelfenster
+  for (const s of [-1, 1]) for (const fz of [-1.5, 1.5]) for (const fy of [1.8, 3.6]) fenster(s * (W / 2 + 0.02), fy, fz, s * Math.PI / 2);
+  for (const fx of [-2, 2]) fenster(fx, 1.8, -D / 2 - 0.02, Math.PI);
+  const fm = new THREE.Mesh(mergeGeometries(fe), fensterMat); g.add(fm);
+  // Blumenkasten unter den unteren Fenstern vorne
+  for (const fx of [-2.2, 2.2]) {
+    kasten(g, fx, 1.1, D / 2 + 0.15, 1.1, 0.2, 0.25, 0x7a4a2a, false);
+    kasten(g, fx, 1.27, D / 2 + 0.15, 1.0, 0.15, 0.2, nr % 2 ? 0xe64a5a : 0xffc93c, false);
+  }
+  hindernisse.push({ x, z, hb: W / 2 + 0.2, ht: D / 2 + 0.2 });
+  if (name) { const sch = schild(name, '#ffd166', 6); sch.position.set(x, H + DH + 1.3, z); scene.add(sch); }
+}
+DORF_HAEUSER.forEach(baueHaus);
+// Die Kirche mit Turm, Uhr und Kreuz
+const KIRCHE = { x: -8, z: 88 };
+{
+  const K = KIRCHE, weiss = mat(0xf4f1ea);
+  kasten(scene, K.x, 3.5, K.z + 8, 8, 7, 12, weiss);                           // Kirchenschiff
+  const form = new THREE.Shape([new THREE.Vector2(-4.6, 0), new THREE.Vector2(4.6, 0), new THREE.Vector2(0, 4.5)]);
+  const dachGeo = new THREE.ExtrudeGeometry(form, { depth: 12.6, bevelEnabled: false }); dachGeo.translate(0, 0, -6.3);
+  const dach = new THREE.Mesh(dachGeo, [weiss, mat(0x5a3b33)]); dach.position.set(K.x, 7, K.z + 8); dach.castShadow = true; scene.add(dach);
+  kasten(scene, K.x, 8, K.z, 4.2, 16, 4.2, weiss);                             // Turm
+  const spitze = new THREE.Mesh(new THREE.ConeGeometry(3.1, 8, 4), mat(0x4f8f78, { metalness: 0.3, roughness: 0.6 }));   // Grünes Kupferdach
+  spitze.rotation.y = Math.PI / 4; spitze.position.set(K.x, 20, K.z); spitze.castShadow = true; scene.add(spitze);
+  const gold = mat(0xd4af37, { metalness: 0.7, roughness: 0.3 });
+  kasten(scene, K.x, 24.8, K.z, 0.15, 1.6, 0.15, gold); kasten(scene, K.x, 25.1, K.z, 0.9, 0.15, 0.15, gold);   // Kreuz
+  const uhr = new THREE.Mesh(new THREE.CircleGeometry(1.1, 24), new THREE.MeshStandardMaterial({ color: 0xffffff })); uhr.rotation.y = Math.PI; uhr.position.set(K.x, 12.5, K.z - 2.13); scene.add(uhr);
+  kasten(scene, K.x, 12.8, K.z - 2.16, 0.1, 0.65, 0.03, 0x111111, false); kasten(scene, K.x + 0.25, 12.5, K.z - 2.16, 0.5, 0.08, 0.03, 0x111111, false);   // Zeiger
+  kasten(scene, K.x, 1.5, K.z - 2.14, 1.6, 3.0, 0.1, 0x5a3218);                // Kirchentür
+  const fe = [];
+  for (const s of [-1, 1]) for (const fz of [4, 8, 12]) fe.push(new THREE.PlaneGeometry(1.0, 2.6).rotateY(s * Math.PI / 2).translate(K.x + s * 4.02, 4, K.z + fz));
+  scene.add(new THREE.Mesh(mergeGeometries(fe), fensterMat));
+  hindernisse.push({ x: K.x, z: K.z + 8, hb: 4.1, ht: 6.1 }, { x: K.x, z: K.z, hb: 2.2, ht: 2.2 });
+}
+// Brunnen auf dem Dorfplatz, Bänke, Laternen und das Ortsschild
+{
+  const stein = mat(0xa8a39a);
+  const rand = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.8, 0.7, 24), stein); rand.position.set(-8, 0.35, 80); rand.castShadow = true; scene.add(rand);
+  const wasser = new THREE.Mesh(new THREE.CircleGeometry(1.5, 24), new THREE.MeshStandardMaterial({ color: 0x3f8fc8, roughness: 0.1, metalness: 0.2 }));
+  wasser.rotation.x = -Math.PI / 2; wasser.position.set(-8, 0.72, 80); scene.add(wasser);
+  const saeule = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1.6, 10), stein); saeule.position.set(-8, 1.3, 80); scene.add(saeule);
+  const schale = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.4, 0.3, 16), stein); schale.position.set(-8, 2.1, 80); scene.add(schale);
+  hindernisse.push({ x: -8, z: 80, r: 1.9 });
+  for (const s of [-1, 1]) {   // Bänke
+    kasten(scene, -8 + s * 4.5, 0.45, 80, 0.5, 0.1, 1.8, 0x8a5a32);
+    kasten(scene, -8 + s * 4.75, 0.75, 80, 0.08, 0.5, 1.8, 0x8a5a32);
+    for (const z of [-0.7, 0.7]) kasten(scene, -8 + s * 4.5, 0.2, 80 + z, 0.4, 0.4, 0.08, 0x333333, false);
+  }
+  const lampenMat = new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffd88a, emissiveIntensity: 0.6 });
+  for (const x of [-46, -34, -22, -12, 8, 20, 32]) {
+    kasten(scene, x, 2, 68.4, 0.15, 4, 0.15, 0x2a2a2a);
+    kasten(scene, x, 4.1, 68.4, 0.45, 0.4, 0.45, lampenMat, false);
+    hindernisse.push({ x, z: 68.4, r: 0.25 });
+  }
+  kasten(scene, 3.6, 1.2, 55, 0.1, 2.4, 0.1, 0x777777);   // Ortsschild
+  kasten(scene, 3.6, 2.3, 55, 0.08, 0.7, 1.8, 0xffd23c);
+  const ort = schild(`🏡 ${DORF_NAME}`, '#ffd166', 8); ort.position.set(3.6, 4.2, 55); scene.add(ort);
+}
+// Dorfbewohner, die auf der Straße spazieren gehen
+const dorfLeute = [];
+{
+  const farben = ['#2457a6', '#7b3fa6', '#d97a1e', '#2f8f3a', '#c23b6a'];
+  const wege = [[-48, 69.4, 36, 69.4], [36, 74.6, -48, 74.6], [-14, 76.5, -2, 76.5], [-30, 74.6, 22, 74.6], [-46, 69.4, -6, 69.4]];
+  wege.forEach((w, k) => {
+    const f = baueFarmer(farben[k]);
+    scene.add(f.g);
+    dorfLeute.push({ f, w, s: (k * 0.37) % 1, v: 1.1 + k * 0.15, dir: k % 2 ? -1 : 1 });
+  });
+}
+let glockenTakt = 20;
+function dorfUpdate(dt) {
+  for (const d of dorfLeute) {
+    const [x1, z1, x2, z2] = d.w, L = Math.hypot(x2 - x1, z2 - z1);
+    d.s += d.dir * d.v * dt / L;
+    if (d.s > 1) { d.s = 1; d.dir = -1; }
+    if (d.s < 0) { d.s = 0; d.dir = 1; }
+    d.f.g.position.set(x1 + (x2 - x1) * d.s, 0, z1 + (z2 - z1) * d.s);
+    d.f.g.rotation.y = Math.atan2(-(x2 - x1) * d.dir, -(z2 - z1) * d.dir);   // In Laufrichtung schauen
+    farmerPose(d.f.t, false, true, dt * 0.6);
+  }
+  // Jede Minute läuten die Kirchenglocken (wenn du in der Nähe bist): Bim – Bam – Bim – Bam
+  glockenTakt -= dt;
+  if (glockenTakt <= 0) {
+    glockenTakt = 60;
+    const laut = lautstaerkeBei(KIRCHE.x, KIRCHE.z);
+    if (laut > 0.15) for (let k = 0; k < 4; k++) { const f = k % 2 ? 392 : 523; ton(f, k * 1.1, 2.5, 'triangle', 0.09 * laut); ton(f * 2.76, k * 1.1, 1.2, 'sine', 0.03 * laut); }
+  }
+}
+
 // ===== Die Felder =====
 // Jedes Feld besteht aus vielen kleinen Stücken (Zellen). Jede Zelle hat einen Zustand:
 //   'wiese' -> pflügen -> 'gepfluegt' -> säen -> 'gesaet' (wächst, w geht von 0 bis 1) -> ernten -> 'stoppeln'
@@ -519,7 +663,7 @@ const felder = FELDER.map((F, nr) => {
   for (let versuch = 0; versuch < anzahl * 3 && n < anzahl; versuch++) {
     const w = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 110;
     const x = Math.cos(w) * r, z = Math.sin(w) * r;
-    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62) || aufWaldweg(x, z, 0.5)) continue;
+    if (feldBei(x, z, 1) || kollidiert(x, z, 1) || inScheune(x, z, 1.5) || Math.abs(z + 8) < 3 || (Math.abs(x) < 3 && z > -8 && z < 22) || (Math.abs(z - 12) < 3 && x > 0 && x < 62) || aufWaldweg(x, z, 0.5) || aufDorfweg(x, z, 0.5)) continue;
     d.position.set(x, 0, z); d.rotation.y = Math.random() * 6; d.scale.setScalar(0.7 + Math.random() * 0.9); d.updateMatrix();
     gras.setMatrixAt(n, d.matrix);
     gras.setColorAt(n, c.setHSL(0.22 + Math.random() * 0.08, 0.5, 0.25 + Math.random() * 0.15));
@@ -619,6 +763,11 @@ const FAHRZEUGE = {
     name: 'Mähdrescher', emoji: '🌾', preis: 180000, farbe: 0xe0b000, art: 'drescher', groesse: 1, tempo: 6.9, arbeit: 1.8, breite: 1.5,
     dieselMax: 500, tankMax: 20000, saatMax: 0, geraete: ['ernte'], motorTon: 0.85,
     faehigkeit: 'Nur Ernten – aber 6,7 m breit und mit Riesen-Korntank!',
+  },
+  harvester: {
+    name: 'Harvester', emoji: '🦾', preis: 150000, farbe: 0xd9531e, art: 'harvester', groesse: 1, tempo: 6.9, arbeit: 1, breite: 1,
+    dieselMax: 400, tankMax: 0, saatMax: 0, geraete: [], motorTon: 0.9, allrad: true,
+    faehigkeit: 'Fällt mit dem Kran eine Fichte in 2 Sekunden (X)! Das Holz holst du mit dem Holzanhänger',
   },
 };
 let aktiv = null;       // In welchem Fahrzeug du gerade sitzt (null = zu Fuß)
