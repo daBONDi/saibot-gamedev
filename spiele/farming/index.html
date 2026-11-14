@@ -87,7 +87,7 @@ button:disabled { opacity: 0.5; cursor: default; }
     letter-spacing: 0.15em;
     text-align: center;
 }
-#haendler {
+#haendler, #hofpanel {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -98,7 +98,8 @@ button:disabled { opacity: 0.5; cursor: default; }
     display: none;
     z-index: 5;
 }
-#haendler h3 { margin: 0 0 8px; }
+#haendler h3, #hofpanel h3 { margin: 0 0 8px; }
+#hofpanel button { display: block; margin: 4px 0; }
 .angebot { background: #ffffff14; border-radius: 8px; padding: 8px; margin-bottom: 8px; line-height: 1.5; }
 #fadenkreuz {
     position: absolute;
@@ -133,6 +134,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 <div class="balken"><div id="tank"></div></div>
 📊 Kornpreis: <span id="preis"></span><br>
 🪵 Holz: <span id="holz" class="klein"></span><br>
+🧺 Vorrat: <span id="vorrat" class="klein"></span><br>
 <button id="btn-bau">🏗️ Baumodus</button>
 <button id="btn-haendler">🛒 Händler</button>
 <button id="btn-neu">🔄 Neues Spiel</button>
@@ -140,6 +142,10 @@ button:disabled { opacity: 0.5; cursor: default; }
   <button id="bau-schuppen">🏠 Schuppen 10.000 €</button>
   <button id="bau-silo">🛢️ Silo 25.000 €</button>
   <button id="bau-baum">🌳 Baum 500 €</button>
+  <button id="bau-gewaechshaus">🪴 Gewächshaus 15.000 €</button>
+  <button id="bau-kuhweide">🐄 Kuhweide 8.000 €</button>
+  <button id="bau-schafweide">🐑 Schafweide 6.000 €</button>
+  <button id="bau-huehnerhof">🐔 Hühnerhof 4.000 €</button>
 </div>
 </div>
 
@@ -154,13 +160,20 @@ Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken · N = Händler<br>
 🌲 Wald: Q = Motorsäge · Maus halten / X = Sägen · Stämme aufsammeln: drüberlaufen<br>
 Beim Sägewerk: V = Holz verkaufen · Zu Fuß beim Landhandel/Tankstelle: T = Säge tanken<br>
 🦾 Harvester: X / Maus halten = Baum fällen · 🪵 Holzanhänger: L = Kran lädt Holz auf (zu Fuß: Holz drauflegen) · V beim Sägewerk<br>
-B = Baumodus · R = Gebäude drehen · M = Ton an/aus
+🪴🐄 Beim Gewächshaus/Gehege: P = Menü · Mit Korn beim Gehege: L = Futter · Beim Dorfladen 🛒: V = Gemüse, Milch, Eier, Wolle verkaufen<br>
+B = Baumodus (1–7 = Gebäude) · R = Gebäude drehen · M = Ton an/aus
 </div>
 
 <div id="haendler" class="box">
 <h3>🛒 Fahrzeug-Händler</h3>
 <div id="haendlerListe"></div>
 <button id="haendler-zu">✖ Schließen</button>
+</div>
+
+<div id="hofpanel" class="box">
+<h3 id="hofpanelTitel"></h3>
+<div id="hofpanelInhalt"></div>
+<button id="hofpanel-zu">✖ Schließen (P)</button>
 </div>
 
 <div id="fadenkreuz"></div>
@@ -186,6 +199,6 @@ B = Baumodus · R = Gebäude drehen · M = Ton an/aus
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=15"></script>
+<script type="module" src="spiel.js?v=16"></script>
 </body>
 </html>

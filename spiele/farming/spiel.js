@@ -1433,6 +1433,53 @@ function baueGebaeudeMesh(art) {
     const kuppel = new THREE.Mesh(new THREE.ConeGeometry(2.7, 2, 24), mat(0x8a8f96));
     kuppel.position.y = 11; kuppel.castShadow = true; g.add(kuppel);
     kasten(g, 0, 5.5, 2.55, 0.5, 11, 0.08, 0x555555, false);   // Leiter
+  } else if (art === 'gewaechshaus') {   // Ein Glashaus mit weißem Rahmen und zwei Beeten drin
+    const W = 7, L = 10, H = 2.6;
+    const glas = new THREE.MeshStandardMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.22, roughness: 0.05, side: THREE.DoubleSide, depthWrite: false });
+    const rahmen = mat(0xf2f2f2, { metalness: 0.3, roughness: 0.4 });
+    kasten(g, 0, 0.15, 0, W, 0.3, L, 0x9a9a9a);                                  // Sockel
+    kasten(g, 0, 0.3 + H / 2, 0, W, H, L, glas, false);                         // Glaswände
+    const form = new THREE.Shape([new THREE.Vector2(-W / 2, 0), new THREE.Vector2(W / 2, 0), new THREE.Vector2(0, 1.7)]);
+    const dachGeo = new THREE.ExtrudeGeometry(form, { depth: L, bevelEnabled: false }); dachGeo.translate(0, 0, -L / 2);
+    const dach = new THREE.Mesh(dachGeo, glas); dach.position.y = 0.3 + H; g.add(dach);
+    for (const x of [-W / 2, W / 2]) for (let k = 0; k <= 4; k++) kasten(g, x, 0.3 + H / 2, -L / 2 + k * L / 4, 0.08, H, 0.08, rahmen);   // Pfosten
+    kasten(g, 0, 0.3 + H + 1.7, 0, 0.1, 0.1, L, rahmen);                          // First
+    for (const x of [-W / 2, W / 2]) kasten(g, x, 0.3 + H, 0, 0.1, 0.1, L, rahmen);
+    for (let k = 0; k <= 4; k++) for (const sx of [-1, 1]) {                      // Dachsparren
+      const sp = kasten(g, sx * W / 4, 0.3 + H + 0.85, -L / 2 + k * L / 4, W / 2 + 0.3, 0.07, 0.07, rahmen, false);
+      sp.rotation.z = -sx * Math.atan2(1.7, W / 2);
+    }
+    kasten(g, 0, 1.3, L / 2 + 0.02, 1.4, 2.0, 0.06, 0x4f7f9f, false);            // Tür vorne
+    for (const x of [-1.7, 1.7]) {                                               // Beete mit Erde
+      kasten(g, x, 0.35, 0, 1.6, 0.3, L - 1, 0x7a5230);
+      kasten(g, x, 0.42, 0, 1.4, 0.06, L - 1.2, 0x4f331c, false);
+    }
+  } else if (GEBAEUDE_ARTEN[art].tier) {   // Ein rundes Gehege mit Holzzaun, Unterstand und Futtertrog
+    const R = GEBAEUDE_ARTEN[art].r - 0.3, huhn = art === 'huehnerhof';
+    const boden = new THREE.Mesh(new THREE.CircleGeometry(R, 32), mat(huhn ? 0x9b7b4a : 0x5f8f3a));
+    boden.rotation.x = -Math.PI / 2; boden.position.y = 0.03; boden.receiveShadow = true; g.add(boden);
+    const teile = [], n = Math.max(14, Math.round(Math.PI * 2 * R / 2.2)), schritt = Math.PI * 2 / n;
+    for (let k = 0; k < n; k++) {
+      const a = k * schritt, m = a + schritt / 2, laenge = 2 * R * Math.sin(schritt / 2);
+      teile.push(new THREE.BoxGeometry(0.16, 1.4, 0.16).translate(Math.cos(a) * R, 0.7, Math.sin(a) * R));                 // Pfosten
+      for (const y of huhn ? [0.25, 0.55, 0.85, 1.15] : [0.55, 1.1]) {                                                       // Latten
+        teile.push(new THREE.BoxGeometry(laenge, 0.1, 0.05).rotateY(-m - Math.PI / 2).translate(Math.cos(m) * R * Math.cos(schritt / 2), y, Math.sin(m) * R * Math.cos(schritt / 2)));
+      }
+    }
+    const zaun = new THREE.Mesh(mergeGeometries(teile), mat(0x8a5a32)); zaun.castShadow = true; g.add(zaun);
+    if (huhn) {   // Hühnerstall: kleines rotes Häuschen mit Rampe
+      kasten(g, 0, 0.9, -R + 1.6, 2.4, 1.2, 1.8, 0xc23b22);
+      const d = kasten(g, 0, 1.75, -R + 1.6, 2.7, 0.12, 2.1, 0x5b2a22); d.rotation.x = 0.2;
+      const rampe = kasten(g, 0, 0.35, -R + 3.0, 0.5, 0.05, 1.2, 0x8a5a32, false); rampe.rotation.x = 0.55;
+    } else {      // Unterstand mit Dach
+      kasten(g, 0, 1.25, -R + 0.9, 4.6, 2.5, 0.15, new THREE.MeshStandardMaterial({ map: bretterTextur('#8a5a32'), roughness: 0.95 }));
+      kasten(g, 0, 2.55, -R + 2.0, 4.9, 0.15, 2.6, 0x6b3a2a);
+      for (const x of [-2.2, 2.2]) kasten(g, x, 1.25, -R + 3.1, 0.15, 2.5, 0.15, 0x6b4a2b);
+    }
+    // Futtertrog mit Futter drin (das Futter wird weniger, wenn die Tiere fressen)
+    kasten(g, R * 0.55, 0.3, R * 0.35, 2.2, 0.5, 0.7, 0x7a5230);
+    const futter = kasten(g, R * 0.55, 0.52, R * 0.35, 2.0, 0.06, 0.5, 0xe3c46a, false);
+    g.userData.trog = futter;
   } else {
     const stamm = new THREE.Mesh(stammGeo, mat(0x694020)); stamm.castShadow = true; g.add(stamm);
     const krone = new THREE.Mesh(kroneGeo, mat(0x1f7a30, { flatShading: true })); krone.castShadow = true; g.add(krone);
@@ -1448,13 +1495,327 @@ function neuesSilo(x, z, inhalt = 0) {
   return s;
 }
 function siloSchild(s) { s.schild.userData.malen(`🛢️ ${kg(s.inhalt)}`, s.inhalt >= SILO_MAX ? '#ff9a6b' : '#ffd166'); }
-function gebaeudeHinzu(art, x, z, rot, inhalt = 0) {
+function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   const mesh = baueGebaeudeMesh(art);
   mesh.position.set(x, 0, z); mesh.rotation.y = rot;
   scene.add(mesh);
   const h = { x, z, r: GEBAEUDE_ARTEN[art].r };
   hindernisse.push(h);
-  gebaute.push({ art, x, z, rot, mesh, h, silo: art === 'silo' ? neuesSilo(x, z, inhalt) : null });
+  const b = { art, x, z, rot, mesh, h, silo: art === 'silo' ? neuesSilo(x, z, inhalt) : null, extra: [] };
+  if (art === 'gewaechshaus') ghEinrichten(b);
+  if (GEBAEUDE_ARTEN[art].tier) gehegeEinrichten(b);
+  if (daten) gebDatenSetzen(b, daten);
+  gebaute.push(b);
+}
+
+// ===== Gewächshaus: Gemüse anbauen =====
+// 16 Pflanzen (2 Beete × 8), alle Blätter in einem InstancedMesh und alle Früchte in einem zweiten (schnell!)
+const GH_PLAETZE = [];
+for (const x of [-1.7, 1.7]) for (let k = 0; k < 8; k++) GH_PLAETZE.push([x + (k % 2 ? 0.25 : -0.25), -3.85 + k * 1.1]);
+const ghBlattGeo = new THREE.IcosahedronGeometry(0.5, 1), ghFruchtGeo = new THREE.SphereGeometry(1, 10, 8);
+function ghEinrichten(b) {
+  b.gh = { art: null, w: 0, takt: 0 };
+  b.gh.blaetter = new THREE.InstancedMesh(ghBlattGeo, windMaterial(mat(0xffffff, { flatShading: true }), 0.4), GH_PLAETZE.length);
+  b.gh.fruechte = new THREE.InstancedMesh(ghFruchtGeo, mat(0xffffff, { roughness: 0.5 }), GH_PLAETZE.length * 6);
+  for (const m of [b.gh.blaetter, b.gh.fruechte]) { m.castShadow = true; m.frustumCulled = false; b.mesh.add(m); }
+  b.schild = schild('', '#fff', 7); b.schild.position.set(b.x, 6.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  ghMalen(b);
+}
+function ghMalen(b) {   // Die Pflanzen so groß zeichnen, wie sie gerade sind
+  const gh = b.gh, G = GEMUESE[gh.art], d = new THREE.Object3D(), c = new THREE.Color(), unreif = new THREE.Color(0x7ab33a);
+  if (!G) {
+    gh.blaetter.count = 0; gh.fruechte.count = 0;
+    b.schild.userData.malen('🪴 Leer – P drücken', '#b9f5a0');
+    return;
+  }
+  const w = gh.w, h = G.hoehe;
+  let nf = 0;
+  GH_PLAETZE.forEach(([px, pz], k) => {
+    const gr = 0.25 + 0.75 * w;
+    d.position.set(px, 0.45 + h * gr * 0.45, pz); d.rotation.set(0, k * 1.7, 0); d.scale.set(0.8 * gr, h * gr, 0.8 * gr); d.updateMatrix();
+    gh.blaetter.setMatrixAt(k, d.matrix); gh.blaetter.setColorAt(k, c.set(G.blatt));
+    if (w > 0.55) {   // Früchte wachsen erst in der zweiten Hälfte (erst grün, dann bunt)
+      const reif = (w - 0.55) / 0.45;
+      for (let i = 0; i < G.n; i++) {
+        const a = i / G.n * Math.PI * 2 + k, rr = G.n > 1 ? 0.28 : 0;
+        d.position.set(px + Math.cos(a) * rr, 0.45 + G.fy * (G.n > 1 ? 0.6 + 0.8 * i / G.n : 1), pz + Math.sin(a) * rr);
+        d.rotation.set(0, 0, 0);
+        const fg = G.fg * (0.3 + 0.7 * reif);
+        d.scale.set(fg, gh.art === 'gurke' || gh.art === 'karotte' ? fg * 2.2 : fg, fg); d.updateMatrix();   // Gurken und Karotten sind länglich
+        gh.fruechte.setMatrixAt(nf, d.matrix); gh.fruechte.setColorAt(nf, c.copy(unreif).lerp(new THREE.Color(G.frucht), reif));
+        nf++;
+      }
+    }
+  });
+  gh.blaetter.count = GH_PLAETZE.length; gh.fruechte.count = nf;
+  for (const m of [gh.blaetter, gh.fruechte]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  b.schild.userData.malen(w >= 1 ? `${G.emoji} ${G.name} reif! P = ernten` : `${G.emoji} ${G.name}: ${Math.floor(w * 100)} %`, w >= 1 ? '#7cf5a0' : '#ffd166');
+}
+
+// ===== Nutztiere im Gehege =====
+const fleckTex = (() => {   // Weißes Fell mit schwarzen Flecken (für Kühe)
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#1e1e1e';
+  for (const [x, y, r] of [[14, 18, 10], [44, 12, 7], [38, 44, 12], [10, 50, 6], [56, 34, 5]]) { g.beginPath(); g.ellipse(x, y, r, r * 0.8, x, 0, Math.PI * 2); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+function baueTier(art) {
+  const g = new THREE.Group(), beine = [];
+  const teil = (geo, m, x, y, z) => { const t = new THREE.Mesh(geo, m); t.position.set(x, y, z); t.castShadow = true; g.add(t); return t; };
+  const bein = (x, z, h, dicke, m) => {   // Beine drehen sich an der Hüfte (zum Laufen)
+    const p = new THREE.Group(); p.position.set(x, h, z); g.add(p);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(dicke, h, dicke), m); t.position.y = -h / 2; t.castShadow = true; p.add(t);
+    beine.push(p);
+  };
+  const B = (x, y, z) => new THREE.BoxGeometry(x, y, z);
+  if (art === 'kuh') {
+    const fell = new THREE.MeshStandardMaterial({ map: fleckTex, roughness: 0.9 }), rosa = mat(0xf0a8a8), schwarz = mat(0x1e1e1e), horn = mat(0xe8e0c8);
+    teil(B(0.85, 0.8, 1.7), fell, 0, 1.05, 0);                 // Körper
+    teil(B(0.45, 0.5, 0.55), fell, 0, 1.3, -1.05);             // Kopf
+    teil(B(0.4, 0.25, 0.15), rosa, 0, 1.13, -1.36);            // Maul
+    for (const sx of [-1, 1]) {
+      teil(B(0.06, 0.18, 0.06), horn, sx * 0.17, 1.62, -1.0);   // Hörner
+      teil(B(0.18, 0.08, 0.08), fell, sx * 0.31, 1.42, -0.98);   // Ohren
+      teil(B(0.06, 0.06, 0.02), schwarz, sx * 0.12, 1.4, -1.33); // Augen
+    }
+    teil(B(0.3, 0.18, 0.3), rosa, 0, 0.6, 0.35);               // Euter
+    teil(B(0.05, 0.6, 0.05), schwarz, 0, 1.0, 0.87);           // Schwanz
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) bein(sx * 0.3, sz * 0.6, 0.65, 0.18, fell);
+  } else if (art === 'schaf') {
+    const wolle = mat(0xf3efe6, { flatShading: true }), schwarz = mat(0x2a2a2a);
+    teil(new THREE.IcosahedronGeometry(0.55, 1), wolle, 0, 0.85, 0).scale.set(0.9, 0.8, 1.25);   // Flauschiger Körper
+    teil(B(0.3, 0.35, 0.42), schwarz, 0, 1.0, -0.75);          // Kopf
+    teil(new THREE.IcosahedronGeometry(0.17, 1), wolle, 0, 1.2, -0.66);   // Wolle auf dem Kopf
+    for (const sx of [-1, 1]) teil(B(0.2, 0.06, 0.1), schwarz, sx * 0.2, 1.08, -0.68);   // Ohren
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) bein(sx * 0.22, sz * 0.4, 0.5, 0.1, schwarz);
+  } else {
+    const feder = mat(Math.random() < 0.5 ? 0xf6f2ea : 0xa0602a), rot = mat(0xd8221e), gelb = mat(0xf2b81e);
+    teil(B(0.32, 0.32, 0.42), feder, 0, 0.38, 0);              // Körper
+    teil(B(0.08, 0.25, 0.15), feder, 0, 0.55, 0.22);           // Schwanz
+    teil(B(0.18, 0.2, 0.18), feder, 0, 0.62, -0.22);           // Kopf
+    teil(B(0.04, 0.1, 0.14), rot, 0, 0.76, -0.22);             // Kamm
+    teil(B(0.06, 0.05, 0.08), gelb, 0, 0.6, -0.34);            // Schnabel
+    teil(B(0.04, 0.07, 0.03), rot, 0, 0.53, -0.32);            // Kehllappen
+    for (const sx of [-1, 1]) bein(sx * 0.08, 0, 0.22, 0.04, gelb);
+  }
+  return { g, beine };
+}
+function gehegeEinrichten(b) {
+  const A = GEBAEUDE_ARTEN[b.art];
+  b.geh = { tier: A.tier, R: A.r - 1.6, futter: 0, lager: 0, tiere: [], takt: 0 };
+  b.schild = schild('', '#fff', 8); b.schild.position.set(b.x, 4.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  gehegeSchild(b);
+}
+function tierZahl(b, n) {   // So viele Tiere sollen im Gehege sein
+  const geh = b.geh;
+  while (geh.tiere.length < n) {
+    const t = baueTier(geh.tier), w = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * geh.R;
+    t.x = b.x + Math.cos(w) * rr; t.z = b.z + Math.sin(w) * rr; t.zx = t.x; t.zz = t.z; t.warte = Math.random() * 3; t.phase = 0;
+    t.g.position.set(t.x, 0, t.z); t.g.rotation.y = Math.random() * 6;
+    scene.add(t.g); geh.tiere.push(t); b.extra.push(t.g);
+  }
+  while (geh.tiere.length > n) { const t = geh.tiere.pop(); scene.remove(t.g); }
+}
+function gehegeSchild(b) {
+  const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length;
+  if (!n) { b.schild.userData.malen(`${T.emoji} Leer – P drücken`, '#b9f5a0'); return; }
+  const hunger = geh.futter <= 0;
+  b.schild.userData.malen(`${T.emoji} ${n} · ${P.emoji} ${Math.floor(geh.lager)} ${P.einheit}${hunger ? ' · ⚠️ Hunger!' : ''}`, hunger ? '#ff9a6b' : '#ffd166');
+}
+const tierLaute = {
+  kuh: l => tonGleiten(150, 105, 0, 1.3, 'sawtooth', 0.05 * l),
+  schaf: l => { for (let k = 0; k < 4; k++) ton(470 - k * 10, k * 0.08, 0.1, 'square', 0.025 * l); },
+  huhn: l => { for (let k = 0; k < 4; k++) ton(850 + Math.random() * 400, k * 0.13, 0.07, 'square', 0.025 * l); },
+};
+function gebUpdate(dt) {
+  for (const b of gebaute) {
+    if (b.gh) {   // Gemüse wächst
+      const G = GEMUESE[b.gh.art];
+      if (!G || b.gh.w >= 1) continue;
+      b.gh.w = Math.min(1, b.gh.w + dt / G.zeit);
+      b.gh.takt -= dt;
+      if (b.gh.takt <= 0 || b.gh.w >= 1) { b.gh.takt = 0.5; ghMalen(b); }
+    }
+    if (b.geh) {
+      const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length;
+      // Fressen und Milch/Wolle/Eier geben (nur wenn Futter da ist!). Das Lager fasst so viel wie 10 Minuten.
+      if (n && geh.futter > 0) {
+        geh.futter = Math.max(0, geh.futter - n * T.frisst * dt / 60);
+        geh.lager = Math.min(n * T.proMin * 10, geh.lager + n * T.proMin * dt / 60);
+      }
+      const trog = b.mesh.userData.trog;
+      trog.visible = geh.futter > 0; trog.scale.y = 0.3 + 2 * geh.futter / FUTTER_MAX;
+      // Die Tiere laufen im Gehege herum
+      for (const t of geh.tiere) {
+        if (t.warte > 0) { t.warte -= dt; t.phase *= Math.pow(0.01, dt); }
+        else {
+          const dx = t.zx - t.x, dz = t.zz - t.z, l = Math.hypot(dx, dz);
+          if (l < 0.2) {   // Angekommen: kurz stehen bleiben (grasen), dann ein neues Ziel
+            t.warte = 1 + Math.random() * 5;
+            const w = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * geh.R;
+            t.zx = b.x + Math.cos(w) * rr; t.zz = b.z + Math.sin(w) * rr;
+          } else {
+            const v = Math.min(l, T.tempo * dt);
+            t.x += dx / l * v; t.z += dz / l * v;
+            t.g.rotation.y = Math.atan2(-dx, -dz);
+            t.phase += dt * 8;
+          }
+        }
+        t.g.position.set(t.x, 0, t.z);
+        t.beine.forEach((bn, k) => { bn.rotation.x = Math.sin(t.phase + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI : 0)) * 0.45 * Math.min(1, t.phase); });
+      }
+      // Ab und zu macht ein Tier "Muh", "Mäh" oder "Gack" (wenn du in der Nähe bist)
+      if (n && Math.random() < dt / 10) { const l = Math.max(0, 1 - Math.hypot(wo().x - b.x, wo().z - b.z) / 35); if (l > 0.05) tierLaute[geh.tier](l); }
+      geh.takt -= dt;
+      if (geh.takt <= 0) { geh.takt = 0.5; gehegeSchild(b); }
+    }
+  }
+}
+// Zustand eines Gewächshauses/Geheges (zum Speichern und für den Multiplayer)
+function gebDaten(b) {
+  if (b.gh) return { a: b.gh.art, w: Math.round(b.gh.w * 1000) / 1000 };
+  if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10 };
+  return null;
+}
+function gebDatenSetzen(b, d) {
+  if (!d) return;
+  if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
+  if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; gehegeSchild(b); }
+}
+const gebSchluessel = b => `${b.x.toFixed(1)},${b.z.toFixed(1)}`;
+function gebSenden(b) { mpEvent({ t: 'geb', k: gebSchluessel(b), d: gebDaten(b) }); }
+// Was du geerntet und eingesammelt hast (verkaufen im Dorfladen)
+let vorrat = {};
+const DORFLADEN = { x: 20, z: 78 };   // Vor der Tür vom Dorfladen
+const beimDorfladen = () => Math.hypot(wo().x - DORFLADEN.x, wo().z - DORFLADEN.z) < 7;
+const vorratWert = () => Object.entries(vorrat).reduce((s, [k, m]) => s + (PRODUKTE[k] ? m * PRODUKTE[k].preis : 0), 0);
+function vorratVerkaufen() {
+  const wert = Math.round(vorratWert());
+  if (wert <= 0) { meldung('🛒 Du hast nichts zum Verkaufen! Ernte Gemüse im Gewächshaus 🪴 oder sammel Milch, Eier und Wolle bei den Tieren 🐄 (P).', 4); sound.nein(); return; }
+  money += wert;
+  meldung(`🛒💶 Im Dorfladen verkauft: ${vorratText()} für ${euro(wert)}!`, 4);
+  vorrat = {};
+  sound.kasse();
+  speichern();
+}
+const vorratText = () => Object.entries(vorrat).filter(([, m]) => m >= 1).map(([k, m]) => `${PRODUKTE[k].emoji} ${Math.floor(m)}`).join(' ') || 'leer';
+function nahesHofGebaeude() {
+  const p = wo();
+  return gebaute.find(b => (b.gh || b.geh) && Math.hypot(p.x - b.x, p.z - b.z) < GEBAEUDE_ARTEN[b.art].r + 3.5) || null;
+}
+// Das Menü beim Gewächshaus oder Gehege (Taste P)
+let panelGeb = null, panelZustand = '';
+function panelZeigen(b) {
+  panelGeb = b;
+  $('hofpanel').style.display = b ? 'block' : 'none';
+  if (!b) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  panelMalen();
+}
+function knopf(eltern, text, geht, aktion) {
+  const k = document.createElement('button');
+  k.textContent = text; k.disabled = !geht;
+  k.addEventListener('click', () => { tonStart(); aktion(); });
+  eltern.appendChild(k);
+}
+function panelStatus() {   // Der Text oben im Menü (wird ständig neu geschrieben)
+  const b = panelGeb;
+  if (b.gh) { const G = GEMUESE[b.gh.art]; return G ? (b.gh.w >= 1 ? `${G.emoji} ${G.name} sind reif!` : `${G.emoji} ${G.name} wachsen: ${Math.floor(b.gh.w * 100)} %`) : 'Das Gewächshaus ist leer. Was willst du anbauen?'; }
+  const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt];
+  return `${T.emoji} ${geh.tiere.length} von ${T.max} ${T.name} · 🌾 Futter: ${kg(geh.futter)} · ${P.emoji} ${P.name}: ${Math.floor(geh.lager)} ${P.einheit}${geh.futter <= 0 && geh.tiere.length ? ' · ⚠️ Die Tiere haben Hunger!' : ''}`;
+}
+const panelZustandJetzt = b => b.gh ? `${b.gh.art}-${b.gh.w >= 1}` : `${b.geh.tiere.length}-${Math.floor(b.geh.lager) > 0}-${Math.round(b.geh.futter / 50)}-${money}`;
+function panelMalen() {
+  const b = panelGeb, A = GEBAEUDE_ARTEN[b.art], box = $('hofpanelInhalt');
+  $('hofpanelTitel').textContent = `${A.emoji} ${A.name}`;
+  box.innerHTML = '';
+  const st = document.createElement('div'); st.id = 'panelStatus'; st.style.marginBottom = '8px'; st.textContent = panelStatus(); box.appendChild(st);
+  panelZustand = panelZustandJetzt(b);
+  if (b.gh) {
+    const G = GEMUESE[b.gh.art];
+    if (!G) {
+      for (const [art, S] of Object.entries(GEMUESE)) {
+        const z = document.createElement('div'); z.className = 'angebot';
+        z.innerHTML = `<b>${S.emoji} ${S.name}</b> – Saat ${euro(S.kosten)}<br><span class="klein">⏳ ${S.zeit} Sekunden · 🧺 ${S.menge} ${S.einheit} · 💶 bringt ${euro(S.menge * S.preis)} im Dorfladen</span><br>`;
+        knopf(z, money >= S.kosten ? '🌱 Pflanzen' : '💸 Zu teuer', money >= S.kosten, () => pflanzen(b, art));
+        box.appendChild(z);
+      }
+    } else if (b.gh.w >= 1) knopf(box, `🧺 Ernten: ${G.menge} ${G.einheit} ${G.name}`, true, () => ghErnten(b));
+  } else {
+    const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length;
+    knopf(box, n >= T.max ? `${T.emoji} Gehege ist voll` : `➕ 1 ${T.einzeln} kaufen (${euro(T.preis)})`, n < T.max && money >= T.preis, () => tierKaufen(b));
+    knopf(box, `🧺 Einsammeln: ${Math.floor(geh.lager)} ${P.einheit} ${P.name}`, geh.lager >= 1, () => einsammeln(b));
+    knopf(box, `🌾 1.000 kg Futter kaufen (${euro(1000 * FUTTER_PREIS)})`, geh.futter < FUTTER_MAX - 1 && money >= 1000 * FUTTER_PREIS, () => futterKaufen(b));
+    const tipp = document.createElement('div'); tipp.className = 'klein'; tipp.style.marginTop = '6px';
+    tipp.textContent = `💡 Jedes ${T.einzeln} gibt ${T.proMin} ${P.einheit} ${P.name} pro Minute (${euro(T.proMin * P.preis)}) – aber nur mit Futter! Gratis-Futter: Fahr mit Korn im Tank her und drück L.`;
+    box.appendChild(tipp);
+  }
+}
+function panelUpdate() {
+  if (!panelGeb) return;
+  if (!gebaute.includes(panelGeb) || !nahesHofGebaeude()) { panelZeigen(null); return; }   // Weggegangen? Menü zu
+  if (panelZustandJetzt(panelGeb) !== panelZustand) panelMalen();
+  else $('panelStatus').textContent = panelStatus();
+}
+function pflanzen(b, art) {
+  const G = GEMUESE[art];
+  if (b.gh.art || money < G.kosten) return;
+  money -= G.kosten; b.gh.art = art; b.gh.w = 0;
+  ghMalen(b); gebSenden(b);
+  meldung(`🌱 ${G.name} gepflanzt! In ${G.zeit} Sekunden ist alles reif.`, 3);
+  sound.kaufen(); speichern(); panelMalen();
+}
+function ghErnten(b) {
+  const G = GEMUESE[b.gh.art];
+  if (!G || b.gh.w < 1) return;
+  vorrat[b.gh.art] = (vorrat[b.gh.art] || 0) + G.menge;
+  b.gh.art = null; b.gh.w = 0;
+  ghMalen(b); gebSenden(b);
+  meldung(`🧺 ${G.menge} ${G.einheit} ${G.name} geerntet! Verkaufen im Dorfladen 🛒 (V).`, 3.5);
+  sound.korn(); speichern(); panelMalen();
+}
+function tierKaufen(b) {
+  const T = TIERE[b.geh.tier];
+  if (b.geh.tiere.length >= T.max || money < T.preis) return;
+  money -= T.preis; tierZahl(b, b.geh.tiere.length + 1);
+  gebSenden(b); gehegeSchild(b);
+  meldung(`${T.emoji} Neues ${T.einzeln} im Gehege!${b.geh.futter <= 0 ? ' Vergiss das Futter nicht! 🌾' : ''}`, 3);
+  tierLaute[b.geh.tier](1); speichern(); panelMalen();
+}
+function einsammeln(b) {
+  const T = TIERE[b.geh.tier], P = PRODUKTE[T.produkt], m = Math.floor(b.geh.lager);
+  if (m < 1) return;
+  vorrat[T.produkt] = (vorrat[T.produkt] || 0) + m; b.geh.lager -= m;
+  gebSenden(b); gehegeSchild(b);
+  meldung(`🧺 ${m} ${P.einheit} ${P.name} eingesammelt! Verkaufen im Dorfladen 🛒 (V).`, 3.5);
+  sound.holz(); speichern(); panelMalen();
+}
+function futterKaufen(b) {
+  const menge = Math.min(1000, FUTTER_MAX - b.geh.futter), kosten = Math.round(menge * FUTTER_PREIS);
+  if (menge <= 0 || money < kosten) return;
+  money -= kosten; b.geh.futter += menge;
+  gebSenden(b);
+  meldung(`🌾 ${kg(menge)} Futter in den Trog geschüttet für ${euro(kosten)}`);
+  sound.korn(); speichern(); panelMalen();
+}
+function futterAbladen(b) {   // Korn vom Fahrzeug als Futter in den Trog
+  const menge = Math.min(kornDrin(aktiv), FUTTER_MAX - b.geh.futter);
+  if (kornDrin(aktiv) <= 0) { meldung('🌾 Du hast kein Korn dabei! Ernte erst ein Feld – oder kauf Futter im Menü (P).'); sound.nein(); return; }
+  if (menge <= 0) { meldung('🌾 Der Futtertrog ist schon voll!'); sound.nein(); return; }
+  kornWeg(aktiv, menge); b.geh.futter += menge;
+  gebSenden(b);
+  meldung(`🌾 ${kg(menge)} Korn als Futter abgeladen! (${kg(b.geh.futter)} im Trog)`, 3);
+  sound.korn(); speichern();
+}
+function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächshaus und Gehege
+  if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText()} = ${euro(vorratWert())})`;
+  const b = nahesHofGebaeude();
+  if (!b) return '';
+  if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `🌾 L = Korn als Futter abladen (${kg(kornDrin(aktiv))})` : '';
+  return panelGeb ? '' : `${GEBAEUDE_ARTEN[b.art].emoji} P = ${GEBAEUDE_ARTEN[b.art].name}-Menü öffnen`;
 }
 // Das Hof-Silo: gehört dir von Anfang an
 const HOF_SILO = { x: 41, z: 23 };
@@ -1600,6 +1961,7 @@ function balken(id, wert, max, text) {
 function updateHUD() {
   $('money').textContent = money.toLocaleString('de-DE');
   $('mode').textContent = building ? '🏗️ Baumodus' : aktiv ? '🚜 Fahren' : saegeAn ? '🪚 Motorsäge' : '🚶 Zu Fuß';
+  $('vorrat').textContent = vorratText();
   const ha = holzAnh(aktiv);
   $('holz').textContent = `${getragen} von ${HOLZ_TRAGEN_MAX} Stämmen${ha ? ` · Anhänger ${ha.inhalt}/${ha.typ.max}` : ''} · 🪚 Sprit ${Math.round(saegeSprit)} %`;
   $('ansicht').textContent = ansicht === 'ego' ? '👁️ First Person' : '🎥 Von hinten';
@@ -1687,6 +2049,7 @@ function brauchtFahrzeug(text) {
   return true;
 }
 function verkaufen() {
+  if (beimDorfladen()) { vorratVerkaufen(); return; }
   if (beimSaegewerk()) { holzVerkaufen(); return; }
   if (holzAnh(aktiv) && anhBeimSaegewerk(aktiv)) { holzVomAnhaengerVerkaufen(); return; }
   if (brauchtFahrzeug('Korn zu verkaufen')) return;
@@ -1727,6 +2090,7 @@ function tanken() {
 function einlagern() {   // Korn vom Fahrzeug ins Silo
   if (!aktiv) { holzAufAnhaenger(); return; }               // Zu Fuß: Holz auf den Holzanhänger legen
   if (holzAnh(aktiv) && !nahesSilo()) { holzKran(); return; }   // Mit Holzanhänger: Kran lädt Holz auf
+  { const b = nahesHofGebaeude(); if (b && b.geh && !nahesSilo()) { futterAbladen(b); return; } }   // Beim Gehege: Korn als Futter
   if (brauchtFahrzeug('Korn einzulagern')) return;
   const s = nahesSilo();
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
@@ -2175,7 +2539,7 @@ function speichern() {
       anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
-      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0 })),
+      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat,
       wald: waldDaten(), holz: holzDaten(), saege: { sprit: saegeSprit, getragen },
     }));
   } catch (e) { /* egal – dann eben nicht gespeichert */ }
@@ -2191,7 +2555,8 @@ function laden() {
     f.gekauft = df.g;
     df.c.forEach((code, n) => { f.zellen[n] = { z: ZUSTAND_LANG[code[0]] || 'wiese', w: code[0] === 'g' ? Number(code.slice(1)) / 100 : 0 }; });
   });
-  for (const b of d.gebaeude || []) if (GEBAEUDE_ARTEN[b.art]) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0);
+  for (const b of d.gebaeude || []) if (GEBAEUDE_ARTEN[b.art]) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0, b.d);
+  if (d.vorrat) vorrat = d.vorrat;
   if (d.v === 1) {   // Alter Spielstand (nur ein Traktor)
     neuesFahrzeug('fendt', d.traktor.x, d.traktor.z, d.traktor.r, { saat: d.saat, tank: d.tank, diesel: d.diesel, werkzeug: d.werkzeug });
     einsteigen(fahrzeuge[0]);
@@ -2254,6 +2619,7 @@ $('btn-bau').addEventListener('click', buildMode);
 $('btn-neu').addEventListener('click', neuesSpiel);
 $('btn-haendler').addEventListener('click', () => haendlerZeigen(true));
 $('haendler-zu').addEventListener('click', () => haendlerZeigen(false));
+$('hofpanel-zu').addEventListener('click', () => panelZeigen(null));
 for (const art of Object.keys(GEBAEUDE_ARTEN)) $('bau-' + art).addEventListener('click', () => { bauArt = art; updateHUD(); });
 
 document.addEventListener('keydown', e => {
@@ -2284,12 +2650,11 @@ document.addEventListener('keydown', e => {
   if (k === 'n') haendlerZeigen($('haendler').style.display !== 'block');
   if (k === 'h') kuppeln();
   if (k === 'q') saegeNehmen();
+  if (k === 'p') { if (panelGeb) panelZeigen(null); else { const b = nahesHofGebaeude(); if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
-  if (k === 'escape') haendlerZeigen(false);
-  if (['1', '2', '3'].includes(k)) {
-    if (building) { bauArt = Object.keys(GEBAEUDE_ARTEN)[Number(k) - 1]; updateHUD(); }
-    else if (aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
-  }
+  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); }
+  if (building && k >= '1' && k <= String(Object.keys(GEBAEUDE_ARTEN).length) && k.length === 1) { bauArt = Object.keys(GEBAEUDE_ARTEN)[Number(k) - 1]; updateHUD(); }
+  else if (['1', '2', '3'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
   updateHUD();
 });
 document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -2333,6 +2698,8 @@ renderer.domElement.addEventListener('click', () => {
   money -= A.preis;
   sound.bauen();
   if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
+  if (bauArt === 'gewaechshaus') meldung('🪴 Neues Gewächshaus! Geh hin und drück P, um Gemüse zu pflanzen.', 4);
+  if (GEBAEUDE_ARTEN[bauArt].tier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gebaut! Geh hin und drück P, um ${TIERE[GEBAEUDE_ARTEN[bauArt].tier].name} zu kaufen.`, 4);
   updateHUD();
   speichern();
 });
@@ -2475,7 +2842,7 @@ function weltSchnappschuss() {
   return {
     t: 'welt', money, spielZeit, hofSilo: hofSilo.inhalt,
     felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
-    gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0 })),
+    gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })),
     fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel,
       werkzeug: f.werkzeug, fahrer: f === aktiv ? mp.ich : f.fahrer })),
     spieler: [{ id: mp.ich, nr: mp.nr }, ...[...mp.andere.values()].map(o => ({ id: o.id, nr: o.nr }))],
@@ -2566,7 +2933,9 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
     scene.remove(b.mesh);
     const k = hindernisse.indexOf(b.h); if (k >= 0) hindernisse.splice(k, 1);
     if (b.silo) { scene.remove(b.silo.schild); silos.splice(silos.indexOf(b.silo), 1); }
+    for (const o of b.extra || []) scene.remove(o);   // Schilder und Tiere
   }
+  panelZeigen(null);
   gebaute.length = 0;
   money = d.money; mp.geldBasis = money; spielZeit = d.spielZeit;
   hofSilo.inhalt = d.hofSilo; hofSilo.basis = d.hofSilo; siloSchild(hofSilo);
@@ -2577,7 +2946,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
     df.c.forEach((code, n) => { f.zellen[n] = zelleAusCode(code); });
     malFeld(f);
   });
-  for (const b of d.gebaeude) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0);
+  for (const b of d.gebaeude) if (GEBAEUDE_ARTEN[b.art]) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0, b.d);
   for (const f of d.fahrzeuge) {
     if (!FAHRZEUGE[f.typ]) continue;
     const fz = neuesFahrzeug(f.typ, f.x, f.z, f.r, f);
@@ -2654,6 +3023,8 @@ function mpEmpfangen(d, vonGast) {
     }
     case 'faellt': { const b = baeume[d.nr]; if (b && (b.zustand === 'steht' || b.zustand === 'waechst')) baumFaellen(b, d.w, d.id, false); break; }
     case 'holzWeg': holzWeg(d.id); break;
+    case 'geb': { const b = gebaute.find(x => gebSchluessel(x) === d.k); if (b) gebDatenSetzen(b, d.d); break; }
+    case 'gebStand': for (const e of d.l || []) { const b = gebaute.find(x => gebSchluessel(x) === e.k); if (b) gebDatenSetzen(b, e.d); } return;
     case 'neuesFz': if (!fahrzeuge.some(f => f.id === d.id) && FAHRZEUGE[d.typ]) { neuesFahrzeug(d.typ, d.x, d.z, d.r, { id: d.id }); meldung(`🚜 Neues Fahrzeug auf dem Hof: ${FAHRZEUGE[d.typ].name}!`); } break;
     default: return;
   }
@@ -2683,7 +3054,7 @@ function mpTick(dt) {
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
-    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); }
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
   }
 }
 const weltDa = () => mp.geldBasis !== null;
@@ -2757,6 +3128,8 @@ function animate() {
   }
   waldUpdate(dt);
   dorfUpdate(dt);
+  gebUpdate(dt);
+  panelUpdate();
   if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen);
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
@@ -2808,9 +3181,10 @@ function animate() {
   geistAktualisieren(mausPunkt);
 
   // Hinweis unten in der Mitte
-  const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis();
-  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1/2/3 = anderes Gebäude · B = fertig`);
+  const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis(), hh = hofHinweis();
+  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–7 = anderes Gebäude · B = fertig`);
   else if (wh) zeigeHinweis(wh);
+  else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
   else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = Korn verkaufen (${kg(kornDrin(aktiv))}) · G = Saat · T = Tanken · N = Fahrzeug-Händler`);
   else if (silo) zeigeHinweis(`🛢️ Silo (${kg(silo.inhalt)} drin): L = Korn einlagern · U = Korn holen`);
