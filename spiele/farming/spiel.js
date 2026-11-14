@@ -1092,7 +1092,7 @@ const player = meinFarmer.g, farmer = meinFarmer.t;
 // ===== First-Person-Motorsäge: Säge und Hände direkt vor der Kamera (wie in Ego-Spielen) =====
 scene.add(camera);   // Damit man Sachen an die Kamera hängen kann
 const egoSaege = new THREE.Group();
-egoSaege.visible = false; egoSaege.position.set(0.22, -0.33, -0.45);
+egoSaege.visible = false; egoSaege.position.set(0.28, -0.2, -0.5);
 camera.add(egoSaege);
 const egoKette = [];   // Die Zähne der Kette (die laufen beim Sägen rundherum!)
 {
@@ -1120,9 +1120,9 @@ function egoSaegeUpdate(dt) {
   if (!zeigen) return;
   const r = saegt ? Math.sin(spielZeit * 55) * 0.006 : 0;                  // Rütteln beim Sägen
   const wackeln = mp.laeuft ? Math.sin(farmer.phase) * 0.015 : 0;         // Beim Laufen wippt die Säge
-  const zielZ = saegt ? -0.72 : -0.45, zielKipp = saegt ? -0.08 : -0.28;  // Beim Sägen nach vorne in den Stamm drücken
-  egoSaege.position.x = 0.22 + r;
-  egoSaege.position.y = -0.33 + wackeln + r;
+  const zielZ = saegt ? -0.65 : -0.5, zielKipp = saegt ? -0.05 : -0.15;  // Beim Sägen nach vorne in den Stamm drücken
+  egoSaege.position.x = 0.28 + r;
+  egoSaege.position.y = -0.2 + wackeln + r;
   egoSaege.position.z += (zielZ - egoSaege.position.z) * Math.min(1, dt * 8);
   egoSaege.rotation.x += (zielKipp - egoSaege.rotation.x) * Math.min(1, dt * 8);
   egoSaege.rotation.z = r * 3;
