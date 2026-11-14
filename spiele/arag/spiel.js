@@ -143,7 +143,7 @@ const SAELE = [
 const OFFEN = RAUM;   // "Tür" so breit wie die ganze Wand = keine Wand
 const saalVon = (i, j, e) => SAELE.find(S => S.etage === e && i >= S.i && i < S.i + S.breit && j >= S.j && j < S.j + S.tief) || null;
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1 };   // Starrer: 0 = gibt es nicht mehr
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1, maulwurf: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const GEWINN_PROZENT = 62;           // 🏆 Gewonnen, wenn so viel Prozent aller Schätze im Haus verkauft sind – und ALLE Spieler leben!
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
@@ -387,6 +387,16 @@ const monsterSound = {
     if (jagt) { if (Math.random() < 0.35) gruselTon(700, 0.05, 0.35, 'sawtooth', 0.07 * laut, 1100, 18); }
     else if (Math.random() < 0.4) gruselTon(210, 0.1, 0.9, 'triangle', 0.05 * laut, 170, 9);   // Mmmm-mmm-mmm ...
   },
+  maulwurf(laut, jagt) {   // 🐾 Unter der Erde: Grummeln und Bröseln · Bei der Jagd: schnelles Wühlen
+    rauschen(0, jagt ? 0.35 : 0.6, (jagt ? 0.3 : 0.15) * laut, 'lowpass', jagt ? 500 : 300);
+    ton(45 + Math.random() * 15, 0, 0.3, 'sawtooth', 0.06 * laut, 35);
+    if (Math.random() < 0.2) gruselTon(1300, 0.1, 0.2, 'triangle', 0.04 * laut, 1700, 30);   // Quiek!
+  },
+  maulwurfRaus(laut) {   // RUMMMS – der Boden bricht auf!
+    rauschen(0, 1.0, 0.7 * laut, 'lowpass', 900, null, 200);
+    ton(60, 0, 0.8, 'sine', 0.8 * laut, 30);
+    gruselTon(300, 0.5, 0.6, 'sawtooth', 0.1 * laut, 120, 25);
+  },
   omaGrummel(laut) {   // HMPF?! Was guckst du so?!
     gruselTon(160, 0, 0.45, 'sawtooth', 0.1 * laut, 320, 14);
     gruselTon(330, 0.45, 0.35, 'sawtooth', 0.08 * laut, 260, 14);
@@ -412,6 +422,14 @@ function monsterGeraeusche(m, dt) {
     if (m.modus === 'verwandeln' && !m.warnTon) { m.warnTon = true; monsterSound.formwandlerGlitch(Math.max(0.5, monsterLautstaerke(m))); }
     if (m.modus !== 'verwandeln') m.warnTon = false;
   }
+  if (m.art === 'maulwurf') {   // Der Boden bebt! – Warnung kurz bevor er rausbricht (hört man immer)
+    if (m.modus === 'auftauchen' && !m.warnTon) {
+      m.warnTon = true; const laut = Math.max(0.5, monsterLautstaerke(m));
+      monsterSound.maulwurfRaus(laut);
+      if (abstand2D(m.x, m.z, spielerKoerper.position.x, spielerKoerper.position.z) < 8) wackeln = Math.max(wackeln, 0.8);
+    }
+    if (m.modus !== 'auftauchen') m.warnTon = false;
+  }
   if (m.art === 'oma') {   // Hmpf?! – Warnung, wenn jemand sie anschaut
     if (m.modus === 'grummeln' && !m.warnTon) {
       m.warnTon = true; monsterSound.omaGrummel(Math.max(0.5, monsterLautstaerke(m)));
@@ -435,6 +453,7 @@ function monsterGeraeusche(m, dt) {
   if (m.art === 'geist') m.geraeuschZeit = jagt ? zufall(1.2, 2) : zufall(3, 6);
   else if (m.art === 'jaeger') m.geraeuschZeit = jagt ? zufall(2.5, 4) : zufall(4, 7);
   else if (m.art === 'schrank') m.geraeuschZeit = jagt ? zufall(0.35, 0.5) : zufall(5, 9);
+  else if (m.art === 'maulwurf') m.geraeuschZeit = jagt ? zufall(0.3, 0.45) : zufall(1.2, 2);
   else if (m.art === 'oma') { m.geraeuschZeit = jagt ? zufall(0.25, 0.35) : zufall(0.9, 1.3); if (!m.laeuft && !jagt) return; }   // Steht sie, klopft der Stock nicht
   else if (m.art === 'formwandler') { m.geraeuschZeit = jagt ? zufall(0.6, 1) : zufall(7, 13); if (m.modus === 'tarnPokal' || m.modus === 'abhauen') return; }   // Als Pokal ist er still
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
@@ -552,6 +571,17 @@ const MUSIK_LIEDER = {
       D4 F#4 A4 | A4 - - | A5 A5 . | G5 G5 C#4 |
       C#4 E4 B4 | B4 - - | B5 B5 . | G5 G5 C#4 |
       C#4 E4 B4 | B4 - - | B5 B5 . | F#5 F#5 D4 |`),
+  },
+  // 🐾 Achtarm-Maulwurf: Tiefer, wühlender Erd-Metal – tschugga-tschugga unter der Erde
+  maulwurf: {
+    tempo: 150, grund: 41.2, verzerrung: 95, gitarre: 0.5, melodieKlang: 'kreischen', becken: 'achtel',
+    riff: [
+      0, 0, null, 0,  0, null, 3, null,   0, 0, null, 0,  5, null, 3, null,
+      0, 0, null, 0,  0, null, 7, null,   6, null, 5, null,  3, null, 1, null,
+    ],
+    kick: [1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0],
+    snare: [4, 12],
+    melodie: [12, null, 15, 13, 12, null, 18, 17],
   },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
@@ -696,6 +726,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     rauschen(0, 0.4, 0.8, 'lowpass', 2500, null, 100);
     ton(80, 0, 0.5, 'sine', 0.7, 40);
     gruselTon(500, 0.25, 1.0, 'sawtooth', 0.12, 150, 20);
+  } else if (art === 'maulwurf') { // 🐾 Erde bricht auf + Quieken
+    rauschen(0, 1.2, 0.8, 'lowpass', 1200, null, 100);
+    ton(50, 0, 1.2, 'sine', 0.9, 25);
+    gruselTon(1100, 0.3, 0.8, 'sawtooth', 0.12, 1600, 30);
   } else if (art === 'oma') {     // 👵 Wütendes Keifen + Stock auf den Boden: TOCK! TOCK!
     gruselTon(500, 0, 0.9, 'sawtooth', 0.14, 1300, 20);
     gruselTon(750, 0, 0.9, 'square', 0.06, 1600, 25);
@@ -2019,6 +2053,11 @@ function baueHaus() {
   for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnPokal'; }
   for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
   for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
+  for (let k = 0; k < (ld.maulwurf || 0) && haus.baeume; k++) {   // 🐾 Der Maulwurf wohnt draußen im Wald
+    const pl = waldPlatz(); if (!pl) continue;
+    neuesMonster('maulwurf', haus.start);
+    Object.assign(monster[monster.length - 1], { x: pl.x, y: 0, z: pl.z, modus: 'graben' });
+  }
 
   // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
   ducken(false);
@@ -2390,6 +2429,11 @@ const MONSTER_ARTEN = {
   // jagdDauer: so lange jagt sie dich · schubs: so weit fliegst du nach dem Gehstock-Schlag · ruhe: so lange ist sie danach zufrieden
   oma:      { name: 'Böse Oma',   emoji: '👵', tempo: 1.1, jagdTempo: 4.4, schaden: 35, pause: 2, betaeubbar: true,
               sichtWeite: 13, geduld: 1.0, jagdDauer: 7, schubs: 14, ruhe: 5 },
+  // 🐾 Der Achtarm-Maulwurf lebt NUR draußen im Wald. Er gräbt unter der Erde und spürt deine Schritte!
+  // Stillstehen oder Ducken (C) = er spürt dich nicht. fuehlWeite: so weit spürt er Schritte · auftauchWeite: so nah, dann bricht er raus
+  // auftauchen: so lange bebt der Boden vorher (Warnung!) · obenZeit: so lange bleibt er oben und haut mit seinen 8 Armen um sich
+  maulwurf: { name: 'Achtarm-Maulwurf', emoji: '🐾', tempo: 2.0, jagdTempo: 5.0, schaden: 40, pause: 1.2, betaeubbar: true,
+              fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 3, abtauchen: 0.6, schubs: 11 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
@@ -2468,6 +2512,38 @@ function baueMonsterMesh(art) {
       g.userData.beineG.push(b);
     }
     g.userData.beine = 0; g.userData.spalt = spalt;
+  } else if (art === 'maulwurf') {   // 🐾 Samtfell, rosa Sternnase, rote Äuglein – und ACHT Arme mit Grabkrallen
+    const fell = new THREE.MeshStandardMaterial({ color: '#2b2320', roughness: 1 }), rosa = new THREE.MeshStandardMaterial({ color: '#e88aa0', roughness: 0.6 });
+    const kralle = new THREE.MeshStandardMaterial({ color: '#d9cfb8', roughness: 0.4 }), erde = new THREE.MeshStandardMaterial({ color: '#3a2a1c', roughness: 1 });
+    const koerper = new THREE.Group(); g.add(koerper);
+    const teil = (geo, mat, x, y, z, el = koerper) => { const t = new THREE.Mesh(geo, mat); t.position.set(x, y, z); el.add(t); return t; };
+    teil(new THREE.SphereGeometry(0.75, 16, 12), fell, 0, 0.75, -0.1).scale.set(1, 0.9, 1.35);   // Dicker Körper
+    const kopf = new THREE.Group(); kopf.position.set(0, 0.95, 0.85); koerper.add(kopf);
+    teil(new THREE.SphereGeometry(0.42, 14, 10), fell, 0, 0, 0, kopf).scale.set(1, 0.85, 1.2);
+    teil(new THREE.CylinderGeometry(0.13, 0.18, 0.3, 10), rosa, 0, -0.05, 0.5, kopf).rotation.x = Math.PI / 2;   // Schnauze
+    const tentakel = [];
+    for (let k = 0; k < 11; k++) {   // Die Sternnase: viele kleine rosa Fühler
+      const w = k / 11 * Math.PI * 2, t = teil(new THREE.ConeGeometry(0.035, 0.22, 5), rosa, Math.cos(w) * 0.12, -0.05 + Math.sin(w) * 0.12, 0.72, kopf);
+      t.rotation.set(Math.PI / 2 + Math.sin(w) * 0.6, 0, -Math.cos(w) * 0.6); tentakel.push(t);
+    }
+    const augeMat = new THREE.MeshBasicMaterial({ color: '#ff3b3b', fog: false });
+    for (const s of [-1, 1]) teil(new THREE.SphereGeometry(0.04, 6, 5), augeMat, s * 0.2, 0.12, 0.38, kopf);
+    const arme = [];
+    for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {   // Vier Arme auf jeder Seite
+      const arm = new THREE.Group(); arm.position.set(s * 0.7, 0.75 + (k % 2) * 0.15, 0.55 - k * 0.4); koerper.add(arm);
+      teil(new THREE.CylinderGeometry(0.08, 0.1, 0.7, 7), fell, s * 0.35, 0, 0, arm).rotation.z = Math.PI / 2;   // Oberarm
+      const unter = new THREE.Group(); unter.position.set(s * 0.7, 0, 0); arm.add(unter);
+      teil(new THREE.CylinderGeometry(0.06, 0.08, 0.6, 7), fell, 0, -0.3, 0, unter);                              // Unterarm
+      teil(new THREE.SphereGeometry(0.13, 8, 6), rosa, 0, -0.62, 0, unter).scale.set(1.3, 0.6, 1);                  // Grabhand
+      for (const f of [-1, 0, 1]) teil(new THREE.ConeGeometry(0.03, 0.2, 5), kralle, f * 0.07, -0.75, 0.05, unter).rotation.x = Math.PI + 0.3;
+      arm.userData = { s, k, unter }; arme.push(arm);
+    }
+    const huegel = new THREE.Group(); g.add(huegel);   // Der Erdhügel (den sieht man, wenn er unter der Erde gräbt)
+    teil(new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), erde, 0, 0, 0, huegel).scale.set(1, 0.5, 1);
+    for (let k = 0; k < 8; k++) teil(new THREE.DodecahedronGeometry(0.08 + Math.random() * 0.08), erde, (Math.random() - 0.5) * 1.6, 0.05, (Math.random() - 0.5) * 1.6, huegel);
+    const brocken = [];
+    for (let k = 0; k < 14; k++) { const b = teil(new THREE.DodecahedronGeometry(0.1), erde, 0, 0, 0, g); b.userData = { w: k / 14 * Math.PI * 2, v: 2 + Math.random() * 3 }; b.visible = false; brocken.push(b); }
+    Object.assign(g.userData, { koerper, kopf, tentakel, arme, huegel, brocken, augeMat, hoch: -2.3 });
   } else if (art === 'oma') {   // 👵 Krumme alte Oma: lila Kleid, Strickjacke, Dutt, Brille, Handtasche – und der GEHSTOCK
     const mat = (f, rau = 0.9) => new THREE.MeshStandardMaterial({ color: f, roughness: rau });
     const kleid = mat('#5b2a6e'), jacke = mat('#7a6a4f'), haut = mat('#e8c4a8'), haar = mat('#d8d8dc'), holz = mat('#5a3517', 0.6), schuh = mat('#1a1414');
@@ -2600,6 +2676,10 @@ function laerm(x, y, z, staerke) {
   const quelle = { x, y, z };
   for (const m of monster) {
     if (m.betaeubt > 0 || m.art === 'starrer') continue;
+    if (m.art === 'maulwurf') {   // Krach draußen? Da wühlt er hin!
+      if (m.modus === 'graben' && !imHaus(x, z) && abstand2D(m.x, m.z, x, z) < staerke * 2) { m.modus = 'jagen'; m.ziel = { x, y: 0, z }; m.jagdZeit = 6; }
+      continue;
+    }
     const d = abstand3D(m, quelle);
     if (m.art === 'lauscher' && d < staerke * m.info.hoeren) {
       if (m.modus !== 'jagen' && zeit - m.lautZeit > 4) { m.lautZeit = zeit; sound.lauscher(); }
@@ -2670,6 +2750,8 @@ function updateMonster(m, dt) {
     tempo = formwandlerUpdate(m, dt);
   } else if (m.art === 'oma') {
     tempo = omaUpdate(m, dt);
+  } else if (m.art === 'maulwurf') {
+    tempo = maulwurfUpdate(m, dt);
   } else if (m.art === 'starrer') {
     // 🗿 Der Starrer friert ein, sobald du hinschaust
     m.gesehen = starrerGesehen(m);
@@ -2722,7 +2804,7 @@ function updateMonster(m, dt) {
   // Ist das Ziel draußen und MONSTER_DRAUSSEN aus, lauern sie an der Haustür ...
   if (!MONSTER_DRAUSSEN && m.ziel && !imHaus(m.ziel.x, m.ziel.z)) { const a = naechsteHaustuer(m.ziel); m.ziel = a ? { ...a.innen } : { x: m.x, y: m.y, z: m.z }; }
   // 🚪 Eine zue Tür im Weg? Aufbrechen! (Das dauert kurz – deine Chance!)
-  if (tempo > 0) {
+  if (tempo > 0 && m.art !== 'maulwurf') {
     const tu = geschlosseneTuer(m.x, m.z, m.y, 1.15);
     if (tu) { m.tuerZeit = (m.tuerZeit || 0) + dt; tempo = 0; if (m.tuerZeit > TUER_AUFBRECHEN) { m.tuerZeit = 0; tuerSetzen(tu, true, 'monster'); } }
     else m.tuerZeit = 0;
@@ -2738,7 +2820,8 @@ function updateMonster(m, dt) {
     const schonDrin = bodenLochBei(m.x, m.z, m.y, 0.3);   // (Monster laufen um Bodenlöcher herum)
     const loch = (x, z) => (!m.tw && haus.treppen.some(t => imLoch(t, x, z) && m.y > t.basis + ETAGE_HOEHE - 0.3 && !(aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - m.y) < 0.6))) ||
       (!schonDrin && !!bodenLochBei(x, z, m.y, 0.3)) ||
-      (!imHaus(x, z) && (haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.55));   // Draußen: nicht durch Bäume
+      (!imHaus(x, z) && !(m.art === 'maulwurf' && m.modus !== 'oben') && (haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.55)) ||   // Draußen: nicht durch Bäume (unter der Erde geht's!)
+      (m.art === 'maulwurf' && x > -1.2 && x < haus.breit * RAUM + 1.2 && z > -1.2 && z < haus.tief * RAUM + 1.2);   // Der Maulwurf kommt nicht ins Haus
     if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
     else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
     else if (!loch(m.x, nz)) m.z = nz;
@@ -2757,7 +2840,8 @@ function updateMonster(m, dt) {
   m.x = begrenzt(m.x, -zaun, haus.breit * RAUM + zaun); m.z = begrenzt(m.z, -zaun, haus.tief * RAUM + zaun);
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
   // Angriff! Auf dich ... (Die Oma schlägt nur zu, wenn sie wütend ist)
-  const reichweite = m.art === 'oma' ? 1.3 : 1.0, schubs = info.schubs || 9;
+  const reichweite = m.art === 'oma' ? 1.3 : m.art === 'maulwurf' ? 1.8 : 1.0, schubs = info.schubs || 9;
+  if (m.art === 'maulwurf' && m.modus !== 'oben') m.angriffPause = Math.max(m.angriffPause, 0.1);   // Unter der Erde kann er nicht hauen
   const omaHautZu = () => { if (m.art === 'oma') { m.modus = 'wandern'; m.ziel = null; m.ruhe = info.ruhe; m.aerger = 0; m.mesh.userData.schlag = 0.45; } };
   if (m.art === 'oma' && m.modus !== 'jagen') m.angriffPause = Math.max(m.angriffPause, 0.1);
   const fuss = p.y - (geduckt ? DUCK_RADIUS : KOERPER_RADIUS);
@@ -2787,7 +2871,7 @@ function updateMonster(m, dt) {
     }
   }
   // Getroffen von einem geworfenen Schatz? Dann betäubt!
-  if (!info.betaeubbar) return;
+  if (!info.betaeubbar || (m.art === 'maulwurf' && m.modus !== 'oben')) return;
   for (const s of schaetze) {
     if (s.geworfen <= 0) continue;
     const sp = s.body.position, v = s.body.velocity.length();
@@ -2855,6 +2939,66 @@ function schrankUpdate(m, dt) {
   m.ziel = { x: m.heim.x, y: m.heim.y, z: m.heim.z };
   if (abstand2D(m.x, m.z, m.heim.x, m.heim.z) < 0.3 && Math.abs(m.y - m.heim.y) < 1) { m.modus = 'lauern'; return 0; }
   return info.tempo;
+}
+// 🐾 Der Achtarm-Maulwurf: graben → (spürt Schritte) jagen → (direkt drunter) auftauchen → oben (haut zu!) → abtauchen → graben
+function maulwurfOpfer(m, weite, auchStill = false) {   // Wer läuft draußen herum? (Stillstehen oder Ducken = er spürt dich nicht!)
+  let bestes = null, bestD = weite;
+  const p = spielerKoerper.position, v = spielerKoerper.velocity;
+  if (!tot && !imHaus(p.x, p.z) && p.y < 1.5 && (auchStill || (!geduckt && Math.hypot(v.x, v.z) > 0.6))) {
+    const d = abstand2D(m.x, m.z, p.x, p.z); if (d < bestD) { bestD = d; bestes = { x: p.x, y: 0, z: p.z, spieler: true }; }
+  }
+  for (const g of mpGaeste()) {
+    if (zeit - (g.mwT || 0) > 0.3) { g.mwBewegt = Math.hypot(g.x - (g.mwX ?? g.x), g.z - (g.mwZ ?? g.z)) > 0.15; g.mwX = g.x; g.mwZ = g.z; g.mwT = zeit; }
+    if (imHaus(g.x, g.z) || g.y > 1.5 || !(auchStill || (g.mwBewegt && !g.dk))) continue;
+    const d = abstand2D(m.x, m.z, g.x, g.z); if (d < bestD) { bestD = d; bestes = { x: g.x, y: 0, z: g.z, gast: g }; }
+  }
+  for (const h of helfer) {
+    const hp = h.body.position;
+    if (h.kaputt > 0 || imHaus(hp.x, hp.z) || hp.y > 1.5 || !(auchStill || Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.5)) continue;
+    const d = abstand2D(m.x, m.z, hp.x, hp.z); if (d < bestD) { bestD = d; bestes = { x: hp.x, y: 0, z: hp.z, helfer: h }; }
+  }
+  return bestes;
+}
+function maulwurfUpdate(m, dt) {
+  const info = m.info;
+  m.ruhe = Math.max(0, (m.ruhe || 0) - dt);
+  if (m.modus === 'wandern' || m.modus === 'nachsehen') { m.modus = 'abtauchen'; m.warnZeit = info.abtauchen; }   // (nach dem Betäuben)
+  if (m.modus === 'graben' || m.modus === 'jagen') {
+    const o = m.ruhe > 0 ? null : maulwurfOpfer(m, info.fuehlWeite);
+    if (o) {   // Schritte gespürt! Hinwühlen ...
+      m.modus = 'jagen'; m.ziel = { x: o.x, y: 0, z: o.z }; m.jagdZeit = 4;
+      if (abstand2D(m.x, m.z, o.x, o.z) < info.auftauchWeite) {   // Direkt drunter: RAUS!
+        m.modus = 'auftauchen'; m.warnZeit = info.auftauchen; m.winkel = Math.atan2(o.x - m.x, o.z - m.z);
+        if (o.spieler) zeigeNachricht('🐾 DER BODEN BEBT! Ein ACHTARMIGER MAULWURF bricht raus! WEG HIER!', 2.5, '#ff6b6b');
+        if (o.helfer) { o.helfer.angst = 3; sagen(o.helfer, 'hilfe', { monster: info.name }, 1); }
+        return 0;
+      }
+      return info.jagdTempo;
+    }
+    if (m.modus === 'jagen') {   // Niemand mehr zu spüren: Noch kurz zur letzten Stelle wühlen
+      m.jagdZeit -= dt;
+      if (m.jagdZeit > 0 && m.ziel) return abstand2D(m.x, m.z, m.ziel.x, m.ziel.z) < 0.5 ? 0 : info.jagdTempo * 0.8;
+      m.modus = 'graben'; m.ziel = null;
+    }
+    m.zielZeit -= dt;   // Gemütlich durch den Waldboden graben
+    if (!m.ziel || m.zielZeit <= 0 || abstand2D(m.x, m.z, m.ziel.x, m.ziel.z) < 0.6) {
+      const pl = waldPlatz((a, b) => a + Math.random() * (b - a));
+      m.ziel = pl ? { x: pl.x, y: 0, z: pl.z } : { x: m.x, y: 0, z: m.z }; m.zielZeit = 6 + Math.random() * 6;
+    }
+    return info.tempo;
+  }
+  if (m.modus === 'auftauchen') { m.warnZeit -= dt; if (m.warnZeit <= 0) { m.modus = 'oben'; m.obenZeit = info.obenZeit; } return 0; }
+  if (m.modus === 'oben') {   // Oben! Er fuchtelt mit allen acht Armen und schiebt sich auf den Nächsten zu
+    m.obenZeit -= dt;
+    if (m.obenZeit <= 0) { m.modus = 'abtauchen'; m.warnZeit = info.abtauchen; return 0; }
+    const o = maulwurfOpfer(m, 4, true);
+    if (o) { m.ziel = { x: o.x, y: 0, z: o.z }; m.winkel = Math.atan2(o.x - m.x, o.z - m.z); return 1.3; }
+    m.ziel = { x: m.x, y: 0, z: m.z };
+    return 0;
+  }
+  if (m.modus === 'abtauchen') { m.warnZeit -= dt; if (m.warnZeit <= 0) { m.modus = 'graben'; m.ziel = null; m.ruhe = 2; } return 0; }
+  m.modus = 'graben';
+  return 0;
 }
 // 👵🦯 Die Böse Oma: wandern → (jemand schaut sie an) grummeln → (zu lange hingeschaut!) jagen → BONK → wieder wandern
 // Schaust du gerade auf diese Stelle? (Nur die Mitte vom Bild zählt – aus dem Augenwinkel ist okay)
@@ -3097,6 +3241,30 @@ function zeigeMonster(m) {
     U.tuerR.rotation.y += (auf - U.tuerR.rotation.y) * 0.25;
     U.beineG.forEach((b, k) => { b.scale.y = Math.max(0.01, U.beine / 0.4); b.rotation.x = schritt * 0.6 * (k % 2 ? 1 : -1); });
     U.spalt.emissiveIntensity = m.modus === 'lauern' ? 0.35 + Math.sin(zeit * 2 + m.phase) * 0.25 : 1.5;
+  } else if (m.art === 'maulwurf') {
+    const U = g.userData, unten = m.modus === 'graben' || m.modus === 'jagen';
+    const zielH = unten || m.modus === 'abtauchen' ? -2.3 : m.modus === 'auftauchen' ? -1.0 : 0;
+    U.hoch += (zielH - U.hoch) * (zielH > U.hoch ? 0.25 : 0.06);   // Schnell raus, langsam wieder rein
+    g.position.set(m.x, m.y, m.z);
+    g.rotation.set(0, m.winkel, m.betaeubt > 0 ? Math.sin(zeit * 6) * 0.15 : 0);
+    U.koerper.position.y = U.hoch + (m.modus === 'auftauchen' ? Math.sin(zeit * 40) * 0.05 : 0);
+    U.koerper.visible = U.hoch > -2.1;
+    U.huegel.visible = U.hoch < -0.3;   // Der Erdhügel wackelt (bei der Jagd wild!)
+    const wackel = m.modus === 'jagen' ? 1 : 0.3;
+    U.huegel.scale.set(1 + Math.sin(zeit * 12) * 0.08 * wackel, (m.modus === 'auftauchen' ? 1.6 + Math.sin(zeit * 30) * 0.2 : 1) + Math.sin(m.phase * 8) * 0.1 * wackel, 1);
+    const spritzt = m.modus === 'auftauchen' || m.modus === 'abtauchen' || (m.modus === 'oben' && U.hoch < -0.2);   // Erdbrocken fliegen!
+    U.brocken.forEach((b, k) => {
+      b.visible = spritzt;
+      if (spritzt) { const t = (zeit * 1.5 + k * 0.137) % 1; b.position.set(Math.cos(b.userData.w) * t * 1.6, 0.2 + b.userData.v * t - 4.9 * t * t, Math.sin(b.userData.w) * t * 1.6); }
+    });
+    const wild = m.betaeubt > 0 ? 0.2 : m.modus === 'oben' ? 1 : 0.4;   // Acht Arme fuchteln durcheinander
+    U.arme.forEach(a => {
+      const { s, k, unter } = a.userData, ph = zeit * 9 + k * 1.3 + (s > 0 ? 0.7 : 0);
+      a.rotation.z = s * (0.3 + Math.sin(ph) * 0.5 * wild); a.rotation.y = Math.cos(ph * 0.8) * 0.4 * wild;
+      unter.rotation.x = -0.6 + Math.sin(ph + 1) * 0.8 * wild;
+    });
+    U.tentakel.forEach((t, k) => t.scale.setScalar(1 + Math.sin(zeit * 20 + k) * 0.25));   // Die Sternnase schnuppert
+    U.augeMat.color.set(m.betaeubt > 0 ? '#555' : m.modus === 'oben' ? '#ff1a1a' : '#a33');
   } else if (m.art === 'oma') {
     const U = g.userData, jagt = m.modus === 'jagen', sauer = m.modus === 'grummeln';
     const schritt = m.laeuft ? Math.sin(m.phase * (jagt ? 14 : 5)) : 0;
@@ -3656,6 +3824,7 @@ function blitzVon(von, blickRichtung, meldung) {
     const zu = kopf.clone().sub(von), d = zu.length();
     if (d > BLITZ_WEITE || zu.normalize().dot(blickRichtung) < Math.cos(BLITZ_WINKEL)) continue;
     if (!freieSicht(von.clone(), kopf)) continue;
+    if (m.art === 'maulwurf' && m.modus !== 'oben') continue;   // Unter der Erde sieht er den Blitz nicht
     if (!m.info.betaeubbar) { starrerDa = true; continue; }   // Steinaugen kann man nicht blenden ...
     m.betaeubt = Math.max(m.betaeubt, BLITZ_BETAEUBT);
     m.modus = 'wandern'; m.ziel = null; m.zielen = 0;
@@ -3809,7 +3978,7 @@ function jaeger() {   // Welches Monster jagt dich gerade? (das nächste, oder n
   let bestes = null, bestD = 12;
   for (const m of monster) {
     const d = abstand3D(m, p);
-    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.modus === 'jagen')) { bestes = m; bestD = d; }
+    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.modus === 'jagen' || (m.art === 'maulwurf' && (m.modus === 'auftauchen' || m.modus === 'oben')))) { bestes = m; bestD = d; }
   }
   return bestes;
 }
