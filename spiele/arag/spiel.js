@@ -127,7 +127,7 @@ const SAELE = [
 const OFFEN = RAUM;   // "Tür" so breit wie die ganze Wand = keine Wand
 const saalVon = (i, j, e) => SAELE.find(S => S.etage === e && i >= S.i && i < S.i + S.breit && j >= S.j && j < S.j + S.tief) || null;
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1 };   // Starrer: 0 = gibt es nicht mehr
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
 const ABGABE_ZEIT = 0.8;            // So lange muss ein Schatz in der Abgabe liegen, bis er verkauft ist
@@ -365,6 +365,20 @@ const monsterSound = {
     gruselTon(140, 0, 0.9, 'sawtooth', 0.12 * laut, 260, 40);
     for (let k = 0; k < 6; k++) ton(300 + Math.random() * 200, k * 0.13, 0.05, 'square', 0.06 * laut);
   },
+  oma(laut, jagt) {   // 👵 Gehstock: tock ... tock ... und ein Gemurmel · Jagd: schnelles TOCK-TOCK-TOCK und Keifen
+    ton(jagt ? 1000 : 850, 0, 0.04, 'square', 0.12 * laut); rauschen(0, 0.05, 0.2 * laut, 'highpass', 2000);
+    if (jagt) { if (Math.random() < 0.35) gruselTon(700, 0.05, 0.35, 'sawtooth', 0.07 * laut, 1100, 18); }
+    else if (Math.random() < 0.4) gruselTon(210, 0.1, 0.9, 'triangle', 0.05 * laut, 170, 9);   // Mmmm-mmm-mmm ...
+  },
+  omaGrummel(laut) {   // HMPF?! Was guckst du so?!
+    gruselTon(160, 0, 0.45, 'sawtooth', 0.1 * laut, 320, 14);
+    gruselTon(330, 0.45, 0.35, 'sawtooth', 0.08 * laut, 260, 14);
+  },
+  bonk() {   // 🦯 BONK! Der Gehstock trifft
+    ton(520, 0, 0.12, 'square', 0.35, 180); ton(90, 0, 0.3, 'sine', 0.6, 40);
+    rauschen(0, 0.08, 0.5, 'bandpass', 1500);
+    for (let k = 0; k < 3; k++) ton(1800 + k * 400, 0.15 + k * 0.08, 0.1, 'sine', 0.06);   // Sternchen sehen ...
+  },
   starrer(laut) {   // 🗿 Stein schabt über den Boden
     rauschen(0, 0.45, 0.12 * laut, 'lowpass', 400, null, 150);
     ton(48, 0, 0.4, 'sawtooth', 0.04 * laut, 40);
@@ -380,6 +394,13 @@ function monsterGeraeusche(m, dt) {
   if (m.art === 'formwandler') {
     if (m.modus === 'verwandeln' && !m.warnTon) { m.warnTon = true; monsterSound.formwandlerGlitch(Math.max(0.5, monsterLautstaerke(m))); }
     if (m.modus !== 'verwandeln') m.warnTon = false;
+  }
+  if (m.art === 'oma') {   // Hmpf?! – Warnung, wenn jemand sie anschaut
+    if (m.modus === 'grummeln' && !m.warnTon) {
+      m.warnTon = true; monsterSound.omaGrummel(Math.max(0.5, monsterLautstaerke(m)));
+      if (!tot && ichSchaueHin(m, m.info.sichtWeite)) zeigeNachricht('👵 HMPF?! Was guckst du so?! SCHAU WEG!', 2, '#ffb36b');
+    }
+    if (m.modus !== 'grummeln') m.warnTon = false;
   }
   if (m.art === 'schrank') {   // Warnung: Das hört man immer (auch etwas weiter weg), damit du eine Chance hast
     if (m.modus === 'warnen' && !m.warnTon) { m.warnTon = true; monsterSound.schrankWach(Math.max(0.5, monsterLautstaerke(m))); }
@@ -397,6 +418,7 @@ function monsterGeraeusche(m, dt) {
   if (m.art === 'geist') m.geraeuschZeit = jagt ? zufall(1.2, 2) : zufall(3, 6);
   else if (m.art === 'jaeger') m.geraeuschZeit = jagt ? zufall(2.5, 4) : zufall(4, 7);
   else if (m.art === 'schrank') m.geraeuschZeit = jagt ? zufall(0.35, 0.5) : zufall(5, 9);
+  else if (m.art === 'oma') { m.geraeuschZeit = jagt ? zufall(0.25, 0.35) : zufall(0.9, 1.3); if (!m.laeuft && !jagt) return; }   // Steht sie, klopft der Stock nicht
   else if (m.art === 'formwandler') { m.geraeuschZeit = jagt ? zufall(0.6, 1) : zufall(7, 13); if (m.modus === 'tarnPokal' || m.modus === 'abhauen') return; }   // Als Pokal ist er still
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
   if (laut > 0) monsterSound[m.art](laut, jagt);
@@ -477,6 +499,17 @@ const MUSIK_LIEDER = {
     kick: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
     snare: [4, 12],
     melodie: [12, 13, null, 12, 18, 17, null, 13],
+  },
+  // 👵 Böse Oma: Ein wütender Kaffeeklatsch-Walzer auf der Kirchenorgel – mit Gehstock-Klopfen!
+  oma: {
+    tempo: 175, grund: 73, verzerrung: 30, gitarre: 0.35, melodieKlang: 'orgel', becken: 'tick',
+    riff: [
+      0, null, 7, null,  7, null, 0, null,   8, null, 7, null,   0, null, 3, null,
+      0, null, 7, null,  7, null, 0, null,   8, 8, 7, 7,   3, 2, 0, null,
+    ],
+    kick: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    snare: [4, 12],
+    melodie: [12, 15, 14, 12, 11, null, 7, 8],
   },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
@@ -596,6 +629,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     rauschen(0, 0.4, 0.8, 'lowpass', 2500, null, 100);
     ton(80, 0, 0.5, 'sine', 0.7, 40);
     gruselTon(500, 0.25, 1.0, 'sawtooth', 0.12, 150, 20);
+  } else if (art === 'oma') {     // 👵 Wütendes Keifen + Stock auf den Boden: TOCK! TOCK!
+    gruselTon(500, 0, 0.9, 'sawtooth', 0.14, 1300, 20);
+    gruselTon(750, 0, 0.9, 'square', 0.06, 1600, 25);
+    for (let k = 0; k < 2; k++) { ton(900, 0.2 + k * 0.25, 0.05, 'square', 0.3); ton(80, 0.2 + k * 0.25, 0.2, 'sine', 0.5, 40); }
   } else if (art === 'starrer') { // 🗿 Riesiger Steingong + Krachen
     for (const [f, laut] of [[55, 0.5], [151.8, 0.2], [297, 0.1]]) ton(f, 0, 3, 'sine', laut, f * 0.9);
     rauschen(0, 1.5, 0.5, 'lowpass', 1500, null, 60);
@@ -1533,6 +1570,7 @@ function baueHaus() {
   for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
   for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnPokal'; }
   for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
+  for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
 
   // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
   ducken(false);
@@ -1898,6 +1936,11 @@ const MONSTER_ARTEN = {
   // verwandeln: so lange glitcht er, bevor er losjagt · jagdDauer: so lange jagt er · tarnTempo: so schnell fährt er als falscher Bot herum
   formwandler: { name: 'Formwandler', emoji: '👾', tempo: 2.4, jagdTempo: 4.5, schaden: 35, pause: 2, betaeubbar: true,
               aufwachWeite: 2.3, verwandeln: 0.7, jagdDauer: 8, tarnTempo: 1.4 },
+  // 👵🦯 Die Böse Oma: Schau sie NICHT an! Sonst wird sie wütend und zieht dir eine mit dem Gehstock drüber!
+  // sichtWeite: ab so nah merkt sie, dass du sie anschaust · geduld: so viele Sekunden darfst du hinschauen, bevor sie losrennt
+  // jagdDauer: so lange jagt sie dich · schubs: so weit fliegst du nach dem Gehstock-Schlag · ruhe: so lange ist sie danach zufrieden
+  oma:      { name: 'Böse Oma',   emoji: '👵', tempo: 1.1, jagdTempo: 4.4, schaden: 35, pause: 2, betaeubbar: true,
+              sichtWeite: 13, geduld: 1.0, jagdDauer: 7, schubs: 14, ruhe: 5 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
@@ -1976,6 +2019,41 @@ function baueMonsterMesh(art) {
       g.userData.beineG.push(b);
     }
     g.userData.beine = 0; g.userData.spalt = spalt;
+  } else if (art === 'oma') {   // 👵 Krumme alte Oma: lila Kleid, Strickjacke, Dutt, Brille, Handtasche – und der GEHSTOCK
+    const mat = (f, rau = 0.9) => new THREE.MeshStandardMaterial({ color: f, roughness: rau });
+    const kleid = mat('#5b2a6e'), jacke = mat('#7a6a4f'), haut = mat('#e8c4a8'), haar = mat('#d8d8dc'), holz = mat('#5a3517', 0.6), schuh = mat('#1a1414');
+    const teil = (geo, m, x, y, z, eltern = g) => { const t = new THREE.Mesh(geo, m); t.position.set(x, y, z); eltern.add(t); return t; };
+    for (const s of [-1, 1]) teil(new THREE.BoxGeometry(0.14, 0.08, 0.24), schuh, s * 0.1, 0.04, 0.04);
+    teil(new THREE.CylinderGeometry(0.2, 0.42, 0.95, 12), kleid, 0, 0.5, 0);            // Langer Rock
+    const oben = new THREE.Group(); oben.position.set(0, 0.95, 0); g.add(oben);           // Der Oberkörper ist krumm (Buckel!)
+    oben.rotation.x = 0.35;
+    teil(new THREE.CylinderGeometry(0.2, 0.24, 0.55, 10), jacke, 0, 0.25, 0, oben);
+    teil(new THREE.SphereGeometry(0.2, 10, 8), jacke, 0, 0.42, -0.09, oben).scale.set(1.1, 0.8, 1);   // Buckel
+    const kopf = new THREE.Group(); kopf.position.set(0, 0.68, 0.06); oben.add(kopf);
+    kopf.rotation.x = -0.35;   // Kopf wieder gerade nach vorne (sie schaut dich an ...)
+    teil(new THREE.SphereGeometry(0.17, 12, 10), haut, 0, 0, 0, kopf);
+    teil(new THREE.SphereGeometry(0.19, 12, 10, 0, Math.PI * 2, 0, 1.6), haar, 0, 0.03, -0.02, kopf);   // Graue Haare
+    teil(new THREE.SphereGeometry(0.09, 10, 8), haar, 0, 0.12, -0.15, kopf);                 // Dutt
+    teil(new THREE.ConeGeometry(0.03, 0.08, 6), haut, 0, -0.02, 0.18, kopf).rotation.x = Math.PI / 2;   // Spitze Nase
+    // Brille mit Augen dahinter (die Augen leuchten: grau = ruhig, orange = sauer, rot = WÜTEND)
+    const augeMat = new THREE.MeshBasicMaterial({ color: '#8899aa', fog: false });
+    const brille = mat('#222', 0.4);
+    for (const s of [-1, 1]) {
+      teil(new THREE.SphereGeometry(0.03, 8, 6), augeMat, s * 0.065, 0.03, 0.15, kopf);
+      teil(new THREE.TorusGeometry(0.05, 0.008, 6, 14), brille, s * 0.065, 0.03, 0.165, kopf);
+    }
+    teil(new THREE.BoxGeometry(0.1, 0.03, 0.01), new THREE.MeshBasicMaterial({ color: '#2a0d0d' }), 0, -0.08, 0.16, kopf);   // Böser, schmaler Mund
+    // Linker Arm mit Handtasche
+    const armL = new THREE.Group(); armL.position.set(-0.24, 0.45, 0); oben.add(armL);
+    teil(new THREE.BoxGeometry(0.09, 0.45, 0.09), jacke, 0, -0.2, 0, armL);
+    teil(new THREE.BoxGeometry(0.22, 0.18, 0.08), mat('#2b1a10', 0.5), -0.02, -0.5, 0.02, armL);
+    // Rechter Arm mit Gehstock (der dreht sich zum Zuschlagen!)
+    const armR = new THREE.Group(); armR.position.set(0.24, 0.45, 0); oben.add(armR);
+    teil(new THREE.BoxGeometry(0.09, 0.45, 0.09), jacke, 0, -0.2, 0, armR);
+    const stock = new THREE.Group(); stock.position.set(0, -0.42, 0.05); armR.add(stock);
+    teil(new THREE.CylinderGeometry(0.025, 0.025, 1.05, 8), holz, 0, -0.45, 0, stock);
+    teil(new THREE.TorusGeometry(0.07, 0.025, 6, 10, Math.PI), holz, 0, 0.07, 0.07, stock).rotation.y = Math.PI / 2;   // Gebogener Griff
+    Object.assign(g.userData, { oben, kopf, armL, armR, augeMat, schlag: 0 });
   } else if (art === 'geist') {
     const staub = new THREE.MeshStandardMaterial({ color: '#8d8a86', transparent: true, opacity: 0.55, roughness: 1, depthWrite: false });
     for (let k = 0; k < 7; k++) {
@@ -2141,6 +2219,8 @@ function updateMonster(m, dt) {
     tempo = schrankUpdate(m, dt);
   } else if (m.art === 'formwandler') {
     tempo = formwandlerUpdate(m, dt);
+  } else if (m.art === 'oma') {
+    tempo = omaUpdate(m, dt);
   } else if (m.art === 'starrer') {
     // 🗿 Der Starrer friert ein, sobald du hinschaust
     m.gesehen = starrerGesehen(m);
@@ -2210,21 +2290,25 @@ function updateMonster(m, dt) {
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
-  // Angriff! Auf dich ...
-  const reichweite = 1.0;
+  // Angriff! Auf dich ... (Die Oma schlägt nur zu, wenn sie wütend ist)
+  const reichweite = m.art === 'oma' ? 1.3 : 1.0, schubs = info.schubs || 9;
+  const omaHautZu = () => { if (m.art === 'oma') { m.modus = 'wandern'; m.ziel = null; m.ruhe = info.ruhe; m.aerger = 0; m.mesh.userData.schlag = 0.45; } };
+  if (m.art === 'oma' && m.modus !== 'jagen') m.angriffPause = Math.max(m.angriffPause, 0.1);
   const fuss = p.y - (geduckt ? DUCK_RADIUS : KOERPER_RADIUS);
   if (m.angriffPause <= 0 && abstand2D(m.x, m.z, p.x, p.z) < reichweite && Math.abs(fuss - m.y) < 1.2) {
     m.angriffPause = info.pause;
     getroffen(info.schaden, `${info.emoji} ${info.name}`);
     const weg = new CANNON.Vec3(p.x - m.x, 0, p.z - m.z);
     weg.normalize();
-    spielerKoerper.velocity.set(weg.x * 9, 3, weg.z * 9);   // Wegschubsen
+    spielerKoerper.velocity.set(weg.x * schubs, 3, weg.z * schubs);   // Wegschubsen
+    omaHautZu();
   }
   // ... oder einen anderen Spieler (Multiplayer)
   for (const g of mpGaeste()) {
     if (m.angriffPause <= 0 && abstand2D(m.x, m.z, g.x, g.z) < reichweite && Math.abs(g.y - m.y) < 1.2) {
       m.angriffPause = info.pause;
-      mpTreffer(g, info.schaden, `${info.emoji} ${info.name}`, m, 9);
+      mpTreffer(g, info.schaden, `${info.emoji} ${info.name}`, m, schubs);
+      omaHautZu();
     }
   }
   // ... oder auf einen Helfer
@@ -2233,6 +2317,7 @@ function updateMonster(m, dt) {
     if (h.kaputt <= 0 && m.angriffPause <= 0 && abstand2D(m.x, m.z, hp.x, hp.z) < reichweite && Math.abs(hp.y - 0.35 - m.y) < 1.2) {
       m.angriffPause = info.pause;
       helferKaputt(h, info, m);
+      omaHautZu();
     }
   }
   // Getroffen von einem geworfenen Schatz? Dann betäubt!
@@ -2303,6 +2388,63 @@ function schrankUpdate(m, dt) {
   // Heimweg: zum neuen Versteck laufen
   m.ziel = { x: m.heim.x, y: m.heim.y, z: m.heim.z };
   if (abstand2D(m.x, m.z, m.heim.x, m.heim.z) < 0.3 && Math.abs(m.y - m.heim.y) < 1) { m.modus = 'lauern'; return 0; }
+  return info.tempo;
+}
+// 👵🦯 Die Böse Oma: wandern → (jemand schaut sie an) grummeln → (zu lange hingeschaut!) jagen → BONK → wieder wandern
+// Schaust du gerade auf diese Stelle? (Nur die Mitte vom Bild zählt – aus dem Augenwinkel ist okay)
+function ichSchaueHin(m, weite, hoehe = 1.3) {
+  const kopf = new THREE.Vector3(m.x, m.y + hoehe, m.z);
+  if (kopf.distanceTo(kamera.position) > weite) return false;
+  const p = kopf.clone().project(kamera);
+  if (p.z > 1 || Math.abs(p.x) > 0.55 || Math.abs(p.y) > 0.7) return false;
+  return freieSicht(kamera.position.clone(), kopf);
+}
+function omaGucker(m) {   // Wer schaut die Oma gerade an? (du oder ein Mitspieler – Helfer-Bots sind zu höflich dafür)
+  if (zustand !== 'spiel') return null;
+  const weite = m.info.sichtWeite, p = spielerKoerper.position;
+  if (!tot && ichSchaueHin(m, weite)) return { x: p.x, y: p.y, z: p.z, spieler: true };
+  const kopf = new THREE.Vector3(m.x, m.y + 1.3, m.z);
+  for (const g of mpGaeste()) {
+    if (!g.k || !g.r) continue;
+    const auge = new THREE.Vector3(g.k[0], g.k[1], g.k[2]), zu = kopf.clone().sub(auge);
+    if (zu.length() < weite && zu.normalize().dot(new THREE.Vector3(g.r[0], g.r[1], g.r[2])) > 0.85 && freieSicht(auge, kopf)) return { x: g.x, y: g.y, z: g.z, gast: g };
+  }
+  return null;
+}
+function omaUpdate(m, dt) {
+  const info = m.info;
+  m.ruhe = Math.max(0, (m.ruhe || 0) - dt);
+  if (m.modus === 'jagen') {   // WÜTEND! Sie rennt dem hinterher, der sie angeschaut hat
+    m.jagdZeit -= dt;
+    const o = m.opfer;
+    const ziel = !o ? null : o.spieler ? (tot ? null : spielerKoerper.position) : o.gast && mp.andere.has(o.gast.id) && o.gast.y > -10 ? o.gast : null;
+    if (!ziel || m.jagdZeit <= 0) { m.modus = 'wandern'; m.ziel = null; m.ruhe = 2; m.aerger = 0; return info.tempo; }
+    m.ziel = { x: ziel.x, y: ziel.y, z: ziel.z };
+    return info.jagdTempo;
+  }
+  const gucker = m.ruhe > 0 ? null : omaGucker(m);
+  if (gucker) {   // Hmpf?! Sie bleibt stehen, starrt zurück und wird immer saurer ...
+    m.modus = 'grummeln';
+    m.aerger = (m.aerger || 0) + dt / info.geduld;
+    m.winkel = Math.atan2(gucker.x - m.x, gucker.z - m.z);
+    m.ziel = { x: m.x, y: m.y, z: m.z };
+    if (m.aerger >= 1) {
+      m.modus = 'jagen'; m.jagdZeit = info.jagdDauer; m.opfer = gucker; m.aerger = 0;
+      if (gucker.spieler) zeigeNachricht('👵🦯 DU HAST DIE OMA ANGESCHAUT! LAUF!!!', 2.5, '#ff6b6b');
+      const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, m) < 15);
+      if (zeuge) { zeuge.angst = 3; sagen(zeuge, 'hilfe', { monster: info.name }, 1); }
+    }
+    return 0;
+  }
+  if (m.modus === 'grummeln') {   // Keiner schaut mehr hin: Sie beruhigt sich langsam wieder
+    m.aerger -= dt / info.geduld * 0.6;
+    if (m.aerger > 0) return 0;
+    m.modus = 'wandern'; m.ziel = null;
+  }
+  m.aerger = 0;
+  // Wandern (oder nachsehen, wenn sie Krach gehört hat)
+  m.zielZeit -= dt;
+  if (!m.ziel || m.zielZeit <= 0 || abstand3D(m, m.ziel) < 0.5) { m.modus = 'wandern'; m.ziel = zufallsZiel(m); m.zielZeit = zufall(5, 10); }
   return info.tempo;
 }
 // 🤖👾 Der Formwandler: tarnBot / tarnPokal → (jemand kommt nah) verwandeln → jagen → abhauen (in einen anderen Raum) → neue Tarnung
@@ -2489,6 +2631,22 @@ function zeigeMonster(m) {
     U.tuerR.rotation.y += (auf - U.tuerR.rotation.y) * 0.25;
     U.beineG.forEach((b, k) => { b.scale.y = Math.max(0.01, U.beine / 0.4); b.rotation.x = schritt * 0.6 * (k % 2 ? 1 : -1); });
     U.spalt.emissiveIntensity = m.modus === 'lauern' ? 0.35 + Math.sin(zeit * 2 + m.phase) * 0.25 : 1.5;
+  } else if (m.art === 'oma') {
+    const U = g.userData, jagt = m.modus === 'jagen', sauer = m.modus === 'grummeln';
+    const schritt = m.laeuft ? Math.sin(m.phase * (jagt ? 14 : 5)) : 0;
+    const zittern = sauer ? Math.sin(zeit * 45) * 0.02 : 0;
+    g.position.set(m.x + zittern, m.y + Math.abs(schritt) * (jagt ? 0.08 : 0.02), m.z);
+    g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel + (m.betaeubt > 0 ? Math.sin(zeit * 6) * 0.5 : 0), schritt * 0.06);
+    U.oben.rotation.x = jagt ? 0.15 : 0.35;   // Wütend steht sie fast gerade!
+    U.augeMat.color.set(m.betaeubt > 0 ? '#444' : jagt ? '#ff1a1a' : sauer ? '#ff9a2a' : '#8899aa');
+    U.schlag = Math.max(0, U.schlag - 1 / 60);
+    let arm;
+    if (U.schlag > 0) arm = -2.6 + (1 - U.schlag / 0.45) * 2.0;               // BONK: von hoch oben nach unten
+    else if (jagt) arm = -2.4 + Math.sin(m.phase * 12) * 0.5;                   // Stock hoch über dem Kopf, fuchtelt
+    else if (sauer) arm = -0.9 + Math.sin(zeit * 18) * 0.35;                    // Droht mit dem Stock
+    else arm = -0.15 + schritt * 0.25;                                           // Normal: stützt sich auf den Stock
+    U.armR.rotation.x += (arm - U.armR.rotation.x) * (U.schlag > 0 ? 0.6 : 0.25);
+    U.armL.rotation.x = -schritt * 0.2;
   } else {
     g.position.set(m.x, m.y, m.z);
     g.rotation.set(0, m.winkel, 0);   // Eine Statue wackelt nicht ...
@@ -2947,6 +3105,7 @@ function getroffen(menge, von) {
   schadenBlitz = 0.6;
   wackeln = 0.3;
   sound.autsch();
+  if (String(von).includes('Oma')) { monsterSound.bonk(); zeigeNachricht('🦯 BONK! Die Böse Oma hat dir eine übergezogen!', 2, '#ff6b6b'); }
   loslassen();   // Vor Schreck lässt du alles fallen!
   const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, spielerKoerper.position) < 15);
   if (zeuge) sagen(zeuge, 'aufpassen', {}, 1);
