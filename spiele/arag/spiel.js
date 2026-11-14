@@ -2606,8 +2606,8 @@ function zeigeMonster(m) {
     if (form === 'bot') {   // Sieht aus wie ein normaler Helfer ... aber manchmal flackert das Gesicht (X-Augen!)
       const F = U.botGesicht;
       F.kaputt = Math.sin(zeit * 1.7 + m.phase) > 0.985 ? 1 : 0;
-      beineAnimieren(U.bot, BEIN_LAENGE, m.laeuft, 1 / 60);
-      U.bot.arme.forEach((a, k) => { a.rotation.x = 0.9 + (m.laeuft ? Math.sin(zeit * 8 + k * Math.PI) * 0.15 : 0); });
+      beineAnimieren(U.bot, BEIN_LAENGE, m.laeuft ? m.info.tarnTempo : 0, 1 / 60);
+      U.bot.arme.forEach((a, k) => { a.rotation.x = 0.9 + U.bot.armSchwung * (k ? -1 : 1); });
       U.bot.antenne.visible = (zeit * 2) % 1.5 < 1.2;
       U.bot.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
       U.bot.g.visible = F.kaputt ? Math.random() < 0.5 : true;
@@ -2779,19 +2779,53 @@ function baueHelferMesh(info) {
   beineAnimieren(T, BEIN_LAENGE, false, 0);
   return T;
 }
-// Beine bewegen: ziel = wie weit ausgefahren (0 = ganz eingefahren, z. B. beim Ducken). laeuft = Schritte machen
+// Beine bewegen: ziel = wie weit ausgefahren (0 = ganz eingefahren, z. B. beim Ducken)
+// laeuft: true = Schritte machen (wie schnell, misst der Roboter selbst) · eine Zahl = so schnell läuft er (Meter pro Sekunde) · false = steht
+// Die Schritte passen zum Tempo: Die Füße bleiben auf dem Boden stehen, statt zu rutschen (wie bei echten Beinen!)
+const SCHRITT_WEITE = 0.12;    // So weit gehen die Füße nach vorne und hinten (wird beim Rennen größer)
+const SCHRITT_HOCH = 0.07;     // So hoch heben die Füße ab
 function beineAnimieren(T, ziel, laeuft, dt) {
-  T.ausgefahren += (ziel - T.ausgefahren) * Math.min(1, dt * 10 || 1);   // Weich ein- und ausfahren (zischhh!)
-  if (laeuft) T.schrittPhase += dt * 11;
-  const hoch = T.ausgefahren;
-  T.oben.position.y = hoch;
+  // Wie viel Zeit ist seit dem letzten Bild vergangen? (Echte Zeit – dann passt es auch bei schnellen Bildschirmen)
+  const t = T.letzteZeit === undefined ? 0 : begrenzt(zeit - T.letzteZeit, 0, 0.1);
+  T.letzteZeit = zeit;
+  if (dt === 0) T.tempo = T.gang = 0;
+  // Wie schnell bewegt sich der Roboter wirklich? (Selbst gemessen)
+  const pos = T.g.position;
+  if (T.altX === undefined) { T.altX = pos.x; T.altZ = pos.z; }
+  const gemessen = t > 0 ? Math.min(8, Math.hypot(pos.x - T.altX, pos.z - T.altZ) / t) : 0;
+  T.altX = pos.x; T.altZ = pos.z;
+  const ist = typeof laeuft === 'number' ? laeuft : laeuft ? gemessen : 0;
+  T.tempo = (T.tempo || 0) + (ist - (T.tempo || 0)) * Math.min(1, t * 10);
+  // gang: 0 = steht still, 1 = läuft richtig (weich überblenden, damit die Beine nicht springen)
+  T.gang = (T.gang || 0) + ((ist > 0.15 ? Math.min(1, T.tempo / 1.2 + 0.25) : 0) - (T.gang || 0)) * Math.min(1, t * 8);
+  T.ausgefahren += (ziel - T.ausgefahren) * Math.min(1, t * 10 || 1);   // Weich ein- und ausfahren (zischhh!)
+  const hoch = T.ausgefahren, beinAnteil = Math.min(1, hoch / 0.15);
+  // Größere Schritte, wenn er schneller ist – und die Schrittfrequenz passt genau dazu
+  const weite = (SCHRITT_WEITE + Math.min(0.13, T.tempo * 0.035)) * beinAnteil;
+  // Ein ganzer Schritt-Kreis = Fuß einmal ganz nach hinten (am Boden) und wieder nach vorne (in der Luft)
+  if (T.gang > 0.01) T.schrittPhase += Math.PI * 2 * Math.min(3.6, Math.max(T.tempo, 0.6) / Math.max(0.05, 4 * weite)) * t;
+  const ph = T.schrittPhase, g = T.gang;
+  // Körper: hüpft bei jedem Schritt ein bisschen hoch, wackelt zur Seite und lehnt sich beim Rennen nach vorne
+  const huepf = (0.5 - 0.5 * Math.cos(ph * 2)) * 0.035 * g * beinAnteil;
+  T.oben.position.y = hoch + huepf;
+  T.oben.rotation.z = Math.sin(ph) * 0.045 * g;
+  T.oben.rotation.x = Math.min(0.12, T.tempo * 0.02) * g;
+  if (T.kopf) T.kopf.rotation.z = -Math.sin(ph) * 0.03 * g;   // Kopf bleibt ruhiger (gleicht aus)
+  T.armSchwung = Math.sin(ph) * 0.35 * g;   // Für die Arme: gegengleich zu den Beinen schwingen
   for (const b of T.beine) {
-    const huefteY = hoch + 0.15;
-    // Beim Laufen: Füße abwechselnd nach vorne und hoch (je weiter ausgefahren, desto größer die Schritte)
-    const welle = Math.sin(T.schrittPhase + (b.s > 0 ? Math.PI : 0)) * (laeuft ? 1 : 0);
-    const schritt = welle * 0.14 * Math.min(1, hoch / 0.15);
-    const heben = laeuft ? Math.max(0, Math.cos(T.schrittPhase + (b.s > 0 ? Math.PI : 0))) * 0.06 * Math.min(1, hoch / 0.15) : 0;
+    const huefteY = hoch + 0.15 + huepf;
+    // u = wo im Schritt der Fuß gerade ist (0 bis 1). Das zweite Bein ist genau einen halben Schritt versetzt.
+    const u = ((ph / (Math.PI * 2) + (b.s > 0 ? 0.5 : 0)) % 1 + 1) % 1;
+    let schritt, heben, kipp;
+    if (u < 0.5) {   // Am Boden: Der Fuß steht still, der Roboter läuft über ihn drüber (darum wandert er gleichmäßig nach hinten)
+      schritt = weite * (1 - 4 * u); heben = 0; kipp = u > 0.4 ? (u - 0.4) * 4 : 0;   // Am Ende: Ferse hoch zum Abdrücken
+    } else {         // In der Luft: Fuß hochheben und nach vorne schwingen
+      const w = (u - 0.5) / 0.5;
+      schritt = -weite * Math.cos(Math.PI * w); heben = Math.sin(Math.PI * w) * SCHRITT_HOCH * beinAnteil; kipp = 0.4 - w * 0.8;
+    }
+    schritt *= g; heben *= g;
     b.fuss.position.set(b.s * 0.17, heben, schritt);
+    b.fuss.rotation.x = kipp * 0.5 * g;
     b.huefte.position.set(b.s * 0.17, huefteY, 0);
     // Die Kolbenstange geht von der Hüfte bis zum Fuß (schräg, wenn der Fuß vorne oder hinten ist)
     const dy = huefteY - (heben + 0.07), dz = schritt;
@@ -2985,7 +3019,7 @@ function zeigeHelfer(h) {
   if (h.kaputt > 0) T.g.position.y = p.y - 0.25;
   const faehrt = mp.rolle === 'gast' ? h.zx !== undefined && Math.hypot(h.zx - p.x, h.zz - p.z) > 0.05 : Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.3;
   beineAnimieren(T, h.kaputt > 0 ? 0 : BEIN_LAENGE, faehrt && h.kaputt <= 0, 1 / 60);   // Kaputt: Beine fahren ein
-  T.arme.forEach((a, k) => { a.rotation.x = h.modus === 'tragen' ? -0.5 : 0.9 + (faehrt ? Math.sin(zeit * 8 + k * Math.PI) * 0.15 : 0); });
+  T.arme.forEach((a, k) => { a.rotation.x = h.modus === 'tragen' ? -0.5 : 0.9 + T.armSchwung * (k ? -1 : 1); });
   // Beim Reden zu dir schauen, sonst nach vorne
   let kopfDreh = 0;
   if (h.redet > 0) {
@@ -4131,17 +4165,16 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     }
     o.teile.g.visible = true;
     const f = 0.25;
-    const laeuft = Math.hypot(o.x - o.ax, o.z - o.az) > 0.03;
     o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
     o.aw = winkelHin(o.aw, o.w, f);
     const T = o.teile, wink = o.aw + Math.PI;   // Die Kamera schaut nach -Z, die Roboter nach +Z
     T.g.position.set(o.ax, o.ay, o.az);
     T.g.rotation.set(0, wink, 0);
-    beineAnimieren(T, o.dk ? 0 : BEIN_LAENGE, laeuft, 1 / 60);   // Geduckt: Beine einfahren!
+    beineAnimieren(T, o.dk ? 0 : BEIN_LAENGE, true, 1 / 60);   // (Wie schnell er läuft, misst der Roboter selbst)   // Geduckt: Beine einfahren!
     const haelt = o.hg >= 0 ? schatzMitId(o.hg) : null;
     // Hält er einen Mitspieler hoch? (vielleicht sogar DICH!)
     const packtPos = !o.pg ? null : o.pg === mp.peer.id ? spielerKoerper.position : mp.andere.get(o.pg) ? (q => ({ x: q.ax, y: q.ay + 0.6, z: q.az }))(mp.andere.get(o.pg)) : null;
-    T.arme.forEach(a => { a.rotation.x = haelt || packtPos ? -0.5 : 0.9; });
+    T.arme.forEach((a, k) => { a.rotation.x = haelt || packtPos ? -0.5 : 0.9 + T.armSchwung * (k ? -1 : 1); });
     T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
     T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
     malGesicht(o);
