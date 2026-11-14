@@ -3071,6 +3071,7 @@ document.addEventListener('keydown', e => {
   if (k === 'f') ansichtWechseln();
   if (k === 'r') rotation += Math.PI / 4;
   if (k === 'm') tonAn = !tonAn;
+  if (k === 'j') { musikAn = !musikAn; meldung(musikAn ? '🎵 Musik an' : '🔇 Musik aus', 1.5); }
   if (k === 'v') verkaufen();
   if (k === 'g') saatKaufen();
   if (k === 't') tanken();
@@ -3661,6 +3662,53 @@ function schlafen() {
   }, 1300);
 }
 
+// ===== Hintergrundmusik (selbst gespielt mit Web Audio – keine Datei nötig!) =====
+// Tagsüber: fröhliche Bauernhof-Musik (Gitarre, Bass, Flöte). Nachts: ruhige Schlaflied-Musik.
+const MUSIK_LAUT = 0.35;         // Wie laut die Musik ist (0 = aus, 1 = sehr laut)
+let musikAn = true, musik = null;
+const note = m => 440 * Math.pow(2, (m - 69) / 12);   // Notennummer -> Tonhöhe (60 = das C in der Mitte vom Klavier)
+// Akkorde: [Bass, Akkord-Töne] · Tag: C – G – a – F · Nacht: a – F – C – G
+const MUSIK_TAG = { tempo: 0.28, akkorde: [[48, [60, 64, 67]], [43, [59, 62, 67]], [45, [60, 64, 69]], [41, [60, 65, 69]]],
+  melodie: [72, 74, 76, 79, 76, 74, 72, -1,  74, 71, 74, 79, 77, 76, 74, -1,  76, 72, 76, 81, 79, 76, 72, -1,  77, 76, 74, 72, 74, 72, 69, -1,
+            79, -1, 76, 79, 81, 79, 76, -1,  79, 77, 76, 74, 71, 74, 79, -1,  76, 74, 72, 76, 81, 76, 72, -1,  72, 74, 76, 72, 69, 72, 72, -1] };
+const MUSIK_NACHT = { tempo: 0.42, akkorde: [[45, [57, 60, 64]], [41, [57, 60, 65]], [48, [55, 60, 64]], [43, [55, 59, 62]]],
+  melodie: [76, -1, 72, -1, 74, -1, 72, -1,  77, -1, 76, -1, 72, -1, -1, -1,  76, -1, 79, -1, 76, -1, 72, -1,  74, -1, 71, -1, 74, -1, -1, -1] };
+function musikTon(f, t, dauer, klang, laut, ziel) {   // Einen Ton genau zur Zeit t spielen
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = klang; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
+  o.connect(g).connect(ziel); o.start(t); o.stop(t + dauer + 0.05);
+}
+function musikUpdate() {
+  if (!audio) return;
+  if (!musik) {   // Beim ersten Mal: eigener Lautstärke-Regler für die Musik
+    const g = audio.createGain(); g.gain.value = 0; g.connect(audio.destination);
+    musik = { g, zeit: audio.currentTime + 0.3, schritt: 0 };
+  }
+  const nacht = tagHell < 0.4;
+  musik.g.gain.setTargetAtTime(musikAn && tonAn ? MUSIK_LAUT * (nacht ? 0.8 : 1) : 0, audio.currentTime, 0.3);
+  if (!musikAn || !tonAn) { musik.zeit = audio.currentTime + 0.3; return; }
+  if (musik.zeit < audio.currentTime - 0.1) musik.zeit = audio.currentTime + 0.05;   // War das Spiel im Hintergrund? Nicht alles nachholen!
+  // Immer ein kleines Stück im Voraus planen (dann klingt es gleichmäßig, auch wenn das Spiel kurz ruckelt)
+  while (musik.zeit < audio.currentTime + 0.4) {
+    const M = nacht ? MUSIK_NACHT : MUSIK_TAG, t = musik.zeit, k = musik.schritt;
+    const takt = Math.floor(k / 8) % M.akkorde.length, im = k % 8, [bass, akkord] = M.akkorde[takt];
+    if (nacht) {   // Nachts: weiche Harfe (Akkord-Töne nacheinander) und leiser Bass
+      if (im % 2 === 0) musikTon(note(akkord[(im / 2) % 3] + 12), t, 1.6, 'sine', 0.05, musik.g);
+      if (im === 0) musikTon(note(bass), t, 3, 'sine', 0.09, musik.g);
+    } else {        // Tagsüber: Bass auf 1 und 5, Gitarre schrummt, Flöte spielt die Melodie
+      if (im === 0 || im === 4) musikTon(note(bass + (im === 4 ? 7 : 0)), t, 0.5, 'triangle', 0.11, musik.g);
+      if (im === 2 || im === 6) for (const n of akkord) musikTon(note(n), t + (n % 3) * 0.012, 0.35, 'triangle', 0.03, musik.g);
+    }
+    const m = M.melodie[k % M.melodie.length];
+    if (m > 0) {
+      musikTon(note(m), t, nacht ? 0.9 : 0.32, 'sine', nacht ? 0.045 : 0.06, musik.g);
+      if (!nacht) musikTon(note(m) * 2, t, 0.15, 'sine', 0.01, musik.g);   // Etwas "Luft" wie bei einer Flöte
+    }
+    musik.zeit += M.tempo; musik.schritt++;
+  }
+}
+
 // ===== Spielschleife =====
 const clock = new THREE.Clock();
 const kamPos = new THREE.Vector3(0, 8, 20);
@@ -3697,6 +3745,7 @@ function animate() {
   waldUpdate(dt);
   dorfUpdate(dt);
   angelUpdate(dt);
+  musikUpdate();
   salzUpdate(dt);
   gebUpdate(dt);
   panelUpdate();
