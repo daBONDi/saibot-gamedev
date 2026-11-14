@@ -2373,6 +2373,9 @@ function fahren(fz, dt) {
 const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const MP_VORSILBE = 'farming-hof-';   // Damit sich die Codes nicht mit ARAG mischen
 const MP_MAX = 4, MP_RATE = 15;
+// Die Spiel-Version kommt automatisch aus der index.html (spiel.js?v=...). Alle Spieler brauchen die gleiche!
+const SPIEL_VERSION = new URL(import.meta.url).searchParams.get('v') || '?';
+const ALTE_VERSION = '⚠️ Ihr habt verschiedene Spiel-Versionen! Wer das alte Spiel hat: Strg + F5 drücken (am Handy/Tablet: Seite neu laden).';
 const MP_BAUERN = [
   { name: 'Bauer Rot', farbe: '#b3261e' },
   { name: 'Bauer Blau', farbe: '#2457a6' },
@@ -2480,7 +2483,7 @@ function mpNeuerGast(conn) {
     if (nr >= MP_MAX) { conn.send({ t: 'voll' }); setTimeout(() => conn.close(), 500); return; }
     const g = mpSpielerNeu(conn.peer, nr);
     g.conn = conn;
-    conn.send({ t: 'hallo', nr, code: mp.code });
+    conn.send({ t: 'hallo', nr, code: mp.code, v: SPIEL_VERSION });
     conn.send(weltSchnappschuss());
     meldung(`👋 ${g.name} ist auf deinem Hof!`, 3);
     sound.kaufen();
@@ -2566,6 +2569,7 @@ function mpEmpfangen(d, vonGast) {
   const host = mp.rolle === 'host';
   switch (d.t) {
     case 'hallo':
+      if (d.v !== SPIEL_VERSION) meldung(ALTE_VERSION, 12);
       mp.nr = d.nr;
       farmer.hemd.map = karoTextur(MP_BAUERN[d.nr].farbe); farmer.hemd.needsUpdate = true;   // Dein Hemd bekommt deine Farbe
       return;
@@ -2587,7 +2591,12 @@ function mpEmpfangen(d, vonGast) {
         });
       });
       return;
-    case 'sp': if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho }); } break;
+    case 'sp':
+      if (host && vonGast && !vonGast.versionOk) {   // Hat der Gast die gleiche Version? (Alte Versionen schicken gar keine mit)
+        vonGast.versionOk = true;
+        if (d.v !== SPIEL_VERSION) meldung(`${ALTE_VERSION} (${vonGast.name})`, 12);
+      }
+      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho }); } break;
     case 'fz': {
       const fz = fahrzeuge.find(f => f.id === d.id);
       if (fz && fz !== aktiv) {
@@ -2641,7 +2650,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
