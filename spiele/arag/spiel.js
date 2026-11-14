@@ -129,6 +129,7 @@ const saalVon = (i, j, e) => SAELE.find(S => S.etage === e && i >= S.i && i < S.
 // Jedes Monster gibt es genau EINMAL im Haus
 const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
+const GEWINN_PROZENT = 62;           // 🏆 Gewonnen, wenn so viel Prozent aller Schätze im Haus verkauft sind – und ALLE Spieler leben!
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
 const ABGABE_ZEIT = 0.8;            // So lange muss ein Schatz in der Abgabe liegen, bis er verkauft ist
 function levelDaten() {
@@ -3265,6 +3266,7 @@ function update(dt) {
     s.drinZeit = drin ? (s.drinZeit || 0) + dt : 0;
     if (s.drinZeit > ABGABE_ZEIT) abgeben(s);
   }
+  gewinnPruefen();
   // Ab und zu taucht ein neuer Schatz im Haus auf
   neuerSchatzZeit -= dt;
   if (neuerSchatzZeit <= 0) { neuerSchatzZeit = NEUER_SCHATZ_ALLE; if (schaetze.filter(x => x.typ.id !== 'kopf').length < schatzStartAnzahl) neuerSchatzIrgendwo(); }
@@ -3302,6 +3304,22 @@ function jaeger() {   // Welches Monster jagt dich gerade? (das nächste, oder n
 }
 // ===== Abgabe, neue Schätze, Köpfe und Wiederbeleben =====
 let tot = false, meinKopfId = null, neuerSchatzZeit = NEUER_SCHATZ_ALLE, schatzStartAnzahl = 0;
+let verkauft = 0, gewinnHinweisZeit = -99;   // So viele Schätze wurden schon verkauft
+const gewinnZiel = () => Math.max(1, Math.ceil(schatzStartAnzahl * GEWINN_PROZENT / 100));
+function alleLeben() {   // Lebt jeder Spieler? (Liegt irgendwo noch ein Kopf herum, ist jemand kaputt)
+  if (tot || schaetze.some(x => x.typ.id === 'kopf')) return false;
+  for (const g of mp.andere.values()) if (g.y <= -10) return false;
+  return true;
+}
+function gewinnPruefen() {   // Nur beim Gastgeber (oder allein)
+  if (zustand !== 'spiel' || verkauft < gewinnZiel()) return;
+  if (alleLeben()) { gewonnen(); return; }
+  if (zeit - gewinnHinweisZeit > 6) {
+    gewinnHinweisZeit = zeit;
+    const t = '🏆 Genug Schätze verkauft! Aber erst gewinnt ihr, wenn ALLE wieder leben – bringt die Köpfe 🤖 zur Abgabe!';
+    zeigeNachricht(t, 4, '#ffd166'); if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: t, farbe: '#ffd166' });
+  }
+}
 function schatzEntfernen(s) {   // Einen Schatz ganz aus dem Spiel nehmen
   for (const h of helfer) if (h.auftrag === s) helferLoslassen(h);
   mpSchatzWeg(s);
@@ -3325,6 +3343,7 @@ function abgeben(s) {
     return;
   }
   konto += s.wert;
+  verkauft++;
   if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } }
   sound.abgabe();
   schwebeText(p.x, p.y + 0.6, p.z, `+${euro(s.wert)} 💰`, '#7cf5c6');
@@ -3401,20 +3420,18 @@ function starteLevel(startzahl = KARTE.startzahl) {
   if (mp.rolle === 'gast') mpGastVorbereiten();
   energie = 100; ausdauer = AUSDAUER_MAX;
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
-  tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length;
+  tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
-  zeigeNachricht('🏚️ Die große Spukvilla! Bring Schätze zur Abgabe 🚚 – jeder Schatz wird sofort zu Geld!', 5);
+  zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5);
   mausFangen();
 }
-function levelGeschafft() {
-  const wert = lasterWert();
-  konto += wert;
-  levelErgebnis = { wert, helfer: helfer.map(h => `${h.name}: ${h.abgeliefert}`).join(' · ') };
+function gewonnen() {   // 🏆 GEWONNEN!
+  levelErgebnis = { verkauft, ziel: gewinnZiel(), zeit: Math.round(spielZeit), helfer: helfer.map(h => `${h.name}: ${h.abgeliefert}`).join(' · ') };
   if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } }
   zustand = 'geschafft';
   loslassen();
   sound.geschafft();
-  if (mp.rolle === 'host') mpAnAlle({ t: 'geschafft', wert, konto, helfer: levelErgebnis.helfer });
+  if (mp.rolle === 'host') mpAnAlle({ t: 'geschafft', erg: levelErgebnis, konto });
   if (document.pointerLockElement) document.exitPointerLock();
 }
 
@@ -3499,13 +3516,16 @@ function zeichneHUD() {
   }
   // Oben links: Level, Ziel, Raum und Stockwerk
   const p = tot ? kamera.position : spielerKoerper.position;
-  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 12, 280, 92, 12); ctx.fill();
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 12, 280, 130, 12); ctx.fill();
   text('🏚️ SPUKVILLA', 24, 30, 16, '#7cf5c6', 'left');
   const genug = konto >= WIEDERBELEBEN_PREIS;
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
   text(`📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}`, 24, 86, 13, '#c9c3ff', 'left', false);
+  const zielN = gewinnZiel(), fertig = verkauft >= zielN;
+  text(`🏆 Ziel: ${Math.min(verkauft, zielN)} / ${zielN} Schätze verkauft`, 24, 108, 13, fertig ? '#4ade80' : '#ffd166', 'left', false);
+  balken(24, 120, 256, 10, verkauft / zielN, fertig ? '#4ade80' : '#ffd166');
   // Oben rechts: Konto und Helfer
   ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(W - 282, 12, 270, 40 + helfer.length * 22, 12); ctx.fill();
   text(`💰 ${euro(konto)}`, W - 147, 32, 17, '#ffd166');
@@ -3585,10 +3605,9 @@ function zeichneHUD() {
     if (s.getragenVon && !gegriffen) text(`🤖 ${s.getragenVon.name} trägt das gerade`, W / 2, H / 2 + 118, 12, s.getragenVon.farbe);
   }
   // Abfahren?
-  if (lasterWert() >= ld.ziel) {
-    const da = spielerImLaster();
-    ctx.fillStyle = 'rgba(10,12,18,0.85)'; rr(W / 2 - 200, H - 70, 400, 46, 12); ctx.fill();
-    text(da ? '✅ Ziel erreicht! Drück E zum Abfahren!' : '✅ Ziel erreicht! Geh zum Transporter und drück E', W / 2, H - 47, 16, '#4ade80');
+  if (verkauft >= gewinnZiel() && !alleLeben() && !tot) {
+    ctx.fillStyle = 'rgba(10,12,18,0.85)'; rr(W / 2 - 230, H - 70, 460, 46, 12); ctx.fill();
+    text('🏆 Genug verkauft! Belebt alle wieder, dann habt ihr gewonnen!', W / 2, H - 47, 15, '#ffd166');
   }
   // Ein Monster jagt dich!
   if (gejagt()) text('⚠️ GEJAGT!', W / 2, 95, 20 + Math.sin(zeit * 10) * 2, '#ff6b6b');
@@ -3654,16 +3673,15 @@ function zeichneTitel() {
 }
 function zeichneGeschafft() {
   ctx.fillStyle = 'rgba(5,8,10,0.88)'; ctx.fillRect(0, 0, W, H);
-  text(`✅ LEVEL ${level} GESCHAFFT!`, W / 2, 140, 46, '#4ade80');
-  zeichneRoboter(W / 2, 250, 1.1);
-  text(`Abgeliefert: ${euro(levelErgebnis.wert)}`, W / 2, 345, 24, '#fff');
-  if (levelErgebnis.helfer) text(`🤖 Von deinen Helfern gebracht: ${levelErgebnis.helfer}`, W / 2, 378, 15, '#c9c3ff', 'center', false);
-  text(`💰 Auf dem Konto: ${euro(konto)}`, W / 2, 415, 24, '#ffd166');
-  if (konto >= rekord) text('🏆 Neuer Rekord!', W / 2, 452, 20, '#ffd166');
-  const n = levelDaten(level + 1);
-  const monsterText = [`${n.geister} 👻`, n.lauscher ? `${n.lauscher} 👂` : '', n.starrer ? `${n.starrer} 🗿` : ''].filter(Boolean).join(' ');
-  text(`Nächstes Level: ${n.etagen} Stockwerke mit je ${n.breit}×${n.tief} Räumen, Ziel ${euro(n.ziel)}, Monster: ${monsterText}`, W / 2, 492, 15, '#c9c3ff', 'center', false);
-  text(mp.rolle === 'gast' ? '⏳ Warte auf den Gastgeber ...' : '▶ Klicken für das nächste Level', W / 2, 545, 24, '#7cf5c6');
+  const E = levelErgebnis || {};
+  text('🏆 GEWONNEN! 🏆', W / 2, 130, 52, '#ffd166');
+  zeichneRoboter(W / 2, 240, 1.1);
+  text(`🎉 ${E.verkauft} Schätze verkauft (Ziel: ${E.ziel}) – und ${mp.aktiv ? 'alle sind' : 'du bist'} am Leben!`, W / 2, 340, 22, '#fff');
+  if (typeof E.zeit === 'number') text(`⏱️ Zeit: ${Math.floor(E.zeit / 60)} min ${E.zeit % 60} s`, W / 2, 375, 18, '#c9c3ff');
+  if (E.helfer) text(`🤖 Von deinen Helfern gebracht: ${E.helfer}`, W / 2, 405, 15, '#c9c3ff', 'center', false);
+  text(`💰 Auf dem Konto: ${euro(konto)}`, W / 2, 445, 24, '#ffd166');
+  if (konto >= rekord) text('🏆 Neuer Rekord!', W / 2, 480, 20, '#ffd166');
+  text(mp.rolle === 'gast' ? '⏳ Warte auf den Gastgeber ...' : '▶ Klicken für ein neues Spiel', W / 2, 545, 24, '#7cf5c6');
 }
 function zeichneKaputt() {
   ctx.fillStyle = 'rgba(25,0,0,0.85)'; ctx.fillRect(0, 0, W, H);
@@ -3712,7 +3730,7 @@ addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
 canvas.addEventListener('pointerdown', e => {
   tonStart();
   if (zustand === 'titel') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
-  if (zustand === 'geschafft') { if (mp.rolle !== 'gast') { level++; starteLevel(); } return; }
+  if (zustand === 'geschafft') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
   if (tot) { if (!mp.aktiv && e.button === 2) { zustand = 'kaputt'; if (document.pointerLockElement) document.exitPointerLock(); } return; }   // Allein: Rechtsklick = aufgeben
@@ -3925,7 +3943,7 @@ function mpHostSendet() {
     const alt = s.mpAlt;
     if (alle || !alt || a.some((v, i) => Math.abs(v - alt[i]) > 0.004)) { sc.push(a); s.mpAlt = a; }
   }
-  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, ids: alle ? schaetze.map(x => x.id) : null,
+  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, ids: alle ? schaetze.map(x => x.id) : null,
     koepfe: alle ? schaetze.filter(x => x.typ.id === 'kopf').map(x => [x.id, x.besitzer, x.typ.farbe]) : null,
     neu: alle ? schaetze.filter(x => x.typ.id !== 'kopf').map(x => [x.id, x.typ.id]) : null });
 }
@@ -3975,7 +3993,7 @@ function mpVomHost(d) {
     return;
   }
   if (d.t === 'geschafft') {
-    levelErgebnis = { wert: d.wert, helfer: d.helfer };
+    levelErgebnis = d.erg;
     konto = d.konto;
     if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } }
     zustand = 'geschafft';
@@ -4029,6 +4047,7 @@ function mpSchnappschuss(d) {
     if (!h.auftrag) h.modus = 'suchen';
   });
   // Schätze
+  if (typeof d.vk === 'number') verkauft = d.vk;
   if (typeof d.ko === 'number') { konto = d.ko; if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } } }
   // Neue Schätze und Köpfe, die der Gastgeber hat, ich aber noch nicht
   for (const [id, typId] of d.neu || []) if (!schatzMitId(id)) { const typ = SCHAETZE.find(t => t.id === typId); if (typ) neuerSchatz(typ, 0, -40, 0).id = id; }
