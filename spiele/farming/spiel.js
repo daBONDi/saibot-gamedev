@@ -53,6 +53,9 @@ const GEBAEUDE_ARTEN = {
   kuhweide: { name: 'Kuhweide', emoji: '🐄', preis: 8000, r: 10, tier: 'kuh' },
   schafweide: { name: 'Schafweide', emoji: '🐑', preis: 6000, r: 8, tier: 'schaf' },
   huehnerhof: { name: 'Hühnerhof', emoji: '🐔', preis: 4000, r: 6, tier: 'huhn' },
+  apfelbaum: { name: 'Apfelbaum', emoji: '🍎', preis: 2000, r: 1.6 },
+  birnbaum: { name: 'Birnbaum', emoji: '🍐', preis: 2500, r: 1.6 },
+  kirschbaum: { name: 'Kirschbaum', emoji: '🍒', preis: 3000, r: 1.6 },
 };
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
 // (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
@@ -77,6 +80,14 @@ const PRODUKTE = {
   eier: { name: 'Eier', emoji: '🥚', einheit: 'Stück', preis: 2 },
 };
 for (const [k, G] of Object.entries(GEMUESE)) PRODUKTE[k] = { name: G.name, emoji: G.emoji, einheit: G.einheit, preis: G.preis };
+// Obstbäume: zeit = Sekunden bis die Früchte reif sind, menge = so viel pflückst du, preis = so viel bringt 1 kg im Dorfladen
+// (bluete = Farbe der Blüten, farbe = Farbe der reifen Früchte, groesse = Fruchtgröße, laenglich = Birnen sind länglich)
+const OBST = {
+  apfelbaum: { frucht: 'apfel', name: 'Äpfel', emoji: '🍎', zeit: 120, menge: 100, preis: 3, bluete: 0xf6c6d6, farbe: 0xd8231e, groesse: 0.14, laenglich: 1, krone: 0x2f7d2a },
+  birnbaum: { frucht: 'birne', name: 'Birnen', emoji: '🍐', zeit: 150, menge: 80, preis: 4, bluete: 0xffffff, farbe: 0xd2c63a, groesse: 0.13, laenglich: 1.4, krone: 0x3a8a2f },
+  kirschbaum: { frucht: 'kirsche', name: 'Kirschen', emoji: '🍒', zeit: 90, menge: 50, preis: 8, bluete: 0xfff0f5, farbe: 0x8e0f1e, groesse: 0.07, laenglich: 1, krone: 0x2a6e2a },
+};
+for (const O of Object.values(OBST)) PRODUKTE[O.frucht] = { name: O.name, emoji: O.emoji, einheit: 'kg', preis: O.preis };
 const FUTTER_MAX = 5000;         // So viel Futter (kg) passt in einen Futtertrog
 const FUTTER_PREIS = 0.5;        // Futter kaufen kostet so viel pro kg (Korn vom eigenen Feld ist gratis!)
 const LADEN = { x: 60, z: 12, r: 8 };   // Der Landhandel: Hier verkaufst du Korn und kaufst Saat
@@ -1454,6 +1465,9 @@ function baueGebaeudeMesh(art) {
       kasten(g, x, 0.35, 0, 1.6, 0.3, L - 1, 0x7a5230);
       kasten(g, x, 0.42, 0, 1.4, 0.06, L - 1.2, 0x4f331c, false);
     }
+  } else if (OBST[art]) {   // Obstbaum: Stamm + Krone (die Früchte kommen später dazu)
+    const stamm = new THREE.Mesh(stammGeo, mat(0x6b4423)); stamm.castShadow = true; g.add(stamm);
+    const krone = new THREE.Mesh(kroneGeo, windMaterial(mat(OBST[art].krone, { flatShading: true }), 0.15)); krone.castShadow = true; g.add(krone);
   } else if (GEBAEUDE_ARTEN[art].tier) {   // Ein rundes Gehege mit Holzzaun, Unterstand und Futtertrog
     const R = GEBAEUDE_ARTEN[art].r - 0.3, huhn = art === 'huehnerhof';
     const boden = new THREE.Mesh(new THREE.CircleGeometry(R, 32), mat(huhn ? 0x9b7b4a : 0x5f8f3a));
@@ -1504,6 +1518,7 @@ function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   const b = { art, x, z, rot, mesh, h, silo: art === 'silo' ? neuesSilo(x, z, inhalt) : null, extra: [] };
   if (art === 'gewaechshaus') ghEinrichten(b);
   if (GEBAEUDE_ARTEN[art].tier) gehegeEinrichten(b);
+  if (OBST[art]) obstEinrichten(b);
   if (daten) gebDatenSetzen(b, daten);
   gebaute.push(b);
 }
@@ -1550,6 +1565,49 @@ function ghMalen(b) {   // Die Pflanzen so groß zeichnen, wie sie gerade sind
   gh.blaetter.count = GH_PLAETZE.length; gh.fruechte.count = nf;
   for (const m of [gh.blaetter, gh.fruechte]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   b.schild.userData.malen(w >= 1 ? `${G.emoji} ${G.name} reif! P = ernten` : `${G.emoji} ${G.name}: ${Math.floor(w * 100)} %`, w >= 1 ? '#7cf5a0' : '#ffd166');
+}
+
+// ===== Obstbäume: erst Blüten, dann grüne Früchte, dann reif und bunt =====
+const OBST_PLAETZE = [];   // Wo die Früchte in der Krone hängen (gleichmäßig verteilt, wie bei einer Sonnenblume)
+for (let k = 0; k < 40; k++) {
+  const y = 1 - (k + 0.5) / 40 * 2, rr = Math.sqrt(1 - y * y), w = k * 2.39996;
+  if (y < -0.55) continue;   // Ganz unten in der Krone hängt nichts
+  OBST_PLAETZE.push([Math.cos(w) * rr * 1.95, 4.2 + y * 1.7, Math.sin(w) * rr * 1.95]);
+}
+function obstEinrichten(b) {
+  b.obst = { w: 0, takt: 0 };
+  b.obst.fruechte = new THREE.InstancedMesh(ghFruchtGeo, mat(0xffffff, { roughness: 0.4 }), OBST_PLAETZE.length);
+  b.obst.fruechte.castShadow = true; b.obst.fruechte.frustumCulled = false;
+  b.mesh.add(b.obst.fruechte);
+  b.schild = schild('', '#fff', 5); b.schild.position.set(b.x, 7.6, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  obstMalen(b);
+}
+function obstMalen(b) {
+  const O = OBST[b.art], w = b.obst.w, m = b.obst.fruechte, d = new THREE.Object3D(), c = new THREE.Color(), gruen = new THREE.Color(0x7ab33a);
+  OBST_PLAETZE.forEach(([x, y, z], k) => {
+    d.position.set(x, y, z);
+    if (w < 0.25) {   // Blütezeit
+      d.position.y += 0.05; d.scale.setScalar(w < 0.02 ? 0.001 : 0.09);
+      c.set(O.bluete);
+    } else {          // Früchte wachsen: erst klein und grün, dann groß und bunt
+      const reif = (w - 0.25) / 0.75, g = O.groesse * (0.35 + 0.65 * reif);
+      d.position.y -= 0.12; d.scale.set(g, g * O.laenglich, g);
+      c.copy(gruen).lerp(new THREE.Color(O.farbe), Math.min(1, reif * 1.3));
+    }
+    d.updateMatrix(); m.setMatrixAt(k, d.matrix); m.setColorAt(k, c);
+  });
+  m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  b.schild.userData.malen(w >= 1 ? `${O.emoji} Reif! P = pflücken` : w < 0.25 ? `🌸 Blüht ... ${Math.floor(w * 100)} %` : `${O.emoji} ${Math.floor(w * 100)} %`, w >= 1 ? '#7cf5a0' : '#ffd166');
+}
+function obstPfluecken(b) {
+  const O = OBST[b.art];
+  if (b.obst.w < 1) { meldung(`${O.emoji} Die ${O.name} sind noch nicht reif (${Math.floor(b.obst.w * 100)} %)!`); sound.nein(); return; }
+  vorrat[O.frucht] = (vorrat[O.frucht] || 0) + O.menge;
+  b.obst.w = 0;
+  obstMalen(b); gebSenden(b);
+  for (let k = 0; k < 12; k++) staub(b.x + zufall(-1.8, 1.8), b.z + zufall(-1.8, 1.8), O.krone, 3.5, -0.6, 0.6);   // Blätter rieseln runter
+  meldung(`${O.emoji} ${O.menge} kg ${O.name} gepflückt! Verkaufen im Dorfladen 🛒 (V).`, 3.5);
+  sound.korn(); speichern();
 }
 
 // ===== Nutztiere im Gehege =====
@@ -1632,6 +1690,11 @@ const tierLaute = {
 };
 function gebUpdate(dt) {
   for (const b of gebaute) {
+    if (b.obst && b.obst.w < 1) {   // Obst wächst
+      b.obst.w = Math.min(1, b.obst.w + dt / OBST[b.art].zeit);
+      b.obst.takt -= dt;
+      if (b.obst.takt <= 0 || b.obst.w >= 1) { b.obst.takt = 0.5; obstMalen(b); }
+    }
     if (b.gh) {   // Gemüse wächst
       const G = GEMUESE[b.gh.art];
       if (!G || b.gh.w >= 1) continue;
@@ -1676,12 +1739,14 @@ function gebUpdate(dt) {
 }
 // Zustand eines Gewächshauses/Geheges (zum Speichern und für den Multiplayer)
 function gebDaten(b) {
+  if (b.obst) return { o: Math.round(b.obst.w * 1000) / 1000 };
   if (b.gh) return { a: b.gh.art, w: Math.round(b.gh.w * 1000) / 1000 };
   if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10 };
   return null;
 }
 function gebDatenSetzen(b, d) {
   if (!d) return;
+  if (b.obst) { b.obst.w = d.o || 0; obstMalen(b); }
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
   if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; gehegeSchild(b); }
 }
@@ -1704,7 +1769,13 @@ function vorratVerkaufen() {
 const vorratText = () => Object.entries(vorrat).filter(([, m]) => m >= 1).map(([k, m]) => `${PRODUKTE[k].emoji} ${Math.floor(m)}`).join(' ') || 'leer';
 function nahesHofGebaeude() {
   const p = wo();
-  return gebaute.find(b => (b.gh || b.geh) && Math.hypot(p.x - b.x, p.z - b.z) < GEBAEUDE_ARTEN[b.art].r + 3.5) || null;
+  let bestes = null, bestD = Infinity;
+  for (const b of gebaute) {
+    if (!b.gh && !b.geh && !b.obst) continue;
+    const d = Math.hypot(p.x - b.x, p.z - b.z) - GEBAEUDE_ARTEN[b.art].r;
+    if (d < 3.5 && d < bestD) { bestD = d; bestes = b; }
+  }
+  return bestes;
 }
 // Das Menü beim Gewächshaus oder Gehege (Taste P)
 let panelGeb = null, panelZustand = '';
@@ -1756,7 +1827,7 @@ function panelMalen() {
 }
 function panelUpdate() {
   if (!panelGeb) return;
-  if (!gebaute.includes(panelGeb) || !nahesHofGebaeude()) { panelZeigen(null); return; }   // Weggegangen? Menü zu
+  if (!gebaute.includes(panelGeb) || Math.hypot(wo().x - panelGeb.x, wo().z - panelGeb.z) > GEBAEUDE_ARTEN[panelGeb.art].r + 5) { panelZeigen(null); return; }   // Weggegangen? Menü zu
   if (panelZustandJetzt(panelGeb) !== panelZustand) panelMalen();
   else $('panelStatus').textContent = panelStatus();
 }
@@ -1814,6 +1885,7 @@ function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächs
   if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText()} = ${euro(vorratWert())})`;
   const b = nahesHofGebaeude();
   if (!b) return '';
+  if (b.obst) { const O = OBST[b.art]; return b.obst.w >= 1 ? `${O.emoji} P = ${O.menge} kg ${O.name} pflücken` : `${O.emoji} ${GEBAEUDE_ARTEN[b.art].name}: ${b.obst.w < 0.25 ? 'blüht' : 'Früchte wachsen'} (${Math.floor(b.obst.w * 100)} %)`; }
   if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `🌾 L = Korn als Futter abladen (${kg(kornDrin(aktiv))})` : '';
   return panelGeb ? '' : `${GEBAEUDE_ARTEN[b.art].emoji} P = ${GEBAEUDE_ARTEN[b.art].name}-Menü öffnen`;
 }
@@ -2650,10 +2722,11 @@ document.addEventListener('keydown', e => {
   if (k === 'n') haendlerZeigen($('haendler').style.display !== 'block');
   if (k === 'h') kuppeln();
   if (k === 'q') saegeNehmen();
-  if (k === 'p') { if (panelGeb) panelZeigen(null); else { const b = nahesHofGebaeude(); if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
+  if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
   if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); }
-  if (building && k >= '1' && k <= String(Object.keys(GEBAEUDE_ARTEN).length) && k.length === 1) { bauArt = Object.keys(GEBAEUDE_ARTEN)[Number(k) - 1]; updateHUD(); }
+  const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
+  if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; updateHUD(); }
   else if (['1', '2', '3'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
   updateHUD();
 });
@@ -2698,6 +2771,7 @@ renderer.domElement.addEventListener('click', () => {
   money -= A.preis;
   sound.bauen();
   if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
+  if (OBST[bauArt]) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gepflanzt! Erst blüht er, dann wachsen die ${OBST[bauArt].name}. Wenn sie reif sind: P = pflücken.`, 4);
   if (bauArt === 'gewaechshaus') meldung('🪴 Neues Gewächshaus! Geh hin und drück P, um Gemüse zu pflanzen.', 4);
   if (GEBAEUDE_ARTEN[bauArt].tier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gebaut! Geh hin und drück P, um ${TIERE[GEBAEUDE_ARTEN[bauArt].tier].name} zu kaufen.`, 4);
   updateHUD();
@@ -3054,7 +3128,7 @@ function mpTick(dt) {
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
-    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
   }
 }
 const weltDa = () => mp.geldBasis !== null;
@@ -3182,7 +3256,7 @@ function animate() {
 
   // Hinweis unten in der Mitte
   const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis(), hh = hofHinweis();
-  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–7 = anderes Gebäude · B = fertig`);
+  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–9, 0 = anderes Gebäude · B = fertig`);
   else if (wh) zeigeHinweis(wh);
   else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
