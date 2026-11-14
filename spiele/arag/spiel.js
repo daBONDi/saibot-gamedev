@@ -486,6 +486,9 @@ function walzerNoten(text) {   // Eine Note pro Viertel: "D4" = spielen, "-" = w
   for (const w of text.split(/\s+/).filter(w => w && w !== '|')) liste.push(w === '-' ? null : w === '.' ? 'pause' : notenZahl(w), null, null, null);
   return liste;
 }
+function riffNoten(text) {   // Ein Riff aufschreiben: eine Zahl pro Sechzehntel, "." = Pause, "|" = Taktstrich (wird ignoriert)
+  return text.split(/\s+/).filter(w => w && w !== '|').map(w => w === '.' ? null : Number(w));
+}
 function walzerBegleitung(akkorde) {   // Pro Takt: tiefer Grundton (BUM), dann zweimal der Akkord (tschak, tschak)
   const GRUND = { D: 0, E: 2, F: 3, G: 5, A: 7, B: 9, C: 10 };
   const liste = [];
@@ -572,16 +575,22 @@ const MUSIK_LIEDER = {
       C#4 E4 B4 | B4 - - | B5 B5 . | G5 G5 C#4 |
       C#4 E4 B4 | B4 - - | B5 B5 . | F#5 F#5 D4 |`),
   },
-  // 🐾 Achtarm-Maulwurf: Tiefer, wühlender Erd-Metal – tschugga-tschugga unter der Erde
+  // 🐾 Achtarm-Maulwurf: „Unter der Erde“ – ein eigenes Modern-Metal-Lied: tief gestimmte Gitarren,
+  // stotternde Riffs, ein Breakdown in der Mitte und eine kreischende Lead-Melodie obendrauf
   maulwurf: {
-    tempo: 150, grund: 41.2, verzerrung: 95, gitarre: 0.5, melodieKlang: 'kreischen', becken: 'achtel',
-    riff: [
-      0, 0, null, 0,  0, null, 3, null,   0, 0, null, 0,  5, null, 3, null,
-      0, 0, null, 0,  0, null, 7, null,   6, null, 5, null,  3, null, 1, null,
-    ],
-    kick: [1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0],
+    tempo: 165, grund: 65.4, verzerrung: 100, gitarre: 0.55, becken: 'achtel',
+    // Eine Zahl pro Sechzehntel (Halbtöne über dem tiefen C), . = Pause
+    riff: riffNoten(`
+      0 0 . 0  0 . 0 .  3 . 0 0  . 5 . 3  |  0 0 . 0  0 . 0 .  7 . 6 .  5 . 3 .  |
+      0 0 . 0  0 . 0 .  3 . 0 0  . 5 . 3  |  0 0 . 0  0 . 10 .  8 . 7 .  3 . 5 .  |
+      0 . . 0  . . 0 .  . . 0 .  0 . . .  |  0 . . 0  . . 1 .  . . 1 .  0 . . .  |
+      12 . 10 .  8 . 7 .  8 . 7 .  3 . 5 .  |  0 0 0 0  0 0 0 0  0 0 0 0  7 6 5 3  |`),
+    kick: [1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1],
     snare: [4, 12],
-    melodie: [12, null, 15, 13, 12, null, 18, 17],
+    // Die Lead-Gitarre: eine Note pro Viertel (- = weiterklingen, . = Pause) – in der Mitte Pause für den Breakdown
+    stimme: walzerNoten(`
+      Eb5 D5 C5 G4 | Ab4 - G4 . | Eb5 D5 C5 Bb4 | C5 - - . |
+      . . . .      | . . . .    | G5 F5 Eb5 D5  | C5 - - - |`),
   },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
