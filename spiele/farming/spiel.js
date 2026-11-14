@@ -1298,7 +1298,8 @@ function balken(id, wert, max, text) {
 }
 function updateHUD() {
   $('money').textContent = money.toLocaleString('de-DE');
-  $('mode').textContent = building ? '🏗️ Baumodus' : aktiv ? '🚜 Fahren' : '🚶 Zu Fuß';
+  $('mode').textContent = building ? '🏗️ Baumodus' : aktiv ? '🚜 Fahren' : saegeAn ? '🪚 Motorsäge' : '🚶 Zu Fuß';
+  $('holz').textContent = `${getragen} von ${HOLZ_TRAGEN_MAX} Stämmen · 🪚 Sprit ${Math.round(saegeSprit)} %`;
   $('ansicht').textContent = ansicht === 'ego' ? '👁️ First Person' : '🎥 Von hinten';
   const fz = aktiv || letztes;
   if (fz) {
@@ -1384,6 +1385,7 @@ function brauchtFahrzeug(text) {
   return true;
 }
 function verkaufen() {
+  if (beimSaegewerk()) { holzVerkaufen(); return; }
   if (brauchtFahrzeug('Korn zu verkaufen')) return;
   if (!imLaden()) { meldung('🏪 Fahr auf den gelben Platz beim Landhandel!'); sound.nein(); return; }
   const drin = kornDrin(aktiv);
@@ -1409,7 +1411,7 @@ function saatKaufen() {
 }
 function anHofTankstelle() { return !!aktiv && Math.hypot(aktiv.g.position.x - TANKSTELLE.x, aktiv.g.position.z - TANKSTELLE.z) < aktiv.radius + 3.5; }
 function tanken() {
-  if (brauchtFahrzeug('zu tanken')) return;
+  if (!aktiv) { saegeTanken(); return; }   // Zu Fuß: die Motorsäge tanken
   if (!imLaden() && !anHofTankstelle()) { meldung('⛽ Tanken kannst du beim Landhandel 🏪 oder an der Hof-Tankstelle in der Scheune 🏚️!'); sound.nein(); return; }
   const menge = aktiv.typ.dieselMax - aktiv.diesel, kosten = Math.round(menge * DIESEL_PREIS);
   if (menge < 1) { meldung('⛽ Der Tank ist schon voll!'); return; }
@@ -1446,6 +1448,195 @@ function ausSiloHolen() {   // Korn aus dem Silo aufs Fahrzeug (zum Verkaufen, w
   sound.korn();
   speichern();
 }
+// ===== Wald: Bäume fällen, Holz sammeln und verkaufen =====
+const holzStuecke = [];   // Holzstämme, die auf dem Boden liegen: { id, x, z, r, g, bereit }
+function neuesHolz(id, x, z, r, bereit) {
+  const g = new THREE.Group();
+  const st = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2.6, 10), [rindeMat, schnittMat, schnittMat]);
+  st.rotation.x = Math.PI / 2; st.castShadow = true; st.receiveShadow = true; g.add(st);
+  g.position.set(x, 0.3, z); g.rotation.y = r; g.visible = bereit;
+  scene.add(g);
+  const h = { id, x, z, r, g, bereit };
+  holzStuecke.push(h);
+  return h;
+}
+function holzWeg(id) {
+  const k = holzStuecke.findIndex(h => h.id === id);
+  if (k < 0) return;
+  scene.remove(holzStuecke[k].g);
+  holzStuecke.splice(k, 1);
+}
+function baumZustand(b, zustand, wert) {   // Einen Baum stehen, liegen oder wachsen lassen
+  b.zustand = zustand; b.hp = 0;
+  b.kipp.rotation.set(0, 0, 0);
+  if (zustand === 'stumpf') {
+    b.kipp.visible = false; b.stumpf.visible = true; b.h.r = 0.45;
+    b.zeit = wert ?? NACHWACHS_ZEIT;
+  } else {
+    b.kipp.visible = true; b.stumpf.visible = false; b.h.r = 0.7 * b.s;
+    b.wachs = zustand === 'waechst' ? (wert ?? 0) : 1;
+    b.kipp.scale.setScalar(0.15 + 0.85 * b.wachs);
+  }
+}
+const lautstaerkeBei = (x, z) => { const p = wo(); return Math.max(0, 1 - Math.hypot(x - p.x, z - p.z) / 90); };   // Weit weg = leiser
+function baumFaellen(b, w, id, ich) {   // w = Richtung, in die der Baum fällt
+  b.zustand = 'faellt'; b.hp = 0; b.fallW = 0; b.fallV = 0.15;
+  b.g.rotation.y = w + Math.PI;   // So kippt er von dir weg
+  b.stumpf.visible = true; b.h.r = 0.45;
+  // Die Holzstämme liegen schon bereit – man sieht sie aber erst, wenn der Baum unten ist
+  b.holz = [];
+  for (let k = 0; k < HOLZ_PRO_BAUM; k++) {
+    const d = (2.2 + k * 2.8) * b.s;
+    b.holz.push(neuesHolz(`${id}-${k}`, r2(b.x + Math.sin(w) * d), r2(b.z + Math.cos(w) * d), w, false));
+  }
+  sound.knarren(lautstaerkeBei(b.x, b.z));
+  if (ich) {
+    meldung('🌲 Baum fällt! Achtung! 🪵', 2.5);
+    mpEvent({ t: 'faellt', nr: b.nr, w, id });
+  }
+}
+function baumAufgeschlagen(b) {
+  baumZustand(b, 'stumpf');
+  for (const h of b.holz || []) { h.bereit = true; h.g.visible = true; }
+  b.holz = null;
+  sound.aufprall(lautstaerkeBei(b.x, b.z));
+  const w = b.g.rotation.y - Math.PI;
+  for (let k = 0; k < 14; k++) {   // Staub und Nadeln wirbeln hoch
+    const d = (1 + k * 0.6) * b.s;
+    staub(b.x + Math.sin(w) * d, b.z + Math.cos(w) * d, k % 2 ? 0x8a7a5a : 0x3f6a32, 0.4, 1.2, 1.8);
+  }
+}
+function baumVorMir() {   // Der Baum, vor dem du stehst (zum Sägen)
+  const p = player.position, vx = -Math.sin(yaw), vz = -Math.cos(yaw);
+  let bester = null, bestD = 2.6;
+  for (const b of baeume) {
+    if (b.zustand !== 'steht') continue;
+    const d = Math.hypot(b.x - p.x, b.z - p.z);
+    if (d < bestD && ((b.x - p.x) * vx + (b.z - p.z) * vz) / d > 0.4) { bestD = d; bester = b; }
+  }
+  return bester;
+}
+function baumInDerNaehe(abstand = 4) {
+  const p = player.position;
+  return baeume.find(b => Math.hypot(b.x - p.x, b.z - p.z) < abstand) || null;
+}
+const beimSaegewerk = () => !aktiv && Math.hypot(player.position.x - SAEGEWERK.platzX, player.position.z - SAEGEWERK.platzZ) < SAEGEWERK.r + 3;
+const beimSpritHolen = () => !aktiv && (Math.hypot(player.position.x - LADEN.x, player.position.z - LADEN.z) < LADEN.r + 10 ||
+  Math.hypot(player.position.x - TANKSTELLE.x, player.position.z - TANKSTELLE.z) < 3.5);
+function saegeNehmen() {
+  if (aktiv) { meldung('🪚 Steig erst aus (E), dann kannst du die Motorsäge nehmen!'); sound.nein(); return; }
+  saegeAn = !saegeAn;
+  if (saegeAn) {
+    sound.anwerfen();
+    meldung(saegeSprit > 0 ? `🪚 Motorsäge an! Geh zu einer Fichte 🌲 und halt die Maus gedrückt (oder X). Sprit: ${Math.round(saegeSprit)} %`
+      : '🪚 Der Sprit ist leer! Tanken (T) beim Landhandel 🏪 oder an der Hof-Tankstelle 🏚️.', 3.5);
+  } else { sound.klick(); meldung('🪚 Motorsäge weggepackt.', 1.5); }
+}
+function saegeTanken() {
+  if (!beimSpritHolen()) { meldung('⛽ Fahrzeuge und die 🪚 Motorsäge tankst du beim Landhandel 🏪 oder an der Hof-Tankstelle 🏚️!'); sound.nein(); return; }
+  const menge = 100 - saegeSprit, kosten = Math.max(1, Math.round(menge * SPRIT_PREIS));
+  if (menge < 1) { meldung('🪚 Die Motorsäge ist schon voll!'); return; }
+  if (money < kosten) { meldung('💸 Nicht genug Geld zum Tanken!'); sound.nein(); return; }
+  money -= kosten; saegeSprit = 100;
+  meldung(`🪚⛽ Motorsäge vollgetankt für ${euro(kosten)}`);
+  sound.kasse();
+  speichern();
+}
+function holzVerkaufen() {
+  if (getragen <= 0) { meldung('🪵 Du hast kein Holz dabei! Fäll Bäume im Wald 🌲 und heb die Stämme auf.'); sound.nein(); return; }
+  const erloes = getragen * HOLZ_PREIS;
+  money += erloes;
+  meldung(`🪚💶 ${getragen} Holzstämme verkauft für ${euro(erloes)}!`, 3.5);
+  getragen = 0;
+  sound.kasse();
+  speichern();
+}
+function waldUpdate(dt) {
+  // Sägen: Motorsäge in der Hand + Maus gedrückt (oder X)
+  saegt = false;
+  if (saegeAn && !aktiv) {
+    if (!building && (mouseDown || keys.x)) {
+      if (saegeSprit <= 0) meldungSelten('⛽ Die Motorsäge hat keinen Sprit mehr! Drück T beim Landhandel 🏪 oder an der Hof-Tankstelle 🏚️.');
+      else {
+        saegt = true;
+        saegeSprit = Math.max(0, saegeSprit - dt * 3);
+        const b = baumVorMir();
+        if (b) {
+          b.hp += dt / SAEGE_ZEIT;
+          b.kipp.rotation.z = Math.sin(spielZeit * 70) * 0.01;   // Der Baum zittert
+          const nx = (player.position.x - b.x), nz = (player.position.z - b.z), l = Math.hypot(nx, nz) || 1;
+          if (Math.random() < 0.6) staub(b.x + nx / l * 0.5, b.z + nz / l * 0.5, 0xe8cf94, 0.8, 0.6, 0.35);   // Sägespäne
+          if (b.hp >= 1) baumFaellen(b, Math.atan2(b.x - player.position.x, b.z - player.position.z), Math.random().toString(36).slice(2, 8), true);
+        }
+      }
+    } else saegeSprit = Math.max(0, saegeSprit - dt * 0.15);   // Im Leerlauf braucht sie nur ein bisschen
+  }
+  // Bäume fallen um, Stümpfe wachsen nach
+  for (const b of baeume) {
+    if (b.zustand === 'faellt') {
+      b.fallV += dt * 2.4;   // Erst langsam, dann immer schneller
+      b.fallW = Math.min(Math.PI / 2 - 0.05, b.fallW + b.fallV * dt);
+      b.kipp.rotation.x = -b.fallW;
+      if (b.fallW >= Math.PI / 2 - 0.05) baumAufgeschlagen(b);
+    } else if (b.zustand === 'stumpf') {
+      b.zeit -= dt;
+      if (b.zeit <= 0) {
+        // Nicht nachwachsen, wenn gerade jemand drauf steht (sonst steckst du im Baum fest!)
+        const imWeg = (!aktiv && Math.hypot(player.position.x - b.x, player.position.z - b.z) < 1.8) ||
+          fahrzeuge.some(fz => Math.hypot(fz.g.position.x - b.x, fz.g.position.z - b.z) < fz.radius + 1.5);
+        if (imWeg) b.zeit = 5; else baumZustand(b, 'waechst', 0);
+      }
+    } else if (b.zustand === 'waechst') {
+      b.wachs = Math.min(1, b.wachs + dt / BAUM_WACHS_DAUER);
+      b.kipp.scale.setScalar(0.15 + 0.85 * b.wachs);
+      if (b.wachs >= 1) b.zustand = 'steht';
+    } else if (b.kipp.rotation.z !== 0 && !saegt) b.kipp.rotation.z = 0;
+  }
+  // Holz aufheben: einfach drüberlaufen
+  if (!aktiv) {
+    for (const h of [...holzStuecke]) {
+      if (!h.bereit || Math.hypot(h.x - player.position.x, h.z - player.position.z) > 1.8) continue;
+      if (getragen >= HOLZ_TRAGEN_MAX) { meldungSelten(`🪵 Du kannst nur ${HOLZ_TRAGEN_MAX} Stämme tragen! Bring sie zum Sägewerk 🪚 und drück V.`); break; }
+      getragen++;
+      holzWeg(h.id);
+      mpEvent({ t: 'holzWeg', id: h.id });
+      sound.holz();
+      meldungSelten(`🪵 Holzstamm aufgehoben! (${getragen} von ${HOLZ_TRAGEN_MAX})`);
+    }
+  }
+}
+function waldHinweis() {   // Was steht unten in der Mitte, wenn du zu Fuß im Wald bist?
+  if (aktiv) return '';
+  if (beimSaegewerk()) return getragen > 0 ? `🪚 Sägewerk: V = Holz verkaufen (${getragen} Stämme = ${euro(getragen * HOLZ_PREIS)})` : '🪚 Sägewerk: Bring Holzstämme 🪵 her und drück V!';
+  if (beimSpritHolen() && saegeAn && saegeSprit < 99) return `⛽ T = Motorsäge tanken (${Math.round(saegeSprit)} %)`;
+  if (saegeAn) {
+    const b = baumVorMir();
+    if (b) return `🌲 Maus gedrückt halten oder X = Sägen! (${Math.round(b.hp * 100)} %)`;
+    const n = baumInDerNaehe();
+    if (n && n.zustand === 'waechst') return '🌱 Dieser Baum wächst noch – such dir einen großen!';
+    if (n && n.zustand === 'steht') return '🌲 Dreh dich zum Baum und geh ganz nah ran!';
+    return '';
+  }
+  const n = baumInDerNaehe();
+  if (n && n.zustand === 'steht') return '🪚 Q = Motorsäge nehmen';
+  return '';
+}
+const waldDaten = () => baeume.map(b => b.zustand === 'steht' ? 's' : b.zustand === 'waechst' ? 'w' + Math.round(b.wachs * 100) : 'x' + Math.round(b.zustand === 'faellt' ? NACHWACHS_ZEIT : b.zeit));
+const holzDaten = () => holzStuecke.map(h => ({ id: h.id, x: h.x, z: h.z, r: r2(h.r) }));
+function waldLaden(codes, liste) {
+  (codes || []).forEach((c, k) => {
+    const b = baeume[k];
+    if (!b || typeof c !== 'string') return;
+    if (c[0] === 'x') baumZustand(b, 'stumpf', Number(c.slice(1)) || 0);
+    else if (c[0] === 'w') baumZustand(b, 'waechst', (Number(c.slice(1)) || 0) / 100);
+    else baumZustand(b, 'steht');
+    b.holz = null;
+  });
+  for (const h of holzStuecke) scene.remove(h.g);
+  holzStuecke.length = 0;
+  for (const h of liste || []) neuesHolz(h.id, h.x, h.z, h.r, true);
+}
+
 function feldInDerNaehe() {   // Ein Feld, das dir noch nicht gehört und neben dem du stehst
   const p = wo();
   const f = feldBei(p.x, p.z, 5);
@@ -1529,6 +1720,8 @@ function einsteigen(fz) {
   player.scale.setScalar(1 / g);
   farmerPose(farmer, true, false, 0);
   fz.ziel = null;   // Jetzt fahre ICH es
+  saegeAn = false; saegt = false;   // Die Motorsäge kommt in die Kabine
+  farmerWerkzeug(farmer, false, false, 0);
   sound.tuer();
 }
 function aussteigen() {
@@ -1572,6 +1765,7 @@ function speichern() {
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
       gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0 })),
+      wald: waldDaten(), holz: holzDaten(), saege: { sprit: saegeSprit, getragen },
     }));
   } catch (e) { /* egal – dann eben nicht gespeichert */ }
 }
@@ -1593,6 +1787,8 @@ function laden() {
     return true;
   }
   hofSilo.inhalt = d.hofSilo || 0; siloSchild(hofSilo);
+  if (d.wald) waldLaden(d.wald, d.holz);
+  if (d.saege) { saegeSprit = d.saege.sprit ?? 100; getragen = d.saege.getragen || 0; }
   for (const f of d.fahrzeuge || []) if (FAHRZEUGE[f.typ]) neuesFahrzeug(f.typ, f.x, f.z, f.r, f);
   anhaengerLaden(d.anhaenger);
   if (!fahrzeuge.length) neuesFahrzeug('fendt', 0, 10, 0);
@@ -1675,6 +1871,7 @@ document.addEventListener('keydown', e => {
   if (k === 'k') feldKaufen();
   if (k === 'n') haendlerZeigen($('haendler').style.display !== 'block');
   if (k === 'h') kuppeln();
+  if (k === 'q') saegeNehmen();
   if (k === 'o') ueberladen();
   if (k === 'escape') haendlerZeigen(false);
   if (['1', '2', '3'].includes(k)) {
@@ -1868,6 +2065,7 @@ function weltSchnappschuss() {
       werkzeug: f.werkzeug, fahrer: f === aktiv ? mp.ich : f.fahrer })),
     spieler: [{ id: mp.ich, nr: mp.nr }, ...[...mp.andere.values()].map(o => ({ id: o.id, nr: o.nr }))],
     anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
+    wald: waldDaten(), holz: holzDaten(),
   };
 }
 
@@ -1971,6 +2169,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
     fz.fahrer = f.fahrer; fz.fahrerZeit = spielZeit;
   }
   anhaengerLaden(d.anhaenger);
+  if (d.wald) waldLaden(d.wald, d.holz);
   letztes = fahrzeuge[0] || null;
   player.position.set(4 + mp.nr * 2, 0, 15); yaw = 0;
   for (const sp of d.spieler) if (sp.id !== mp.ich && !mp.andere.has(sp.id)) mpSpielerNeu(sp.id, sp.nr);
@@ -2005,7 +2204,7 @@ function mpEmpfangen(d, vonGast) {
         });
       });
       return;
-    case 'sp': if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf }); } break;
+    case 'sp': if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho }); } break;
     case 'fz': {
       const fz = fahrzeuge.find(f => f.id === d.id);
       if (fz && fz !== aktiv) {
@@ -2032,6 +2231,8 @@ function mpEmpfangen(d, vonGast) {
       if (a && !a.an) { a.inhalt = d.i; a.basis = d.i; }
       break;
     }
+    case 'faellt': { const b = baeume[d.nr]; if (b && (b.zustand === 'steht' || b.zustand === 'waechst')) baumFaellen(b, d.w, d.id, false); break; }
+    case 'holzWeg': holzWeg(d.id); break;
     case 'neuesFz': if (!fahrzeuge.some(f => f.id === d.id) && FAHRZEUGE[d.typ]) { neuesFahrzeug(d.typ, d.x, d.z, d.r, { id: d.id }); meldung(`🚜 Neues Fahrzeug auf dem Hof: ${FAHRZEUGE[d.typ].name}!`); } break;
     default: return;
   }
@@ -2057,7 +2258,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
@@ -2079,6 +2280,7 @@ function mpAndereZeigen(dt) {
         o.schild.visible = false;
       }
       farmerPose(o.farmer.t, true, false, dt);
+      farmerWerkzeug(o.farmer.t, false, false, 0);
       continue;
     }
     if (G.parent !== scene) { scene.add(G); G.scale.setScalar(1); o.ax = o.x; o.ay = o.y; o.az = o.z; o.ayaw = o.yaw; o.schild.visible = true; }
@@ -2091,6 +2293,8 @@ function mpAndereZeigen(dt) {
     G.position.set(o.ax, o.ay, o.az);
     G.rotation.set(0, o.ayaw, 0);
     farmerPose(o.farmer.t, false, o.lf, dt, o.y > 0.05);
+    farmerWerkzeug(o.farmer.t, !!o.sa, !!o.sg, o.ho || 0);
+    if (o.sg && Math.random() < 0.4) staub(o.ax - Math.sin(o.ayaw) * 1.3, o.az - Math.cos(o.ayaw) * 1.3, 0xe8cf94, 0.8, 0.6, 0.35);   // Sägespäne
   }
 }
 $('mp-erstellen').addEventListener('click', () => { tonStart(); mpRaumErstellen(); });
@@ -2130,6 +2334,8 @@ function animate() {
     mp.laeuft = Math.hypot(player.position.x - alt.x, player.position.z - alt.z) > 0.001;
     farmerPose(farmer, false, mp.laeuft, dt, !amBoden);
   }
+  waldUpdate(dt);
+  if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen);
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
     const fremd = fremdGefahren(fz);
@@ -2179,8 +2385,9 @@ function animate() {
   geistAktualisieren(mausPunkt);
 
   // Hinweis unten in der Mitte
-  const fn = feldInDerNaehe(), silo = nahesSilo();
+  const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis();
   if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1/2/3 = anderes Gebäude · B = fertig`);
+  else if (wh) zeigeHinweis(wh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
   else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = Korn verkaufen (${kg(kornDrin(aktiv))}) · G = Saat · T = Tanken · N = Fahrzeug-Händler`);
   else if (silo) zeigeHinweis(`🛢️ Silo (${kg(silo.inhalt)} drin): L = Korn einlagern · U = Korn holen`);
@@ -2207,6 +2414,14 @@ function animate() {
     motor.o.frequency.setTargetAtTime(an ? drehzahl : 0.01, t, 0.15);
     motor.o2.frequency.setTargetAtTime(an ? drehzahl * 0.5 : 0.01, t, 0.15);
     motor.g.gain.setTargetAtTime(an && tonAn ? (0.05 + (gasGeben ? 0.03 : 0)) * (ansicht === 'ego' ? 1.3 : 1) : 0, t, 0.2);
+  }
+  if (saegeTon) {   // Motorsäge: im Leerlauf blubbern, beim Sägen laut kreischen
+    const t = audio.currentTime, an = saegeAn && !aktiv && saegeSprit > 0 && tonAn;
+    const f = saegt ? 175 + Math.random() * 20 : 92 + Math.sin(spielZeit * 9) * 6;
+    saegeTon.o.frequency.setTargetAtTime(f, t, 0.08);
+    saegeTon.o2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
+    saegeTon.f.frequency.setTargetAtTime(saegt ? 1400 : 700, t, 0.1);
+    saegeTon.g.gain.setTargetAtTime(an ? (saegt ? 0.09 : 0.03) : 0, t, 0.1);
   }
 
   // Kamera
