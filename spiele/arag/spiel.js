@@ -88,7 +88,9 @@ const LABYRINTH_ABKUERZUNGEN = 0.1;   // So oft gibt es extra Durchgänge (0 = n
 // ===== 🚌 Der ARAG-Einsatzbus: Intro, Lobby im Bus, und die Abgabe draußen auf dem Parkplatz =====
 const INTRO_AN = true;           // false = kein Intro
 const INTRO_DAUER = 14;          // So lange dauert das Intro (Sekunden) – Klick oder Leertaste überspringt es
-const LOBBY_AN = true;           // false = keine Lobby (die Bustür ist sofort offen)
+const LOBBY_AN = true;           // false = keine Lobby (du stehst gleich draußen vor dem Bus)
+const BUS_TEMPO = 14;            // So schnell fährt der Bus in der Lobby (Meter pro Sekunde – 14 sind etwa 50 km/h)
+const LOBBY_ORT = { x: -400, z: 0 };   // Hier fährt der Lobby-Bus (weit weg vom Haus, damit man es nicht sieht)
 const TRANK_RADIUS = 1.8;        // So weit spritzt ein Trank, wenn er zerplatzt (Meter)
 // Die Tränke vom Chemiker: schaden = so viel Energie kostet ein Treffer · pfuetze = so viele Sekunden bleibt eine Pfütze liegen
 //   gift = so viel Energie pro Sekunde in der Giftwolke · langsam = so schnell bist du im Schleim noch (0.35 = ein Drittel)
@@ -1935,19 +1937,114 @@ function baueBus(mz) {
   const bankMat = new THREE.MeshStandardMaterial({ color: '#2f6b5a', roughness: 0.8 });
   teil(X1 + 0.45, 0.22, (TZ2 + Z2) / 2 + 0.4, 0.6, 0.44, Z2 - TZ2 - 1.4, bankMat);
   teil(X1 + 0.2, 0.75, (TZ2 + Z2) / 2 + 0.4, 0.12, 0.65, Z2 - TZ2 - 1.4, bankMat, false);
+  const licht = lampeHinzu(cx, H - 0.35, (Z1 + Z2) / 2 + 1, '#eaffff', 1.5, 10, false);
+  haus.bus = { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, tuer, tuerKoerper, tuerX: X2 - D / 2, tuerZ: TZ, tuerAuf: false, tuerWeg: 0, dachLichter,
+    licht, lichtPos: licht ? licht.position.clone() : null,
+    schuppen: { bus: true, x1: X1, z1: Z1, x2: X2, z2: Z2, seite: 'o', tx: X2, tz: TZ, nx: 1, nz: 0, innen: { x: X2 - 1.2, y: 0, z: TZ }, aussen: { x: X2 + 1.3, y: 0, z: TZ } } };
+  haus.spawn = { x: X2 + 1.6, z: TZ };   // Hier tauchst du wieder auf (vor der Bustür)
+}
+// 🚌💨 Der fahrende Bus (die Lobby): echte Fenster, ein Fahrer-Roboter – und draußen zieht die Landschaft vorbei
+// (Der Bus steht in Wirklichkeit still – die Bäume, Laternen und Streifen bewegen sich. Wie im Kino!)
+function baueFahrBus(ox, oz) {
+  const X1 = ox, X2 = ox + 3.4, Z1 = oz, Z2 = oz + 12, H = 3.0, D = 0.15, cx = (X1 + X2) / 2, W = X2 - X1, L = Z2 - Z1, mz = (Z1 + Z2) / 2;
+  const gruppe = new THREE.Group(); hausGruppe.add(gruppe);
+  const wandMat = new THREE.MeshStandardMaterial({ color: '#b9c1c9', roughness: 0.8 }), streifen = new THREE.MeshBasicMaterial({ color: '#7cf5c6' });
+  const glasMat = new THREE.MeshBasicMaterial({ color: '#9fd8ff', transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide });
+  const teil = (x, y, z, b, h, t, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat); m.position.set(x, y, z); m.receiveShadow = true; gruppe.add(m); return m; };
+  // Physik: Boden, Wände (ganz zu – raus kommt man erst an der Spukvilla) und Decke
+  festerKoerper(cx, -0.1, mz, W + 2, 0.2, L + 2);
+  festerKoerper(X1 + D / 2, H / 2, mz, D, H, L); festerKoerper(X2 - D / 2, H / 2, mz, D, H, L);
+  festerKoerper(cx, H / 2, Z1 + D / 2, W, H, D); festerKoerper(cx, H / 2, Z2 - D / 2, W, H, D); festerKoerper(cx, H + 0.1, mz, W, 0.2, L);
+  // Seitenwände mit ECHTEN Fenstern
+  for (const x of [X1 + D / 2, X2 - D / 2]) {
+    teil(x, 0.575, mz, D, 1.15, L, wandMat);
+    teil(x, (2.15 + H) / 2, mz, D, H - 2.15, L, wandMat);
+    teil(x, 1.15, mz, D + 0.02, 0.05, L, streifen);
+    for (let z = Z1; z <= Z2 + 0.01; z += 2) teil(x, 1.65, z, D, 1.0, 0.22, wandMat);   // Fensterpfosten
+    const glas = new THREE.Mesh(new THREE.PlaneGeometry(L, 1.0), glasMat); glas.position.set(x, 1.65, mz); glas.rotation.y = Math.PI / 2; gruppe.add(glas);
+  }
+  // Vorne die große Windschutzscheibe, hinten eine Wand
+  teil(cx, 0.6, Z1 + D / 2, W, 1.2, D, wandMat); teil(cx, (2.35 + H) / 2, Z1 + D / 2, W, H - 2.35, D, wandMat);
+  const scheibe = new THREE.Mesh(new THREE.PlaneGeometry(W, 1.15), glasMat); scheibe.position.set(cx, 1.77, Z1 + D / 2); gruppe.add(scheibe);
+  teil(cx, H / 2, Z2 - D / 2, W, H, D, wandMat);
+  teil(cx, H - D / 2, mz, W, D, L, new THREE.MeshStandardMaterial({ color: '#dfe5ea', roughness: 0.9 }));
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshStandardMaterial({ color: '#2b3038', roughness: 0.9 }));
+  boden.rotation.x = -Math.PI / 2; boden.position.set(cx, 0.02, mz); gruppe.add(boden);
+  // Die Tür (zu, rechts vorne)
+  const tuerMat = new THREE.MeshStandardMaterial({ color: '#eef3f1', roughness: 0.5 });
+  teil(X2 - D / 2 - 0.02, 1.1, Z1 + 2, 0.06, 2.2, 1.4, tuerMat);
+  // Der Fahrer-Roboter am Lenkrad (mit Armaturenbrett)
+  teil(cx, 1.0, Z1 + 0.45, W - 0.3, 0.25, 0.6, new THREE.MeshStandardMaterial({ color: '#1d2228', roughness: 0.6 }));
+  for (let k = 0; k < 4; k++) { const l = new THREE.Mesh(new THREE.CircleGeometry(0.04, 10), new THREE.MeshBasicMaterial({ color: ['#4ade80', '#ffd166', '#ff6b6b', '#7cf5c6'][k] })); l.position.set(X1 + 1.3 + k * 0.15, 1.13, Z1 + 0.76); l.rotation.x = -1.2; gruppe.add(l); }
+  const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 8, 20), new THREE.MeshStandardMaterial({ color: '#111' }));
+  lenkrad.position.set(X1 + 0.85, 1.25, Z1 + 0.85); lenkrad.rotation.x = -0.9; gruppe.add(lenkrad);
+  teil(X1 + 0.85, 0.3, Z1 + 1.65, 0.6, 0.6, 0.6, new THREE.MeshStandardMaterial({ color: '#2f6b5a', roughness: 0.8 }));   // Fahrersitz
+  const fahrer = baueHelferMesh({ name: 'Fahrer Kurt', farbe: '#ffd166' });
+  if (fahrer.g.parent) fahrer.g.parent.remove(fahrer.g);
+  gruppe.add(fahrer.g); fahrer.g.position.set(X1 + 0.85, 0.15, Z1 + 1.55); fahrer.g.rotation.y = Math.PI;
+  fahrer.arme.forEach(a => { a.rotation.x = -0.9; });
+  malGesicht({ gesicht: fahrer.gesicht, farbe: '#ffd166', kaputt: 0, angst: 0, froh: 1, redet: 0, blinzelVersatz: 0 });
+  // Bänke, der Bildschirm und der große rote Knopf
+  const bankMat = new THREE.MeshStandardMaterial({ color: '#2f6b5a', roughness: 0.8 });
+  teil(X1 + 0.45, 0.22, mz + 1.5, 0.6, 0.44, 7, bankMat); festerKoerper(X1 + 0.45, 0.22, mz + 1.5, 0.6, 0.44, 7);
+  teil(X1 + 0.2, 0.75, mz + 1.5, 0.12, 0.65, 7, bankMat);
   const monitor = canvasTextur(512, 288, () => {});
   const bild = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 1.3), new THREE.MeshBasicMaterial({ map: monitor.tex }));
   bild.position.set(cx, 1.75, Z2 - D - 0.02); bild.rotation.y = Math.PI; gruppe.add(bild);
-  const knopf = { x: X2 - 0.5, z: TZ2 + 0.9 };
-  teil(knopf.x, 0.5, knopf.z, 0.35, 1.0, 0.35, metallGrauMat);
+  const knopf = { x: X2 - 0.5, z: Z1 + 3.6 };
+  teil(knopf.x, 0.5, knopf.z, 0.35, 1.0, 0.35, metallGrauMat); festerKoerper(knopf.x, 0.5, knopf.z, 0.35, 1.0, 0.35);
   const knopfOben = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.1, 16), new THREE.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#aa0000', emissiveIntensity: 1 }));
   knopfOben.position.set(knopf.x, 1.05, knopf.z); gruppe.add(knopfOben);
-  const knopfSchild = schildMesh('🔴 E = LOS!', 0.9, 0.3); knopfSchild.position.set(knopf.x + 0.1, 1.55, knopf.z); knopfSchild.rotation.y = -Math.PI / 2; gruppe.add(knopfSchild);
-  const licht = lampeHinzu(cx, H - 0.35, (Z1 + Z2) / 2 + 1, '#eaffff', 1.5, 10, false);
-  haus.bus = { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, tuer, tuerKoerper, tuerX: X2 - D / 2, tuerZ: TZ, tuerAuf: false, tuerWeg: 0, dachLichter, knopf, knopfOben,
-    monitor, licht, lobby: { x: cx, z: Z2 - 2.2 },
-    schuppen: { bus: true, x1: X1, z1: Z1, x2: X2, z2: Z2, seite: 'o', tx: X2, tz: TZ, nx: 1, nz: 0, innen: { x: X2 - 1.2, y: 0, z: TZ }, aussen: { x: X2 + 1.3, y: 0, z: TZ } } };
-  haus.spawn = { x: X2 + 1.6, z: TZ };   // Hier tauchst du wieder auf (vor der Bustür)
+  const knopfSchild = schildMesh('🔴 E = LOS!', 0.9, 0.3); knopfSchild.position.set(knopf.x + 0.12, 2.0, knopf.z); knopfSchild.rotation.y = -Math.PI / 2; gruppe.add(knopfSchild);
+  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
+}
+function baueLandschaft(cx, mz) {   // Die Straße durch den nächtlichen Wald (alles bewegt sich nach hinten = der Bus fährt nach vorne)
+  const g = new THREE.Group(); hausGruppe.add(g);
+  const LANG = 200, hilf = new THREE.Object3D();
+  const gras = grasTextur.clone(); gras.needsUpdate = true; gras.repeat.set(30, 50);
+  const wiese = new THREE.Mesh(new THREE.PlaneGeometry(120, LANG), new THREE.MeshStandardMaterial({ map: gras, roughness: 1 }));
+  wiese.rotation.x = -Math.PI / 2; wiese.position.set(cx, -0.02, mz); g.add(wiese);
+  const strasse = new THREE.Mesh(new THREE.PlaneGeometry(7, LANG), new THREE.MeshStandardMaterial({ color: '#1a1b1e', roughness: 0.9 }));
+  strasse.rotation.x = -Math.PI / 2; strasse.position.set(cx + 0.8, -0.01, mz); g.add(strasse);
+  const dinge = [];   // Alles, was vorbeizieht: { art, x, z, ... }
+  for (let k = 0; k < 34; k++) dinge.push({ art: 'streifen', x: cx + 0.8, z: mz - LANG / 2 + k * 6 });
+  for (let k = 0; k < 8; k++) dinge.push({ art: 'laterne', x: cx + 5.2, z: mz - LANG / 2 + k * 25 });
+  for (let k = 0; k < 90; k++) { const seite = k % 2 ? 1 : -1; dinge.push({ art: 'baum', x: cx + 0.8 + seite * (6 + Math.random() * 28), z: mz - LANG / 2 + Math.random() * LANG, h: 6 + Math.random() * 6, dreh: Math.random() * 6 }); }
+  const anzahl = a => dinge.filter(d => d.art === a).length;
+  const streifenM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.15, 0.02, 3), new THREE.MeshBasicMaterial({ color: '#d8d8d0' }), anzahl('streifen'));
+  const stammM = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.28, 1, 7), new THREE.MeshStandardMaterial({ color: '#2a1e16', roughness: 1 }), anzahl('baum'));
+  const kroneM = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 8), new THREE.MeshStandardMaterial({ color: '#13241a', roughness: 1 }), anzahl('baum'));
+  const pfostenM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.15, 4.5, 0.15), new THREE.MeshStandardMaterial({ color: '#2b2f36', roughness: 0.7 }), anzahl('laterne'));
+  const kopfM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.18, 0.35), new THREE.MeshBasicMaterial({ color: '#ffe2a8' }), anzahl('laterne'));
+  const lichtM = new THREE.InstancedMesh(new THREE.CircleGeometry(3.2, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffcf8a', transparent: true, opacity: 0.13, depthWrite: false, blending: THREE.AdditiveBlending }), anzahl('laterne'));
+  for (const m of [streifenM, stammM, kroneM, pfostenM, kopfM, lichtM]) { m.frustumCulled = false; g.add(m); }
+  const mond = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: '#e9e6cf', fog: false }));
+  mond.position.set(cx - 70, 60, mz - 140); g.add(mond);
+  const L = { gruppe: g, dinge, LANG, mz, streifenM, stammM, kroneM, pfostenM, kopfM, lichtM, hilf };
+  landschaftZeigen(L);
+  return L;
+}
+function landschaftZeigen(L) {   // Alle Bäume, Laternen und Streifen an ihre (neue) Stelle setzen
+  const z = { streifen: 0, baum: 0, laterne: 0 }, h = L.hilf;
+  for (const d of L.dinge) {
+    const k = z[d.art]++;
+    h.rotation.set(0, 0, 0); h.scale.set(1, 1, 1);
+    if (d.art === 'streifen') { h.position.set(d.x, 0.0, d.z); h.updateMatrix(); L.streifenM.setMatrixAt(k, h.matrix); }
+    else if (d.art === 'laterne') {
+      h.position.set(d.x, 2.25, d.z); h.updateMatrix(); L.pfostenM.setMatrixAt(k, h.matrix);
+      h.position.set(d.x - 0.4, 4.45, d.z); h.updateMatrix(); L.kopfM.setMatrixAt(k, h.matrix);
+      h.position.set(d.x - 1.5, 0.0, d.z); h.updateMatrix(); L.lichtM.setMatrixAt(k, h.matrix);
+    } else {
+      h.position.set(d.x, d.h / 2, d.z); h.rotation.set(0, d.dreh, 0); h.scale.set(1, d.h, 1); h.updateMatrix(); L.stammM.setMatrixAt(k, h.matrix);
+      const r = 2.0 * d.h / 10; h.position.set(d.x, d.h * 0.65, d.z); h.scale.set(r, d.h * 0.7, r); h.updateMatrix(); L.kroneM.setMatrixAt(k, h.matrix);
+    }
+  }
+  for (const m of [L.streifenM, L.stammM, L.kroneM, L.pfostenM, L.kopfM, L.lichtM]) m.instanceMatrix.needsUpdate = true;
+}
+function landschaftFahren(L, dt) {
+  const weg = BUS_TEMPO * dt;
+  for (const d of L.dinge) { d.z += weg; if (d.z > L.mz + L.LANG / 2) d.z -= L.LANG; }
+  landschaftZeigen(L);
 }
 function baueAbgabe() {   // Die Abgabe: eine grüne Zone mit Rand (zum Haus hin offen), ein Schild und eine Laterne
   const L = haus.laster;
@@ -2664,6 +2761,7 @@ function baueHaus() {
   haus.laster = { x1: -8.5, x2: -4.0, z1: mz - 2.3, z2: mz + 2.2 };
   baueAbgabe();
   baueBus(mz);
+  haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby: der Bus auf der Fahrt
   for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
 
   // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
@@ -2701,7 +2799,7 @@ function baueHaus() {
 
   // 8. Du startest im ARAG-Bus (Lobby). Deine Helfer stehen neben dir.
   ducken(false);
-  const BUS = haus.bus;   // (Du startest im Bus – in der Lobby. Ohne Lobby: draußen vor der Bustür)
+  const BUS = haus.fahrBus;   // (Du startest im fahrenden Bus – in der Lobby. Ohne Lobby: draußen vor der Bustür)
   if (LOBBY_AN) { spielerKoerper.position.set(BUS.lobby.x, KOERPER_RADIUS + 0.05, BUS.lobby.z); blick.links = 0; }
   else { spielerKoerper.position.set(haus.spawn.x, KOERPER_RADIUS + 0.05, haus.spawn.z); blick.links = -Math.PI / 2; }
   spielerKoerper.velocity.set(0, 0, 0);
@@ -5185,7 +5283,7 @@ function introEnde() {
   if (introZeit < 0) return;
   introZeit = -1; einblenden = 1;
   if (haus.bus) haus.bus.gruppe.position.z = 0;
-  if (lobby) lobbyWillkommen();
+  if (!lobby) ausTuer();   // Angekommen – Tür auf!
 }
 function introKamera() {
   const B = haus.bus, t = begrenzt(introZeit / INTRO_DAUER, 0, 1);
@@ -5211,22 +5309,33 @@ function zeichneIntro() {
 }
 // Die Lobby
 function lobbyWillkommen() {
-  zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E!' : '🚌 Willkommen im ARAG-Bus! Geh zum roten Knopf 🔴 und drück E!', 5);
+  zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E – dann sind wir da!' : '🚌 Willkommen im ARAG-Bus! Drück am roten Knopf 🔴 E – dann sind wir da!', 5);
 }
 function startNachricht() { zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); }
 function amKnopf() {
-  const B = haus && haus.bus, p = spielerKoerper.position;
+  const B = haus && haus.fahrBus, p = spielerKoerper.position;
   return !!B && !tot && abstand2D(p.x, p.z, B.knopf.x, B.knopf.z) < 1.6;
 }
-function losGehts() {   // 🔴 Der Knopf wurde gedrückt: Tür auf – los geht's!
+function losGehts() {   // 🔴 Der Knopf wurde gedrückt: Der Bus kommt an der Spukvilla an!
   if (!lobby) return;
-  if (introZeit >= 0) introEnde();
   lobby = false; spielZeit = 0;
-  busTuerAuf();
-  ton(880, 0, 0.12, 'sine', 0.1); ton(660, 0.15, 0.2, 'sine', 0.1);   // Ding-dong
-  startNachricht();
+  ankommen();
   if (mp.rolle === 'host') mpAnAlle({ t: 'los' });
 }
+function ankommen() {   // Alle im Bus (und die Helfer) stehen jetzt im echten Bus auf dem Parkplatz – genau an derselben Stelle im Bus
+  const F = haus.fahrBus, B = haus.bus;
+  if (F) {
+    const dx = B.x1 - F.x1, dz = B.z1 - F.z1, p = spielerKoerper.position;
+    if (!tot) { p.x += dx; p.z += dz; spielerKoerper.velocity.set(0, 0, 0); }
+    if (mp.rolle !== 'gast') for (const h of helfer) { h.body.position.x += dx; h.body.position.z += dz; h.body.velocity.set(0, 0, 0); h.tw = null; }
+    F.gruppe.visible = false; F.landschaft.gruppe.visible = false;
+  }
+  rauschen(0, 0.9, 0.25, 'highpass', 2500, null, 800);   // Pssssch! (Bremsen)
+  ton(880, 0.3, 0.12, 'sine', 0.1); ton(660, 0.45, 0.2, 'sine', 0.1);   // Ding-dong
+  einblenden = 1;
+  if (INTRO_AN) introStarten(); else ausTuer();
+}
+function ausTuer() { busTuerAuf(); startNachricht(); spielZeit = 0; }   // Tür auf – raus mit euch!
 function busTuerAuf() {
   const B = haus && haus.bus;
   if (!B || B.tuerAuf) return;
@@ -5239,23 +5348,33 @@ function busUpdate(dt) {
   const B = haus && haus.bus;
   if (!B) return;
   B.gruppe.position.z = introZeit >= 0 ? busVersatz(introZeit) : 0;   // Im Intro kommt der Bus angefahren
-  if (B.licht) B.licht.intensity = introZeit >= 0 && busVersatz(introZeit) > 1 ? 0 : 1.5;   // (Das Licht im Bus geht erst an, wenn er da ist)
+  const F = haus.fahrBus;
+  if (B.licht) {   // Das Licht: in der Lobby im fahrenden Bus, danach im echten Bus (im Intro erst, wenn er angekommen ist)
+    if (lobby && F) B.licht.position.set(F.licht.x, F.licht.y, F.licht.z); else B.licht.position.copy(B.lichtPos);
+    B.licht.intensity = introZeit >= 0 && busVersatz(introZeit) > 1 ? 0 : 1.5;
+  }
+  if (lobby && F) {   // 🚌💨 Draußen zieht alles vorbei, der Motor brummt
+    landschaftFahren(F.landschaft, dt);
+    if (zeit - (F.motorZeit ?? -9) > 1) { F.motorZeit = zeit; ton(48, 0, 1.15, 'sawtooth', 0.02, 46); ton(96, 0, 1.15, 'sine', 0.015, 92); }
+  }
   // Die Schiebetür: erst ein Stück raus, dann zur Seite
   B.tuerWeg += ((B.tuerAuf ? 1 : 0) - B.tuerWeg) * Math.min(1, dt * 2.5);
   B.tuer.position.x = B.tuerX + Math.min(1, B.tuerWeg * 3) * 0.13;
   B.tuer.position.z = B.tuerZ + Math.max(0, B.tuerWeg - 0.25) / 0.75 * 1.45;
   B.dachLichter.forEach((l, k) => l.material.color.set((zeit * 2 + k) % 2 < 1 ? '#ffae3d' : '#4a3010'));   // Blink, blink
-  B.knopfOben.material.emissiveIntensity = lobby ? 0.6 + Math.sin(zeit * 6) * 0.4 : 0.2;
-  if (lobby && zeit - (B.monitorZeit ?? -9) > 1) { B.monitorZeit = zeit; maleMonitor(); }   // Der Bildschirm (einmal pro Sekunde neu)
+  if (F && lobby) {
+    F.knopfOben.material.emissiveIntensity = 0.6 + Math.sin(zeit * 6) * 0.4;
+    if (zeit - (F.monitorZeit ?? -9) > 1) { F.monitorZeit = zeit; maleMonitor(); }   // Der Bildschirm (einmal pro Sekunde neu)
+  }
 }
 function maleMonitor() {
-  const M = haus.bus.monitor, g = M.g, b = 512, h = 288;
+  const M = haus.fahrBus.monitor, g = M.g, b = 512, h = 288;
   g.fillStyle = '#06121a'; g.fillRect(0, 0, b, h);
   g.strokeStyle = '#7cf5c6'; g.lineWidth = 6; g.strokeRect(3, 3, b - 6, h - 6);
   zeichneAragLogo(g, 22, 30, 42, '#ffffff');
   g.textAlign = 'left'; g.fillStyle = '#7cf5c6'; g.font = 'bold 20px Arial, sans-serif'; g.fillText('EINSATZ-BUS · LOBBY', 245, 52);
   g.fillStyle = '#ffffff'; g.font = '19px Arial, sans-serif';
-  g.fillText('🏚️ Auftrag: Die große Spukvilla', 22, 115);
+  g.fillText('🏚️ Auftrag: Die große Spukvilla (wir sind unterwegs!)', 22, 115);
   g.fillText(`🏆 Ziel: ${gewinnZiel()} Schätze verkaufen`, 22, 145);
   g.fillText(`💰 Rekord: ${euro(rekord)}`, 22, 175);
   const team = [mp.aktiv ? MP_ROBOTER[mp.nr]?.name || 'Du' : 'Du', ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
@@ -5265,8 +5384,8 @@ function maleMonitor() {
 }
 function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby tun?
   ctx.fillStyle = 'rgba(10,12,18,0.82)'; rr(W / 2 - 260, 14, 520, 62, 12); ctx.fill();
-  text('🚌 LOBBY – ARAG-Einsatzbus', W / 2, 38, 18, '#7cf5c6');
-  text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Einer drückt den roten Knopf 🔴` : 'Lauf zum roten Knopf 🔴 an der Tür', W / 2, 62, 13, '#c9c3ff', 'center', false);
+  text('🚌💨 LOBBY – Der ARAG-Bus fährt zur Spukvilla', W / 2, 38, 18, '#7cf5c6');
+  text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Alle bereit? Einer drückt den roten Knopf 🔴` : 'Bereit? Lauf zum roten Knopf 🔴 an der Tür!', W / 2, 62, 13, '#c9c3ff', 'center', false);
   if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
 }
 function neuesSpiel() {
@@ -5281,10 +5400,10 @@ function starteLevel(startzahl = KARTE.startzahl) {
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
-  lobby = LOBBY_AN; introZeit = -1; einblenden = 0;
-  if (INTRO_AN) introStarten();
-  if (lobby) { if (!INTRO_AN) lobbyWillkommen(); }
-  else { busTuerAuf(); startNachricht(); }
+  lobby = LOBBY_AN; introZeit = -1; einblenden = 1;
+  if (lobby) lobbyWillkommen();          // Erst fährt der Bus (Lobby) ...
+  else if (INTRO_AN) introStarten();     // ... ohne Lobby gleich das Intro
+  else ausTuer();
   mausFangen();
 }
 function gewonnen() {   // 🏆 GEWONNEN!
@@ -5314,6 +5433,11 @@ function zeichne3D() {
   kamera.rotation.set(blick.hoch, blick.links, 0);
   kamera.updateMatrixWorld();
   if (introZeit >= 0) introKamera();   // 🎬 Im Intro fliegt die Kamera durch den Wald
+  else if (lobby) {   // 🚌💨 Im fahrenden Bus ruckelt es ein bisschen
+    kamera.position.y += Math.sin(zeit * 11) * 0.01 + (Math.sin(zeit * 1.3) > 0.985 ? 0.035 : 0);
+    kamera.rotation.z = Math.sin(zeit * 0.8) * 0.01;
+    kamera.updateMatrixWorld();
+  }
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
   for (const m of monster) zeigeMonster(m);
   for (const h of helfer) zeigeHelfer(h);
@@ -5406,7 +5530,7 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  text(lobby ? '📍 🚌💨 Im ARAG-Bus – unterwegs' : imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
   if (lobby) zeichneLobbyHUD();
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
@@ -5432,7 +5556,8 @@ function zeichneHUD() {
   // Oben Mitte: Pfeil zum Transporter (oder zur Treppe, wenn du oben bist)
   const L = haus.laster;
   let zielX = (L.x1 + L.x2) / 2, zielZ = (L.z1 + L.z2) / 2, zielText = '🚚';
-  if (imKeller(p)) {   // Im Keller: Der Pfeil zeigt zur Kellertreppe
+  if (lobby && haus.fahrBus) { zielX = haus.fahrBus.knopf.x; zielZ = haus.fahrBus.knopf.z; zielText = '🔴 Knopf'; }
+  else if (imKeller(p)) {   // Im Keller: Der Pfeil zeigt zur Kellertreppe
     const pt = treppenPunkte(haus.keller.treppe);
     zielX = pt.unten.x; zielZ = pt.unten.z; zielText = '🪜 rauf';
   } else if (raum.e > 0) {
