@@ -4889,6 +4889,18 @@ function aufBildschirm(v) {
 }
 
 function zeichneHUD() {
+  // 🔵 Nebeltrank: blauer Schleier vor den Augen · 🟣 Klebeschleim: lila Rand
+  if (nebelZeit > 0) {
+    const n = begrenzt(nebelZeit / 1.5, 0, 1);
+    ctx.fillStyle = `rgba(60,140,210,${0.35 * n})`; ctx.fillRect(0, 0, W, H);
+    for (let k = 0; k < 6; k++) {   // Wabernde Nebelflecken
+      const x = W * (0.5 + Math.sin(zeit * 0.7 + k * 1.7) * 0.4), y = H * (0.5 + Math.cos(zeit * 0.5 + k * 2.3) * 0.35);
+      const v = ctx.createRadialGradient(x, y, 0, x, y, 260);
+      v.addColorStop(0, `rgba(170,215,255,${0.3 * n})`); v.addColorStop(1, 'rgba(170,215,255,0)');
+      ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+    }
+  }
+  if (klebZeit > 0) { ctx.strokeStyle = 'rgba(192,77,255,0.55)'; ctx.lineWidth = 26; ctx.strokeRect(0, 0, W, H); text('🟣 Du klebst fest!', W / 2, H - 170, 16, '#e0a8ff'); }
   // Weiß blitzen bei der Blitzlampe
   if (blitzHell > 0) { ctx.fillStyle = `rgba(255,255,240,${blitzHell * 0.85})`; ctx.fillRect(0, 0, W, H); }
   // Rot blitzen, wenn du getroffen wurdest
@@ -4918,7 +4930,7 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? '📍 🛖 Im Gartenhäuschen' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  text(imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? '📍 🛖 Im Gartenhäuschen' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
   text(`🏆 Ziel: ${Math.min(verkauft, zielN)} / ${zielN} Schätze verkauft`, 24, 108, 13, fertig ? '#4ade80' : '#ffd166', 'left', false);
@@ -4943,7 +4955,10 @@ function zeichneHUD() {
   // Oben Mitte: Pfeil zum Transporter (oder zur Treppe, wenn du oben bist)
   const L = haus.laster;
   let zielX = (L.x1 + L.x2) / 2, zielZ = (L.z1 + L.z2) / 2, zielText = '🚚';
-  if (raum.e > 0) {
+  if (imKeller(p)) {   // Im Keller: Der Pfeil zeigt zur Kellertreppe
+    const pt = treppenPunkte(haus.keller.treppe);
+    zielX = pt.unten.x; zielZ = pt.unten.z; zielText = '🪜 rauf';
+  } else if (raum.e > 0) {
     const pt = treppenPunkte(raum.treppeRunter || haus.treppen[raum.e - 1]);
     zielX = pt.oben.x; zielZ = pt.oben.z; zielText = '🪜 runter';
   }
@@ -5061,7 +5076,7 @@ function zeichneTitel() {
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische, durch Mauselöcher 🐭!) · F: Blitzlampe 📸 · E: Tür auf/zu 🚪', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
-  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster – deine Helfer blitzen auch! 📸', W / 2, 468, 12, '#8a8fb0', 'center', false);
+  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster – deine Helfer blitzen auch! 📸 Im Keller wohnt der Chemiker 🧪', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
   text('🌐 Mit Freunden spielen? Oben rechts einen Raum erstellen oder einen Code eingeben!', W / 2, 548, 12, '#7cf5c6', 'center', false);
@@ -5545,6 +5560,8 @@ function mpVomHost(d) {
     else if (d.id !== mp.peer.id) { const o = mp.andere.get(d.id); if (o) { o.blitzHell = 1; sound.blitz(lautBei({ x: o.x, y: o.y, z: o.z })); } }
   }
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
+  else if (d.t === 'trank') trankStart(d.id, d.art, d.p, d.v);                  // 🧪 Der Chemiker wirft
+  else if (d.t === 'platsch') trankPlatsch(d.id, d.art, d.p[0], d.p[1], d.p[2]);   // ... und der Trank zerplatzt
   else if (d.t === 'au') {
     getroffen(d.s, d.von);
     const l = Math.hypot(d.wx, d.wz) || 1;
