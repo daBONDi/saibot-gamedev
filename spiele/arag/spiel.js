@@ -366,6 +366,15 @@ function gruselTon(hoehe, start, dauer, klang, laut, hoeheEnde, zittern = 6, zie
   } catch (e) { /* egal */ }
 }
 const monsterSound = {
+  chemiker(laut, jagt) {   // 🧪 Blubb ... blubb ... (und beim Jagen ein irres Kichern)
+    for (let k = 0; k < 4; k++) ton(zufall(180, 420), k * 0.13 + zufall(0, 0.05), 0.09, 'sine', 0.12 * laut, zufall(500, 900));
+    if (jagt) monsterSound.chemikerLacht(laut * 0.7);
+  },
+  chemikerLacht(laut) {   // Hehehehe-HAHAHA!
+    for (let k = 0; k < 7; k++) { const h = 520 - k * 30 + (k % 2) * 90; ton(h, k * 0.11, 0.08, 'square', 0.05 * laut, h * 0.8); }
+  },
+  trankWurf(laut) { rauschen(0, 0.3, 0.12 * laut, 'bandpass', 1500, null, 500); },   // Wusch!
+  trankPlatsch(laut) { sound.glas(laut); rauschen(0.02, 0.6, 0.25 * laut, 'highpass', 2500, null, 6000); ton(160, 0, 0.2, 'sine', 0.2 * laut, 60); },   // KLIRR! Zischhh ...
   geist(laut, jagt) {   // 👻 Huuuuuu ... (beim Jagen höher und schriller)
     const h = jagt ? zufall(500, 650) : zufall(300, 420);
     gruselTon(h, 0, zufall(1.2, 2), 'sine', 0.09 * laut, h * zufall(0.6, 0.8), jagt ? 9 : 5);
@@ -533,6 +542,17 @@ function walzerBegleitung(akkorde) {   // Pro Takt: tiefer Grundton (BUM), dann 
   return liste;
 }
 const MUSIK_LIEDER = {
+  // 🧪 Chemiker: Verrückter Labor-Swing – blubbernde Orgel, hüpfender Bass, alles ein bisschen schief (ein eigenes Lied!)
+  chemiker: {
+    tempo: 168, grund: 98, verzerrung: 30, gitarre: 0.35, melodieKlang: 'orgel', becken: 'tick',
+    riff: [
+      0, null, 12, null,  3, null, 15, null,   2, null, 14, null,  6, 5, 4, 3,
+      0, null, 12, null,  3, null, 15, null,   7, 6, 5, null,  1, null, 0, null,
+    ],
+    kick: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    snare: [4, 12],
+    melodie: [24, 27, 26, 30, 24, 27, 31, 30],
+  },
   // 👻 Staubgeist: Spuk-Orgel mit Geisterchor und Glöckchen – unheimlich und schwebend
   geist: {
     tempo: 140, grund: 110, verzerrung: 15, gitarre: 0.25, melodieKlang: 'orgel', becken: 'glocke',
@@ -777,6 +797,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     gruselTon(500, 0, 0.9, 'sawtooth', 0.14, 1300, 20);
     gruselTon(750, 0, 0.9, 'square', 0.06, 1600, 25);
     for (let k = 0; k < 2; k++) { ton(900, 0.2 + k * 0.25, 0.05, 'square', 0.3); ton(80, 0.2 + k * 0.25, 0.2, 'sine', 0.5, 40); }
+  } else if (art === 'chemiker') { // 🧪 Glas klirrt + irres Lachen
+    sound.glas(1);
+    monsterSound.chemikerLacht(1.4);
+    gruselTon(300, 0.1, 1.0, 'square', 0.08, 1200, 25);
   } else if (art === 'starrer') { // 🗿 Riesiger Steingong + Krachen
     for (const [f, laut] of [[55, 0.5], [151.8, 0.2], [297, 0.1]]) ton(f, 0, 3, 'sine', laut, f * 0.9);
     rauschen(0, 1.5, 0.5, 'lowpass', 1500, null, 60);
@@ -1100,6 +1124,7 @@ let level = 1, konto = 0, ld = levelDaten(1);
 let rekord = 0;
 try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /* egal */ }
 let haus = null;            // Das aktuelle Haus
+let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
 let schatzNummer = 0;       // Jeder Schatz bekommt eine Nummer (für den Multiplayer)
 let monster = [];           // Alle Monster
@@ -2118,6 +2143,7 @@ function hausAufraeumen() {
   for (const s of splitter) szene.remove(s.mesh);
   for (const s of schussSpuren) szene.remove(s.mesh);
   schussSpuren = [];
+  traenkeAufraeumen();
   for (const d of tuerListe) if (d.body.world) welt.removeBody(d.body);
   tuerListe = [];
   wandKoerper = []; sichtBlocker = []; schaetze = []; monster = []; helfer = []; splitter = []; schwebeTexte = []; funk = [];
@@ -2953,6 +2979,57 @@ function baueMonsterMesh(art) {
     const laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({ color: '#ff2020', fog: false, transparent: true, opacity: 0.8 }));
     laser.visible = false; laser.castShadow = false; g.add(laser);
     Object.assign(g.userData, { blitz, feuer, laser, flinte });
+  } else if (art === 'chemiker') {
+    // 🧪 Der verrückte Chemiker: weißer Kittel mit Flecken, wilde weiße Haare, grün leuchtende Schutzbrille, Gürtel voller Tränke
+    const mat = f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.85 });
+    const kittelTex = malTextur(64, 64, (c, b, h) => {
+      c.fillStyle = '#e8ece4'; c.fillRect(0, 0, b, h);
+      for (let k = 0; k < 9; k++) { c.fillStyle = ['#5dff4a', '#c04dff', '#4dc3ff', '#ff8a3d', '#6b5a3a'][k % 5]; c.globalAlpha = 0.55; c.beginPath(); c.arc(Math.random() * b, Math.random() * h, 2 + Math.random() * 5, 0, 7); c.fill(); }
+    }, false);
+    const kittel = new THREE.MeshStandardMaterial({ map: kittelTex, roughness: 0.9 }), hose = mat('#2b2b33'), haut = mat('#c8d6b0'), haar = mat('#f2f2f2');
+    const beine = [];
+    for (const s of [-1, 1]) {
+      const bein = new THREE.Group(); bein.position.set(s * 0.11, 0.78, 0); g.add(bein);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.72, 0.17), hose); b.position.y = -0.36; bein.add(b);
+      const schuh = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.1, 0.3), mat('#141414')); schuh.position.set(0, -0.73, 0.05); bein.add(schuh);
+      beine.push(bein);
+    }
+    // Langer Kittel (unten weit, offen) und Oberkörper
+    const rock = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.38, 0.75, 12, 1, true), new THREE.MeshStandardMaterial({ map: kittelTex, roughness: 0.9, side: THREE.DoubleSide }));
+    rock.position.y = 0.85; g.add(rock);
+    const brust = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.3), kittel); brust.position.y = 1.45; g.add(brust);
+    // Gürtel mit vier bunten Trank-Fläschchen
+    const guertel = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.07, 0.34), mat('#4a2f1a')); guertel.position.y = 1.2; g.add(guertel);
+    Object.values(TRAENKE).forEach((T, k) => {
+      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), new THREE.MeshBasicMaterial({ color: T.farbe }));
+      fl.position.set(-0.2 + k * 0.13, 1.14, 0.19); g.add(fl);
+    });
+    // Kopf: grünliche Haut, riesige Schutzbrille, wilde Haare in alle Richtungen
+    const kopf = new THREE.Group(); kopf.position.y = 1.92; g.add(kopf);
+    kopf.add(new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), haut));
+    const brilleMat = new THREE.MeshBasicMaterial({ color: '#5dff4a', fog: false });
+    for (const s of [-1, 1]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.022, 6, 14), mat('#3a3a3a')); ring.position.set(s * 0.085, 0.03, 0.16); kopf.add(ring);
+      const glas = new THREE.Mesh(new THREE.CircleGeometry(0.068, 14), brilleMat); glas.position.set(s * 0.085, 0.03, 0.17); kopf.add(glas);
+    }
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.015, 6, 20), mat('#222')); band.rotation.x = Math.PI / 2; band.position.y = 0.03; kopf.add(band);
+    for (let k = 0; k < 14; k++) {   // Haare wie nach einer Explosion
+      const w = k / 14 * Math.PI * 2, haarM = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 5), haar);
+      haarM.position.set(Math.cos(w) * 0.15, 0.12 + (k % 3) * 0.03, Math.sin(w) * 0.15 - 0.03);
+      haarM.rotation.set(Math.sin(w) * 1.0, 0, -Math.cos(w) * 1.0); kopf.add(haarM);
+    }
+    const mund = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.025, 0.02), mat('#3a1010')); mund.position.set(0, -0.09, 0.18); kopf.add(mund);
+    // Arme: Der rechte hält einen Trank (holt beim Werfen weit aus)
+    const arme = [];
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Group(); arm.position.set(s * 0.32, 1.66, 0); g.add(arm);
+      const a = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.6, 0.13), kittel); a.position.y = -0.28; arm.add(a);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), haut); hand.position.y = -0.6; arm.add(hand);
+      arme.push(arm);
+    }
+    const flasche = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshBasicMaterial({ color: '#5dff4a' }));
+    flasche.position.set(0, -0.72, 0.03); arme[1].add(flasche);
+    Object.assign(g.userData, { beine, arme, kopf, brilleMat, flasche });
   } else {   // starrer
     const stein = new THREE.MeshStandardMaterial({ color: '#8a8780', roughness: 1 });
     const sockel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.2, 12), stein); sockel.position.y = 0.1; g.add(sockel);
@@ -3509,6 +3586,167 @@ function updateSchussSpuren(dt) {
   }
   schussSpuren = schussSpuren.filter(sp => sp.t > 0);
 }
+// 🧪 Der Chemiker: Sieht er jemanden in Wurfweite, bleibt er stehen, holt aus – und WUSCH! fliegt ein Trank im Bogen
+function chemikerWirft(m, dt) {
+  const info = m.info;
+  // Er verlässt seinen Keller nie: Ist sein Ziel oben, wartet er unten an der Treppe (und wirft hoch, wenn er dich sieht!)
+  if (haus.keller && m.ziel && !imKeller(m.ziel)) { const P = treppenPunkte(haus.keller.treppe); m.ziel = { x: P.vor.x + 1.5, y: haus.keller.boden, z: P.vor.z + 1.5 }; }
+  m.nachladen -= dt;
+  const o = m.opfer;
+  if (!o || m.modus !== 'jagen' || zeit - m.opferZeit > 0.35 || m.nachladen > 0) { m.zielen = 0; return false; }
+  if (o.helfer && o.helfer.kaputt > 0) { m.zielen = 0; return false; }
+  if (o.gast && !mp.andere.has(o.gast.id)) { m.zielen = 0; return false; }
+  const ziel = o.helfer ? o.helfer.body.position : o.gast ? { x: o.gast.x, y: o.gast.y + 0.4, z: o.gast.z } : spielerKoerper.position;
+  if (abstand3D(m, ziel) > info.wurfWeite) { m.zielen = 0; return false; }
+  m.winkel = Math.atan2(ziel.x - m.x, ziel.z - m.z);   // Zum Opfer drehen
+  if (m.zielen === 0) monsterSound.chemikerLacht(Math.max(0.4, monsterLautstaerke(m)));
+  m.zielen += dt;
+  if (m.zielen >= info.ausholen) { m.zielen = 0; m.nachladen = info.nachladen; trankWerfen(m, ziel); }
+  return true;
+}
+const TRANK_SCHWERKRAFT = 9.8;
+function trankWerfen(m, ziel) {
+  const art = auswahl(Object.keys(TRAENKE));
+  const hand = { x: m.x + Math.sin(m.winkel) * 0.3 + Math.cos(m.winkel) * 0.32, y: m.y + 2.0, z: m.z + Math.cos(m.winkel) * 0.3 - Math.sin(m.winkel) * 0.32 };
+  const zx = ziel.x + zufall(-0.5, 0.5), zz = ziel.z + zufall(-0.5, 0.5);   // Ein bisschen ungenau (sonst wäre es unfair)
+  const dx = zx - hand.x, dy = ziel.y - hand.y, dz = zz - hand.z;
+  const T = begrenzt(Math.hypot(dx, dz) / 12, 0.35, 1.0);   // Flugzeit: ein flacher Bogen, damit er nicht an die Kellerdecke knallt
+  const v = [dx / T, (dy + 0.5 * TRANK_SCHWERKRAFT * T * T) / T, dz / T];
+  const id = ++trankNummer;
+  trankStart(id, art, [hand.x, hand.y, hand.z], v);
+  if (mp.rolle === 'host') mpAnAlle({ t: 'trank', id, art, p: [r2(hand.x), r2(hand.y), r2(hand.z)], v: v.map(r2) });
+}
+function trankStart(id, art, p, v) {   // Ein Trank fliegt los (das sehen alle)
+  const T = TRAENKE[art];
+  if (!T) return;
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: T.farbe })));
+  const hals = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.12, 8), new THREE.MeshBasicMaterial({ color: '#cfe9ff', transparent: true, opacity: 0.6 }));
+  hals.position.y = 0.13; g.add(hals);
+  const korken = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.05, 8), new THREE.MeshStandardMaterial({ color: '#8a5a2b' }));
+  korken.position.y = 0.21; g.add(korken);
+  g.position.set(p[0], p[1], p[2]); szene.add(g);
+  traenke.push({ id, art, mesh: g, pos: new THREE.Vector3(p[0], p[1], p[2]), v: new THREE.Vector3(v[0], v[1], v[2]), alter: 0 });
+  monsterSound.trankWurf(lautBei({ x: p[0], y: p[1], z: p[2] }));
+}
+function trankWeg(t) { szene.remove(t.mesh); traenke = traenke.filter(q => q !== t); }
+function trankBoden(x, z, y) { return imKellerXZ(x, z) && y < -0.7 ? haus.keller.boden : bodenHoeheBei(x, z, y); }
+function trankTrifftJemanden(q) {
+  const p = spielerKoerper.position;
+  if (!tot && q.distanceTo(p) < 0.55) return true;
+  for (const g of mpGaeste()) if (Math.hypot(q.x - g.x, q.y - g.y - 0.4, q.z - g.z) < 0.6) return true;
+  return helfer.some(h => h.kaputt <= 0 && q.distanceTo(h.body.position) < 0.55);
+}
+const trankStrahl = new THREE.Raycaster(), trankRichtung = new THREE.Vector3();
+function updateTraenke(dt) {
+  for (const t of [...traenke]) {
+    t.alter += dt;
+    const alt = t.pos.clone();
+    t.v.y -= TRANK_SCHWERKRAFT * dt;
+    t.pos.addScaledVector(t.v, dt);
+    t.mesh.position.copy(t.pos);
+    t.mesh.rotation.x += dt * 9; t.mesh.rotation.z += dt * 5;   // Er wirbelt durch die Luft
+    if (mp.rolle === 'gast') { if (t.alter > 4) trankWeg(t); continue; }   // Beim Gast: Wo er zerplatzt, sagt der Gastgeber
+    // Trifft er eine Wand, die Decke, den Boden oder jemanden?
+    let wo = null;
+    trankRichtung.copy(t.pos).sub(alt);
+    const l = trankRichtung.length();
+    if (l > 0) {
+      trankStrahl.set(alt, trankRichtung.normalize()); trankStrahl.far = l;
+      const h = trankStrahl.intersectObjects(sichtBlocker, false)[0];
+      if (h) wo = h.point.clone().addScaledVector(trankRichtung, -0.08);
+    }
+    if (!wo && t.pos.y <= trankBoden(t.pos.x, t.pos.z, alt.y) + 0.08) wo = t.pos.clone();
+    if (!wo && (trankTrifftJemanden(t.pos) || t.alter > 4)) wo = t.pos.clone();
+    if (!wo) continue;
+    trankPlatsch(t.id, t.art, wo.x, wo.y, wo.z);
+    if (mp.rolle === 'host') mpAnAlle({ t: 'platsch', id: t.id, art: t.art, p: [r2(wo.x), r2(wo.y), r2(wo.z)] });
+  }
+}
+// KLIRR! Der Trank zerplatzt (passiert bei allen – jeder Computer kümmert sich um seinen eigenen Roboter)
+function trankPlatsch(id, art, x, y, z) {
+  const t = traenke.find(q => q.id === id);
+  if (t) trankWeg(t);
+  const T = TRAENKE[art];
+  if (!T) return;
+  monsterSound.trankPlatsch(lautBei({ x, y, z }));
+  for (let k = 0; k < 16; k++) {   // Bunte Spritzer und Glassplitter
+    const m = new THREE.Mesh(k % 4 ? new THREE.SphereGeometry(0.05, 6, 4) : new THREE.TetrahedronGeometry(0.04), new THREE.MeshBasicMaterial({ color: k % 4 ? T.farbe : '#cfe9ff' }));
+    m.position.set(x, y + 0.05, z); szene.add(m);
+    splitter.push({ mesh: m, v: new THREE.Vector3(zufall(-3, 3), zufall(1.5, 4.5), zufall(-3, 3)), t: 0.7 });
+  }
+  const boden = trankBoden(x, z, y + 0.3);
+  if (T.pfuetze && y - boden < 1.5) neuePfuetze(art, x, boden, z);
+  if (art === 'knall') { wackeln = Math.max(wackeln, 0.25 * lautBei({ x, y, z })); schwebeText(x, y + 0.8, z, '💥 BUMM!', T.farbe); }
+  // Hat es dich erwischt?
+  const p = spielerKoerper.position;
+  if (!tot && zustand === 'spiel' && Math.hypot(p.x - x, p.y - y, p.z - z) < TRANK_RADIUS + 0.3) trankTrifftMich(T, art, x, z);
+  // Die Helfer (um die kümmert sich nur der Gastgeber)
+  if (mp.rolle === 'gast') return;
+  for (const h of helfer) {
+    const hp = h.body.position;
+    if (h.kaputt > 0 || Math.hypot(hp.x - x, hp.y - y, hp.z - z) > TRANK_RADIUS + 0.3) continue;
+    const m = monster.find(q => q.art === 'chemiker');
+    if ((art === 'knall' || art === 'gift') && m) helferKaputt(h, m.info, m);
+    else { h.wackelt = 1.5; h.angst = 3; }   // Schleim und Nebel: Er ist kurz ganz durcheinander
+  }
+}
+function trankTrifftMich(T, art, x, z) {
+  const p = spielerKoerper.position;
+  if (T.schubs) { const dx = p.x - x, dz = p.z - z, l = Math.hypot(dx, dz) || 1; spielerKoerper.velocity.set(dx / l * T.schubs, 5, dz / l * T.schubs); wackeln = Math.max(wackeln, 0.6); }
+  if (T.nebel) nebelZeit = T.nebel;
+  if (T.langsam) klebZeit = Math.max(klebZeit, 1.5);
+  zeigeNachricht({ gift: '🟢 GIFTTRANK! Raus aus der grünen Wolke!', schleim: '🟣 KLEBESCHLEIM! Du klebst fest ...', nebel: '🔵 NEBELTRANK! Du siehst fast nichts mehr!', knall: '🟠 KNALLTRANK! BUMM!' }[art], 2.5, T.farbe);
+  getroffen(T.schaden, `🧪 Chemiker (${T.name})`);
+}
+function neuePfuetze(art, x, y, z) {
+  const T = TRAENKE[art], g = new THREE.Group();
+  const flaeche = new THREE.Mesh(new THREE.CircleGeometry(TRANK_RADIUS * 0.85, 20), new THREE.MeshBasicMaterial({ color: T.farbe, transparent: true, opacity: 0.5, depthWrite: false }));
+  flaeche.rotation.x = -Math.PI / 2; flaeche.position.y = 0.03; g.add(flaeche);
+  if (T.gift) for (let k = 0; k < 7; k++) {   // Giftwolke: grüne Nebelkugeln, die wabern
+    const w = new THREE.Mesh(new THREE.SphereGeometry(zufall(0.35, 0.6), 10, 8), new THREE.MeshBasicMaterial({ color: T.farbe, transparent: true, opacity: 0.16, depthWrite: false }));
+    w.position.set(zufall(-1, 1), 0.4, zufall(-1, 1)); g.add(w);
+  }
+  g.position.set(x, y, z); szene.add(g);
+  pfuetzen.push({ art, x, y, z, t: T.pfuetze, mesh: g, tick: 0 });
+}
+function giftSchaden(menge) {   // Die Giftwolke kostet langsam Energie (ohne dass du alles fallen lässt)
+  energie -= menge;
+  schadenBlitz = Math.max(schadenBlitz, 0.2);
+  ton(zufall(180, 240), 0, 0.12, 'sawtooth', 0.04, 140);   // *hust*
+  if (energie <= 0) { energie = 1; getroffen(1, '🟢 Giftwolke vom Chemiker'); }
+}
+function updatePfuetzen(dt) {
+  nebelZeit = Math.max(0, nebelZeit - dt); klebZeit = Math.max(0, klebZeit - dt);
+  const p = spielerKoerper.position, fuss = p.y - (geduckt ? DUCK_RADIUS : KOERPER_RADIUS);
+  for (const q of pfuetzen) {
+    q.t -= dt;
+    const T = TRAENKE[q.art], sicht = begrenzt(q.t, 0, 1);   // In der letzten Sekunde verschwindet sie langsam
+    q.mesh.children.forEach((k, i) => {
+      k.material.opacity = (i === 0 ? 0.5 : 0.16) * sicht;
+      if (i > 0) { k.position.y = 0.45 + Math.sin(zeit * 1.5 + i) * 0.25; k.scale.setScalar(1 + Math.sin(zeit * 2 + i * 2) * 0.15); }
+    });
+    if (tot || zustand !== 'spiel' || q.t <= 0) continue;
+    if (abstand2D(p.x, p.z, q.x, q.z) > TRANK_RADIUS * 0.85 || Math.abs(fuss - q.y) > 1.2) continue;
+    if (T.gift) { q.tick -= dt; if (q.tick <= 0) { q.tick = 0.5; giftSchaden(T.gift * 0.5); } }
+    if (T.langsam) klebZeit = Math.max(klebZeit, 0.2);
+  }
+  for (const q of pfuetzen) if (q.t <= 0) szene.remove(q.mesh);
+  pfuetzen = pfuetzen.filter(q => q.t > 0);
+}
+function traenkeAufraeumen() {
+  for (const t of traenke) szene.remove(t.mesh);
+  for (const q of pfuetzen) szene.remove(q.mesh);
+  traenke = []; pfuetzen = []; nebelZeit = 0; klebZeit = 0;
+}
+// 🔵 Nebeltrank: Alles wird blau und neblig (der Nebel im Spiel wird ganz dick)
+const nebelNormal = new THREE.Color(DUNKEL), nebelBlau = new THREE.Color('#1d3f5c');
+function nebelAnpassen() {
+  const n = begrenzt(nebelZeit / 1.5, 0, 1);   // In den letzten 1,5 Sekunden wird es langsam wieder klar
+  szene.fog.density = 0.06 + n * 0.45;
+  szene.fog.color.copy(nebelNormal).lerp(nebelBlau, n);
+  szene.background.copy(szene.fog.color);
+}
 function zeigeMonster(m) {
   const g = m.mesh;
   if (m.art === 'geist') {
@@ -3546,6 +3784,18 @@ function zeigeMonster(m) {
       pos.setXYZ(1, 0, ziel.y + 0.1 - m.y, abstand2D(m.x, m.z, ziel.x, ziel.z));
       pos.needsUpdate = true;
     }
+  } else if (m.art === 'chemiker') {
+    const U = g.userData, schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 10 : 5)) : 0;
+    g.position.set(m.x, m.y + Math.abs(schritt) * 0.04, m.z);
+    g.rotation.set(m.betaeubt > 0 ? 0.2 : 0, m.winkel + (m.betaeubt > 0 ? Math.sin(zeit * 8) * 0.4 : 0), 0);
+    U.beine[0].rotation.x = schritt * 0.5; U.beine[1].rotation.x = -schritt * 0.5;
+    // Rechter Arm: beim Ausholen weit nach hinten-oben, sonst schwingt er beim Laufen. Linker Arm: rührt im Labor im Kessel
+    const aus = m.zielen > 0 ? Math.min(1, m.zielen / m.info.ausholen) : 0;
+    U.arme[1].rotation.x = aus > 0 ? -1.0 - aus * 2.0 : schritt * 0.4;
+    U.arme[0].rotation.x = m.modus === 'jagen' ? -0.6 + Math.sin(zeit * 9) * 0.3 : -schritt * 0.4 + (m.laeuft ? 0 : Math.sin(zeit * 3) * 0.3 - 0.4);
+    U.flasche.visible = m.nachladen < m.info.nachladen - 0.5 || aus > 0;   // Gleich nach dem Wurf ist die Hand leer
+    U.kopf.rotation.z = m.modus === 'jagen' ? Math.sin(zeit * 12) * 0.12 : 0;   // Irres Kopfwackeln
+    U.brilleMat.color.set(m.betaeubt > 0 ? '#444' : aus > 0 && Math.sin(zeit * 30) > 0 ? '#ffffff' : '#5dff4a');
   } else if (m.art === 'formwandler') {
     const U = g.userData, glitch = m.modus === 'verwandeln';
     // Welche Form sieht man? Beim Verwandeln flackert es zwischen allen Formen hin und her!
@@ -4334,6 +4584,7 @@ function updateSpieler(dt) {
   if (rennt) ausdauer = Math.max(0, ausdauer - 30 * dt);
   else ausdauer = Math.min(AUSDAUER_MAX, ausdauer + (laeuft ? 10 : 20) * dt);
   let tempo = geduckt ? DUCK_TEMPO : rennt ? RENN_TEMPO : LAUF_TEMPO;
+  if (klebZeit > 0) tempo *= TRAENKE.schleim.langsam;   // 🟣 Im Klebeschleim kommst du kaum vorwärts
   if (gegriffen) tempo *= 1 - Math.min(0.55, gegriffen.typ.masse / 60);   // Schweres tragen macht langsam
   const v = spielerKoerper.velocity, k = Math.min(1, dt * (amBoden ? 12 : 3));
   v.x += (dx * tempo - v.x) * k;
@@ -4387,6 +4638,8 @@ function update(dt) {
   if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
   for (const m of monster) updateMonster(m, dt);
   updateSchussSpuren(dt);
+  updateTraenke(dt);
+  updatePfuetzen(dt);
   blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
   if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
 
@@ -4574,6 +4827,7 @@ function gewonnen() {   // 🏆 GEWONNEN!
 // ===== Zeichnen =====
 // =====================================================================
 function zeichne3D() {
+  nebelAnpassen();
   const p = spielerKoerper.position;
   const wippen = amBoden && Math.hypot(spielerKoerper.velocity.x, spielerKoerper.velocity.z) > 0.5 ? Math.sin(zeit * 11) * (geduckt ? 0.015 : 0.03) : 0;
   const ruckeln = wackeln > 0 ? (Math.random() - 0.5) * 0.08 : 0;
@@ -5377,6 +5631,8 @@ function updateAlsGast(dt) {
     monsterGeraeusche(m, dt);
   }
   if (gegriffen && gegriffen.kaputt) loslassen();
+  updateTraenke(dt);
+  updatePfuetzen(dt);
   welt.step(1 / 60, dt, 3);
   totParken();
   pruefeBoden();
