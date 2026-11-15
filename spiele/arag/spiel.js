@@ -1154,6 +1154,7 @@ let level = 1, konto = 0, ld = levelDaten(1);
 let rekord = 0;
 try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /* egal */ }
 let haus = null;            // Das aktuelle Haus
+let lobby = false, introZeit = -1, einblenden = 0;   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
 let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
 let schatzNummer = 0;       // Jeder Schatz bekommt eine Nummer (für den Multiplayer)
@@ -1513,7 +1514,7 @@ function baueWiese(B, T, M) {
   const ok = (x, z) => {
     if (x > -0.4 && x < B + 0.4 && z > -0.4 && z < T + 0.4) return false;                      // Nicht im Haus
     if (x < -M + 0.4 || x > B + M - 0.4 || z < -M + 0.4 || z > T + M - 0.4) return false;     // Nicht hinterm Zaun
-    if (schuppenBei(x, z, 0.3)) return false;                                                  // Nicht im Gartenhäuschen
+    if (schuppenBei(x, z, 0.3) || imParkplatz(x, z, 0.2)) return false;                         // Nicht im Gartenhäuschen, nicht auf dem Parkplatz
     return !(haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.4);                    // Nicht im Baumstamm
   };
   const platz = () => { for (let v = 0; v < 30; v++) { const x = -M + Math.random() * (B + 2 * M), z = -M + Math.random() * (T + 2 * M); if (ok(x, z)) return { x, z }; } return null; };
@@ -1601,7 +1602,7 @@ function waldPlatz(zz = zufall, zr = rnd) {   // Ein freier Platz im Wald (nicht
     if (x > -3 && x < B + 3 && z > -3 && z < T + 3) continue;
     if ((haus.schuppen || []).some(S => x > S.x1 - 1.5 && x < S.x2 + 1.5 && z > S.z1 - 1.5 && z < S.z2 + 1.5)) continue;   // Nicht im Gartenhäuschen
     if ((haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 1.4)) continue;
-    if (schuppenBei(x, z, 1.5)) continue;
+    if (schuppenBei(x, z, 1.5) || imParkplatz(x, z, 2)) continue;
     return { x, z };
   }
   return null;
@@ -1820,6 +1821,161 @@ function baueKeller() {
   // Eine schwache, flackernde Glühbirne im Vorraum an der Treppe
   lampeHinzu(P.vor.x + 1.5, d - 0.3, P.vor.z + 1.5, '#ffb070', 0.9, 9, true);
 }
+// =====================================================================
+// ===== 🚌 Der ARAG-Einsatzbus (die Lobby), die Abgabe und der Parkplatz =====
+// =====================================================================
+// Das Firmenlogo: ein Roboterkopf mit Bildschirm-Gesicht und daneben ARAG (s = Größe in Pixeln)
+function zeichneAragLogo(g, x, y, s, schriftFarbe = '#10202a') {
+  g.save();
+  g.strokeStyle = '#7cf5c6'; g.lineWidth = s * 0.06;
+  g.beginPath(); g.moveTo(x + s * 0.5, y); g.lineTo(x + s * 0.5, y - s * 0.2); g.stroke();   // Antenne
+  g.fillStyle = '#ff6b6b'; g.beginPath(); g.arc(x + s * 0.5, y - s * 0.24, s * 0.08, 0, 7); g.fill();
+  g.fillStyle = '#7cf5c6'; g.beginPath(); g.roundRect(x, y, s, s * 0.8, s * 0.18); g.fill();     // Kopf
+  g.fillStyle = '#10202a'; g.beginPath(); g.roundRect(x + s * 0.12, y + s * 0.16, s * 0.76, s * 0.46, s * 0.1); g.fill();   // Bildschirm
+  g.fillStyle = '#7cf5c6';
+  for (const ax of [0.33, 0.67]) { g.beginPath(); g.arc(x + s * ax, y + s * 0.36, s * 0.08, 0, 7); g.fill(); }   // Augen
+  g.fillRect(x + s * 0.36, y + s * 0.5, s * 0.28, s * 0.04);   // Mund
+  g.fillStyle = schriftFarbe; g.font = `900 ${Math.round(s * 0.9)}px "Arial Black", Arial, sans-serif`;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillText('ARAG', x + s * 1.18, y + s * 0.8);
+  g.restore();
+}
+function canvasTextur(b, h, malen) {
+  const c = document.createElement('canvas'); c.width = b; c.height = h;
+  const g = c.getContext('2d'); malen(g, b, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return { tex: t, g, c };
+}
+function busSeite(laenge, logo) {   // Eine Seite vom Bus: oben Fenster, unten Logo und Spruch
+  const b = Math.round(laenge / 2.85 * 320);
+  return canvasTextur(b, 320, (g) => {
+    g.fillStyle = '#eef3f1'; g.fillRect(0, 0, b, 320);
+    const n = Math.max(2, Math.floor((b - 30) / 165));
+    for (let k = 0; k < n; k++) {   // Fenster (nachts dunkel, mit einem kleinen Glanz)
+      g.fillStyle = '#0e1a2b'; g.beginPath(); g.roundRect(25 + k * (b - 30) / n, 28, (b - 30) / n - 20, 95, 12); g.fill();
+      g.fillStyle = 'rgba(124,245,198,0.1)'; g.fillRect(35 + k * (b - 30) / n, 36, 30, 80);
+    }
+    g.fillStyle = '#7cf5c6'; g.fillRect(0, 138, b, 16);   // Mint-Streifen
+    g.fillStyle = '#10202a'; g.fillRect(0, 288, b, 32);   // Unten dunkel
+    if (logo) {
+      zeichneAragLogo(g, 40, 178, 92);
+      g.fillStyle = '#10202a'; g.font = 'bold 30px Arial, sans-serif'; g.fillText('Schatz-Bergungsdienst', 450, 212);
+      g.fillStyle = '#1f8a64'; g.font = 'italic bold 32px Arial, sans-serif'; g.fillText('Wir holen alles raus!', 450, 258);
+      if (b > 1100) { g.fillStyle = '#10202a'; g.font = 'bold 24px Arial, sans-serif'; g.fillText('☎ 0800 · SPUK · WEG', b - 290, 258); }
+    }
+  }).tex;
+}
+function baueBus(mz) {
+  const X1 = -15.4, X2 = -12.0, Z1 = mz - 7, Z2 = mz + 5, H = 3.0, D = 0.15, cx = (X1 + X2) / 2, W = X2 - X1;
+  const TZ1 = Z1 + 1.3, TZ2 = Z1 + 2.7, TZ = (TZ1 + TZ2) / 2;   // Die Tür (rechts vorne – zum Haus hin)
+  const gruppe = new THREE.Group(); hausGruppe.add(gruppe);   // (Im Intro fährt die ganze Gruppe heran)
+  const lack = new THREE.MeshStandardMaterial({ color: '#eef3f1', roughness: 0.5 });
+  const innenTex = canvasTextur(512, 160, (g) => {   // Innen: graue Wand, dunkle Fenster
+    g.fillStyle = '#b9c1c9'; g.fillRect(0, 0, 512, 160);
+    for (let k = 0; k < 3; k++) { g.fillStyle = '#0b1422'; g.beginPath(); g.roundRect(15 + k * 168, 12, 150, 55, 8); g.fill(); }
+    g.fillStyle = '#7cf5c6'; g.fillRect(0, 76, 512, 5);
+  }).tex;
+  innenTex.wrapS = THREE.RepeatWrapping;
+  const innen = l => { const t = innenTex.clone(); t.needsUpdate = true; t.repeat.set(l / 4, 1); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 }); };
+  const decke = new THREE.MeshStandardMaterial({ color: '#dfe5ea', roughness: 0.9 });
+  const teil = (x, y, z, b, h, t, mat, physik = true) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat);
+    m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; gruppe.add(m);
+    if (physik) { festerKoerper(x, y, z, b, h, t); sichtBlocker.push(m); }
+    return m;
+  };
+  const L = Z2 - Z1, mat6 = (k, besonders, rest) => [0, 1, 2, 3, 4, 5].map(i => i === k ? besonders : rest);
+  // Wände: außen Lack und Logo, innen grau mit Fenstern (Seiten vom Kasten: 0 = +x, 1 = -x, 2 = oben, 3 = unten, 4 = +z, 5 = -z)
+  teil(X1 + D / 2, H / 2, (Z1 + Z2) / 2, D, H, L, mat6(1, new THREE.MeshStandardMaterial({ map: busSeite(L, true), roughness: 0.5 }), innen(L)));             // Links (Westen)
+  teil(X2 - D / 2, H / 2, (Z1 + TZ1) / 2, D, H, TZ1 - Z1, mat6(0, lack, innen(TZ1 - Z1)));                                                                     // Rechts vor der Tür
+  teil(X2 - D / 2, (2.2 + H) / 2, TZ, D, H - 2.2, TZ2 - TZ1, mat6(0, lack, decke));                                                                              // Über der Tür
+  teil(X2 - D / 2, H / 2, (TZ2 + Z2) / 2, D, H, Z2 - TZ2, mat6(0, new THREE.MeshStandardMaterial({ map: busSeite(Z2 - TZ2, true), roughness: 0.5 }), innen(Z2 - TZ2)));   // Rechts mit Logo
+  const front = canvasTextur(384, 336, (g, b, h) => {   // Vorne: Leuchtschrift, Windschutzscheibe, Scheinwerfer
+    g.fillStyle = '#eef3f1'; g.fillRect(0, 0, b, h);
+    g.fillStyle = '#111'; g.fillRect(30, 10, b - 60, 42); g.fillStyle = '#ffb02e'; g.font = 'bold 30px monospace'; g.textAlign = 'center'; g.fillText('SPUKVILLA', b / 2, 42);
+    g.fillStyle = '#0e1a2b'; g.beginPath(); g.roundRect(14, 62, b - 28, 120, 14); g.fill();
+    g.fillStyle = 'rgba(124,245,198,0.12)'; g.fillRect(30, 70, 60, 100);
+    g.fillStyle = '#7cf5c6'; g.fillRect(0, 196, b, 12);
+    zeichneAragLogo(g, 110, 225, 40);
+    for (const sx of [40, b - 40]) { g.fillStyle = '#fff6c0'; g.beginPath(); g.arc(sx, 280, 24, 0, 7); g.fill(); g.fillStyle = '#ffd166'; g.beginPath(); g.arc(sx, 280, 13, 0, 7); g.fill(); }
+    g.fillStyle = '#10202a'; g.fillRect(0, h - 26, b, 26);
+  }).tex;
+  const hinten = canvasTextur(384, 336, (g, b, h) => {
+    g.fillStyle = '#eef3f1'; g.fillRect(0, 0, b, h);
+    g.fillStyle = '#0e1a2b'; g.beginPath(); g.roundRect(30, 28, b - 60, 95, 12); g.fill();
+    g.fillStyle = '#7cf5c6'; g.fillRect(0, 138, b, 14);
+    zeichneAragLogo(g, 70, 190, 60);
+    for (const sx of [34, b - 34]) { g.fillStyle = '#ff3030'; g.beginPath(); g.roundRect(sx - 18, 255, 36, 40, 6); g.fill(); }
+    g.fillStyle = '#10202a'; g.fillRect(0, h - 26, b, 26);
+  }).tex;
+  teil(cx, H / 2, Z1 + D / 2, W, H, D, mat6(5, new THREE.MeshStandardMaterial({ map: front, roughness: 0.4 }), innen(W)));    // Vorne
+  teil(cx, H / 2, Z2 - D / 2, W, H, D, mat6(4, new THREE.MeshStandardMaterial({ map: hinten, roughness: 0.5 }), innen(W)));   // Hinten
+  teil(cx, H - D / 2, (Z1 + Z2) / 2, W, D, L, mat6(3, decke, lack));                                                             // Dach
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(W - 2 * D, L - 2 * D), new THREE.MeshStandardMaterial({ color: '#2b3038', roughness: 0.9 }));
+  boden.rotation.x = -Math.PI / 2; boden.position.set(cx, 0.02, (Z1 + Z2) / 2); gruppe.add(boden);
+  // Räder, Scheinwerfer-Strahlen und blinkende Dachlichter
+  const reifen = new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.9 }), felge = new THREE.MeshStandardMaterial({ color: '#9aa3ad', metalness: 0.7, roughness: 0.3 });
+  for (const x of [X1 - 0.05, X2 + 0.05]) for (const z of [Z1 + 2.1, Z2 - 2.3]) {
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.32, 18), reifen); r.rotation.z = Math.PI / 2; r.position.set(x, 0.45, z); gruppe.add(r);
+    const f = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.34, 12), felge); f.rotation.z = Math.PI / 2; f.position.set(x, 0.45, z); gruppe.add(f);
+  }
+  for (const sx of [X1 + 0.4, X2 - 0.4]) {
+    const kegel = new THREE.Mesh(KEGEL_GEO, new THREE.MeshBasicMaterial({ color: '#fff3c0', alphaMap: KEGEL_TEX, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    kegel.raycast = () => {}; kegel.position.set(sx, 0.55, Z1 - 0.02); kegel.rotation.set(0.12, Math.PI, 0); kegel.scale.setScalar(9); gruppe.add(kegel);
+  }
+  const dachLichter = [-0.8, 0.8].map(dx => { const l = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 0.25), new THREE.MeshBasicMaterial({ color: '#ffae3d' })); l.position.set(cx + dx, H + 0.09, Z1 + 0.5); gruppe.add(l); return l; });
+  // Die Schiebetür (geht auf, wenn's losgeht)
+  const tuer = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, TZ2 - TZ1), [lack, lack, lack, lack, lack, lack]);
+  tuer.position.set(X2 - D / 2, 1.1, TZ); gruppe.add(tuer); sichtBlocker.push(tuer);
+  const fenster = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.7), new THREE.MeshBasicMaterial({ color: '#0e1a2b' }));
+  fenster.position.set(0.035, 0.5, 0); fenster.rotation.y = Math.PI / 2; tuer.add(fenster);
+  const tuerKoerper = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.08, 1.1, (TZ2 - TZ1) / 2)), material: standardMat, collisionFilterGroup: G_WAND });
+  tuerKoerper.position.set(X2 - D / 2, 1.1, TZ); welt.addBody(tuerKoerper); wandKoerper.push(tuerKoerper);
+  // Innen: Sitzbänke, der Lobby-Bildschirm und der große rote Knopf
+  const bankMat = new THREE.MeshStandardMaterial({ color: '#2f6b5a', roughness: 0.8 });
+  teil(X1 + 0.45, 0.22, (TZ2 + Z2) / 2 + 0.4, 0.6, 0.44, Z2 - TZ2 - 1.4, bankMat);
+  teil(X1 + 0.2, 0.75, (TZ2 + Z2) / 2 + 0.4, 0.12, 0.65, Z2 - TZ2 - 1.4, bankMat, false);
+  const monitor = canvasTextur(512, 288, () => {});
+  const bild = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 1.3), new THREE.MeshBasicMaterial({ map: monitor.tex }));
+  bild.position.set(cx, 1.75, Z2 - D - 0.02); bild.rotation.y = Math.PI; gruppe.add(bild);
+  const knopf = { x: X2 - 0.5, z: TZ2 + 0.9 };
+  teil(knopf.x, 0.5, knopf.z, 0.35, 1.0, 0.35, metallGrauMat);
+  const knopfOben = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.1, 16), new THREE.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#aa0000', emissiveIntensity: 1 }));
+  knopfOben.position.set(knopf.x, 1.05, knopf.z); gruppe.add(knopfOben);
+  const knopfSchild = schildMesh('🔴 E = LOS!', 0.9, 0.3); knopfSchild.position.set(knopf.x + 0.1, 1.55, knopf.z); knopfSchild.rotation.y = -Math.PI / 2; gruppe.add(knopfSchild);
+  const licht = lampeHinzu(cx, H - 0.35, (Z1 + Z2) / 2 + 1, '#eaffff', 1.5, 10, false);
+  haus.bus = { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, tuer, tuerKoerper, tuerX: X2 - D / 2, tuerZ: TZ, tuerAuf: false, tuerWeg: 0, dachLichter, knopf, knopfOben,
+    monitor, licht, lobby: { x: cx, z: Z2 - 2.2 },
+    schuppen: { bus: true, x1: X1, z1: Z1, x2: X2, z2: Z2, seite: 'o', tx: X2, tz: TZ, nx: 1, nz: 0, innen: { x: X2 - 1.2, y: 0, z: TZ }, aussen: { x: X2 + 1.3, y: 0, z: TZ } } };
+  haus.spawn = { x: X2 + 1.6, z: TZ };   // Hier tauchst du wieder auf (vor der Bustür)
+}
+function baueAbgabe() {   // Die Abgabe: eine grüne Zone mit Rand (zum Haus hin offen), ein Schild und eine Laterne
+  const L = haus.laster;
+  const zone = new THREE.Mesh(new THREE.PlaneGeometry(L.x2 - L.x1, L.z2 - L.z1), new THREE.MeshBasicMaterial({ color: '#1f8a64', transparent: true, opacity: 0.45 }));
+  zone.rotation.x = -Math.PI / 2; zone.position.set((L.x1 + L.x2) / 2, 0.03, (L.z1 + L.z2) / 2);
+  hausGruppe.add(zone);
+  const randMat = new THREE.MeshStandardMaterial({ color: '#7cf5c6', emissive: '#2aa77a', emissiveIntensity: 0.8 });
+  festerKlotz((L.x1 + L.x2) / 2, 0.2, L.z1, L.x2 - L.x1, 0.4, 0.15, randMat, false);
+  festerKlotz((L.x1 + L.x2) / 2, 0.2, L.z2, L.x2 - L.x1, 0.4, 0.15, randMat, false);
+  festerKlotz(L.x1, 0.2, (L.z1 + L.z2) / 2, 0.15, 0.4, L.z2 - L.z1, randMat, false);
+  const pfosten = festerKlotz(L.x1 - 0.3, 1.4, (L.z1 + L.z2) / 2, 0.15, 2.8, 0.15, metallGrauMat, false);
+  const schild = schildMesh('🚚 ARAG-ABGABE', 2.6, 0.65);
+  schild.position.set(L.x1 - 0.2, 2.5, (L.z1 + L.z2) / 2); schild.rotation.y = Math.PI / 2;
+  hausGruppe.add(schild);
+  lampeHinzu((L.x1 + L.x2) / 2, 3.2, (L.z1 + L.z2) / 2, '#c8ffe8', 2.2, 11, false);
+}
+const imParkplatz = (x, z, rand = 0) => (haus && haus.parkplatz || []).some(P => x > P.x1 - rand && x < P.x2 + rand && z > P.z1 - rand && z < P.z2 + rand);
+const kiesTextur = malTextur(128, 128, (g, b, h) => {   // Schotter
+  g.fillStyle = '#3a3a3c'; g.fillRect(0, 0, b, h);
+  for (let k = 0; k < 900; k++) { g.fillStyle = ['#4a4a4e', '#2c2c2e', '#55524e', '#333336'][k % 4]; g.fillRect(Math.random() * b, Math.random() * h, 2 + Math.random() * 3, 2 + Math.random() * 3); }
+});
+function bauePlatzBoden() {   // Schotter auf dem Parkplatz und dem Waldweg (liegt knapp über dem Gras)
+  for (const P of haus.parkplatz) {
+    const t = kiesTextur.clone(); t.needsUpdate = true; t.repeat.set((P.x2 - P.x1) / 3, (P.z2 - P.z1) / 3);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(P.x2 - P.x1, P.z2 - P.z1), new THREE.MeshStandardMaterial({ map: t, roughness: 1 }));
+    m.rotation.x = -Math.PI / 2; m.position.set((P.x1 + P.x2) / 2, 0.006, (P.z1 + P.z2) / 2); m.receiveShadow = true; hausGruppe.add(m);
+  }
+}
 function baueWald() {
   const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
   // 1) Boden: Waldboden rund ums Haus (dicke Platten, wie im Erdgeschoss)
@@ -1909,6 +2065,7 @@ function baueWald() {
     const x = zufall(-M, B + M), z = zufall(-M, T + M);
     if (frei(x, z)) baeume.push({ x, z, h: zufall(6, 12), tot: rnd() < 0.25, dreh: zufall(0, 6.3) });
   }
+  for (let k = baeume.length - 1; k >= 0; k--) if (imParkplatz(baeume[k].x, baeume[k].z, 1.8)) baeume.splice(k, 1);   // 🅿️ Auf dem Parkplatz und dem Waldweg stehen keine Bäume
   const stammMat = new THREE.MeshStandardMaterial({ color: '#2a1e16', roughness: 1 }), nadelMat = new THREE.MeshStandardMaterial({ color: '#13241a', roughness: 1 });
   const lebend = baeume.filter(b => !b.tot), kahl = baeume.filter(b => b.tot);
   const staemme = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.28, 1, 7), stammMat, baeume.length);
@@ -1936,6 +2093,8 @@ function baueWald() {
   });
   for (const m of [staemme, kronen, aeste]) { m.castShadow = true; hausGruppe.add(m); }
   haus.baeume = baeume;
+  if (haus.bus) haus.schuppen.push(haus.bus.schuppen);   // 🚌 Der Bus funktioniert wie ein Gartenhäuschen: rein und raus nur durch die Tür
+  if (haus.parkplatz) bauePlatzBoden();
   // 5) Schätze im Wald (im Laub versteckt ...)
   for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
   baueWiese(B, T, M);   // 🌱🌼 Gras und Wildblumen
@@ -3399,6 +3558,7 @@ function updateMonster(m, dt) {
       (!schonDrin && !!bodenLochBei(x, z, m.y, 0.3)) ||
       (!imHaus(x, z) && !(m.art === 'maulwurf' && m.modus !== 'oben') && (haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.55)) ||   // Draußen: nicht durch Bäume (unter der Erde geht's!)
       (m.art === 'maulwurf' && x > -1.2 && x < haus.breit * RAUM + 1.2 && z > -1.2 && z < haus.tief * RAUM + 1.2) ||   // Der Maulwurf kommt nicht ins Haus
+      (m.art === 'maulwurf' && imParkplatz(x, z, 0.5)) ||   // ... und nicht unter den Schotter-Parkplatz
       schuppenSperre(m, x, z);   // Gartenhäuschen: nur durch die Tür
     if (!loch(nx, nz)) { m.x = nx; m.z = nz; }
     else if (!loch(nx, m.z)) m.x = nx;   // Am Loch entlang rutschen
@@ -3530,12 +3690,12 @@ function maulwurfOpfer(m, weite, auchStill = false) {   // Wer läuft draußen h
   let bestes = null, bestD = weite;
   const dranBleiben = (o, d) => { if (m.opferWer && o.wer === m.opferWer) d -= 4; return d; };   // Wen er schon jagt, den verfolgt er lieber weiter
   const p = spielerKoerper.position, v = spielerKoerper.velocity;
-  if (!tot && !imHaus(p.x, p.z) && !schuppenBei(p.x, p.z) && p.y < 1.5 && (auchStill || (!geduckt && Math.hypot(v.x, v.z) > 0.6))) {
+  if (!tot && !imHaus(p.x, p.z) && !schuppenBei(p.x, p.z) && !imParkplatz(p.x, p.z) && p.y < 1.5 && (auchStill || (!geduckt && Math.hypot(v.x, v.z) > 0.6))) {
     const o = { x: p.x, y: 0, z: p.z, spieler: true, wer: 'ich' }, d = dranBleiben(o, abstand2D(m.x, m.z, p.x, p.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   for (const g of mpGaeste()) {
     if (zeit - (g.mwT || 0) > 0.3) { g.mwBewegt = Math.hypot(g.x - (g.mwX ?? g.x), g.z - (g.mwZ ?? g.z)) > 0.15; g.mwX = g.x; g.mwZ = g.z; g.mwT = zeit; }
-    if (imHaus(g.x, g.z) || schuppenBei(g.x, g.z) || g.y > 1.5 || !(auchStill || (g.mwBewegt && !g.dk))) continue;
+    if (imHaus(g.x, g.z) || schuppenBei(g.x, g.z) || imParkplatz(g.x, g.z) || g.y > 1.5 || !(auchStill || (g.mwBewegt && !g.dk))) continue;
     const o = { x: g.x, y: 0, z: g.z, gast: g, wer: g.id }, d = dranBleiben(o, abstand2D(m.x, m.z, g.x, g.z)); if (d < bestD) { bestD = d; bestes = o; }
   }
   for (const h of helfer) {
@@ -4357,9 +4517,9 @@ function helferKaputt(h, info, monster) {
   sagen(h, 'kaputt', {}, 2);
 }
 function helferAmStart(h) {   // Zack – zurück am Start! (neben der Abgabe, jeder Helfer an seinem Platz)
-  const S = haus.raeume[haus.start], k = Math.max(0, helfer.indexOf(h));
+  const k = Math.max(0, helfer.indexOf(h));
   h.kaputt = 0; h.leben = HELFER_LEBEN; h.heilZeit = HELFER_HEILEN; h.wackelt = 0; h.angst = 0; h.tw = null;
-  h.body.position.set(RAUM / 2 + 1.2, 0.5, S.z0 + 3.5 + k * 3);
+  h.body.position.set(haus.spawn.x + 1.5, 0.5, haus.spawn.z - 1.5 + k * 1.5);   // Vor der Bustür
   h.body.velocity.set(0, 0, 0);
   const p = h.body.position;
   schwebeText(p.x, p.y + 1.2, p.z, `🔧 ${h.name} ist zurück am Start!`, h.farbe);
@@ -4419,7 +4579,7 @@ function updateHelfer(h, dt) {
     ziel = p.x > L.x2 + 0.2 && Math.abs(p.z - mz) > 1.0 ? { x: L.x2 + 1.2, y: 0, z: mz } : { x: (L.x1 + L.x2) / 2 + 0.3, y: 0, z: mz };
   }
   else {   // Nichts zu tun: am Transporter warten (und sich ein bisschen langweilen)
-    ziel = { x: RAUM / 2 + 1.5, y: 0, z: (L.z1 + L.z2) / 2 + (h === helfer[0] ? -2 : 2) };
+    ziel = { x: L.x2 + 1.5, y: 0, z: (L.z1 + L.z2) / 2 + (h === helfer[0] ? -3 : 3) };   // (Draußen neben der Abgabe)
     h.wartenZeit += dt;
     if (h.wartenZeit > 25) { h.wartenZeit = 0; sagen(h, 'warten'); }
   }
@@ -4526,6 +4686,7 @@ function zeigeHelfer(h) {
   // Kopflampe (Helfer schauen ein bisschen nach unten auf den Boden)
   h.blitzHell = Math.max(0, (h.blitzHell || 0) - 3 / 60);
   kopflampeZeigen(T, h.kaputt <= 0, -0.15, h.blitzHell);
+  T.g.visible = introZeit < 0;   // (Im Intro sitzen sie schon im Bus – der kommt aber erst angefahren)
 }
 // 🔦 Kopflampe von einem Roboter: an/aus, nach oben/unten drehen, bei einer Wand kürzer machen, beim Blitzen hell
 const lampenPos = new THREE.Vector3(), lampenRicht = new THREE.Vector3();
@@ -4793,6 +4954,7 @@ function updateSpieler(dt) {
 // =====================================================================
 function update(dt) {
   if (nachricht) { nachricht.t -= dt; if (nachricht.t <= 0) nachricht = null; }
+  einblenden = Math.max(0, einblenden - dt);
   schadenBlitz = Math.max(0, schadenBlitz - dt);
   wackeln = Math.max(0, wackeln - dt);
   for (const f of funk) f.t -= dt;
@@ -4802,6 +4964,14 @@ function update(dt) {
   if (mp.rolle === 'gast') { if (zustand === 'spiel') updateAlsGast(dt); return; }
   if (zustand !== 'spiel' || (pause && !mp.aktiv)) return;   // Im Multiplayer läuft das Spiel auch in der Pause weiter
   spielZeit += dt;
+  busUpdate(dt);
+  if (introZeit >= 0) introUpdate(dt);
+  if (lobby || introZeit >= 0) {   // 🚌 In der Lobby (und im Intro) passiert im Haus noch nichts – die Monster warten
+    if (introZeit < 0) { updateSpieler(dt); gehaltenWerden(dt); packenPruefen(); haltenPhysik(); }
+    welt.step(1 / 60, dt, 3); pruefeBoden(); updateEffekte(dt);
+    spielZeit = 0;
+    return;
+  }
   if (spielZeit > 1.5 && spielZeit - dt <= 1.5 && helfer.length) sagen(auswahl(helfer), 'start', {}, 2);
 
   updateSpieler(dt);
@@ -4818,9 +4988,9 @@ function update(dt) {
     s.geworfen -= dt;
   }
   // Ist etwas aus dem Haus gefallen? (sollte nicht passieren, aber sicher ist sicher)
-  for (const s of schaetze) if (s.body.position.y < -ETAGE_HOEHE - 1.5) { s.body.position.set(RAUM / 2, 1, haus.laster.z1 + 2); s.body.velocity.set(0, 0, 0); }
-  for (const h of helfer) if (h.body.position.y < -ETAGE_HOEHE - 1.5) { h.body.position.set(RAUM / 2, 0.5, haus.laster.z1 + 2); h.body.velocity.set(0, 0, 0); }
-  if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
+  for (const s of schaetze) if (s.body.position.y < -ETAGE_HOEHE - 1.5) { s.body.position.set(haus.spawn.x + 1, 1, haus.spawn.z); s.body.velocity.set(0, 0, 0); }
+  for (const h of helfer) if (h.body.position.y < -ETAGE_HOEHE - 1.5) { h.body.position.set(haus.spawn.x + 1, 0.5, haus.spawn.z); h.body.velocity.set(0, 0, 0); }
+  if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(haus.spawn.x, 0.6, haus.spawn.z); spielerKoerper.velocity.set(0, 0, 0); }
   for (const m of monster) updateMonster(m, dt);
   updateSchussSpuren(dt);
   updateTraenke(dt);
@@ -4962,8 +5132,7 @@ function wiederbeleben(besitzer) {   // Beim Gastgeber: Wer bekommt sein Leben z
 }
 function spielerWiederbeleben() {
   tot = false; meinKopfId = null; energie = 100; ausdauer = AUSDAUER_MAX;
-  const L = haus.laster;
-  spielerKoerper.position.set(RAUM / 2 + zufall(-1, 1), KOERPER_RADIUS + 0.3, L.z1 + 2.5);
+  spielerKoerper.position.set(haus.spawn.x + zufall(0, 1), KOERPER_RADIUS + 0.3, haus.spawn.z + zufall(-1, 1));   // Vor der Bustür
   spielerKoerper.velocity.set(0, 0, 0);
   sound.geschafft();
   zeigeNachricht('🔧 Du bist wiederbelebt! Danke, Team! 🤖💚', 4);
@@ -4983,6 +5152,121 @@ function lautBei(p) {
 // =====================================================================
 // ===== Level starten und beenden =====
 // =====================================================================
+// =====================================================================
+// ===== 🎬 Intro und 🚌 Lobby =====
+// =====================================================================
+// Das Intro: Die Kamera fliegt durch den Wald, der Bus kommt angefahren, am Ende das Logo
+const INTRO_TEXTE = [
+  [0.8, 4.3, '🌲 Irgendwo, tief in einem dunklen Wald ...'],
+  [4.5, 8.2, '🏚️ ... steht eine alte Spukvilla. Voller Schätze – und voller Monster.'],
+  [8.4, 10.3, '🚌 Zum Glück gibt es ...'],
+];
+const busVersatz = t => { const u = begrenzt((t - 1.5) / 7.5, 0, 1); return 40 * Math.pow(1 - u, 2.2); };   // Wie weit der Bus noch weg ist (er bremst am Ende sanft)
+function introStarten() {
+  introZeit = 0;
+  const B = haus.bus, cx = (B.x1 + B.x2) / 2, mz = (B.z1 + B.z2) / 2, hx = haus.breit * RAUM / 2, hz = haus.tief * RAUM / 2;
+  const v = (x, y, z) => new THREE.Vector3(x, y, z);
+  B.introWeg = new THREE.CatmullRomCurve3([v(cx - 32, 30, B.z2 + 50), v(cx - 20, 12, B.z2 + 30), v(cx - 12, 4, mz + 10), v(B.x2 + 5.5, 1.9, mz + 1.5), v(B.x2 + 4, 1.7, B.tuerZ)]);
+  B.introBlick = new THREE.CatmullRomCurve3([v(hx, 4, hz), v(cx, 1.5, B.z2 + 22), v(cx, 1.5, mz), v(B.x2, 1.6, mz + 1.5), v(B.x2, 1.3, B.tuerZ)]);
+  rauschen(0, 6, 0.06, 'lowpass', 500, null, 200);   // Wind im Wald
+}
+function introUpdate(dt) {
+  const vorher = introZeit;
+  introZeit += dt;
+  const ab = t => vorher < t && introZeit >= t;
+  if (ab(1.6)) { ton(46, 0, 7.5, 'sawtooth', 0.05, 38); ton(92, 0, 7.5, 'sine', 0.05, 70); }   // Brummender Motor
+  if (ab(8.8)) rauschen(0, 0.9, 0.25, 'highpass', 2500, null, 800);   // Pssssch! (Bremsen)
+  if (ab(10.4)) [523, 659, 784, 1047].forEach((f, i) => ton(f, i * 0.13, 0.35, 'square', 0.06));   // ARAG-Melodie
+  if (introZeit >= INTRO_DAUER) introEnde();
+}
+function introEnde() {
+  if (introZeit < 0) return;
+  introZeit = -1; einblenden = 1;
+  if (haus.bus) haus.bus.gruppe.position.z = 0;
+  if (lobby) lobbyWillkommen();
+}
+function introKamera() {
+  const B = haus.bus, t = begrenzt(introZeit / INTRO_DAUER, 0, 1);
+  kamera.position.copy(B.introWeg.getPoint(t));
+  kamera.lookAt(B.introBlick.getPoint(t));
+  kamera.updateMatrixWorld();
+}
+function zeichneIntro() {
+  const t = introZeit, sicht = (a, b) => t >= a && t < b ? Math.min(1, (t - a) / 0.6, (b - t) / 0.6) : 0;
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H * 0.1); ctx.fillRect(0, H * 0.9, W, H * 0.1);   // Kino-Balken
+  for (const [a, b, txt] of INTRO_TEXTE) { const s = sicht(a, b); if (s > 0) { ctx.globalAlpha = s; text(txt, W / 2, H * 0.84, 26, '#fff'); ctx.globalAlpha = 1; } }
+  const s = sicht(10.4, INTRO_DAUER - 0.3);
+  if (s > 0) {   // Das Logo!
+    ctx.globalAlpha = s;
+    ctx.fillStyle = 'rgba(5,8,12,0.75)'; rr(W / 2 - 290, H / 2 - 115, 580, 230, 22); ctx.fill();
+    zeichneAragLogo(ctx, W / 2 - 205, H / 2 - 62, 105, '#ffffff');
+    text('Schatz-Bergungsdienst · Wir holen alles raus!', W / 2, H / 2 + 85, 19, '#7cf5c6');
+    ctx.globalAlpha = 1;
+  }
+  const schwarz = Math.max(t < 1 ? 1 - t : 0, t > INTRO_DAUER - 0.7 ? (t - (INTRO_DAUER - 0.7)) / 0.7 : 0);
+  if (schwarz > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, schwarz)})`; ctx.fillRect(0, 0, W, H); }
+  text('Klick oder Leertaste = überspringen', W - 20, H - 16, 13, '#8a8fb0', 'right', false);
+}
+// Die Lobby
+function lobbyWillkommen() {
+  zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E!' : '🚌 Willkommen im ARAG-Bus! Geh zum roten Knopf 🔴 und drück E!', 5);
+}
+function startNachricht() { zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); }
+function amKnopf() {
+  const B = haus && haus.bus, p = spielerKoerper.position;
+  return !!B && !tot && abstand2D(p.x, p.z, B.knopf.x, B.knopf.z) < 1.6;
+}
+function losGehts() {   // 🔴 Der Knopf wurde gedrückt: Tür auf – los geht's!
+  if (!lobby) return;
+  if (introZeit >= 0) introEnde();
+  lobby = false; spielZeit = 0;
+  busTuerAuf();
+  ton(880, 0, 0.12, 'sine', 0.1); ton(660, 0.15, 0.2, 'sine', 0.1);   // Ding-dong
+  startNachricht();
+  if (mp.rolle === 'host') mpAnAlle({ t: 'los' });
+}
+function busTuerAuf() {
+  const B = haus && haus.bus;
+  if (!B || B.tuerAuf) return;
+  B.tuerAuf = true;
+  welt.removeBody(B.tuerKoerper);
+  const i = sichtBlocker.indexOf(B.tuer); if (i >= 0) sichtBlocker.splice(i, 1);
+  rauschen(0, 0.7, 0.2, 'highpass', 2000, null, 500);   // Pschhh – die Tür geht auf
+}
+function busUpdate(dt) {
+  const B = haus && haus.bus;
+  if (!B) return;
+  B.gruppe.position.z = introZeit >= 0 ? busVersatz(introZeit) : 0;   // Im Intro kommt der Bus angefahren
+  if (B.licht) B.licht.intensity = introZeit >= 0 && busVersatz(introZeit) > 1 ? 0 : 1.5;   // (Das Licht im Bus geht erst an, wenn er da ist)
+  // Die Schiebetür: erst ein Stück raus, dann zur Seite
+  B.tuerWeg += ((B.tuerAuf ? 1 : 0) - B.tuerWeg) * Math.min(1, dt * 2.5);
+  B.tuer.position.x = B.tuerX + Math.min(1, B.tuerWeg * 3) * 0.13;
+  B.tuer.position.z = B.tuerZ + Math.max(0, B.tuerWeg - 0.25) / 0.75 * 1.45;
+  B.dachLichter.forEach((l, k) => l.material.color.set((zeit * 2 + k) % 2 < 1 ? '#ffae3d' : '#4a3010'));   // Blink, blink
+  B.knopfOben.material.emissiveIntensity = lobby ? 0.6 + Math.sin(zeit * 6) * 0.4 : 0.2;
+  if (lobby && zeit - (B.monitorZeit ?? -9) > 1) { B.monitorZeit = zeit; maleMonitor(); }   // Der Bildschirm (einmal pro Sekunde neu)
+}
+function maleMonitor() {
+  const M = haus.bus.monitor, g = M.g, b = 512, h = 288;
+  g.fillStyle = '#06121a'; g.fillRect(0, 0, b, h);
+  g.strokeStyle = '#7cf5c6'; g.lineWidth = 6; g.strokeRect(3, 3, b - 6, h - 6);
+  zeichneAragLogo(g, 22, 30, 42, '#ffffff');
+  g.textAlign = 'left'; g.fillStyle = '#7cf5c6'; g.font = 'bold 20px Arial, sans-serif'; g.fillText('EINSATZ-BUS · LOBBY', 245, 52);
+  g.fillStyle = '#ffffff'; g.font = '19px Arial, sans-serif';
+  g.fillText('🏚️ Auftrag: Die große Spukvilla', 22, 115);
+  g.fillText(`🏆 Ziel: ${gewinnZiel()} Schätze verkaufen`, 22, 145);
+  g.fillText(`💰 Rekord: ${euro(rekord)}`, 22, 175);
+  const team = [mp.aktiv ? MP_ROBOTER[mp.nr]?.name || 'Du' : 'Du', ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
+  g.fillStyle = '#ffd166'; g.fillText(`🤖 Team: ${team.join(', ')}`, 22, 205);
+  if (Math.floor(zeit) % 2 === 0) { g.fillStyle = '#ff6b6b'; g.font = 'bold 22px Arial, sans-serif'; g.fillText('🔴 Roter Knopf + E = LOS!', 22, 255); }
+  M.tex.needsUpdate = true;
+}
+function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby tun?
+  ctx.fillStyle = 'rgba(10,12,18,0.82)'; rr(W / 2 - 260, 14, 520, 62, 12); ctx.fill();
+  text('🚌 LOBBY – ARAG-Einsatzbus', W / 2, 38, 18, '#7cf5c6');
+  text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Einer drückt den roten Knopf 🔴` : 'Lauf zum roten Knopf 🔴 an der Tür', W / 2, 62, 13, '#c9c3ff', 'center', false);
+  if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
+}
 function neuesSpiel() {
   level = 1; konto = 0;
   starteLevel();
@@ -4995,7 +5279,10 @@ function starteLevel(startzahl = KARTE.startzahl) {
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
-  zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5);
+  lobby = LOBBY_AN; introZeit = -1; einblenden = 0;
+  if (INTRO_AN) introStarten();
+  if (lobby) { if (!INTRO_AN) lobbyWillkommen(); }
+  else { busTuerAuf(); startNachricht(); }
   mausFangen();
 }
 function gewonnen() {   // 🏆 GEWONNEN!
@@ -5024,6 +5311,7 @@ function zeichne3D() {
   }
   kamera.rotation.set(blick.hoch, blick.links, 0);
   kamera.updateMatrixWorld();
+  if (introZeit >= 0) introKamera();   // 🎬 Im Intro fliegt die Kamera durch den Wald
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
   for (const m of monster) zeigeMonster(m);
   for (const h of helfer) zeigeHelfer(h);
@@ -5047,7 +5335,7 @@ function zeichne3D() {
     }
   }
   // Dein Greifer: Ring dreht sich, Zinken schließen sich beim Greifen, alles leuchtet heller
-  greifer.visible = !tot;
+  greifer.visible = !tot && introZeit < 0;
   greifer.position.y = -0.27 + wippen * 0.5;
   const haeltWas = gegriffen || gepackt, siehtWas = schwebend || schwebendSpieler;
   greiferRing.rotation.z += haeltWas ? 0.3 : siehtWas ? 0.08 : 0.02;
@@ -5116,8 +5404,9 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? '📍 🛖 Im Gartenhäuschen' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  text(imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
+  if (lobby) zeichneLobbyHUD();
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
   text(`🏆 Ziel: ${Math.min(verkauft, zielN)} / ${zielN} Schätze verkauft`, 24, 108, 13, fertig ? '#4ade80' : '#ffd166', 'left', false);
   balken(24, 120, 256, 10, verkauft / zielN, fertig ? '#4ade80' : '#ffd166');
@@ -5295,7 +5584,8 @@ function zeichne() {
   zuschauRauschen(tot && zustand === 'spiel' && !pause && zeit - totSeit >= VERBINDUNG_WEG_ZEIT);   // Beim Zuschauen rauscht es immer
   if (zustand === 'titel') { zeichneTitel(); return; }
   zeichne3D();
-  zeichneHUD();
+  if (introZeit >= 0) zeichneIntro(); else zeichneHUD();
+  if (einblenden > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, einblenden)})`; ctx.fillRect(0, 0, W, H); }
   if (tot && zustand === 'spiel') zeichneSignal();
   if (zustand === 'geschafft') zeichneGeschafft();
   if (zustand === 'kaputt') zeichneKaputt();
@@ -5447,6 +5737,8 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (k === 'm') tonAn = !tonAn;
   if (k === 'f') blitzen();
+  if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
+  if (k === 'e' && zustand === 'spiel' && lobby && amKnopf()) { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); return; }   // 🔴 LOS!
   if (k === 'e' && zustand === 'spiel' && !tot && !pause) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
@@ -5456,6 +5748,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'titel') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
   if (zustand === 'geschafft') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
+  if (introZeit >= 0) { introEnde(); mausFangen(); return; }   // 🎬 Klick = Intro überspringen
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
   if (tot) {
     if (!mp.aktiv && e.button === 2) { zustand = 'kaputt'; if (document.pointerLockElement) document.exitPointerLock(); }   // Allein: Rechtsklick = aufgeben
@@ -5628,7 +5921,8 @@ function mpVomGast(g, d) {
     const s = schatzMitId(d.id);
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
     g.hg = -1;
-  } else if (d.t === 'blitz') {   // Ein Gast blitzt: Monster blenden, und alle sehen seine Lampe aufblitzen
+  } else if (d.t === 'losBitte') losGehts();   // 🔴 Ein Gast hat im Bus den Knopf gedrückt
+  else if (d.t === 'blitz') {   // Ein Gast blitzt: Monster blenden, und alle sehen seine Lampe aufblitzen
     blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
     g.blitzHell = 1;
     sound.blitz(lautBei({ x: d.p[0], y: d.p[1], z: d.p[2] }));
@@ -5677,7 +5971,7 @@ function mpHostSendet() {
     const alt = s.mpAlt;
     if (alle || !alt || a.some((v, i) => Math.abs(v - alt[i]) > 0.004)) { sc.push(a); s.mpAlt = a; }
   }
-  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, tu: alle ? tuerListe.filter(x => x.auf).map(x => x.id) : null, ids: alle ? schaetze.map(x => x.id) : null,
+  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, lb: lobby ? 1 : 0, tu: alle ? tuerListe.filter(x => x.auf).map(x => x.id) : null, ids: alle ? schaetze.map(x => x.id) : null,
     koepfe: alle ? schaetze.filter(x => x.typ.id === 'kopf').map(x => [x.id, x.besitzer, x.typ.farbe]) : null,
     neu: alle ? schaetze.filter(x => x.typ.id !== 'kopf').map(x => [x.id, x.typ.id]) : null });
 }
@@ -5746,6 +6040,7 @@ function mpVomHost(d) {
     else if (d.id !== mp.peer.id) { const o = mp.andere.get(d.id); if (o) { o.blitzHell = 1; sound.blitz(lautBei({ x: o.x, y: o.y, z: o.z })); } }
   }
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
+  else if (d.t === 'los') losGehts();   // 🔴 Einer hat den Knopf gedrückt!
   else if (d.t === 'trank') trankStart(d.id, d.art, d.p, d.v);                  // 🧪 Der Chemiker wirft
   else if (d.t === 'platsch') trankPlatsch(d.id, d.art, d.p[0], d.p[1], d.p[2]);   // ... und der Trank zerplatzt
   else if (d.t === 'au') {
@@ -5787,6 +6082,7 @@ function mpSchnappschuss(d) {
     h.auftrag = a[7] >= 0 ? schatzMitId(a[7]) : null;
     if (!h.auftrag) h.modus = 'suchen';
   });
+  if (d.lb === 0 && lobby) losGehts();   // Der Gastgeber hat schon losgelegt
   // Schätze
   if (typeof d.vk === 'number') verkauft = d.vk;
   if (d.tu) { const offen = new Set(d.tu); for (const t of tuerListe) if (t.auf !== offen.has(t.id)) tuerSetzen(t, offen.has(t.id), 'sync', true); }
@@ -5806,7 +6102,9 @@ const winkelHin = (von, nach, f) => {   // Einen Winkel weich zu einem anderen d
 const mpQuat = new CANNON.Quaternion();
 function updateAlsGast(dt) {
   spielZeit += dt;
-  if (!pause) updateSpieler(dt);
+  busUpdate(dt);
+  if (introZeit >= 0) introUpdate(dt);
+  if (!pause && introZeit < 0) updateSpieler(dt);
   gehaltenWerden(dt);
   packenPruefen();
   const f = Math.min(1, dt * 12);
@@ -5839,7 +6137,7 @@ function updateAlsGast(dt) {
   welt.step(1 / 60, dt, 3);
   totParken();
   pruefeBoden();
-  if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
+  if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(haus.spawn.x, 0.6, haus.spawn.z); spielerKoerper.velocity.set(0, 0, 0); }
   updateSchussSpuren(dt);
   blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
   if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
@@ -5873,7 +6171,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
       o.teile.g.traverse(k => { k.userData.spielerId = o.id; });   // Damit der Greifstrahl weiß, wer das ist
       Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
     }
-    o.teile.g.visible = true;
+    o.teile.g.visible = introZeit < 0;
     const f = 0.25;
     o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
     o.aw = winkelHin(o.aw, o.w, f);
