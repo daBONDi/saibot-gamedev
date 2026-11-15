@@ -2044,6 +2044,7 @@ function baueWald() {
     const b = 4.4, t = 3.6, x1 = zufall(-M + 3, B + M - 3 - b), z1 = zufall(-M + 3, T + M - 3 - t), x2 = x1 + b, z2 = z1 + t;
     if (x2 > -7 && x1 < B + 7 && z2 > -7 && z1 < T + 7) continue;                                                          // Nicht zu nah am Haus
     if (haus.schuppen.some(S => x2 > S.x1 - 7 && x1 < S.x2 + 7 && z2 > S.z1 - 7 && z1 < S.z2 + 7)) continue;              // Nicht zu nah aneinander
+    if ((haus.parkplatz || []).some(P => x2 > P.x1 - 3 && x1 < P.x2 + 3 && z2 > P.z1 - 3 && z1 < P.z2 + 3)) continue;   // Nicht auf den Parkplatz oder den Waldweg
     const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
     if (haus.aussenTuerListe.some(a => abstand2D(cx, cz, a.weit.x, a.weit.z) < 7)) continue;                                // Nicht vor eine Haustür
     const hx = B / 2 - cx, hz = T / 2 - cz;
