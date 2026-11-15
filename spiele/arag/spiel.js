@@ -41,6 +41,14 @@ const BLITZ_WEITE = 11;         // So weit reicht der Blitz (in Metern)
 const BLITZ_WINKEL = 0.6;       // So breit ist der Blitz (größer = breiter)
 const BLITZ_BETAEUBT = 4;       // So viele Sekunden sind geblendete Monster betäubt
 const BLITZ_LADEN = 10;         // So viele Sekunden braucht die Blitzlampe zum Aufladen
+// ===== Die Helfer-Bots haben auch eine Blitzlampe 📸 =====
+const HELFER_BLITZ = true;       // false = Die Helfer blitzen nicht
+const HELFER_BLITZ_WEITE = 7;    // So nah muss ein jagendes Monster sein, damit ein Helfer blitzt (Meter)
+const HELFER_BLITZ_LADEN = 15;   // So viele Sekunden braucht die Blitzlampe eines Helfers zum Aufladen
+// ===== Taschenlampen der anderen (Mitspieler und Helfer) 🔦 =====
+const ANDERE_LAMPEN = true;      // false = Die anderen haben keine Taschenlampe
+const ANDERE_LICHTER = 3;        // So viele von ihnen machen ECHTES Licht (die nächsten). Mehr = schöner, aber langsamer!
+const LICHTKEGEL_LAENGE = 7;     // So lang ist der sichtbare Lichtstrahl (Meter)
 const DUCK_SICHT = 0.55;         // Geduckt sehen dich Monster nur aus so viel der normalen Entfernung
 const MAX_LAMPEN = 14;
 const MONSTER_START_ABSTAND = 3;   // So viele Räume (Türen) weit weg vom Start tauchen Monster auf           // So viele Lichter gibt es höchstens (mehr wird langsam)
@@ -292,7 +300,7 @@ const sound = {
   schritt() { ton(90, 0, 0.06, 'sine', 0.05, 50); },
   sprung() { ton(300, 0, 0.15, 'sine', 0.05, 500); },
   ducken() { ton(200, 0, 0.08, 'sine', 0.04, 140); },
-  blitz() { ton(2400, 0, 0.25, 'sine', 0.1, 600); rauschen(0, 0.2, 0.25, 'highpass', 3000); ton(4000, 0.25, 0.8, 'sine', 0.03, 3000); },   // PFFT! ... iiiiiii
+  blitz(laut = 1) { ton(2400, 0, 0.25, 'sine', 0.1 * laut, 600); rauschen(0, 0.2, 0.25 * laut, 'highpass', 3000); ton(4000, 0.25, 0.8, 'sine', 0.03 * laut, 3000); },   // PFFT! ... iiiiiii
   piep() { ton(660, 0, 0.1, 'square', 0.06); },
   robo(hoehe, laut) {   // Roboter-Piepsen beim Reden (wie kleine Computer-Wörter)
     for (let k = 0; k < 4; k++) ton(hoehe * zufall(0.8, 1.5), k * 0.07, 0.06, 'square', 0.035 * laut);
@@ -842,6 +850,22 @@ taschenlampe.castShadow = true;
 taschenlampe.shadow.mapSize.set(1024, 1024);
 taschenlampe.shadow.camera.near = 0.2;
 kamera.add(taschenlampe, taschenlampe.target);
+// Echte Lichter für die Taschenlampen der anderen (immer gleich viele, sonst ruckelt das Spiel beim Umbauen)
+const andereLichter = [];
+for (let i = 0; i < (ANDERE_LAMPEN ? ANDERE_LICHTER : 0); i++) {
+  const l = new THREE.SpotLight('#fff3d6', 0, 20, 0.5, 0.5, 1);
+  szene.add(l, l.target);
+  andereLichter.push(l);
+}
+// Der sichtbare Lichtstrahl: ein Kegel, der vorne hell ist und nach hinten verblasst
+const KEGEL_GEO = new THREE.ConeGeometry(0.45, 1, 20, 1, true).rotateX(-Math.PI / 2).translate(0, 0, 0.5);   // Spitze bei der Lampe, zeigt nach vorne
+const KEGEL_TEX = (() => {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 64;
+  const g = c.getContext('2d'), v = g.createLinearGradient(0, 0, 0, 64);
+  v.addColorStop(0, '#fff'); v.addColorStop(0.35, '#777'); v.addColorStop(1, '#000');
+  g.fillStyle = v; g.fillRect(0, 0, 4, 64);
+  return new THREE.CanvasTexture(c);
+})();
 
 // Kleine Bilder (Texturen) selbst malen
 function malTextur(b, h, malen, wiederholen = true) {
@@ -3548,6 +3572,16 @@ function baueHelferMesh(info) {
   for (const s of [-1, 1]) teil(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 14), lack, s * 0.23, 0, 0, kopf).rotation.z = Math.PI / 2;   // Ohren
   teil(new THREE.CylinderGeometry(0.008, 0.008, 0.2), blech, 0.1, 0.24, 0, kopf);               // Antenne
   const antenne = teil(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: info.farbe }), 0.1, 0.35, 0, kopf);
+  // Kopflampe 🔦 (oben auf der Stirn) mit sichtbarem Lichtstrahl
+  const lampenHalter = new THREE.Group(); lampenHalter.position.set(-0.08, 0.2, 0.1); kopf.add(lampenHalter);
+  teil(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 12), dunkel, 0, 0, -0.03, lampenHalter).rotation.x = Math.PI / 2;
+  const linse = teil(new THREE.CircleGeometry(0.042, 14), new THREE.MeshBasicMaterial({ color: '#fff6d0' }), 0, 0, 0.012, lampenHalter);
+  const kegel = new THREE.Mesh(KEGEL_GEO, new THREE.MeshBasicMaterial({ color: '#fff3d6', alphaMap: KEGEL_TEX, transparent: true, opacity: 0.12,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  kegel.position.z = 0.012; kegel.scale.setScalar(LICHTKEGEL_LAENGE); kegel.visible = ANDERE_LAMPEN;
+  kegel.raycast = () => {};   // Licht kann man nicht anfassen (der Greifstrahl geht durch)
+  lampenHalter.add(kegel);
+  const lampe = { halter: lampenHalter, linse, kegel, laenge: LICHTKEGEL_LAENGE, pruef: Math.random() * 6 };
   // Namensschild und Sprechblase
   const schild = namensSchild(`🤖 ${info.name}`, info.farbe);
   schild.position.y = 1.35; oben.add(schild);
@@ -3556,7 +3590,7 @@ function baueHelferMesh(info) {
   const blase = new THREE.Sprite(new THREE.SpriteMaterial({ map: blasenTex, transparent: true, depthWrite: false }));
   blase.scale.set(2.0, 0.5, 1); blase.position.y = 1.75; blase.visible = false; oben.add(blase);
   szene.add(g);
-  const T = { g, oben, beine, ausgefahren: BEIN_LAENGE, schrittPhase: Math.random() * 6, kopf, arme, antenne, lampen, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
+  const T = { g, oben, beine, ausgefahren: BEIN_LAENGE, schrittPhase: Math.random() * 6, kopf, arme, antenne, lampen, lampe, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
   beineAnimieren(T, BEIN_LAENGE, false, 0);
   return T;
 }
@@ -3630,6 +3664,41 @@ function neuerHelfer(info, x, z) {
     redePause: zufall(1, 3), redet: 0, blasenZeit: 0, angst: 0, froh: 0, wartenZeit: 0, blinzelVersatz: zufall(0, 3),
     gesicht: teile.gesicht, blase: { g: teile.blasenG, tex: teile.blasenTex } };
   helfer.push(h);
+}
+// 📸 Ein Helfer blitzt ein Monster an, das gerade jagt und nah genug ist
+function helferBlitzPruefen(h, dt) {
+  if (h.blitzLadung === undefined) h.blitzLadung = Math.random();   // Nicht alle Helfer gleichzeitig voll
+  h.blitzLadung = Math.min(1, h.blitzLadung + dt / HELFER_BLITZ_LADEN);
+  if (h.blitzLadung < 1) return;
+  h.blitzSuchen = (h.blitzSuchen || 0) - dt;
+  if (h.blitzSuchen > 0) return;
+  h.blitzSuchen = 0.25;   // Nur 4 Mal pro Sekunde umschauen (spart Rechenzeit)
+  const p = h.body.position;
+  const von = new THREE.Vector3(p.x, p.y + 0.35 + h.teile.ausgefahren + 0.5, p.z);   // Ungefähr die Kopflampe
+  let bestes = null, bestD = HELFER_BLITZ_WEITE;
+  for (const m of monster) {
+    if (m.betaeubt > 0 || !m.info.betaeubbar) continue;
+    const gefaehrlich = m.modus === 'jagen' || m.modus === 'oben' || m.modus === 'verwandeln' || m.zielen > 0;
+    if (!gefaehrlich) continue;
+    const d = abstand3D({ x: m.x, y: m.y + 1, z: m.z }, von);
+    if (d > bestD) continue;
+    if (!freieSicht(von.clone(), new THREE.Vector3(m.x, m.y + 1.2, m.z))) continue;
+    bestes = m; bestD = d;
+  }
+  if (!bestes) return;
+  // Zum Monster drehen und PFFT!
+  h.blitzLadung = 0;
+  h.winkel = Math.atan2(bestes.x - p.x, bestes.z - p.z);
+  const richtung = new THREE.Vector3(bestes.x, bestes.y + 1.2, bestes.z).sub(von).normalize();
+  blitzVon(von, richtung, false);
+  helferBlitzEffekt(h);
+  if (mp.rolle === 'host') mpAnAlle({ t: 'blitzSicht', h: helfer.indexOf(h) });
+  sagen(h, 'blitz', { name: bestes.info.name }, 2);
+  if (abstand3D(p, spielerKoerper.position) < 15) zeigeNachricht(`📸 ${h.name} hat den ${bestes.info.name} geblitzt!`, 2, '#ffd166');
+}
+function helferBlitzEffekt(h) {   // Die Lampe blitzt hell auf (das sehen alle)
+  h.blitzHell = 1;
+  sound.blitz(lautBei(h.body.position) * 0.8);
 }
 function helferLoslassen(h) {
   const s = h.auftrag;
@@ -3710,6 +3779,8 @@ function updateHelfer(h, dt) {
   }
   // Gerade getroffen? Dann kurz durcheinander
   if (h.wackelt > 0) { h.wackelt -= dt; return; }
+  // Kommt ein Monster? Blitzen! 📸
+  if (HELFER_BLITZ) helferBlitzPruefen(h, dt);
   // Ist der Auftrag noch gültig?
   const s = h.auftrag;
   if (s && (s.kaputt || gegriffen === s || (h.modus === 'hinlaufen' && (imLaster(s) || s.getragenVon)))) helferLoslassen(h);
@@ -3834,6 +3905,53 @@ function zeigeHelfer(h) {
     const nach = new THREE.Vector3().copy(h.auftrag.body.position);
     zeigeStrahl(h.strahl, von, nach, new THREE.Vector3(Math.sin(h.winkel), 0.3, Math.cos(h.winkel)).normalize(), Math.max(...h.auftrag.typ.groesse) * 0.6);
   } else h.strahl.g.visible = false;
+  // Kopflampe (Helfer schauen ein bisschen nach unten auf den Boden)
+  h.blitzHell = Math.max(0, (h.blitzHell || 0) - 3 / 60);
+  kopflampeZeigen(T, h.kaputt <= 0, -0.15, h.blitzHell);
+}
+// 🔦 Kopflampe von einem Roboter: an/aus, nach oben/unten drehen, bei einer Wand kürzer machen, beim Blitzen hell
+const lampenPos = new THREE.Vector3(), lampenRicht = new THREE.Vector3();
+function kopflampeZeigen(T, an, hoch, hell) {
+  const L = T.lampe;
+  L.an = an && ANDERE_LAMPEN;
+  L.hell = hell;
+  L.kegel.visible = L.an;
+  L.linse.material.color.set(L.an ? (hell > 0 ? '#ffffff' : '#fff6d0') : '#333333');
+  if (!L.an) return;
+  L.halter.rotation.x = -hoch;   // Positiv = nach oben schauen
+  // Steht eine Wand im Weg? Dann den Strahl kürzer machen (nur alle paar Bilder prüfen, das spart Rechenzeit)
+  L.pruef -= 1;
+  if (L.pruef <= 0) {
+    L.pruef = 6;
+    L.halter.getWorldPosition(lampenPos);
+    lampenRicht.set(0, 0, 1).transformDirection(L.halter.matrixWorld);
+    sichtStrahl.set(lampenPos, lampenRicht);
+    sichtStrahl.far = LICHTKEGEL_LAENGE;
+    const treffer = sichtStrahl.intersectObjects(sichtBlocker, false);
+    L.laenge = treffer.length ? Math.max(0.4, treffer[0].distance + 0.4) : LICHTKEGEL_LAENGE;
+  }
+  L.kegel.scale.setScalar(L.laenge);
+  L.kegel.material.opacity = 0.12 + hell * 0.6;
+}
+// Die echten Lichter bekommen die Roboter, die am nächsten bei dir sind
+function andereLampenLichter() {
+  if (!andereLichter.length) return;
+  const liste = [];
+  const nimm = T => { if (T && T.g.visible && T.lampe.an) liste.push({ T, d: T.g.position.distanceToSquared(kamera.position) }); };
+  for (const h of helfer) nimm(h.teile);
+  for (const o of mp.andere.values()) nimm(o.teile);
+  liste.sort((a, b) => a.d - b.d);
+  andereLichter.forEach((l, i) => {
+    const e = liste[i];
+    if (!e) { l.intensity = 0; return; }
+    const L = e.T.lampe;
+    L.halter.updateWorldMatrix(true, false);
+    L.halter.getWorldPosition(l.position);
+    lampenRicht.set(0, 0, 1).transformDirection(L.halter.matrixWorld);
+    l.target.position.copy(l.position).addScaledVector(lampenRicht, 5);
+    l.intensity = 4 + L.hell * 70;
+    l.angle = 0.5 + L.hell * 0.35;
+  });
 }
 
 // =====================================================================
@@ -3957,6 +4075,7 @@ function blitzen() {
   sound.blitz();
   const blickRichtung = new THREE.Vector3();
   kamera.getWorldDirection(blickRichtung);
+  if (mp.rolle === 'host') mpAnAlle({ t: 'blitzSicht', id: mp.peer.id });   // Die anderen sehen deine Lampe aufblitzen
   if (mp.rolle === 'gast') {   // Die Monster sind beim Gastgeber – also dorthin schicken
     const k = kamera.position;
     mpSende({ t: 'blitz', p: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(blickRichtung.x), r2(blickRichtung.y), r2(blickRichtung.z)] });
@@ -4287,6 +4406,7 @@ function zeichne3D() {
   for (const m of monster) zeigeMonster(m);
   for (const h of helfer) zeigeHelfer(h);
   mpZeigeAndere();
+  andereLampenLichter();
   tuerenZeigen(1 / 60);
   if (tot && zeit - totSeit >= VERBINDUNG_WEG_ZEIT) zuschauKamera();   // Kaputt: Du schaust bei einem anderen Roboter mit zu
   // Flackernde Lampen, Kaminfeuer und Pendel
@@ -4853,7 +4973,7 @@ function mpGastWeg(id) {
 }
 function mpVomGast(g, d) {
   if (!d || !d.t) return;
-  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
+  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
   else if (d.t === 'tuerE') tuerSetzen(tuerListe[d.id], !!d.auf, 'spieler');   // Ein Gast hat E gedrückt
@@ -4866,7 +4986,12 @@ function mpVomGast(g, d) {
     const s = schatzMitId(d.id);
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
     g.hg = -1;
-  } else if (d.t === 'blitz') blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
+  } else if (d.t === 'blitz') {   // Ein Gast blitzt: Monster blenden, und alle sehen seine Lampe aufblitzen
+    blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
+    g.blitzHell = 1;
+    sound.blitz(lautBei({ x: d.p[0], y: d.p[1], z: d.p[2] }));
+    mpAnAlle({ t: 'blitzSicht', id: g.id });
+  }
   else if (d.t === 'wirf') {   // Ein Gast wirft jemanden: Bin ich das? Sonst weiterleiten
     if (d.ziel === mp.peer.id) geworfenWerden(d.v, g.name);
     else { const z = mp.andere.get(d.ziel); if (z) mpSendeAn(z, { t: 'wirf', v: d.v, von: g.name }); }
@@ -4893,9 +5018,9 @@ function mpHostSendet() {
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const hz = gepackt ? halteZiel() : null;
-  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
-  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
+  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
     r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null]);
   const he = helfer.map(h => {
@@ -4974,6 +5099,10 @@ function mpVomHost(d) {
   else if (d.t === 'tuer') tuerSetzen(tuerListe[d.id], d.auf, d.w, true);
   else if (d.t === 'kaputt') { const s = schatzMitId(d.id); if (s && !s.kaputt) zerbrechen(s); }
   else if (d.t === 'sag') { const h = helfer[d.h]; if (h) helferSpricht(h, d.satz); }
+  else if (d.t === 'blitzSicht') {   // Jemand hat geblitzt (ein Helfer oder ein Mitspieler)
+    if (d.h !== undefined) { const h = helfer[d.h]; if (h) helferBlitzEffekt(h); }
+    else if (d.id !== mp.peer.id) { const o = mp.andere.get(d.id); if (o) { o.blitzHell = 1; sound.blitz(lautBei({ x: o.x, y: o.y, z: o.z })); } }
+  }
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
   else if (d.t === 'au') {
     getroffen(d.s, d.von);
@@ -4996,7 +5125,7 @@ function mpSchnappschuss(d) {
     da.add(a.id);
     let o = mp.andere.get(a.id);
     if (!o) { o = { id: a.id, nr: a.nr, ...MP_ROBOTER[a.nr] }; mp.andere.set(a.id, o); }
-    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
+    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, n: a.n || 0, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
   }
   for (const [id, o] of mp.andere) if (!da.has(id)) { mpMeshWeg(o); mp.andere.delete(id); }
   // Monster
@@ -5077,7 +5206,7 @@ function mpGastSendet() {
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const r = new THREE.Vector3(); kamera.getWorldDirection(r);
   const k = kamera.position, hz = gegriffen || gepackt ? halteZiel() : null;
-  mpSende({ t: 'p', x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
+  mpSende({ t: 'p', x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
     hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)] });
 }
 
@@ -5113,6 +5242,9 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
     T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
     malGesicht(o);
+    o.ahoch = (o.ahoch || 0) + ((o.n || 0) - (o.ahoch || 0)) * f;   // Wohin schaut er hoch/runter? (weich)
+    o.blitzHell = Math.max(0, (o.blitzHell || 0) - 3 / 60);
+    kopflampeZeigen(T, true, o.ahoch, o.blitzHell);
     if (haelt) {
       const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55 + T.ausgefahren, o.az + Math.cos(wink) * 0.45);
       const nach = new THREE.Vector3().copy(haelt.body.position);
