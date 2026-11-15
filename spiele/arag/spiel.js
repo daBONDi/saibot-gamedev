@@ -119,6 +119,7 @@ const HELFER_TRAGE_TEMPO = 2.2;  // ... und so schnell, wenn sie was tragen
 const BEIN_LAENGE = 0.3;         // So weit fahren die Roboter-Beine aus (0 = keine Beine)
 const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn er kein Leben mehr hat (nur wenn HELFER_SOFORT_ZURUECK = false)
 const HELFER_SOFORT_ZURUECK = true;   // true = Ein kaputter Helfer taucht SOFORT wieder am Start auf (mit vollen Leben) – nur wenn HELFER_KOPF = false
+const BOT_BAUCH = 0.7;          // 🤖 So dick ist der Bauch der Roboter (1 = so dick wie früher, 0.5 = ganz schlank)
 const HELFER_KOPF = true;        // 💀 true = Ein kaputter Helfer verliert seinen KOPF – bringt ihn zur Abgabe, dann ist er wieder da!
 const HELFER_WIEDERBELEBEN_PREIS = 500;   // So viel kostet es, einen Helfer-Bot wiederzubeleben
 const SCHROTT_ZEIT = 6;          // 💀 Sind ALLE Roboter Schrott (Spieler und Helfer), ist das Spiel aus – nach so vielen Sekunden geht's zurück in die Lobby
@@ -4424,19 +4425,20 @@ function baueHelferMesh(info) {
     teil(new THREE.CylinderGeometry(0.04, 0.04, 0.16, 10), metallGrauMat, 0, 0.035, -0.1, fuss).rotation.z = Math.PI / 2;   // Ferse/Rad
     beine.push({ s, huefte, kolben, fuss });
   }
-  teil(new THREE.BoxGeometry(0.4, 0.14, 0.5), dunkel, 0, 0.2, 0);                               // Fahrgestell
+  const b = BOT_BAUCH;   // (Wie dick der Bauch ist – alles am Bauch wird damit mal genommen)
+  teil(new THREE.BoxGeometry(Math.max(0.3, 0.4 * b), 0.14, 0.5 * b), dunkel, 0, 0.2, 0);          // Fahrgestell
   // Körper mit Brustplatte, Lämpchen und Akku hinten
-  teil(new THREE.BoxGeometry(0.46, 0.38, 0.36), lack, 0, 0.47, 0);
-  teil(new THREE.BoxGeometry(0.3, 0.2, 0.02), dunkel, 0, 0.5, 0.185);
-  const lampen = ['#4ade80', '#ffd166', '#ff6b6b'].map((c, k) => teil(new THREE.SphereGeometry(0.02, 8, 6), new THREE.MeshBasicMaterial({ color: c }), -0.07 + k * 0.07, 0.55, 0.2));
-  teil(new THREE.BoxGeometry(0.47, 0.04, 0.37), blech, 0, 0.3, 0);                              // Streifen unten
-  teil(new THREE.BoxGeometry(0.3, 0.26, 0.1), dunkel, 0, 0.5, -0.22);                           // Akku
-  teil(new THREE.BoxGeometry(0.22, 0.03, 0.01), leucht, 0, 0.55, -0.272);
+  teil(new THREE.BoxGeometry(0.46 * b, 0.38, 0.36 * b), lack, 0, 0.47, 0);
+  teil(new THREE.BoxGeometry(0.3 * b, 0.2, 0.02), dunkel, 0, 0.5, 0.18 * b + 0.005);
+  const lampen = ['#4ade80', '#ffd166', '#ff6b6b'].map((c, k) => teil(new THREE.SphereGeometry(0.02, 8, 6), new THREE.MeshBasicMaterial({ color: c }), (-0.07 + k * 0.07) * b, 0.55, 0.18 * b + 0.015));
+  teil(new THREE.BoxGeometry(0.46 * b + 0.01, 0.04, 0.36 * b + 0.01), blech, 0, 0.3, 0);          // Streifen unten
+  teil(new THREE.BoxGeometry(0.3 * b, 0.26, 0.1), dunkel, 0, 0.5, -0.18 * b - 0.05);              // Akku
+  teil(new THREE.BoxGeometry(0.22 * b, 0.03, 0.01), leucht, 0, 0.55, -0.18 * b - 0.102);
   // Arme mit Ellbogen und Greifzange
   const arme = [];
   for (const s of [-1, 1]) {
-    teil(new THREE.SphereGeometry(0.06, 10, 8), blech, s * 0.27, 0.6, 0);                       // Schulter
-    const arm = new THREE.Group(); arm.position.set(s * 0.29, 0.6, 0); oben.add(arm);
+    teil(new THREE.SphereGeometry(0.06, 10, 8), blech, s * (0.23 * b + 0.04), 0.6, 0);         // Schulter (direkt am Bauch)
+    const arm = new THREE.Group(); arm.position.set(s * (0.23 * b + 0.06), 0.6, 0); oben.add(arm);
     teil(new THREE.BoxGeometry(0.06, 0.06, 0.2), blech, 0, 0, 0.1, arm);                        // Oberarm
     teil(new THREE.SphereGeometry(0.04, 8, 6), dunkel, 0, 0, 0.21, arm);                        // Ellbogen
     teil(new THREE.BoxGeometry(0.05, 0.05, 0.16), lack, 0, -0.02, 0.29, arm);                   // Unterarm
