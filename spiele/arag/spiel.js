@@ -1501,6 +1501,118 @@ function baueGartenhaus(S) {
   const kiste = (x, z) => festerKlotz(x, 0.3, z, 0.6, 0.6, 0.6, kistenMat);   // Alte Kisten in den Ecken
   kiste(x1 + 0.55, z1 + 0.55); kiste(x2 - 0.55, z2 - 0.55);
 }
+// =====================================================================
+// ===== 🧪 Der Keller: dunkle Steinmauern, Fässer, Weinregale – und das Labor vom Chemiker =====
+// =====================================================================
+const kellerSteinTextur = malTextur(128, 128, (g, b, h) => {   // Alte Backsteine mit Moos
+  g.fillStyle = '#2e2a26'; g.fillRect(0, 0, b, h);
+  for (let r = 0; r < 8; r++) for (let k = 0; k < 4; k++) {
+    const x = k * 32 + (r % 2) * 16, y = r * 16;
+    g.fillStyle = ['#5a4a3e', '#4f4238', '#62513f', '#544a42'][(r * 3 + k) % 4];
+    g.fillRect(x + 1, y + 1, 30, 14); g.fillRect(x - 127, y + 1, 30, 14);
+  }
+  for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(60,90,40,${0.15 + Math.random() * 0.2})`; g.fillRect(Math.random() * b, Math.random() * h, 3 + Math.random() * 8, 2 + Math.random() * 4); }
+});
+function baueKeller() {
+  const K = haus.keller, b = K.boden, d = K.decke, hoch = d - b, t = K.treppe;
+  const P = treppenPunkte(t);
+  const wandTex = kellerSteinTextur.clone(); wandTex.needsUpdate = true; wandTex.repeat.set(4, 1);
+  const wandMat = new THREE.MeshStandardMaterial({ map: wandTex, roughness: 1 });
+  // 1) Mauern rundherum und der Steinboden
+  festerKlotz((K.x1 + K.x2) / 2, b + hoch / 2, K.z1, K.x2 - K.x1 + 0.3, hoch, 0.3, wandMat);
+  festerKlotz((K.x1 + K.x2) / 2, b + hoch / 2, K.z2, K.x2 - K.x1 + 0.3, hoch, 0.3, wandMat);
+  festerKlotz(K.x1, b + hoch / 2, (K.z1 + K.z2) / 2, 0.3, hoch, K.z2 - K.z1, wandMat);
+  festerKlotz(K.x2, b + hoch / 2, (K.z1 + K.z2) / 2, 0.3, hoch, K.z2 - K.z1, wandMat);
+  const bodenTex = BOEDEN.beton.clone(); bodenTex.needsUpdate = true; bodenTex.repeat.set((K.x2 - K.x1) / 2, (K.z2 - K.z1) / 2);
+  bodenFlaeche({ x0: K.x1, z0: K.z1 }, K.x1, K.z1, K.x2, K.z2, b + 0.001, new THREE.MeshStandardMaterial({ map: bodenTex, color: '#8a8478', roughness: 1 }));
+  // 2) Holzbalken unter der Decke (nicht über der Treppe – sonst stößt man sich den Kopf)
+  for (let z = K.z1 + 2.5; z < K.z2 - 0.5; z += 2.5) {
+    if (z > t.z0 - 0.3 && z < t.z0 + LOCH.z2 + 0.4) continue;
+    const balken = new THREE.Mesh(new THREE.BoxGeometry(K.x2 - K.x1, 0.2, 0.25), dunkelHolzMat);
+    balken.position.set((K.x1 + K.x2) / 2, d - 0.1, z); hausGruppe.add(balken);
+  }
+  // 3) Das Labor: in der Ecke, die am weitesten von der Treppe weg ist
+  const ecken = [[K.x1, K.z1, 1, 1], [K.x2, K.z1, -1, 1], [K.x1, K.z2, 1, -1], [K.x2, K.z2, -1, -1]];
+  const [ex, ez, sx, sz] = ecken.reduce((a, e) => abstand2D(e[0], e[1], P.vor.x, P.vor.z) > abstand2D(a[0], a[1], P.vor.x, P.vor.z) ? e : a);
+  const lx = ex + sx * 3.6, lz = ez + sz * 3.6;   // Mitte vom Labor
+  // Zwei lange Labortische an den Wänden (L-Form) mit vielen bunten Flaschen
+  const tischMat = new THREE.MeshStandardMaterial({ color: '#4a3a2c', roughness: 0.7 });
+  const tisch = (x, z, breit, tief) => {
+    festerKlotz(x, b + 0.45, z, breit, 0.9, tief, tischMat, false);
+    for (let k = 0; k < Math.max(breit, tief) * 2.2; k++) {
+      const farbe = auswahl(['#5dff4a', '#c04dff', '#4dc3ff', '#ff8a3d', '#ff4d6d', '#fff36b']);
+      const hoehe = zufall(0.12, 0.3), fx = x + (breit > tief ? zufall(-breit / 2 + 0.2, breit / 2 - 0.2) : zufall(-0.2, 0.2)), fz = z + (tief > breit ? zufall(-tief / 2 + 0.2, tief / 2 - 0.2) : zufall(-0.2, 0.2));
+      const glas = new THREE.Mesh(rnd() < 0.5 ? new THREE.CylinderGeometry(0.05, 0.07, hoehe, 8) : new THREE.SphereGeometry(hoehe * 0.45, 8, 6), new THREE.MeshBasicMaterial({ color: farbe, transparent: true, opacity: 0.85 }));
+      glas.position.set(fx, b + 0.9 + hoehe / 2, fz); hausGruppe.add(glas);
+    }
+  };
+  tisch(ex + sx * 0.6, ez + sz * 3.2, 0.9, 4.6);
+  tisch(ex + sx * 3.4, ez + sz * 0.6, 4.6, 0.9);
+  // Der große blubbernde Kessel mit grünem Gebräu
+  const kx = lx + sx * 0.6, kz = lz + sz * 0.6;
+  const kessel = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.6, 0.8, 18, 1, true), new THREE.MeshStandardMaterial({ color: '#1d1d1f', metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
+  kessel.position.set(kx, b + 0.4, kz); kessel.castShadow = true; hausGruppe.add(kessel);
+  festerKoerper(kx, b + 0.4, kz, 1.3, 0.8, 1.3);
+  const brei = new THREE.Mesh(new THREE.CircleGeometry(0.72, 18), new THREE.MeshBasicMaterial({ color: '#4dff5e' }));
+  brei.rotation.x = -Math.PI / 2; brei.position.set(kx, b + 0.7, kz); hausGruppe.add(brei);
+  for (let k = 0; k < 6; k++) {   // Blasen steigen auf
+    const blase = new THREE.Mesh(new THREE.SphereGeometry(zufall(0.05, 0.11), 8, 6), new THREE.MeshBasicMaterial({ color: '#9dff8a', transparent: true, opacity: 0.8 }));
+    blase.userData.blubber = { x: kx + zufall(-0.45, 0.45), z: kz + zufall(-0.45, 0.45), y: b + 0.7, versatz: zufall(0, 3) };
+    hausGruppe.add(blase); haus.bewegteDeko.push(blase);
+  }
+  for (let k = 0; k < 5; k++) {   // Feuer unter dem Kessel
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), new THREE.MeshBasicMaterial({ color: k % 2 ? '#ff8a3d' : '#ffd166' }));
+    f.position.set(kx + Math.cos(k * 1.3) * 0.35, b + 0.12, kz + Math.sin(k * 1.3) * 0.35); f.userData.feuer = true;
+    hausGruppe.add(f); haus.bewegteDeko.push(f);
+  }
+  lampeHinzu(kx, b + 1.6, kz, '#57ff7a', 2.2, 13, true);   // Grünes Leuchten aus dem Kessel
+  // Warnschild
+  const schild = schildMesh('☠️ LABOR – BETRETEN VERBOTEN!', 2.6, 0.5);
+  schild.position.set(ex + sx * 0.17, b + 1.9, ez + sz * 3.2); schild.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2; hausGruppe.add(schild);
+  K.labor = { x: lx + sx * 1.6, z: lz - sz * 0.4, winkel: Math.atan2(kx - (lx + sx * 1.6), kz - (lz - sz * 0.4)) };
+  K.laborMitte = { x: lx, z: lz };
+  // 4) Fässer und Weinregale an den Wänden (nicht vor der Treppe, nicht im Labor)
+  const platzFrei = (x, z, r) => abstand2D(x, z, lx, lz) > 4.5 + r && abstand2D(x, z, P.vor.x, P.vor.z) > 2.5 + r &&
+    !(x > t.x0 && x < t.x0 + RAUM && z > t.z0 && z < t.z0 + 3.2);   // (Der Streifen mit der Treppe)
+  const fassMat = new THREE.MeshStandardMaterial({ color: '#5b3b22', roughness: 0.85 }), reifMat = metallGrauMat;
+  const fass = (x, z, liegend) => {
+    const g = new THREE.Group();
+    const koerper = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.0, 14), fassMat); koerper.castShadow = true; g.add(koerper);
+    for (const y of [-0.35, 0.35]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 6, 16), reifMat); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); }
+    if (liegend) g.rotation.z = Math.PI / 2;
+    g.position.set(x, b + (liegend ? 0.42 : 0.5), z); hausGruppe.add(g);
+    festerKoerper(x, b + 0.5, z, liegend ? 1.0 : 0.85, 1.0, 0.85);
+  };
+  let fassAnzahl = 0;
+  for (let v = 0; v < 200 && fassAnzahl < 10; v++) {
+    const seite = zufallGanz(0, 3), entlang = rnd();
+    const x = seite < 2 ? K.x1 + 1 + entlang * (K.x2 - K.x1 - 2) : seite === 2 ? K.x1 + 0.7 : K.x2 - 0.7;
+    const z = seite >= 2 ? K.z1 + 1 + entlang * (K.z2 - K.z1 - 2) : seite === 0 ? K.z1 + 0.7 : K.z2 - 0.7;
+    if (!platzFrei(x, z, 0.6) || (K.faesser || []).some(f => abstand2D(f.x, f.z, x, z) < 1.0)) continue;
+    fass(x, z, rnd() < 0.3); (K.faesser = K.faesser || []).push({ x, z }); fassAnzahl++;
+    if (rnd() < 0.5) { const z2 = seite >= 2 ? z + 0.9 : z, x2 = seite < 2 ? x + 0.9 : x; if (platzFrei(x2, z2, 0.6)) { fass(x2, z2, false); K.faesser.push({ x: x2, z: z2 }); } }   // Oft stehen zwei nebeneinander
+  }
+  // Weinregal mit staubigen Flaschen (an der Wand gegenüber vom Labor)
+  const rx = ex === K.x1 ? K.x2 - 0.45 : K.x1 + 0.45, rz = (K.z1 + K.z2) / 2 + sz * 2.5;
+  if (platzFrei(rx, rz, 1)) {
+    festerKlotz(rx, b + 1.0, rz, 0.6, 2.0, 3.0, dunkelHolzMat, false);
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 9; k++) {
+      if (rnd() < 0.25) continue;
+      const fl = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.32, 6), new THREE.MeshStandardMaterial({ color: auswahl(['#1f3d1f', '#3d1f2a', '#2a2a1a']), roughness: 0.3 }));
+      fl.rotation.x = Math.PI / 2; fl.position.set(rx + (ex === K.x1 ? -0.32 : 0.32), b + 0.3 + r * 0.45, rz - 1.3 + k * 0.32); hausGruppe.add(fl);
+    }
+  }
+  // Eine schwache, flackernde Glühbirne unten an der Treppe
+  lampeHinzu(P.vor.x + 1.5, d - 0.3, P.vor.z + 1.5, '#ffb070', 0.9, 9, true);
+  // 5) Schätze im Keller
+  for (let k = 0, v = 0; k < KELLER_SCHAETZE && v < 300; v++) {
+    const x = zufall(K.x1 + 1.2, K.x2 - 1.2), z = zufall(K.z1 + 1.2, K.z2 - 1.2);
+    if (!platzFrei(x, z, 0) || (K.faesser || []).some(f => abstand2D(f.x, f.z, x, z) < 1.2)) continue;
+    const typ = gewichtetWaehlen(SCHAETZE);
+    neuerSchatz(typ, x, b + typ.groesse[1] / 2 + 0.05, z);
+    k++;
+  }
+}
 function baueWald() {
   const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
   // 1) Boden: Waldboden rund ums Haus (dicke Platten, wie im Erdgeschoss)
@@ -2931,6 +3043,10 @@ function starrerGesehen(m) {
   return freieSicht(kamera.position.clone(), kopf);
 }
 function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum, auch mal die Treppe hoch)
+  if (m.art === 'chemiker' && haus.keller) {   // 🧪 Der Chemiker bleibt in seinem Keller – meistens rührt er im Labor herum
+    const K = haus.keller, L = Math.random() < 0.6 ? K.laborMitte : null;
+    return L ? { x: L.x + zufall(-1.5, 1.5), y: K.boden, z: L.z + zufall(-1.5, 1.5) } : { x: zufall(K.x1 + 1.5, K.x2 - 1.5), y: K.boden, z: zufall(K.z1 + 3.5, K.z2 - 1.5) };
+  }
   const jetzt = raumNrVon(m.x, m.y, m.z);
   const moeglich = nachbarn(jetzt).filter(n => verbunden(jetzt, n));
   const raum = Math.random() < 0.7 && moeglich.length ? auswahl(moeglich) : jetzt;
@@ -2976,6 +3092,7 @@ function updateMonster(m, dt) {
           if (m.modus !== 'jagen') {
             if (opfer.spieler) {
               if (m.art === 'jaeger') { monsterSound.jaeger(1, true); zeigeNachricht('🤠 Der verrückte Jäger hat dich gesehen! IN DECKUNG!', 2, '#ff6b6b'); }
+              else if (m.art === 'chemiker') { monsterSound.chemikerLacht(1); zeigeNachricht('🧪 MUAHAHA! Der Chemiker hat dich gesehen! Pass auf seine Tränke auf!', 2.5, '#5dff4a'); }
               else { sound.geist(); zeigeNachricht(`${info.emoji} Der ${info.name} hat dich gesehen! LAUF!`, 2, '#ff6b6b'); }
             } else if (opfer.helfer) {
               opfer.helfer.angst = 3;
@@ -3000,6 +3117,7 @@ function updateMonster(m, dt) {
     }
     tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
     if (m.art === 'jaeger' && jaegerZielt(m, dt)) tempo = 0;   // Beim Zielen bleibt er stehen
+    if (m.art === 'chemiker' && chemikerWirft(m, dt)) tempo = 0;   // Beim Ausholen bleibt er stehen
   }
   // Ist das Ziel draußen und MONSTER_DRAUSSEN aus, lauern sie an der Haustür ...
   if (!MONSTER_DRAUSSEN && m.ziel && !imHaus(m.ziel.x, m.ziel.z)) { const a = naechsteHaustuer(m.ziel); m.ziel = a ? { ...a.innen } : { x: m.x, y: m.y, z: m.z }; }
@@ -4483,6 +4601,10 @@ function zeichne3D() {
   for (const d of haus.bewegteDeko) {
     if (d.userData.feuer) d.scale.y = 0.8 + Math.random() * 0.5;
     if (d.userData.pendel) d.position.x = Math.sin(zeit * 2.5) * 0.12;
+    if (d.userData.blubber) {   // 🧪 Blasen im Kessel: steigen hoch, werden groß und platzen
+      const B = d.userData.blubber, u = (zeit * 0.7 + B.versatz) % 1;
+      d.position.set(B.x, B.y + u * 0.25, B.z); d.scale.setScalar(0.3 + u);
+    }
   }
   // Dein Greifer: Ring dreht sich, Zinken schließen sich beim Greifen, alles leuchtet heller
   greifer.visible = !tot;
