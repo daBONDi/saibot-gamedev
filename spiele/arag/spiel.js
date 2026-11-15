@@ -2566,7 +2566,8 @@ function baueHaus() {
 
   // 2a. 🚪 Haustüren nach draußen: auf jeder Seite vom Haus eine (im Erdgeschoss)
   haus.aussenTueren = new Set(); haus.aussenTuerListe = [];
-  const kanten = { n: R => R.j === 0 && !R.treppeHoch && !R.treppeRunter, s: R => R.j === haus.tief - 1, w: R => R.nr === haus.start,   // (Im Startraum: Da geht's raus zum Parkplatz mit dem Bus) o: R => R.i === haus.breit - 1 };
+  // (Die Haustür im Westen ist immer im Startraum: Da geht's raus zum Parkplatz mit dem Bus)
+  const kanten = { n: R => R.j === 0 && !R.treppeHoch && !R.treppeRunter, s: R => R.j === haus.tief - 1, w: R => R.nr === haus.start, o: R => R.i === haus.breit - 1 };
   for (const seite of ['n', 's', 'w', 'o']) {
     const liste = haus.raeume.filter(R => R.e === 0 && kanten[seite](R));
     if (!liste.length) continue;
