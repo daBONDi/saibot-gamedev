@@ -81,8 +81,10 @@ const WALD_NEU_ANTEIL = 0.25;    // So oft taucht ein neuer Schatz draußen auf 
 const MONSTER_DRAUSSEN = true;   // true = Monster folgen dir nach draußen · false = sie bleiben im Haus und warten an der Tür
 // ===== 🧪 Der Keller (unter dem Haus) – da wohnt der verrückte Chemiker! =====
 const KELLER_AN = true;          // false = kein Keller (und kein Chemiker)
-const KELLER = { i: 2, j: 0, breit: 2, tief: 2 };   // Wo der Keller liegt: Spalte i, Reihe j (wie bei den Sälen) · 2 × 2 Räume = 20 × 20 Meter
-const KELLER_SCHAETZE = 6;       // So viele Schätze liegen am Anfang im Keller
+const KELLER = { i: 1, j: 0, breit: 4, tief: 3 };   // Wo der Keller liegt: Spalte i, Reihe j (wie bei den Sälen) · 4 × 3 Räume = 40 × 30 Meter
+const KELLER_SCHAETZE = 10;      // So viele Schätze liegen am Anfang im Keller (in den Sackgassen vom Labyrinth!)
+const LABYRINTH_ZELLE = 2.5;     // 🌀 So breit sind die Gänge im Labyrinth (Meter)
+const LABYRINTH_ABKUERZUNGEN = 0.1;   // So oft gibt es extra Durchgänge (0 = nur ein einziger Weg überall hin, 0.3 = sehr viele Wege)
 const TRANK_RADIUS = 1.8;        // So weit spritzt ein Trank, wenn er zerplatzt (Meter)
 // Die Tränke vom Chemiker: schaden = so viel Energie kostet ein Treffer · pfuetze = so viele Sekunden bleibt eine Pfütze liegen
 //   gift = so viel Energie pro Sekunde in der Giftwolke · langsam = so schnell bist du im Schleim noch (0.35 = ein Drittel)
@@ -370,12 +372,19 @@ function gruselTon(hoehe, start, dauer, klang, laut, hoeheEnde, zittern = 6, zie
   } catch (e) { /* egal */ }
 }
 const monsterSound = {
-  chemiker(laut, jagt) {   // 🧪 Blubb ... blubb ... (und beim Jagen ein irres Kichern)
-    for (let k = 0; k < 4; k++) ton(zufall(180, 420), k * 0.13 + zufall(0, 0.05), 0.09, 'sine', 0.12 * laut, zufall(500, 900));
+  chemiker(laut, jagt) {   // 🐷 Grunz, grunz ... (und beim Jagen ein irres Oink-Lachen)
+    monsterSound.grunzen(laut, 0); if (Math.random() < 0.6) monsterSound.grunzen(laut * 0.8, 0.3);
     if (jagt) monsterSound.chemikerLacht(laut * 0.7);
   },
-  chemikerLacht(laut) {   // Hehehehe-HAHAHA!
-    for (let k = 0; k < 7; k++) { const h = 520 - k * 30 + (k % 2) * 90; ton(h, k * 0.11, 0.08, 'square', 0.05 * laut, h * 0.8); }
+  grunzen(laut, start) {   // Ein Schweine-Grunzer: tiefes, raues Brummen + Schnauben
+    const h = zufall(95, 130);
+    ton(h, start, 0.22, 'sawtooth', 0.12 * laut, h * 0.7); ton(h * 1.5, start, 0.2, 'square', 0.03 * laut, h);
+    rauschen(start, 0.2, 0.12 * laut, 'bandpass', 600, null, 300);
+  },
+  chemikerLacht(laut) {   // OINK-HAHAHA! (ein quiekendes Lachen)
+    ton(700, 0, 0.18, 'sawtooth', 0.07 * laut, 1100); ton(1050, 0, 0.18, 'square', 0.025 * laut, 1500);   // Quiiiek!
+    for (let k = 0; k < 6; k++) { const h = 560 - k * 35 + (k % 2) * 110; ton(h, 0.22 + k * 0.1, 0.07, 'sawtooth', 0.05 * laut, h * 0.75); }
+    monsterSound.grunzen(laut, 0.85);
   },
   trankWurf(laut) { rauschen(0, 0.3, 0.12 * laut, 'bandpass', 1500, null, 500); },   // Wusch!
   trankPlatsch(laut) { sound.glas(laut); rauschen(0.02, 0.6, 0.25 * laut, 'highpass', 2500, null, 6000); ton(160, 0, 0.2, 'sine', 0.2 * laut, 60); },   // KLIRR! Zischhh ...
@@ -546,17 +555,26 @@ function walzerBegleitung(akkorde) {   // Pro Takt: tiefer Grundton (BUM), dann 
   return liste;
 }
 const MUSIK_LIEDER = {
-  // 🧪 Chemiker: Verrückter Labor-Swing – blubbernde Orgel, hüpfender Bass, alles ein bisschen schief (ein eigenes Lied!)
+  // 🐷 Doktor Schorsch: „Schweinchen-Lied“ – eine EIGENE fröhliche Kinderlied-Melodie zum Mitsummen ...
+  // ... aber gespielt auf einer kaputten, verzerrten E-Gitarre. Und in der zweiten Hälfte wird sie schief und gruselig!
   chemiker: {
-    tempo: 168, grund: 98, verzerrung: 30, gitarre: 0.35, melodieKlang: 'orgel', becken: 'tick',
-    riff: [
-      0, null, 12, null,  3, null, 15, null,   2, null, 14, null,  6, 5, 4, 3,
-      0, null, 12, null,  3, null, 15, null,   7, 6, 5, null,  1, null, 0, null,
-    ],
-    kick: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    tempo: 150, grund: 65.4, verzerrung: 85, gitarre: 0.35, becken: 'achtel', stimmeKlang: 'verzerrt',
+    // Begleitung: hüpfender Bass (Hopsa-hopsa)
+    riff: riffNoten(`
+      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  5 . 17 .  12 . 17 .  7 . 19 .  14 . 19 .  |
+      0 . 12 .  7 . 12 .  9 . 21 .  4 . 16 .  |  5 . 17 .  7 . 19 .  0 . 12 .  0 . . .  |
+      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  5 . 17 .  12 . 17 .  7 . 19 .  14 . 19 .  |
+      0 . 12 .  6 . 12 .  8 . 20 .  3 . 15 .  |  5 . 17 .  6 . 18 .  0 . 12 .  0 . . .  |`),
+    kick: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
     snare: [4, 12],
-    melodie: [24, 27, 26, 30, 24, 27, 31, 30],
+    // Die Melodie: eine Note pro Viertel. - = weiterklingen · . = Pause
+    stimme: walzerNoten(`
+      C5 E5 G5 E5 | F5 A5 G5 - | E5 G5 C6 G5 | A5 G5 E5 - |
+      F5 E5 D5 E5 | F5 G5 A5 - | G5 E5 D5 B4 | C5 - . . |
+      C5 E5 G5 E5 | F5 A5 G5 - | Eb5 G5 C6 Gb5 | Ab5 G5 Eb5 - |
+      F5 Eb5 D5 Eb5 | F5 Gb5 Ab5 - | G5 Eb5 Db5 B4 | C5 - . . |`),
   },
+
   // 👻 Staubgeist: Spuk-Orgel mit Geisterchor und Glöckchen – unheimlich und schwebend
   geist: {
     tempo: 140, grund: 110, verzerrung: 15, gitarre: 0.25, melodieKlang: 'orgel', becken: 'glocke',
@@ -801,7 +819,7 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     gruselTon(500, 0, 0.9, 'sawtooth', 0.14, 1300, 20);
     gruselTon(750, 0, 0.9, 'square', 0.06, 1600, 25);
     for (let k = 0; k < 2; k++) { ton(900, 0.2 + k * 0.25, 0.05, 'square', 0.3); ton(80, 0.2 + k * 0.25, 0.2, 'sine', 0.5, 40); }
-  } else if (art === 'chemiker') { // 🧪 Glas klirrt + irres Lachen
+  } else if (art === 'chemiker') { // 🐷 Glas klirrt + QUIIIEK + irres Lachen
     sound.glas(1);
     monsterSound.chemikerLacht(1.4);
     gruselTon(300, 0.1, 1.0, 'square', 0.08, 1200, 25);
@@ -1278,8 +1296,11 @@ function wegPunkt(wer, pos, ziel) {
   // 🧪 Runter in den Keller oder rauf? Dann über die Kellertreppe!
   if (haus.keller) {
     const ka = imKeller(pos), kb = imKeller(ziel), P = treppenPunkte(haus.keller.treppe);
-    if (ka && kb) return rampenUmweg(wer, pos, ziel) || ziel;   // Beide im Keller: Der Keller ist ein großer Raum
-    if (ka) { wer.tw = { k: 0, reihe: [P.vor, P.unten, P.oben, P.absatz] }; return wer.tw.reihe[0]; }
+    if (ka && kb) return kellerWeg(pos, ziel);   // Beide im Keller: durchs Labyrinth
+    if (ka) {   // Raus: erst durchs Labyrinth zur Treppe, dann hoch
+      if (abstand2D(pos.x, pos.z, P.vor.x, P.vor.z) > 0.8) return kellerWeg(pos, P.vor);
+      wer.tw = { k: 0, reihe: [P.vor, P.unten, P.oben, P.absatz] }; return wer.tw.reihe[0];
+    }
     if (kb) {
       if (abstand2D(pos.x, pos.z, P.absatz.x, P.absatz.z) < 0.6 && Math.abs(pos.y - P.absatz.y) < 1.2) { wer.tw = { k: 0, reihe: [P.absatz, P.oben, P.unten, P.vor] }; return wer.tw.reihe[0]; }
       ziel = P.absatz;   // Erst mal oben zur Kellertreppe
@@ -1627,6 +1648,34 @@ const kellerSteinTextur = malTextur(128, 128, (g, b, h) => {   // Alte Backstein
   }
   for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(60,90,40,${0.15 + Math.random() * 0.2})`; g.fillRect(Math.random() * b, Math.random() * h, 3 + Math.random() * 8, 2 + Math.random() * 4); }
 });
+// Das Labyrinth: Der Keller ist in Zellen eingeteilt (wie ein Schachbrett). Zwischen zwei Zellen ist eine Wand – oder ein Durchgang.
+const kellerKante = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`;
+function kellerZelle(x, z) {
+  const K = haus.keller;
+  return begrenzt(Math.floor((z - K.z1) / K.zelle), 0, K.nz - 1) * K.nx + begrenzt(Math.floor((x - K.x1) / K.zelle), 0, K.nx - 1);
+}
+function kellerZellMitte(c) {
+  const K = haus.keller;
+  return { x: K.x1 + (c % K.nx + 0.5) * K.zelle, y: K.boden, z: K.z1 + (Math.floor(c / K.nx) + 0.5) * K.zelle };
+}
+function kellerNachbarn(c) {   // Zellen daneben, zu denen ein Durchgang führt
+  const K = haus.keller, x = c % K.nx, z = Math.floor(c / K.nx), liste = [];
+  for (const [n, ok] of [[c - 1, x > 0], [c + 1, x < K.nx - 1], [c - K.nx, z > 0], [c + K.nx, z < K.nz - 1]]) if (ok && K.offen.has(kellerKante(c, n))) liste.push(n);
+  return liste;
+}
+// Wohin im Labyrinth als Nächstes? (Breitensuche: der kürzeste Weg durch die Gänge)
+function kellerWeg(pos, ziel) {
+  const K = haus.keller, a = kellerZelle(pos.x, pos.z), b = kellerZelle(ziel.x, ziel.z);
+  if (a === b || K.gesperrt.has(a) || K.gesperrt.has(b)) return ziel;
+  const vorher = new Map([[a, -1]]), schlange = [a];
+  for (let k = 0; k < schlange.length && !vorher.has(b); k++) for (const n of kellerNachbarn(schlange[k])) if (!vorher.has(n)) { vorher.set(n, schlange[k]); schlange.push(n); }
+  if (!vorher.has(b)) return ziel;
+  let n = b;
+  while (vorher.get(n) !== a) n = vorher.get(n);
+  // Steht man schräg zum Durchgang? Dann erst in die Mitte der eigenen Zelle (sonst bleibt man an der Mauerecke hängen)
+  const am = kellerZellMitte(a), quer = Math.abs(n - a) === 1 ? Math.abs(pos.z - am.z) : Math.abs(pos.x - am.x);
+  return quer > 0.45 ? am : kellerZellMitte(n);
+}
 function baueKeller() {
   const K = haus.keller, b = K.boden, d = K.decke, hoch = d - b, t = K.treppe;
   const P = treppenPunkte(t);
@@ -1639,19 +1688,65 @@ function baueKeller() {
   festerKlotz(K.x2, b + hoch / 2, (K.z1 + K.z2) / 2, 0.3, hoch, K.z2 - K.z1, wandMat);
   const bodenTex = BOEDEN.beton.clone(); bodenTex.needsUpdate = true; bodenTex.repeat.set((K.x2 - K.x1) / 2, (K.z2 - K.z1) / 2);
   bodenFlaeche({ x0: K.x1, z0: K.z1 }, K.x1, K.z1, K.x2, K.z2, b + 0.001, new THREE.MeshStandardMaterial({ map: bodenTex, color: '#8a8478', roughness: 1 }));
-  // 2) Holzbalken unter der Decke (nicht über der Treppe – sonst stößt man sich den Kopf)
-  for (let z = K.z1 + 2.5; z < K.z2 - 0.5; z += 2.5) {
-    if (z > t.z0 - 0.3 && z < t.z0 + LOCH.z2 + 0.4) continue;
-    const balken = new THREE.Mesh(new THREE.BoxGeometry(K.x2 - K.x1, 0.2, 0.25), dunkelHolzMat);
-    balken.position.set((K.x1 + K.x2) / 2, d - 0.1, z); hausGruppe.add(balken);
+  // 2) 🌀 Das Labyrinth ausdenken
+  const Z = LABYRINTH_ZELLE, nx = Math.round((K.x2 - K.x1) / Z), nz = Math.round((K.z2 - K.z1) / Z);
+  Object.assign(K, { zelle: Z, nx, nz, offen: new Set(), gesperrt: new Set() });
+  const nr = (cx, cz) => cz * nx + cx, mitte = c => kellerZellMitte(c);
+  for (let c = 0; c < nx * nz; c++) {   // Zellen, in denen die Treppe steht, kann man nicht betreten
+    const m = mitte(c);
+    if (m.x > t.x0 + TREPPE.von && m.x < t.x0 + TREPPE.bis && m.z > t.z0 && m.z < t.z0 + 2.2) K.gesperrt.add(c);
   }
-  // 3) Das Labor: in der Ecke, die am weitesten von der Treppe weg ist
-  const ecken = [[K.x1, K.z1, 1, 1], [K.x2, K.z1, -1, 1], [K.x1, K.z2, 1, -1], [K.x2, K.z2, -1, -1]];
-  const [ex, ez, sx, sz] = ecken.reduce((a, e) => abstand2D(e[0], e[1], P.vor.x, P.vor.z) > abstand2D(a[0], a[1], P.vor.x, P.vor.z) ? e : a);
+  const bereich = (cx0, cz0, w, h) => {   // Ein offener Bereich: alle Wände dazwischen fallen weg
+    for (let x = cx0; x < cx0 + w; x++) for (let z = cz0; z < cz0 + h; z++) {
+      if (x + 1 < cx0 + w) K.offen.add(kellerKante(nr(x, z), nr(x + 1, z)));
+      if (z + 1 < cz0 + h) K.offen.add(kellerKante(nr(x, z), nr(x, z + 1)));
+    }
+  };
+  // Vor der Treppe: ein kleiner Vorraum (so breit wie der Raum oben, 2 Zellen tief)
+  const tcx = Math.round((t.x0 - K.x1) / Z), tcz = Math.round((t.z0 - K.z1) / Z), tw = Math.round(RAUM / Z);
+  bereich(tcx, tcz, tw, 2);
+  for (let x = tcx; x < tcx + tw; x++) for (const g of K.gesperrt) {   // Zwischen Treppe und Vorraum keine Wand (sonst kommt man nicht runter)
+    if (g === nr(x, tcz)) K.offen.add(kellerKante(g, nr(x, tcz + 1)));
+  }
+  // Das Labor: 3 × 3 Zellen in der Ecke, die am weitesten von der Treppe weg ist
+  const ecken = [[0, 0], [nx - 3, 0], [0, nz - 3], [nx - 3, nz - 3]];
+  const [lcx, lcz] = ecken.reduce((a, e) => abstand2D(e[0] + 1.5, e[1] + 1.5, tcx + 1, tcz + 1) > abstand2D(a[0] + 1.5, a[1] + 1.5, tcx + 1, tcz + 1) ? e : a);
+  bereich(lcx, lcz, 3, 3);
+  const imLabor = c => { const x = c % nx, z = Math.floor(c / nx); return x >= lcx && x < lcx + 3 && z >= lcz && z < lcz + 3; };
+  // Gänge graben: Von der Treppe aus kreuz und quer, bis jede Zelle erreicht ist (wie ein Maulwurf mit Rückwärtsgang)
+  const start = kellerZelle(P.vor.x, P.vor.z), besucht = new Set([start]), stapel = [start];
+  const daneben = c => { const x = c % nx, z = Math.floor(c / nx); return [[c - 1, x > 0], [c + 1, x < nx - 1], [c - nx, z > 0], [c + nx, z < nz - 1]].filter(([n, ok]) => ok && !K.gesperrt.has(n)).map(([n]) => n); };
+  while (stapel.length) {
+    const c = stapel[stapel.length - 1], frei = daneben(c).filter(n => !besucht.has(n));
+    if (!frei.length) { stapel.pop(); continue; }
+    const n = auswahl(frei);
+    K.offen.add(kellerKante(c, n)); besucht.add(n); stapel.push(n);
+  }
+  // Ein paar Abkürzungen (dann gibt es mehrere Wege – wichtig, um Doktor Schorsch zu entkommen!)
+  for (let c = 0; c < nx * nz; c++) for (const n of daneben(c)) if (n > c && !K.offen.has(kellerKante(c, n)) && rnd() < LABYRINTH_ABKUERZUNGEN) K.offen.add(kellerKante(c, n));
+  // 3) Die Mauern bauen (nebeneinanderliegende Wandstücke werden zu einer langen Mauer zusammengefasst)
+  const zu = (c, n) => !K.offen.has(kellerKante(c, n)) && !(K.gesperrt.has(c) && K.gesperrt.has(n));
+  for (let z = 1; z < nz; z++) {   // Mauern entlang x
+    let von = -1;
+    for (let x = 0; x <= nx; x++) {
+      const geschlossen = x < nx && zu(nr(x, z - 1), nr(x, z));
+      if (geschlossen && von < 0) von = x;
+      if (!geschlossen && von >= 0) { festerKlotz(K.x1 + (von + x) / 2 * Z, b + hoch / 2, K.z1 + z * Z, (x - von) * Z + 0.3, hoch, 0.3, wandMat); von = -1; }
+    }
+  }
+  for (let x = 1; x < nx; x++) {   // Mauern entlang z
+    let von = -1;
+    for (let z = 0; z <= nz; z++) {
+      const geschlossen = z < nz && zu(nr(x - 1, z), nr(x, z));
+      if (geschlossen && von < 0) von = z;
+      if (!geschlossen && von >= 0) { festerKlotz(K.x1 + x * Z, b + hoch / 2, K.z1 + (von + z) / 2 * Z, 0.3, hoch, (z - von) * Z + 0.3, wandMat); von = -1; }
+    }
+  }
+  // 4) Das Labor von Doktor Schorsch
+  const sx = lcx === 0 ? 1 : -1, sz = lcz === 0 ? 1 : -1, ex = sx > 0 ? K.x1 : K.x2, ez = sz > 0 ? K.z1 : K.z2;
   const lx = ex + sx * 3.6, lz = ez + sz * 3.6;   // Mitte vom Labor
-  // Zwei lange Labortische an den Wänden (L-Form) mit vielen bunten Flaschen
   const tischMat = new THREE.MeshStandardMaterial({ color: '#4a3a2c', roughness: 0.7 });
-  const tisch = (x, z, breit, tief) => {
+  const tisch = (x, z, breit, tief) => {   // Ein langer Labortisch voller bunter Flaschen
     festerKlotz(x, b + 0.45, z, breit, 0.9, tief, tischMat, false);
     for (let k = 0; k < Math.max(breit, tief) * 2.2; k++) {
       const farbe = auswahl(['#5dff4a', '#c04dff', '#4dc3ff', '#ff8a3d', '#ff4d6d', '#fff36b']);
@@ -1662,8 +1757,7 @@ function baueKeller() {
   };
   tisch(ex + sx * 0.6, ez + sz * 3.2, 0.9, 4.6);
   tisch(ex + sx * 3.4, ez + sz * 0.6, 4.6, 0.9);
-  // Der große blubbernde Kessel mit grünem Gebräu
-  const kx = lx + sx * 0.6, kz = lz + sz * 0.6;
+  const kx = lx + sx * 0.6, kz = lz + sz * 0.6;   // Der große blubbernde Kessel
   const kessel = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.6, 0.8, 18, 1, true), new THREE.MeshStandardMaterial({ color: '#1d1d1f', metalness: 0.7, roughness: 0.4, side: THREE.DoubleSide }));
   kessel.position.set(kx, b + 0.4, kz); kessel.castShadow = true; hausGruppe.add(kessel);
   festerKoerper(kx, b + 0.4, kz, 1.3, 0.8, 1.3);
@@ -1680,52 +1774,43 @@ function baueKeller() {
     hausGruppe.add(f); haus.bewegteDeko.push(f);
   }
   lampeHinzu(kx, b + 1.6, kz, '#57ff7a', 2.2, 13, true);   // Grünes Leuchten aus dem Kessel
-  // Warnschild
-  const schild = schildMesh('☠️ LABOR – BETRETEN VERBOTEN!', 2.6, 0.5);
+  const schild = schildMesh('🐷 LABOR VON DR. SCHORSCH – BETRETEN VERBOTEN!', 3.2, 0.5);
   schild.position.set(ex + sx * 0.17, b + 1.9, ez + sz * 3.2); schild.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2; hausGruppe.add(schild);
   K.labor = { x: lx + sx * 1.6, z: lz - sz * 0.4, winkel: Math.atan2(kx - (lx + sx * 1.6), kz - (lz - sz * 0.4)) };
   K.laborMitte = { x: lx, z: lz };
-  // 4) Fässer und Weinregale an den Wänden (nicht vor der Treppe, nicht im Labor)
-  const platzFrei = (x, z, r) => abstand2D(x, z, lx, lz) > 4.5 + r && abstand2D(x, z, P.vor.x, P.vor.z) > 2.5 + r &&
-    !(x > t.x0 && x < t.x0 + RAUM && z > t.z0 && z < t.z0 + 3.2);   // (Der Streifen mit der Treppe)
-  const fassMat = new THREE.MeshStandardMaterial({ color: '#5b3b22', roughness: 0.85 }), reifMat = metallGrauMat;
-  const fass = (x, z, liegend) => {
+  // 5) Sackgassen: Da liegen die Schätze (und alte Fässer)
+  const sackgassen = mischen([...Array(nx * nz).keys()].filter(c => !K.gesperrt.has(c) && !imLabor(c) && kellerNachbarn(c).length === 1 && abstand2D(mitte(c).x, mitte(c).z, P.vor.x, P.vor.z) > 4));
+  const fassMat = new THREE.MeshStandardMaterial({ color: '#5b3b22', roughness: 0.85 });
+  const fass = (x, z) => {
     const g = new THREE.Group();
     const koerper = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.0, 14), fassMat); koerper.castShadow = true; g.add(koerper);
-    for (const y of [-0.35, 0.35]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 6, 16), reifMat); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); }
-    if (liegend) g.rotation.z = Math.PI / 2;
-    g.position.set(x, b + (liegend ? 0.42 : 0.5), z); hausGruppe.add(g);
-    festerKoerper(x, b + 0.5, z, liegend ? 1.0 : 0.85, 1.0, 0.85);
+    for (const y of [-0.35, 0.35]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 6, 16), metallGrauMat); r.rotation.x = Math.PI / 2; r.position.y = y; g.add(r); }
+    g.position.set(x, b + 0.5, z); hausGruppe.add(g);
+    festerKoerper(x, b + 0.5, z, 0.85, 1.0, 0.85);
   };
-  let fassAnzahl = 0;
-  for (let v = 0; v < 200 && fassAnzahl < 10; v++) {
-    const seite = zufallGanz(0, 3), entlang = rnd();
-    const x = seite < 2 ? K.x1 + 1 + entlang * (K.x2 - K.x1 - 2) : seite === 2 ? K.x1 + 0.7 : K.x2 - 0.7;
-    const z = seite >= 2 ? K.z1 + 1 + entlang * (K.z2 - K.z1 - 2) : seite === 0 ? K.z1 + 0.7 : K.z2 - 0.7;
-    if (!platzFrei(x, z, 0.6) || (K.faesser || []).some(f => abstand2D(f.x, f.z, x, z) < 1.0)) continue;
-    fass(x, z, rnd() < 0.3); (K.faesser = K.faesser || []).push({ x, z }); fassAnzahl++;
-    if (rnd() < 0.5) { const z2 = seite >= 2 ? z + 0.9 : z, x2 = seite < 2 ? x + 0.9 : x; if (platzFrei(x2, z2, 0.6)) { fass(x2, z2, false); K.faesser.push({ x: x2, z: z2 }); } }   // Oft stehen zwei nebeneinander
-  }
-  // Weinregal mit staubigen Flaschen (an der Wand gegenüber vom Labor)
-  const rx = ex === K.x1 ? K.x2 - 0.45 : K.x1 + 0.45, rz = (K.z1 + K.z2) / 2 + sz * 2.5;
-  if (platzFrei(rx, rz, 1)) {
-    festerKlotz(rx, b + 1.0, rz, 0.6, 2.0, 3.0, dunkelHolzMat, false);
-    for (let r = 0; r < 4; r++) for (let k = 0; k < 9; k++) {
-      if (rnd() < 0.25) continue;
-      const fl = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.32, 6), new THREE.MeshStandardMaterial({ color: auswahl(['#1f3d1f', '#3d1f2a', '#2a2a1a']), roughness: 0.3 }));
-      fl.rotation.x = Math.PI / 2; fl.position.set(rx + (ex === K.x1 ? -0.32 : 0.32), b + 0.3 + r * 0.45, rz - 1.3 + k * 0.32); hausGruppe.add(fl);
+  sackgassen.forEach((c, k) => {
+    const m = mitte(c), [n] = kellerNachbarn(c), o = mitte(n);
+    const hx = Math.sign(m.x - o.x) * 0.55, hz = Math.sign(m.z - o.z) * 0.55;   // Ein Stück nach hinten (weg vom Eingang)
+    if (k < KELLER_SCHAETZE) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, m.x + hx, b + typ.groesse[1] / 2 + 0.05, m.z + hz); }
+    else if (rnd() < 0.6) fass(m.x + hx * 1.1 + (hz ? zufall(-0.5, 0.5) : 0), m.z + hz * 1.1 + (hx ? zufall(-0.5, 0.5) : 0));
+  });
+  // 6) Leuchtende Pilze an den Wänden (so findet man sich ein bisschen zurecht)
+  const pilzFarben = ['#6bffb0', '#7fd8ff', '#c48bff'];
+  for (let k = 0; k < 45; k++) {
+    const c = zufallGanz(0, nx * nz - 1);
+    if (K.gesperrt.has(c) || imLabor(c)) continue;
+    const m = mitte(c), farbe = auswahl(pilzFarben), ecke = [zufall(-0.85, 0.85), auswahl([-0.95, 0.95])], quer = rnd() < 0.5;
+    const px = m.x + (quer ? ecke[1] : ecke[0]), pz = m.z + (quer ? ecke[0] : ecke[1]);
+    for (let p = 0; p < 3; p++) {
+      const h = zufall(0.06, 0.16), stiel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, h, 5), new THREE.MeshBasicMaterial({ color: '#d8e6d0' }));
+      const ox = px + zufall(-0.15, 0.15), oz = pz + zufall(-0.15, 0.15);
+      stiel.position.set(ox, b + h / 2, oz); hausGruppe.add(stiel);
+      const hut = new THREE.Mesh(new THREE.SphereGeometry(zufall(0.04, 0.07), 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: farbe }));
+      hut.position.set(ox, b + h, oz); hausGruppe.add(hut);
     }
   }
-  // Eine schwache, flackernde Glühbirne unten an der Treppe
+  // Eine schwache, flackernde Glühbirne im Vorraum an der Treppe
   lampeHinzu(P.vor.x + 1.5, d - 0.3, P.vor.z + 1.5, '#ffb070', 0.9, 9, true);
-  // 5) Schätze im Keller
-  for (let k = 0, v = 0; k < KELLER_SCHAETZE && v < 300; v++) {
-    const x = zufall(K.x1 + 1.2, K.x2 - 1.2), z = zufall(K.z1 + 1.2, K.z2 - 1.2);
-    if (!platzFrei(x, z, 0) || (K.faesser || []).some(f => abstand2D(f.x, f.z, x, z) < 1.2)) continue;
-    const typ = gewichtetWaehlen(SCHAETZE);
-    neuerSchatz(typ, x, b + typ.groesse[1] / 2 + 0.05, z);
-    k++;
-  }
 }
 function baueWald() {
   const B = haus.breit * RAUM, T = haus.tief * RAUM, M = WALD_RAND, dach = (haus.etagen - 1) * ETAGE_HOEHE + WAND_HOEHE;
@@ -2858,9 +2943,9 @@ const MONSTER_ARTEN = {
   // krabbelTempo: so schnell krabbelt er oben (du läufst 4, rennst 6.5) · krabbelWeite: so weit riecht er dich oben (auch wenn du stillstehst!)
   maulwurf: { name: 'Achtarm-Maulwurf', emoji: '🐾', tempo: 2.5, jagdTempo: 5.8, schaden: 40, pause: 1.2, betaeubbar: true,
               fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 8, abtauchen: 0.6, schubs: 11, krabbelTempo: 5.2, krabbelWeite: 14 },
-  // 🧪 Der verrückte Chemiker wohnt im Keller und wirft mit Tränken (siehe TRAENKE oben)! Er verlässt seinen Keller nie.
+  // 🐷🧪 Doktor Schorsch, das verrückte Chemiker-Schwein, wohnt im Keller-Labyrinth und wirft mit Tränken (siehe TRAENKE oben)! Er verlässt seinen Keller nie.
   // wurfWeite: so weit wirft er · ausholen: so lange holt er aus, bevor er wirft (deine Chance auszuweichen!) · nachladen: so lange bis zum nächsten Trank
-  chemiker: { name: 'Chemiker',   emoji: '🧪', tempo: 1.2, jagdTempo: 2.6, schaden: 15, sicht: 15, augen: 1.6, pause: 2, betaeubbar: true,
+  chemiker: { name: 'Doktor Schorsch', emoji: '🐷', tempo: 1.2, jagdTempo: 2.6, schaden: 15, sicht: 15, augen: 1.6, pause: 2, betaeubbar: true,
               wurfWeite: 13, ausholen: 0.7, nachladen: 2.4 },
 };
 function baueMonsterMesh(art) {
@@ -3070,55 +3155,58 @@ function baueMonsterMesh(art) {
     laser.visible = false; laser.castShadow = false; g.add(laser);
     Object.assign(g.userData, { blitz, feuer, laser, flinte });
   } else if (art === 'chemiker') {
-    // 🧪 Der verrückte Chemiker: weißer Kittel mit Flecken, wilde weiße Haare, grün leuchtende Schutzbrille, Gürtel voller Tränke
-    const mat = f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.85 });
+    // 🐷 Doktor Schorsch: ein Schwein, das auf zwei Beinen steht – mit fleckigem Labor-Kittel, runder Brille und Ringelschwanz
+    const mat = f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.75 });
     const kittelTex = malTextur(64, 64, (c, b, h) => {
       c.fillStyle = '#e8ece4'; c.fillRect(0, 0, b, h);
       for (let k = 0; k < 9; k++) { c.fillStyle = ['#5dff4a', '#c04dff', '#4dc3ff', '#ff8a3d', '#6b5a3a'][k % 5]; c.globalAlpha = 0.55; c.beginPath(); c.arc(Math.random() * b, Math.random() * h, 2 + Math.random() * 5, 0, 7); c.fill(); }
     }, false);
-    const kittel = new THREE.MeshStandardMaterial({ map: kittelTex, roughness: 0.9 }), hose = mat('#2b2b33'), haut = mat('#c8d6b0'), haar = mat('#f2f2f2');
+    const kittel = new THREE.MeshStandardMaterial({ map: kittelTex, roughness: 0.9 }), rosa = mat('#f2a7b5'), dunkelRosa = mat('#d9788c'), huf = mat('#3a2a2a');
     const beine = [];
-    for (const s of [-1, 1]) {
-      const bein = new THREE.Group(); bein.position.set(s * 0.11, 0.78, 0); g.add(bein);
-      const b = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.72, 0.17), hose); b.position.y = -0.36; bein.add(b);
-      const schuh = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.1, 0.3), mat('#141414')); schuh.position.set(0, -0.73, 0.05); bein.add(schuh);
+    for (const s of [-1, 1]) {   // Kurze, dicke Schweinebeine mit Hufen
+      const bein = new THREE.Group(); bein.position.set(s * 0.14, 0.62, 0); g.add(bein);
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.56, 10), rosa); b.position.y = -0.28; bein.add(b);
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.08, 10), huf); h.position.y = -0.58; bein.add(h);
       beine.push(bein);
     }
-    // Langer Kittel (unten weit, offen) und Oberkörper
-    const rock = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.38, 0.75, 12, 1, true), new THREE.MeshStandardMaterial({ map: kittelTex, roughness: 0.9, side: THREE.DoubleSide }));
-    rock.position.y = 0.85; g.add(rock);
-    const brust = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.3), kittel); brust.position.y = 1.45; g.add(brust);
+    // Dicker runder Schweinebauch, darüber der offene Kittel
+    const bauch = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 12), rosa); bauch.scale.set(1, 1.25, 0.95); bauch.position.y = 1.05; g.add(bauch);
+    const rock = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.44, 0.95, 14, 1, true, Math.PI * 0.62, Math.PI * 1.76), new THREE.MeshStandardMaterial({ map: kittelTex, roughness: 0.9, side: THREE.DoubleSide }));
+    rock.position.y = 1.0; g.add(rock);   // (Vorne offen – da guckt der rosa Bauch raus)
+    const schultern = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.3, 14), kittel); schultern.position.y = 1.47; g.add(schultern);
     // Gürtel mit vier bunten Trank-Fläschchen
-    const guertel = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.07, 0.34), mat('#4a2f1a')); guertel.position.y = 1.2; g.add(guertel);
     Object.values(TRAENKE).forEach((T, k) => {
-      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), new THREE.MeshBasicMaterial({ color: T.farbe }));
-      fl.position.set(-0.2 + k * 0.13, 1.14, 0.19); g.add(fl);
+      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: T.farbe }));
+      fl.position.set(-0.27 + k * 0.18, 0.78, 0.33); g.add(fl);
     });
-    // Kopf: grünliche Haut, riesige Schutzbrille, wilde Haare in alle Richtungen
-    const kopf = new THREE.Group(); kopf.position.y = 1.92; g.add(kopf);
-    kopf.add(new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), haut));
-    const brilleMat = new THREE.MeshBasicMaterial({ color: '#5dff4a', fog: false });
+    // Ringelschwanz (schaut hinten aus dem Kittel)
+    const schwanz = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 6, 12, Math.PI * 1.6), rosa); schwanz.position.set(0, 0.72, -0.42); schwanz.rotation.y = Math.PI / 2; g.add(schwanz);
+    // Kopf: runder Schweinekopf, Rüssel mit Nasenlöchern, Schlappohren und eine runde Brille
+    const kopf = new THREE.Group(); kopf.position.y = 1.8; g.add(kopf);
+    kopf.add(new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 12), rosa));
+    const ruessel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 0.14, 16), dunkelRosa); ruessel.rotation.x = Math.PI / 2; ruessel.position.set(0, -0.04, 0.27); kopf.add(ruessel);
     for (const s of [-1, 1]) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.022, 6, 14), mat('#3a3a3a')); ring.position.set(s * 0.085, 0.03, 0.16); kopf.add(ring);
-      const glas = new THREE.Mesh(new THREE.CircleGeometry(0.068, 14), brilleMat); glas.position.set(s * 0.085, 0.03, 0.17); kopf.add(glas);
+      const loch = new THREE.Mesh(new THREE.CircleGeometry(0.022, 8), mat('#5a2030')); loch.position.set(s * 0.04, -0.04, 0.342); kopf.add(loch);   // Nasenloch
+      const ohr = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 4), dunkelRosa); ohr.position.set(s * 0.16, 0.22, 0.02); ohr.rotation.set(0.5, 0, -s * 0.5); kopf.add(ohr);   // Schlappohr
+      const auge = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), mat('#111')); auge.position.set(s * 0.085, 0.07, 0.22); kopf.add(auge);
     }
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.015, 6, 20), mat('#222')); band.rotation.x = Math.PI / 2; band.position.y = 0.03; kopf.add(band);
-    for (let k = 0; k < 14; k++) {   // Haare wie nach einer Explosion
-      const w = k / 14 * Math.PI * 2, haarM = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 5), haar);
-      haarM.position.set(Math.cos(w) * 0.15, 0.12 + (k % 3) * 0.03, Math.sin(w) * 0.15 - 0.03);
-      haarM.rotation.set(Math.sin(w) * 1.0, 0, -Math.cos(w) * 1.0); kopf.add(haarM);
+    const brilleMat = new THREE.MeshBasicMaterial({ color: '#5dff4a', fog: false, transparent: true, opacity: 0.45 });
+    for (const s of [-1, 1]) {   // Runde Brille (die Gläser leuchten grün – irre!)
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 16), mat('#2a2a2a')); ring.position.set(s * 0.085, 0.07, 0.235); kopf.add(ring);
+      const glas = new THREE.Mesh(new THREE.CircleGeometry(0.066, 16), brilleMat); glas.position.set(s * 0.085, 0.07, 0.24); kopf.add(glas);
     }
-    const mund = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.025, 0.02), mat('#3a1010')); mund.position.set(0, -0.09, 0.18); kopf.add(mund);
-    // Arme: Der rechte hält einen Trank (holt beim Werfen weit aus)
+    const steg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.012), mat('#2a2a2a')); steg.position.set(0, 0.08, 0.24); kopf.add(steg);
+    const mund = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 6, 10, Math.PI), mat('#5a2030')); mund.rotation.z = Math.PI; mund.position.set(0, -0.14, 0.2); kopf.add(mund);   // Fieses Grinsen
+    // Arme im Kittel mit rosa Huf-Händen: Der rechte hält einen Trank (holt beim Werfen weit aus)
     const arme = [];
     for (const s of [-1, 1]) {
-      const arm = new THREE.Group(); arm.position.set(s * 0.32, 1.66, 0); g.add(arm);
-      const a = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.6, 0.13), kittel); a.position.y = -0.28; arm.add(a);
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), haut); hand.position.y = -0.6; arm.add(hand);
+      const arm = new THREE.Group(); arm.position.set(s * 0.38, 1.5, 0); g.add(arm);
+      const a = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.5, 10), kittel); a.position.y = -0.24; arm.add(a);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), rosa); hand.position.y = -0.52; arm.add(hand);
       arme.push(arm);
     }
     const flasche = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshBasicMaterial({ color: '#5dff4a' }));
-    flasche.position.set(0, -0.72, 0.03); arme[1].add(flasche);
+    flasche.position.set(0, -0.64, 0.03); arme[1].add(flasche);
     Object.assign(g.userData, { beine, arme, kopf, brilleMat, flasche });
   } else {   // starrer
     const stein = new THREE.MeshStandardMaterial({ color: '#8a8780', roughness: 1 });
@@ -3211,8 +3299,10 @@ function starrerGesehen(m) {
 }
 function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum, auch mal die Treppe hoch)
   if (m.art === 'chemiker' && haus.keller) {   // 🧪 Der Chemiker bleibt in seinem Keller – meistens rührt er im Labor herum
-    const K = haus.keller, L = Math.random() < 0.6 ? K.laborMitte : null;
-    return L ? { x: L.x + zufall(-1.5, 1.5), y: K.boden, z: L.z + zufall(-1.5, 1.5) } : { x: zufall(K.x1 + 1.5, K.x2 - 1.5), y: K.boden, z: zufall(K.z1 + 3.5, K.z2 - 1.5) };
+    const K = haus.keller, L = Math.random() < 0.4 ? K.laborMitte : null;
+    if (L) return { x: L.x + zufall(-1.5, 1.5), y: K.boden, z: L.z + zufall(-1.5, 1.5) };
+    let c; do c = Math.floor(Math.random() * K.nx * K.nz); while (K.gesperrt.has(c));   // Irgendeine Zelle im Labyrinth
+    return kellerZellMitte(c);
   }
   const jetzt = raumNrVon(m.x, m.y, m.z);
   const moeglich = nachbarn(jetzt).filter(n => verbunden(jetzt, n));
@@ -3259,7 +3349,7 @@ function updateMonster(m, dt) {
           if (m.modus !== 'jagen') {
             if (opfer.spieler) {
               if (m.art === 'jaeger') { monsterSound.jaeger(1, true); zeigeNachricht('🤠 Der verrückte Jäger hat dich gesehen! IN DECKUNG!', 2, '#ff6b6b'); }
-              else if (m.art === 'chemiker') { monsterSound.chemikerLacht(1); zeigeNachricht('🧪 MUAHAHA! Der Chemiker hat dich gesehen! Pass auf seine Tränke auf!', 2.5, '#5dff4a'); }
+              else if (m.art === 'chemiker') { monsterSound.chemikerLacht(1); zeigeNachricht('🐷 OINK-HAHAHA! Doktor Schorsch hat dich gesehen! Pass auf seine Tränke auf!', 2.5, '#ff9ab0'); }
               else { sound.geist(); zeigeNachricht(`${info.emoji} Der ${info.name} hat dich gesehen! LAUF!`, 2, '#ff6b6b'); }
             } else if (opfer.helfer) {
               opfer.helfer.angst = 3;
@@ -3787,7 +3877,7 @@ function trankTrifftMich(T, art, x, z) {
   if (T.nebel) nebelZeit = T.nebel;
   if (T.langsam) klebZeit = Math.max(klebZeit, 1.5);
   zeigeNachricht({ gift: '🟢 GIFTTRANK! Raus aus der grünen Wolke!', schleim: '🟣 KLEBESCHLEIM! Du klebst fest ...', nebel: '🔵 NEBELTRANK! Du siehst fast nichts mehr!', knall: '🟠 KNALLTRANK! BUMM!' }[art], 2.5, T.farbe);
-  getroffen(T.schaden, `🧪 Chemiker (${T.name})`);
+  getroffen(T.schaden, `🐷 Doktor Schorsch (${T.name})`);
 }
 function neuePfuetze(art, x, y, z) {
   const T = TRAENKE[art], g = new THREE.Group();
@@ -3804,7 +3894,7 @@ function giftSchaden(menge) {   // Die Giftwolke kostet langsam Energie (ohne da
   energie -= menge;
   schadenBlitz = Math.max(schadenBlitz, 0.2);
   ton(zufall(180, 240), 0, 0.12, 'sawtooth', 0.04, 140);   // *hust*
-  if (energie <= 0) { energie = 1; getroffen(1, '🟢 Giftwolke vom Chemiker'); }
+  if (energie <= 0) { energie = 1; getroffen(1, '🟢 Giftwolke von Doktor Schorsch'); }
 }
 function updatePfuetzen(dt) {
   nebelZeit = Math.max(0, nebelZeit - dt); klebZeit = Math.max(0, klebZeit - dt);
@@ -5167,7 +5257,7 @@ function zeichneTitel() {
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische, durch Mauselöcher 🐭!) · F: Blitzlampe 📸 · E: Tür auf/zu 🚪', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
-  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster – deine Helfer blitzen auch! 📸 Im Keller wohnt der Chemiker 🧪', W / 2, 468, 12, '#8a8fb0', 'center', false);
+  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster – deine Helfer blitzen auch! 📸 Im Keller-Labyrinth wohnt Doktor Schorsch 🐷🧪', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
   text('🌐 Mit Freunden spielen? Oben rechts einen Raum erstellen oder einen Code eingeben!', W / 2, 548, 12, '#7cf5c6', 'center', false);
