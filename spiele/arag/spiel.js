@@ -4416,7 +4416,10 @@ function updateHelfer(h, dt) {
   const L = haus.laster;
   let ziel;
   if (h.modus === 'hinlaufen') ziel = { x: h.auftrag.body.position.x, y: h.auftrag.body.position.y, z: h.auftrag.body.position.z };
-  else if (h.modus === 'tragen') ziel = { x: (L.x1 + L.x2) / 2 + 0.3, y: 0, z: (L.z1 + L.z2) / 2 };
+  else if (h.modus === 'tragen') {   // Zur Abgabe – immer von der offenen Seite rein (sonst bleibt der Schatz am grünen Rand hängen)
+    const mz = (L.z1 + L.z2) / 2;
+    ziel = p.x > L.x2 + 0.2 && Math.abs(p.z - mz) > 1.0 ? { x: L.x2 + 1.2, y: 0, z: mz } : { x: (L.x1 + L.x2) / 2 + 0.3, y: 0, z: mz };
+  }
   else {   // Nichts zu tun: am Transporter warten (und sich ein bisschen langweilen)
     ziel = { x: RAUM / 2 + 1.5, y: 0, z: (L.z1 + L.z2) / 2 + (h === helfer[0] ? -2 : 2) };
     h.wartenZeit += dt;
