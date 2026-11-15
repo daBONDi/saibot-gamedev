@@ -121,6 +121,7 @@ const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn er kein
 const HELFER_SOFORT_ZURUECK = true;   // true = Ein kaputter Helfer taucht SOFORT wieder am Start auf (mit vollen Leben) – nur wenn HELFER_KOPF = false
 const HELFER_KOPF = true;        // 💀 true = Ein kaputter Helfer verliert seinen KOPF – bringt ihn zur Abgabe, dann ist er wieder da!
 const HELFER_WIEDERBELEBEN_PREIS = 500;   // So viel kostet es, einen Helfer-Bot wiederzubeleben
+const SCHROTT_ZEIT = 6;          // 💀 Sind ALLE Roboter Schrott (Spieler und Helfer), ist das Spiel aus – nach so vielen Sekunden geht's zurück in die Lobby
 const HELFER_LEBEN = 3;          // So viele Treffer hält ein Helfer aus, bevor er kaputt geht ❤️
 const HELFER_HEILEN = 20;        // Alle 20 Sekunden bekommt ein Helfer ein Leben zurück (0 = nie)
 // Was die Helfer sagen ({name}, {wert} und {monster} werden ersetzt)
@@ -1163,7 +1164,7 @@ let level = 1, konto = 0, ld = levelDaten(1);
 let rekord = 0;
 try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /* egal */ }
 let haus = null;            // Das aktuelle Haus
-let lobby = false, introZeit = -1, einblenden = 0;   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
+let lobby = false, introZeit = -1, einblenden = 0, schrottZeit = -1;   // schrottZeit >= 0: Alle sind Schrott!   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
 let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
 let schatzNummer = 0;       // Jeder Schatz bekommt eine Nummer (für den Multiplayer)
@@ -5124,6 +5125,7 @@ function update(dt) {
     if (s.drinZeit > ABGABE_ZEIT) abgeben(s);
   }
   gewinnPruefen();
+  schrottPruefen(dt);
   // Ab und zu taucht ein neuer Schatz im Haus auf
   neuerSchatzZeit -= dt;
   if (neuerSchatzZeit <= 0) { neuerSchatzZeit = NEUER_SCHATZ_ALLE; if (schaetze.filter(x => x.typ.id !== 'kopf').length < schatzStartAnzahl) neuerSchatzIrgendwo(); }
@@ -5413,6 +5415,37 @@ function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby t
   text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Alle bereit? Einer drückt den roten Knopf 🔴` : 'Bereit? Lauf zum roten Knopf 🔴 an der Tür!', W / 2, 62, 13, '#c9c3ff', 'center', false);
   if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
 }
+// ===== 💀 Alle Roboter Schrott = Spiel aus → zurück in den Bus (Lobby) =====
+function alleSchrott() {
+  if (!tot) return false;                                          // Du lebst noch
+  for (const g of mp.andere.values()) if (g.y > -10) return false;  // Ein Mitspieler lebt noch
+  return helfer.every(h => h.kaputt > 0);                          // ... und kein Helfer-Bot hat mehr einen Kopf
+}
+function schrottPruefen(dt) {   // (Beim Gastgeber, oder wenn du allein spielst)
+  if (schrottZeit >= 0) {
+    schrottZeit += dt;
+    if (schrottZeit > SCHROTT_ZEIT) { schrottZeit = -1; neuesSpiel(); }   // Zurück in den Bus – alles von vorn!
+    return;
+  }
+  if (!alleSchrott()) return;
+  schrottZeit = 0;
+  schrottSound();
+  if (mp.rolle === 'host') mpAnAlle({ t: 'schrott' });
+}
+function schrottSound() {   // Trauriges Tröten: wah – wah – wah – waaaah
+  [392, 370, 349, 330].forEach((f, i) => ton(f, i * 0.45, i === 3 ? 1.2 : 0.4, 'sawtooth', 0.07, i === 3 ? f * 0.85 : null));
+}
+function zeichneSchrott() {
+  const t = schrottZeit, a = Math.min(1, t / 1.2);
+  ctx.fillStyle = `rgba(30,0,0,${0.82 * a})`; ctx.fillRect(0, 0, W, H);
+  if (t < 0.5) return;
+  ctx.globalAlpha = Math.min(1, (t - 0.5) / 0.8);
+  text('💀 ALLE ROBOTER SIND SCHROTT! 💀', W / 2, H / 2 - 70, 40, '#ff6b6b');
+  text('Keiner mehr da, der die Köpfe zur Abgabe bringen kann ...', W / 2, H / 2 - 25, 18, '#fff', 'center', false);
+  text(`🏆 ${verkauft} Schätze verkauft · 💰 ${euro(konto)}`, W / 2, H / 2 + 15, 18, '#ffd166', 'center', false);
+  text(`🚌 Der ARAG-Bus holt euch ab ... zurück in die Lobby in ${Math.max(0, Math.ceil(SCHROTT_ZEIT - t))}`, W / 2, H / 2 + 60, 17, '#7cf5c6', 'center', false);
+  ctx.globalAlpha = 1;
+}
 function neuesSpiel() {
   level = 1; konto = 0;
   starteLevel();
@@ -5425,7 +5458,7 @@ function starteLevel(startzahl = KARTE.startzahl) {
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
-  lobby = LOBBY_AN; introZeit = -1; einblenden = 1;
+  lobby = LOBBY_AN; introZeit = -1; einblenden = 1; schrottZeit = -1;
   if (lobby) lobbyWillkommen();          // Erst fährt der Bus (Lobby) ...
   else if (INTRO_AN) introStarten();     // ... ohne Lobby gleich das Intro
   else ausTuer();
@@ -5740,6 +5773,7 @@ function zeichne() {
   if (einblenden > 0) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, einblenden)})`; ctx.fillRect(0, 0, W, H); }
   if (tot && zustand === 'spiel') zeichneSignal();
   if (zustand === 'geschafft') zeichneGeschafft();
+  if (schrottZeit >= 0 && zustand === 'spiel') zeichneSchrott();
   if (zustand === 'kaputt') zeichneKaputt();
 }
 
@@ -6197,6 +6231,7 @@ function mpVomHost(d) {
   }
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
   else if (d.t === 'los') losGehts();   // 🔴 Einer hat den Knopf gedrückt!
+  else if (d.t === 'schrott') { if (schrottZeit < 0) { schrottZeit = 0; schrottSound(); } }   // 💀 Alle sind Schrott! (Der Gastgeber startet gleich neu)
   else if (d.t === 'trank') trankStart(d.id, d.art, d.p, d.v);                  // 🧪 Der Chemiker wirft
   else if (d.t === 'platsch') trankPlatsch(d.id, d.art, d.p[0], d.p[1], d.p[2]);   // ... und der Trank zerplatzt
   else if (d.t === 'au') {
@@ -6258,6 +6293,7 @@ const winkelHin = (von, nach, f) => {   // Einen Winkel weich zu einem anderen d
 const mpQuat = new CANNON.Quaternion();
 function updateAlsGast(dt) {
   spielZeit += dt;
+  if (schrottZeit >= 0) schrottZeit = Math.min(SCHROTT_ZEIT, schrottZeit + dt);   // (Nur fürs Anzeigen – neu starten tut der Gastgeber)
   busUpdate(dt);
   if (introZeit >= 0) introUpdate(dt);
   if (!pause && introZeit < 0) updateSpieler(dt);
