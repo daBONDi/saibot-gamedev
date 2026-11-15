@@ -89,6 +89,11 @@ const LABYRINTH_ABKUERZUNGEN = 0.1;   // So oft gibt es extra Durchgänge (0 = n
 const INTRO_AN = true;           // false = kein Intro
 const INTRO_DAUER = 14;          // So lange dauert das Intro (Sekunden) – Klick oder Leertaste überspringt es
 const LOBBY_AN = true;           // false = keine Lobby (du stehst gleich draußen vor dem Bus)
+// ===== 🎙️ Voice-Chat (nur im Mehrspieler) – von Papa erlaubt =====
+const VOICE_AN = true;           // false = gar kein Voice-Chat
+const VOICE_TASTE = 'v';         // Diese Taste GEDRÜCKT HALTEN = sprechen (sonst ist dein Mikro aus)
+const VOICE_WEITE = 20;          // So weit hört man die anderen (Meter) – je näher, desto lauter
+const VOICE_WAND_DUMPF = true;   // true = Durch Wände klingt die Stimme dumpf
 const BUS_TEMPO = 14;            // So schnell fährt der Bus in der Lobby (Meter pro Sekunde – 14 sind etwa 50 km/h)
 const LOBBY_ORT = { x: -400, z: 0 };   // Hier fährt der Lobby-Bus (weit weg vom Haus, damit man es nicht sieht)
 const TRANK_RADIUS = 1.8;        // So weit spritzt ein Trank, wenn er zerplatzt (Meter)
@@ -5061,6 +5066,7 @@ function update(dt) {
   funk = funk.filter(f => f.t > 0);
   musikUpdate(zustand === 'spiel' && !pause ? jaeger()?.art ?? null : null);
   mpUpdate(dt);
+  try { voiceUpdate(); } catch (e) { /* Voice-Chat darf nie das Spiel kaputt machen */ }
   if (mp.rolle === 'gast') { if (zustand === 'spiel') updateAlsGast(dt); return; }
   if (zustand !== 'spiel' || (pause && !mp.aktiv)) return;   // Im Multiplayer läuft das Spiel auch in der Pause weiter
   spielZeit += dt;
@@ -5864,11 +5870,13 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (k === 'm') tonAn = !tonAn;
   if (k === 'f') blitzen();
+  if (k === 'n' && mp.aktiv && VOICE_AN) { voice.aus = !voice.aus; zeigeNachricht(voice.aus ? '🔇 Voice-Chat AUS (du hörst niemanden, und keiner hört dich)' : '🎙️ Voice-Chat AN – halte V gedrückt zum Sprechen', 3); }
   if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
   if (k === 'e' && zustand === 'spiel' && lobby && amKnopf()) { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); return; }   // 🔴 LOS!
   if (k === 'e' && zustand === 'spiel' && !tot && !pause) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
+addEventListener('keydown', e => { if (e.key.toLowerCase() === VOICE_TASTE && !e.repeat) voiceMikroHolen(); });   // (Beim ersten Mal fragt der Browser nach dem Mikro)
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
 canvas.addEventListener('pointerdown', e => {
   tonStart();
@@ -5973,6 +5981,8 @@ function mpMeshWeg(o) {
   o.teile = null; o.strahl = null;
 }
 function mpBeenden() {
+  for (const id of [...voice.anrufe.keys()]) voiceAuflegen(id);   // 🎙️ Alle Anrufe beenden
+  voice.spricht = false;
   for (const o of mp.andere.values()) mpMeshWeg(o);
   mp.andere.clear();
   try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ }
@@ -5995,7 +6005,7 @@ async function mpRaumErstellen(versuch = 0) {
   try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
   const code = mpNeuerCode();
   const peer = new window.Peer(MP_VORSILBE + code);
-  mp.peer = peer;
+  mp.peer = peer; voicePeer(peer);
   peer.on('open', () => {
     Object.assign(mp, { aktiv: true, rolle: 'host', code, nr: 0 });
     mpStatus(`✅ Raum ${code} ist offen!`);
@@ -6035,7 +6045,7 @@ function mpGastWeg(id) {
 }
 function mpVomGast(g, d) {
   if (!d || !d.t) return;
-  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
+  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, vo: d.vo || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
   else if (d.t === 'tuerE') tuerSetzen(tuerListe[d.id], !!d.auf, 'spieler');   // Ein Gast hat E gedrückt
@@ -6081,9 +6091,9 @@ function mpHostSendet() {
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const hz = gepackt ? halteZiel() : null;
-  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
-  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
+  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
     r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null]);
   const he = helfer.map(h => {
@@ -6111,7 +6121,7 @@ async function mpBeitreten() {
   mpStatus('⏳ Verbinde ...');
   try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Multiplayer konnte nicht geladen werden (Internet?)'); return; }
   const peer = new window.Peer();
-  mp.peer = peer;
+  mp.peer = peer; voicePeer(peer);
   peer.on('open', () => {
     const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true });
     mp.conn = conn;
@@ -6191,7 +6201,7 @@ function mpSchnappschuss(d) {
     da.add(a.id);
     let o = mp.andere.get(a.id);
     if (!o) { o = { id: a.id, nr: a.nr, ...MP_ROBOTER[a.nr] }; mp.andere.set(a.id, o); }
-    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, n: a.n || 0, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
+    Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, n: a.n || 0, vo: a.vo || 0, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
   }
   for (const [id, o] of mp.andere) if (!da.has(id)) { mpMeshWeg(o); mp.andere.delete(id); }
   // Monster
@@ -6277,7 +6287,7 @@ function mpGastSendet() {
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const r = new THREE.Vector3(); kamera.getWorldDirection(r);
   const k = kamera.position, hz = gegriffen || gepackt ? halteZiel() : null;
-  mpSende({ t: 'p', x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
+  mpSende({ t: 'p', x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
     hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)] });
 }
 
@@ -6312,6 +6322,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     T.arme.forEach((a, k) => { a.rotation.x = haelt || packtPos ? -0.5 : 0.9 + T.armSchwung * (k ? -1 : 1); });
     T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
     T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
+    o.redet = o.vo ? 1 : 0;   // 🎙️ Spricht er gerade? Dann bewegt sich sein Bildschirm-Mund!
     malGesicht(o);
     o.ahoch = (o.ahoch || 0) + ((o.n || 0) - (o.ahoch || 0)) * f;   // Wohin schaut er hoch/runter? (weich)
     o.blitzHell = Math.max(0, (o.blitzHell || 0) - 3 / 60);
@@ -6393,12 +6404,123 @@ function gehaltenWerden(dt) {   // Hält mich gerade jemand mit seinem Strahl ho
   if (l > 9) { vx *= 9 / l; vy *= 9 / l; vz *= 9 / l; }
   spielerKoerper.velocity.set(vx, vy, vz);
 }
+// =====================================================================
+// ===== 🎙️ Voice-Chat: Sprechen mit V (gedrückt halten), je näher, desto lauter =====
+// =====================================================================
+// So geht's: Jeder ruft jeden an (über PeerJS, wie der Mehrspieler). Was du schickst, ist erst mal STILLE.
+// Nur solange du V gedrückt hältst, kommt dein Mikrofon dazu. Die Stimmen der anderen kommen "aus ihren Robotern".
+const voice = { aus: false, spricht: false, mikro: null, mikroFehler: false, raus: null, mikroLaut: null, anrufe: new Map() };
+function voiceRaus() {   // Das, was wir schicken: ein Strom aus dem Web-Audio (am Anfang still)
+  if (voice.raus || !audio || !audio.createMediaStreamDestination) return voice.raus;
+  voice.raus = audio.createMediaStreamDestination();
+  voice.mikroLaut = audio.createGain(); voice.mikroLaut.gain.value = 0;
+  voice.mikroLaut.connect(voice.raus);
+  return voice.raus;
+}
+async function voiceMikroHolen() {   // Erst wenn du zum ersten Mal V drückst, fragt der Browser nach dem Mikrofon
+  if (!VOICE_AN || !mp.aktiv || voice.aus || voice.mikro || voice.mikroFehler || voice.holt) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { voice.mikroFehler = true; return; }
+  tonStart(); voiceRaus();
+  voice.holt = true;
+  try {
+    const strom = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    voice.mikro = audio.createMediaStreamSource(strom);
+    voice.mikro.connect(voice.mikroLaut);
+    zeigeNachricht('🎙️ Mikro bereit! Halte V gedrückt, um zu sprechen.', 3);
+  } catch (e) {
+    voice.mikroFehler = true;
+    zeigeNachricht('🎙️ Kein Mikrofon erlaubt – du kannst die anderen trotzdem hören.', 4, '#ffd166');
+  }
+  voice.holt = false;
+}
+function voicePeer(peer) {   // Wenn jemand anruft: annehmen (wir schicken erst mal Stille)
+  peer.on('call', call => {
+    if (!VOICE_AN) { try { call.close(); } catch (e) { /* egal */ } return; }
+    const raus = voiceRaus();
+    if (!raus) { try { call.close(); } catch (e) { /* egal */ } return; }
+    call.answer(raus.stream);
+    voiceAnrufMerken(call.peer, call);
+  });
+}
+function voiceAnrufMerken(id, call) {
+  const alt = voice.anrufe.get(id);
+  if (alt && alt.call !== call) voiceAuflegen(id);
+  const A = { call, seit: zeit, verbunden: false };
+  voice.anrufe.set(id, A);
+  call.on('stream', strom => voiceAbspielen(A, strom));
+  call.on('close', () => { if (voice.anrufe.get(id) === A) voiceAuflegen(id); });
+  call.on('error', () => { if (voice.anrufe.get(id) === A) voiceAuflegen(id); });
+}
+function voiceAbspielen(A, strom) {   // Die Stimme kommt "aus dem Roboter": Lautstärke nach Abstand, Richtung (links/rechts) und dumpf durch Wände
+  if (A.verbunden || !audio) return;
+  A.verbunden = true;
+  A.el = new Audio(); A.el.srcObject = strom; A.el.muted = true; A.el.play().catch(() => {});   // (Chrome braucht das, sonst bleibt es stumm)
+  A.quelle = audio.createMediaStreamSource(strom);
+  A.dumpf = audio.createBiquadFilter(); A.dumpf.type = 'lowpass'; A.dumpf.frequency.value = 18000;
+  A.raum = audio.createPanner(); Object.assign(A.raum, { panningModel: 'HRTF', distanceModel: 'linear', refDistance: 2, maxDistance: VOICE_WEITE, rolloffFactor: 1 });
+  A.laut = audio.createGain(); A.laut.gain.value = 1;
+  A.quelle.connect(A.dumpf).connect(A.raum).connect(A.laut).connect(audio.destination);
+}
+function voiceAuflegen(id) {
+  const A = voice.anrufe.get(id);
+  if (!A) return;
+  voice.anrufe.delete(id);
+  try { A.call.close(); } catch (e) { /* egal */ }
+  try { if (A.laut) A.laut.disconnect(); if (A.quelle) A.quelle.disconnect(); } catch (e) { /* egal */ }
+  if (A.el) { A.el.srcObject = null; }
+}
+function setzePos(p, x, y, z) { if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; } else p.setPosition(x, y, z); }
+function voiceUpdate() {   // Jedes Bild: anrufen, wen wir noch nicht hören · Lautstärke und Richtung anpassen
+  if (!VOICE_AN || !mp.aktiv || !mp.peer || !audio) { voice.spricht = false; return; }
+  // Sprechen nur, solange V gedrückt ist (und nicht im Menü/Pause, und nicht als Kaputter – die Toten schweigen 👻)
+  voice.spricht = !!(voice.mikro && !voice.aus && tasten[VOICE_TASTE] && zustand === 'spiel' && !tot);
+  if (voice.mikroLaut) voice.mikroLaut.gain.setTargetAtTime(voice.spricht ? 1 : 0, audio.currentTime, 0.03);
+  // Wen müssen wir anrufen? (Damit nicht beide gleichzeitig anrufen: Wer die "kleinere" ID hat, ruft an)
+  const raus = voiceRaus(), ich = mp.peer.id;
+  for (const o of mp.andere.values()) {
+    const A = voice.anrufe.get(o.id);
+    if (A && !A.verbunden && zeit - A.seit > 10) voiceAuflegen(o.id);   // Hat nicht geklappt – nochmal versuchen
+    if (!voice.anrufe.has(o.id) && raus && ich && ich < o.id && zeit - (o.voiceVersuch || -99) > 5) {
+      o.voiceVersuch = zeit;
+      try { voiceAnrufMerken(o.id, mp.peer.call(o.id, raus.stream)); } catch (e) { /* später nochmal */ }
+    }
+  }
+  for (const id of [...voice.anrufe.keys()]) if (!mp.andere.has(id)) voiceAuflegen(id);   // Wer weg ist, wird aufgelegt
+  // Du hörst mit den Ohren der Kamera
+  const L = audio.listener, v = new THREE.Vector3(); kamera.getWorldDirection(v);
+  setzePos(L, kamera.position.x, kamera.position.y, kamera.position.z);
+  if (L.forwardX) { L.forwardX.value = v.x; L.forwardY.value = v.y; L.forwardZ.value = v.z; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+  else L.setOrientation(v.x, v.y, v.z, 0, 1, 0);
+  for (const [id, A] of voice.anrufe) {
+    if (!A.raum) continue;
+    const o = mp.andere.get(id);
+    if (!o || o.ax === undefined) continue;
+    const mund = { x: o.ax, y: o.ay + 1.0, z: o.az };
+    setzePos(A.raum, mund.x, mund.y, mund.z);
+    A.laut.gain.setTargetAtTime(voice.aus || !tonAn ? 0 : 1, audio.currentTime, 0.05);
+    if (VOICE_WAND_DUMPF && zeit - (A.wandZeit || 0) > 0.3) {   // Ist eine Wand dazwischen? Dann klingt es dumpf
+      A.wandZeit = zeit;
+      const frei = abstand3D(mund, kamera.position) > VOICE_WEITE || freieSicht(kamera.position.clone(), new THREE.Vector3(mund.x, mund.y, mund.z));
+      A.dumpf.frequency.setTargetAtTime(frei ? 18000 : 700, audio.currentTime, 0.1);
+    }
+  }
+}
+function voiceHUD(zeilen) {   // Unter der Spielerliste: Wie funktioniert's? Wer spricht?
+  if (!VOICE_AN) return;
+  const y = 148 + zeilen * 18 + 6;
+  if (voice.aus) { text('🔇 Voice-Chat aus (N = an)', 24, y, 12, '#8a8f9e', 'left', false); return; }
+  if (voice.spricht) text('🔴 🎙️ Du sprichst ...', 24, y, 13, '#ff6b6b', 'left', false);
+  else text(voice.mikroFehler ? '🎙️ Kein Mikro · N = Voice aus' : '🎙️ V halten = sprechen · N = aus', 24, y, 12, '#c9c3ff', 'left', false);
+  const sprecher = [...mp.andere.values()].filter(o => o.vo).map(o => o.name);
+  if (sprecher.length) text(`🔊 ${sprecher.join(', ')} spricht`, 24, y + 18, 12, '#7cf5c6', 'left', false);
+}
 function mpHUD() {
   if (!mp.aktiv) return;
   const namen = [mp.rolle === 'host' ? MP_ROBOTER[0] : MP_ROBOTER[mp.nr], ...[...mp.andere.values()].map(o => MP_ROBOTER[o.nr])];
-  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 112, 280, 30 + namen.length * 18, 12); ctx.fill();
+  ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 112, 280, 30 + namen.length * 18 + (VOICE_AN ? 40 : 0), 12); ctx.fill();
   text(`🌐 Raum ${mp.code} · ${namen.length} Spieler${mp.rolle === 'host' ? ' · du bist Gastgeber' : ''}`, 24, 128, 13, '#7cf5c6', 'left', false);
   namen.forEach((n, k) => text(`🤖 ${n.name}${k === 0 ? ' (du)' : ''}`, 24, 148 + k * 18, 12, n.farbe, 'left', false));
+  voiceHUD(namen.length);
 }
 if (mpEl.erstellen) mpEl.erstellen.addEventListener('click', () => { tonStart(); mpRaumErstellen(); });
 if (mpEl.beitreten) mpEl.beitreten.addEventListener('click', () => { tonStart(); mpBeitreten(); });
