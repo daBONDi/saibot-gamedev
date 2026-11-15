@@ -122,6 +122,7 @@ const HELFER_SOFORT_ZURUECK = true;   // true = Ein kaputter Helfer taucht SOFOR
 const BOT_BAUCH = 0.5;          // 🤖 So dick ist der Bauch der Roboter (1 = so dick wie früher, 0.5 = ganz schlank)
 const HELFER_KOPF = true;        // 💀 true = Ein kaputter Helfer verliert seinen KOPF – bringt ihn zur Abgabe, dann ist er wieder da!
 const HELFER_WIEDERBELEBEN_PREIS = 500;   // So viel kostet es, einen Helfer-Bot wiederzubeleben
+const HEIL_PRO_SEKUNDE = 15;     // 🔧 So viel Energie bekommst du pro Sekunde an der Reparatur-Station im Bus zurück
 const SCHROTT_ZEIT = 6;          // 💀 Sind ALLE Roboter Schrott (Spieler und Helfer), ist das Spiel aus – nach so vielen Sekunden geht's zurück in die Lobby
 const HELFER_LEBEN = 3;          // So viele Treffer hält ein Helfer aus, bevor er kaputt geht ❤️
 const HELFER_HEILEN = 20;        // Alle 20 Sekunden bekommt ein Helfer ein Leben zurück (0 = nie)
@@ -1948,8 +1949,25 @@ function baueBus(mz) {
   const bankMat = new THREE.MeshStandardMaterial({ color: '#2f6b5a', roughness: 0.8 });
   teil(X1 + 0.45, 0.22, (TZ2 + Z2) / 2 + 0.4, 0.6, 0.44, Z2 - TZ2 - 1.4, bankMat);
   teil(X1 + 0.2, 0.75, (TZ2 + Z2) / 2 + 0.4, 0.12, 0.65, Z2 - TZ2 - 1.4, bankMat, false);
+  // 🔧💚 Die Reparatur-Station (hinten rechts): eine leuchtende Plattform + ein Gerät an der Wand
+  const heil = { x: X2 - 0.95, z: Z2 - 1.05, r: 0.75 };
+  const heilGruen = new THREE.MeshBasicMaterial({ color: '#4ade80', transparent: true, opacity: 0.5, depthWrite: false });
+  const platte = new THREE.Mesh(new THREE.CircleGeometry(heil.r, 28), heilGruen); platte.rotation.x = -Math.PI / 2; platte.position.set(heil.x, 0.035, heil.z); gruppe.add(platte);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(heil.r - 0.06, heil.r, 32), new THREE.MeshBasicMaterial({ color: '#b6ffcf' })); ring.rotation.x = -Math.PI / 2; ring.position.set(heil.x, 0.04, heil.z); gruppe.add(ring);
+  const geraet = canvasTextur(128, 160, (g) => {   // Das Gerät: weißer Kasten, grünes Kreuz, Blitz
+    g.fillStyle = '#eef3f1'; g.fillRect(0, 0, 128, 160); g.fillStyle = '#10202a'; g.fillRect(10, 10, 108, 70);
+    g.fillStyle = '#4ade80'; g.fillRect(52, 18, 24, 54); g.fillRect(37, 33, 54, 24);
+    g.fillStyle = '#10202a'; g.font = 'bold 22px Arial, sans-serif'; g.textAlign = 'center'; g.fillText('REPARATUR', 64, 108);
+    g.fillStyle = '#ffd166'; g.font = 'bold 30px Arial, sans-serif'; g.fillText('⚡', 64, 145);
+  }).tex;
+  teil(heil.x, 1.3, Z2 - D - 0.12, 0.6, 0.75, 0.22, [lack, lack, lack, lack, lack, new THREE.MeshBasicMaterial({ map: geraet })]);   // (Vorderseite = Richtung -z, zum Businneren)
+  const heilStrahl = new THREE.Mesh(new THREE.CylinderGeometry(heil.r * 0.8, heil.r * 0.9, 2.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: '#4ade80', transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  heilStrahl.position.set(heil.x, 1.3, heil.z); heilStrahl.visible = false; heilStrahl.raycast = () => {}; gruppe.add(heilStrahl);
+  const plusTex = canvasTextur(64, 64, (g) => { g.fillStyle = '#7dffb0'; g.fillRect(24, 8, 16, 48); g.fillRect(8, 24, 48, 16); }).tex;
+  const plusse = [0, 1, 2, 3, 4, 5].map(k => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: plusTex, transparent: true, depthWrite: false })); sp.scale.setScalar(0.18); sp.visible = false; gruppe.add(sp); return sp; });
+  Object.assign(heil, { platte, heilGruen, heilStrahl, plusse });
   const licht = lampeHinzu(cx, H - 0.35, (Z1 + Z2) / 2 + 1, '#eaffff', 1.5, 10, false);
-  haus.bus = { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, tuer, tuerKoerper, tuerX: X2 - D / 2, tuerZ: TZ, tuerAuf: false, tuerWeg: 0, dachLichter,
+  haus.bus = { gruppe, heil, x1: X1, x2: X2, z1: Z1, z2: Z2, tuer, tuerKoerper, tuerX: X2 - D / 2, tuerZ: TZ, tuerAuf: false, tuerWeg: 0, dachLichter,
     licht, lichtPos: licht ? licht.position.clone() : null,
     schuppen: { bus: true, x1: X1, z1: Z1, x2: X2, z2: Z2, seite: 'o', tx: X2, tz: TZ, nx: 1, nz: 0, innen: { x: X2 - 1.2, y: 0, z: TZ }, aussen: { x: X2 + 1.3, y: 0, z: TZ } } };
   haus.spawn = { x: X2 + 1.6, z: TZ };   // Hier tauchst du wieder auf (vor der Bustür)
@@ -5444,9 +5462,35 @@ function busTuerAuf() {
   const i = sichtBlocker.indexOf(B.tuer); if (i >= 0) sichtBlocker.splice(i, 1);
   rauschen(0, 0.7, 0.2, 'highpass', 2000, null, 500);   // Pschhh – die Tür geht auf
 }
+// 🔧💚 Reparieren: Wer auf der grünen Plattform im Bus steht, bekommt Energie zurück
+const aufHeilplatte = (x, z, y) => { const H = haus.bus.heil; return abstand2D(x, z, H.x, H.z) < H.r && y < 1.5; };
+function heilUpdate(B, dt) {
+  const H = B.heil, p = spielerKoerper.position;
+  const ichHeile = !lobby && introZeit < 0 && zustand === 'spiel' && !tot && !pause && aufHeilplatte(p.x, p.z, p.y) && energie < 100;
+  if (ichHeile) {
+    const vorher = energie;
+    energie = Math.min(100, energie + HEIL_PRO_SEKUNDE * dt);
+    if (zeit - (H.piepZeit || -9) > 0.45) { H.piepZeit = zeit; ton(500 + energie * 6, 0, 0.08, 'sine', 0.05, 700 + energie * 6); }   // Piep ... piep ... (immer höher)
+    if (energie >= 100 && vorher < 100) { zeigeNachricht('✅ Voll repariert! 🔧💚', 2); ton(784, 0, 0.12, 'sine', 0.08); ton(1047, 0.12, 0.2, 'sine', 0.08); }
+  }
+  // Leuchtet, wenn irgendwer (du oder ein Mitspieler) gerade drauf steht
+  let jemand = ichHeile;
+  for (const o of mp.andere.values()) if (o.ax !== undefined && o.y > -10 && aufHeilplatte(o.ax, o.az, o.ay)) jemand = true;
+  H.heilGruen.opacity = (jemand ? 0.7 : 0.35) + Math.sin(zeit * (jemand ? 8 : 2.5)) * 0.15;
+  H.heilStrahl.visible = jemand;
+  H.heilStrahl.rotation.y += dt * 2;
+  H.plusse.forEach((sp, k) => {
+    sp.visible = jemand;
+    if (!jemand) return;
+    const u = (zeit * 0.6 + k / H.plusse.length) % 1, w = k * 2.1 + zeit;
+    sp.position.set(H.x + Math.cos(w) * 0.45, 0.2 + u * 2.2, H.z + Math.sin(w) * 0.45);
+    sp.material.opacity = Math.sin(u * Math.PI);
+  });
+}
 function busUpdate(dt) {
   const B = haus && haus.bus;
   if (!B) return;
+  heilUpdate(B, dt);
   B.gruppe.position.z = introZeit >= 0 ? busVersatz(introZeit) : 0;   // Im Intro kommt der Bus angefahren
   const F = haus.fahrBus;
   if (B.licht) {   // Das Licht: in der Lobby im fahrenden Bus, danach im echten Bus (im Intro erst, wenn er angekommen ist)
@@ -5666,6 +5710,7 @@ function zeichneHUD() {
   text(lobby ? '📍 🚌💨 Im ARAG-Bus – unterwegs' : imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
   if (lobby) zeichneLobbyHUD();
+  else if (haus.bus && !tot && aufHeilplatte(p.x, p.z, p.y)) text(energie < 100 ? `🔧 Reparatur ... ${Math.floor(energie)} %` : '✅ Voll repariert!', W / 2, H / 2 + 150, 18, '#4ade80');
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
   text(`🏆 Ziel: ${Math.min(verkauft, zielN)} / ${zielN} Schätze verkauft`, 24, 108, 13, fertig ? '#4ade80' : '#ffd166', 'left', false);
   balken(24, 120, 256, 10, verkauft / zielN, fertig ? '#4ade80' : '#ffd166');
