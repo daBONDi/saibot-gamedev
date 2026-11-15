@@ -560,11 +560,15 @@ const MUSIK_LIEDER = {
   chemiker: {
     tempo: 150, grund: 65.4, verzerrung: 85, gitarre: 0.35, becken: 'achtel', stimmeKlang: 'verzerrt',
     // Begleitung: hüpfender Bass (Hopsa-hopsa)
-    riff: riffNoten(`
-      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  5 . 17 .  12 . 17 .  7 . 19 .  14 . 19 .  |
-      0 . 12 .  7 . 12 .  9 . 21 .  4 . 16 .  |  5 . 17 .  7 . 19 .  0 . 12 .  0 . . .  |
-      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  5 . 17 .  12 . 17 .  7 . 19 .  14 . 19 .  |
-      0 . 12 .  6 . 12 .  8 . 20 .  3 . 15 .  |  5 . 17 .  6 . 18 .  0 . 12 .  0 . . .  |`),
+    riff: riffNoten(`   // Ein Takt pro Melodie-Takt: C F C C | F F G C – und in der gruseligen Hälfte schiefe Töne (Ab, Gb)
+      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  5 . 17 .  12 . 17 .  5 . 17 .  12 . 17 .  |
+      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |
+      5 . 17 .  12 . 17 .  5 . 17 .  12 . 17 .  |  5 . 17 .  12 . 17 .  5 . 17 .  12 . 17 .  |
+      7 . 19 .  14 . 19 .  7 . 19 .  14 . 19 .  |  0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |
+      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  5 . 17 .  12 . 17 .  5 . 17 .  12 . 17 .  |
+      0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |  8 . 20 .  15 . 20 .  8 . 20 .  15 . 20 .  |
+      5 . 17 .  12 . 17 .  5 . 17 .  12 . 17 .  |  6 . 18 .  13 . 18 .  6 . 18 .  13 . 18 .  |
+      7 . 19 .  14 . 19 .  7 . 19 .  14 . 19 .  |  0 . 12 .  7 . 12 .  0 . 12 .  7 . 12 .  |`),
     kick: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
     snare: [4, 12],
     // Die Melodie: eine Note pro Viertel. - = weiterklingen · . = Pause
@@ -1660,7 +1664,7 @@ function kellerZellMitte(c) {
 }
 function kellerNachbarn(c) {   // Zellen daneben, zu denen ein Durchgang führt
   const K = haus.keller, x = c % K.nx, z = Math.floor(c / K.nx), liste = [];
-  for (const [n, ok] of [[c - 1, x > 0], [c + 1, x < K.nx - 1], [c - K.nx, z > 0], [c + K.nx, z < K.nz - 1]]) if (ok && K.offen.has(kellerKante(c, n))) liste.push(n);
+  for (const [n, ok] of [[c - 1, x > 0], [c + 1, x < K.nx - 1], [c - K.nx, z > 0], [c + K.nx, z < K.nz - 1]]) if (ok && K.offen.has(kellerKante(c, n)) && !K.gesperrt.has(n)) liste.push(n);   // (Durch die Treppe kann man nicht laufen)
   return liste;
 }
 // Wohin im Labyrinth als Nächstes? (Breitensuche: der kürzeste Weg durch die Gänge)
