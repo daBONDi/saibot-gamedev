@@ -85,6 +85,10 @@ const KELLER = { i: 1, j: 0, breit: 4, tief: 3 };   // Wo der Keller liegt: Spal
 const KELLER_SCHAETZE = 10;      // So viele Schätze liegen am Anfang im Keller (in den Sackgassen vom Labyrinth!)
 const LABYRINTH_ZELLE = 2.5;     // 🌀 So breit sind die Gänge im Labyrinth (Meter)
 const LABYRINTH_ABKUERZUNGEN = 0.1;   // So oft gibt es extra Durchgänge (0 = nur ein einziger Weg überall hin, 0.3 = sehr viele Wege)
+// ===== 🚌 Der ARAG-Einsatzbus: Intro, Lobby im Bus, und die Abgabe draußen auf dem Parkplatz =====
+const INTRO_AN = true;           // false = kein Intro
+const INTRO_DAUER = 14;          // So lange dauert das Intro (Sekunden) – Klick oder Leertaste überspringt es
+const LOBBY_AN = true;           // false = keine Lobby (die Bustür ist sofort offen)
 const TRANK_RADIUS = 1.8;        // So weit spritzt ein Trank, wenn er zerplatzt (Meter)
 // Die Tränke vom Chemiker: schaden = so viel Energie kostet ein Treffer · pfuetze = so viele Sekunden bleibt eine Pfütze liegen
 //   gift = so viel Energie pro Sekunde in der Giftwolke · langsam = so schnell bist du im Schleim noch (0.35 = ein Drittel)
@@ -1973,7 +1977,7 @@ function lampeHinzu(x, y, z, farbe, staerke, weite, flackern) {
   licht.userData.flackern = flackern;
   licht.userData.stark = staerke;
   hausGruppe.add(licht);
-  return true;
+  return licht;
 }
 
 // ----- Möbel bauen -----
@@ -2403,7 +2407,7 @@ function baueHaus() {
 
   // 2a. 🚪 Haustüren nach draußen: auf jeder Seite vom Haus eine (im Erdgeschoss)
   haus.aussenTueren = new Set(); haus.aussenTuerListe = [];
-  const kanten = { n: R => R.j === 0 && !R.treppeHoch && !R.treppeRunter, s: R => R.j === haus.tief - 1, w: R => R.i === 0 && R.nr !== haus.start, o: R => R.i === haus.breit - 1 };
+  const kanten = { n: R => R.j === 0 && !R.treppeHoch && !R.treppeRunter, s: R => R.j === haus.tief - 1, w: R => R.nr === haus.start,   // (Im Startraum: Da geht's raus zum Parkplatz mit dem Bus) o: R => R.i === haus.breit - 1 };
   for (const seite of ['n', 's', 'w', 'o']) {
     const liste = haus.raeume.filter(R => R.e === 0 && kanten[seite](R));
     if (!liste.length) continue;
@@ -2493,20 +2497,12 @@ function baueHaus() {
   }
   for (const t of haus.treppen) baueTreppe(t);
 
-  // 5. Der Transporter (Abgabe-Zone) im Startraum, an der linken Wand
-  const S = startR;
-  haus.laster = { x1: 0.15, x2: 3.5, z1: S.z0 + 3.0, z2: S.z0 + 7.0 };
-  const L = haus.laster;
-  const zone = new THREE.Mesh(new THREE.PlaneGeometry(L.x2 - L.x1, L.z2 - L.z1), new THREE.MeshBasicMaterial({ color: '#1f8a64', transparent: true, opacity: 0.35 }));
-  zone.rotation.x = -Math.PI / 2; zone.position.set((L.x1 + L.x2) / 2, 0.02, (L.z1 + L.z2) / 2);
-  hausGruppe.add(zone);
-  const randMat = new THREE.MeshStandardMaterial({ color: '#7cf5c6', emissive: '#2aa77a', emissiveIntensity: 0.8 });
-  festerKlotz((L.x1 + L.x2) / 2, 0.2, L.z1, L.x2 - L.x1, 0.4, 0.15, randMat, false);
-  festerKlotz((L.x1 + L.x2) / 2, 0.2, L.z2, L.x2 - L.x1, 0.4, 0.15, randMat, false);
-  const schild = schildMesh('🚚 ARAG-ABGABE', 2.6, 0.65);
-  schild.position.set(0.17, 2.4, (L.z1 + L.z2) / 2); schild.rotation.y = Math.PI / 2;
-  hausGruppe.add(schild);
-  lampeHinzu(S.x0 + RAUM / 2, WAND_HOEHE - 0.4, S.z0 + RAUM / 2, '#c8ffe8', 2.2, 11, false);
+  // 5. 🅿️ Draußen vor der Haustür vom Startraum: der Parkplatz mit dem ARAG-Bus und der Abgabe
+  const S = startR, mz = S.z0 + RAUM / 2;
+  haus.parkplatz = [{ x1: -21, x2: -0.6, z1: mz - 11, z2: mz + 10 }, { x1: -17.5, x2: -10, z1: mz + 9, z2: haus.tief * RAUM + WALD_RAND }];   // Parkplatz + Waldweg (da kommt der Bus her)
+  haus.laster = { x1: -8.5, x2: -4.0, z1: mz - 2.3, z2: mz + 2.2 };
+  baueAbgabe();
+  baueBus(mz);
   for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
 
   // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
@@ -2542,12 +2538,14 @@ function baueHaus() {
     Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
   }
 
-  // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
+  // 8. Du startest im ARAG-Bus (Lobby). Deine Helfer stehen neben dir.
   ducken(false);
-  spielerKoerper.position.set(RAUM / 2, KOERPER_RADIUS + 0.05, S.z0 + RAUM / 2);
+  const BUS = haus.bus;   // (Du startest im Bus – in der Lobby. Ohne Lobby: draußen vor der Bustür)
+  if (LOBBY_AN) { spielerKoerper.position.set(BUS.lobby.x, KOERPER_RADIUS + 0.05, BUS.lobby.z); blick.links = 0; }
+  else { spielerKoerper.position.set(haus.spawn.x, KOERPER_RADIUS + 0.05, haus.spawn.z); blick.links = -Math.PI / 2; }
   spielerKoerper.velocity.set(0, 0, 0);
-  blick.links = Math.PI / 2; blick.hoch = -0.1;
-  for (let k = 0; k < Math.min(HELFER_ANZAHL, HELFER.length); k++) neuerHelfer(HELFER[k], RAUM / 2 + 1.2, S.z0 + 3.5 + k * 3);
+  blick.hoch = -0.1;
+  for (let k = 0; k < Math.min(HELFER_ANZAHL, HELFER.length); k++) neuerHelfer(HELFER[k], LOBBY_AN ? BUS.x2 - 0.7 : haus.spawn.x + 1.5, LOBBY_AN ? BUS.z2 - 1.2 - k * 1.3 : haus.spawn.z + 1.5 + k * 1.5);
 }
 
 // Einen Raum einrichten: Lampe, Möbel in den Ecken, Teppich, Spinnweben, Schätze
