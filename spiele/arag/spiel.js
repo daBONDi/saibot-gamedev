@@ -3679,6 +3679,7 @@ function helferBlitzPruefen(h, dt) {
   let bestes = null, bestD = HELFER_BLITZ_WEITE;
   for (const m of monster) {
     if (m.betaeubt > 0 || !m.info.betaeubbar) continue;
+    if (m.art === 'maulwurf' && m.modus !== 'oben') continue;   // Unter der Erde sieht er den Blitz nicht
     const gefaehrlich = m.modus === 'jagen' || m.modus === 'oben' || m.modus === 'verwandeln' || m.zielen > 0;
     if (!gefaehrlich) continue;
     const d = abstand3D({ x: m.x, y: m.y + 1, z: m.z }, von);
