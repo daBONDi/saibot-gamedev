@@ -4781,7 +4781,8 @@ function zeigeHelfer(h) {
   if (h.kaputt > 0) T.g.position.y = p.y - 0.25;
   const faehrt = mp.rolle === 'gast' ? h.zx !== undefined && Math.hypot(h.zx - p.x, h.zz - p.z) > 0.05 : Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.3;
   beineAnimieren(T, h.kaputt > 0 ? 0 : BEIN_LAENGE, faehrt && h.kaputt <= 0, 1 / 60);   // Kaputt: Beine fahren ein
-  T.arme.forEach((a, k) => { a.rotation.x = h.modus === 'tragen' ? -0.5 : 0.9 + T.armSchwung * (k ? -1 : 1); });
+  T.arme.forEach((a, k) => { a.rotation.order = 'YXZ'; a.rotation.set(h.modus === 'tragen' && k === 1 ? -0.5 : 0.9 + T.armSchwung * (k ? -1 : 1), 0, 0); });
+  if (h.modus === 'tragen' && h.kaputt <= 0 && h.auftrag) armZielt(T, T.arme[0], h.auftrag.body.position);   // Der Greifarm zielt auf den Schatz
   // Beim Reden zu dir schauen, sonst nach vorne
   let kopfDreh = 0;
   if (h.redet > 0) {
@@ -4799,10 +4800,11 @@ function zeigeHelfer(h) {
   T.blase.visible = h.blasenZeit > 0;
   malGesicht(h);
   // Greifstrahl aus der Zange
-  if (h.modus === 'tragen' && h.kaputt <= 0) {
-    const von = new THREE.Vector3(p.x + Math.sin(h.winkel) * 0.45, p.y + 0.2 + T.ausgefahren, p.z + Math.cos(h.winkel) * 0.45);
+  if (h.modus === 'tragen' && h.kaputt <= 0 && h.auftrag) {   // ⚡ Der Strahl kommt aus der Zange vom Greifarm
+    const von = T.arme[0].localToWorld(new THREE.Vector3(0, -0.02, 0.42));
     const nach = new THREE.Vector3().copy(h.auftrag.body.position);
-    zeigeStrahl(h.strahl, von, nach, new THREE.Vector3(Math.sin(h.winkel), 0.3, Math.cos(h.winkel)).normalize(), Math.max(...h.auftrag.typ.groesse) * 0.6);
+    const richtung = new THREE.Vector3(0, 0, 1).transformDirection(T.arme[0].matrixWorld);
+    zeigeStrahl(h.strahl, von, nach, richtung, Math.max(...h.auftrag.typ.groesse) * 0.6);
   } else h.strahl.g.visible = false;
   // Kopflampe (Helfer schauen ein bisschen nach unten auf den Boden)
   h.blitzHell = Math.max(0, (h.blitzHell || 0) - 3 / 60);
@@ -4882,6 +4884,32 @@ greiferGlanz.position.set(0, 0, -0.22); greiferGlanz.scale.setScalar(0.12); grei
 greifer.traverse(o => { o.renderOrder = 10; });
 kamera.add(greifer);
 const spielerStrahl = neuerStrahl('#7cf5c6', 0.03);
+// 🔫 Der Greifer, den die ANDEREN Spieler in der Hand halten (wie deiner, nur klein – er zeigt nach vorne, +z)
+function baueGreifGeraet(farbe) {
+  const g = new THREE.Group(), leucht = new THREE.MeshBasicMaterial({ color: farbe });
+  const t = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+  t(new THREE.CylinderGeometry(0.035, 0.04, 0.22, 12), greiferMat, 0, 0, 0.03).rotation.x = Math.PI / 2;        // Lauf
+  for (const z of [-0.03, 0.03, 0.09]) t(new THREE.TorusGeometry(0.04, 0.007, 6, 14), leucht, 0, 0, z);           // Leuchtende Spulen
+  t(new THREE.CylinderGeometry(0.05, 0.04, 0.04, 12), greiferDunkel, 0, 0, 0.15).rotation.x = Math.PI / 2;       // Kopf
+  const zinken = new THREE.Group(); zinken.position.set(0, 0, 0.17); g.add(zinken);
+  for (let k = 0; k < 3; k++) {
+    const z = new THREE.Group(); z.rotation.z = k / 3 * Math.PI * 2;
+    const zahn = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.08), greiferMat); zahn.position.set(0, 0.045, 0.03);
+    z.add(zahn); zinken.add(z);
+  }
+  const ring = t(new THREE.TorusGeometry(0.06, 0.005, 6, 20), leucht, 0, 0, 0.17);
+  const spitze = t(new THREE.SphereGeometry(0.022, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }), 0, 0, 0.2);
+  g.userData = { zinken, ring, spitze, leucht };
+  return g;
+}
+const armZiel = new THREE.Vector3();
+function armZielt(T, arm, ziel) {   // Den Arm so drehen, dass er genau auf "ziel" (Weltposition) zeigt
+  arm.rotation.order = 'YXZ';
+  T.g.updateMatrixWorld(true);
+  armZiel.copy(ziel); arm.parent.worldToLocal(armZiel); armZiel.sub(arm.position);
+  arm.rotation.set(-Math.atan2(armZiel.y, Math.hypot(armZiel.x, armZiel.z)), Math.atan2(armZiel.x, armZiel.z), 0);
+  arm.updateMatrixWorld(true);
+}
 
 const greifStrahl = new THREE.Raycaster();
 const MITTE = new THREE.Vector2(0, 0);
@@ -6362,6 +6390,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     if (!o.teile) {
       o.teile = baueHelferMesh({ name: o.name, farbe: o.farbe });
       o.strahl = neuerStrahl(o.farbe, 0.025);
+      o.geraet = baueGreifGeraet(o.farbe); o.geraet.position.set(0, -0.02, 0.33); o.teile.arme[0].add(o.geraet);   // 🔫 Greifer in die rechte Hand
       o.teile.g.traverse(k => { k.userData.spielerId = o.id; });   // Damit der Greifstrahl weiß, wer das ist
       Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
     }
@@ -6376,7 +6405,15 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     const haelt = o.hg >= 0 ? schatzMitId(o.hg) : null;
     // Hält er einen Mitspieler hoch? (vielleicht sogar DICH!)
     const packtPos = !o.pg ? null : o.pg === mp.peer.id ? spielerKoerper.position : mp.andere.get(o.pg) ? (q => ({ x: q.ax, y: q.ay + 0.6, z: q.az }))(mp.andere.get(o.pg)) : null;
-    T.arme.forEach((a, k) => { a.rotation.x = haelt || packtPos ? -0.5 : 0.9 + T.armSchwung * (k ? -1 : 1); });
+    T.arme[1].rotation.x = 0.9 - T.armSchwung;   // Linker Arm schwingt beim Laufen
+    // Rechter Arm mit dem Greifer: zielt auf das, was er hält – sonst dahin, wohin der Spieler schaut
+    const zielPunkt = haelt ? haelt.body.position : packtPos ? new THREE.Vector3(packtPos.x, packtPos.y, packtPos.z) : null;
+    if (zielPunkt) armZielt(T, T.arme[0], zielPunkt);
+    else { T.arme[0].rotation.order = 'YXZ'; T.arme[0].rotation.set(-(o.ahoch || 0) + 0.15 + T.armSchwung * 0.2, 0, 0); }
+    const G = o.geraet.userData, haeltWas = !!zielPunkt;
+    G.ring.rotation.z += haeltWas ? 0.3 : 0.03;
+    G.zinken.children.forEach(z => { z.children[0].rotation.x = haeltWas ? -0.35 : 0; });   // Zinken zu beim Halten
+    G.spitze.scale.setScalar(haeltWas ? 1.6 + Math.sin(zeit * 20) * 0.3 : 1);
     T.antenne.visible = (zeit * 2 + o.blinzelVersatz) % 1.5 < 1.2;
     T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
     o.redet = o.vo ? 1 : 0;   // 🎙️ Spricht er gerade? Dann bewegt sich sein Bildschirm-Mund!
@@ -6384,13 +6421,11 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     o.ahoch = (o.ahoch || 0) + ((o.n || 0) - (o.ahoch || 0)) * f;   // Wohin schaut er hoch/runter? (weich)
     o.blitzHell = Math.max(0, (o.blitzHell || 0) - 3 / 60);
     kopflampeZeigen(T, true, o.ahoch, o.blitzHell);
-    if (haelt) {
-      const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55 + T.ausgefahren, o.az + Math.cos(wink) * 0.45);
-      const nach = new THREE.Vector3().copy(haelt.body.position);
-      zeigeStrahl(o.strahl, von, nach, new THREE.Vector3(Math.sin(wink), 0.3, Math.cos(wink)).normalize(), Math.max(...haelt.typ.groesse) * 0.6);
-    } else if (packtPos) {
-      const von = new THREE.Vector3(o.ax + Math.sin(wink) * 0.45, o.ay + 0.55 + T.ausgefahren, o.az + Math.cos(wink) * 0.45);
-      zeigeStrahl(o.strahl, von, new THREE.Vector3(packtPos.x, packtPos.y, packtPos.z), new THREE.Vector3(Math.sin(wink), 0.3, Math.cos(wink)).normalize(), 0.9);
+    if (zielPunkt) {   // ⚡ Der Strahl kommt aus der Spitze vom Greifer
+      o.geraet.updateMatrixWorld(true);
+      const von = G.spitze.getWorldPosition(new THREE.Vector3());
+      const richtung = new THREE.Vector3(0, 0, 1).transformDirection(o.geraet.matrixWorld);
+      zeigeStrahl(o.strahl, von, new THREE.Vector3().copy(zielPunkt), richtung, haelt ? Math.max(...haelt.typ.groesse) * 0.6 : 0.9);
     } else o.strahl.g.visible = false;
   }
 }
