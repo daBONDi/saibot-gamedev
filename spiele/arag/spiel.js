@@ -75,6 +75,20 @@ const GARTENHAUS_ANZAHL = 3;     // 🛖 So viele Gartenhäuschen stehen im Wald
 const GARTENHAUS_SCHAETZE = 2;   // So viele wertvolle Schätze liegen in jedem Gartenhäuschen
 const WALD_NEU_ANTEIL = 0.25;    // So oft taucht ein neuer Schatz draußen auf statt im Haus (0.25 = jeder vierte)
 const MONSTER_DRAUSSEN = true;   // true = Monster folgen dir nach draußen · false = sie bleiben im Haus und warten an der Tür
+// ===== 🧪 Der Keller (unter dem Haus) – da wohnt der verrückte Chemiker! =====
+const KELLER_AN = true;          // false = kein Keller (und kein Chemiker)
+const KELLER = { i: 2, j: 0, breit: 2, tief: 2 };   // Wo der Keller liegt: Spalte i, Reihe j (wie bei den Sälen) · 2 × 2 Räume = 20 × 20 Meter
+const KELLER_SCHAETZE = 6;       // So viele Schätze liegen am Anfang im Keller
+const TRANK_RADIUS = 1.8;        // So weit spritzt ein Trank, wenn er zerplatzt (Meter)
+// Die Tränke vom Chemiker: schaden = so viel Energie kostet ein Treffer · pfuetze = so viele Sekunden bleibt eine Pfütze liegen
+//   gift = so viel Energie pro Sekunde in der Giftwolke · langsam = so schnell bist du im Schleim noch (0.35 = ein Drittel)
+//   nebel = so viele Sekunden siehst du fast nichts · schubs = so weit fliegst du weg
+const TRAENKE = {
+  gift:    { name: 'Gifttrank',    emoji: '🟢', farbe: '#5dff4a', schaden: 10, pfuetze: 5, gift: 8 },
+  schleim: { name: 'Klebeschleim', emoji: '🟣', farbe: '#c04dff', schaden: 5,  pfuetze: 7, langsam: 0.35 },
+  nebel:   { name: 'Nebeltrank',   emoji: '🔵', farbe: '#4dc3ff', schaden: 5,  nebel: 5 },
+  knall:   { name: 'Knalltrank',   emoji: '🟠', farbe: '#ff8a3d', schaden: 18, schubs: 13 },
+};
 
 // ===== Die Helfer-Bots =====
 const HELFER_ANZAHL = 2;         // So viele Kollegen helfen dir (0 bis 3)
@@ -163,7 +177,7 @@ const SAELE = [
 const OFFEN = RAUM;   // "Tür" so breit wie die ganze Wand = keine Wand
 const saalVon = (i, j, e) => SAELE.find(S => S.etage === e && i >= S.i && i < S.i + S.breit && j >= S.j && j < S.j + S.tief) || null;
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1, maulwurf: 1 };   // Starrer: 0 = gibt es nicht mehr
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1, maulwurf: 1, chemiker: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const GEWINN_PROZENT = 62;           // 🏆 Gewonnen, wenn so viel Prozent aller Schätze im Haus verkauft sind – und ALLE Spieler leben!
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
@@ -1061,7 +1075,7 @@ const SCHATZ_MASKE = G_WAND | G_SPIELER | G_SCHATZ | G_HELFER;
 // Boden und Decke (unendlich große Flächen; die Decke wird je nach Stockwerken verschoben)
 const bodenKoerper = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: standardMat, collisionFilterGroup: G_WAND });
 bodenKoerper.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-bodenKoerper.position.y = -GRUBE_TIEFE;   // Ganz unten: der Grund der Gruben (der echte Boden sind dicke Platten, siehe baueHaus)
+bodenKoerper.position.y = -ETAGE_HOEHE;   // Ganz unten: der Kellerboden (der echte Boden oben sind dicke Platten, siehe baueHaus)
 const deckenKoerper = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: standardMat, collisionFilterGroup: G_WAND });
 deckenKoerper.quaternion.setFromEuler(Math.PI / 2, 0, 0);
 deckenKoerper.position.y = WAND_HOEHE;
@@ -1132,6 +1146,9 @@ function raumNrVon(x, y, z) {   // In welchem Raum ist dieser Punkt?
   return raumNr(begrenzt(Math.floor(x / RAUM), 0, haus.breit - 1), begrenzt(Math.floor(z / RAUM), 0, haus.tief - 1), etageVon(y));
 }
 const tuerSchluessel = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`;
+// 🧪 Ist dieser Punkt unten im Keller?
+const imKellerXZ = (x, z) => !!haus && !!haus.keller && x > haus.keller.x1 && x < haus.keller.x2 && z > haus.keller.z1 && z < haus.keller.z2;
+const imKeller = p => imKellerXZ(p.x, p.z) && p.y < -1.2;
 const verbunden = (a, b) => haus.tueren.has(tuerSchluessel(a, b));
 function raumMitte(r) { const R = haus.raeume[r]; return { x: R.x0 + RAUM / 2, y: R.basis, z: R.z0 + RAUM / 2 }; }
 function tuerPunkt(a, b) {   // Die Mitte der Tür zwischen Raum a und b (gleiches Stockwerk)
@@ -1189,9 +1206,10 @@ function bodenHoeheBei(x, z, y) {
   let beste = 0, bestD = Infinity;
   const pruefe = h => { const d = Math.abs(h - y); if (d < bestD) { bestD = d; beste = h; } };
   for (let e = 0; e < haus.etagen; e++) {
-    if (e > 0 && haus.treppen.some(t => t.e + 1 === e && imLoch(t, x, z))) continue;   // Da ist ein Loch
+    if (haus.treppen.some(t => t.e + 1 === e && imLoch(t, x, z))) continue;   // Da ist ein Loch (im Erdgeschoss: das Loch über der Kellertreppe)
     pruefe(e * ETAGE_HOEHE);
   }
+  if (imKellerXZ(x, z)) pruefe(haus.keller.boden);   // Der Kellerboden
   // Auf der Rampe? Dann die Rampe nehmen, wenn sie nah genug ist (sonst läuft man unten durch)
   for (const t of haus.treppen) if (aufRampe(t, x, z) && Math.abs(rampenHoehe(t, x) - y) < 0.6) return rampenHoehe(t, x);
   return beste;
@@ -1227,6 +1245,16 @@ function wegPunkt(wer, pos, ziel) {
       !haus.treppen.some(t => aufRampe(t, pos.x, pos.z) && Math.abs(rampenHoehe(t, pos.x) - pos.y) < 1.0)) wer.tw = null;
     else if (q) return q;
     else wer.tw = null;
+  }
+  // 🧪 Runter in den Keller oder rauf? Dann über die Kellertreppe!
+  if (haus.keller) {
+    const ka = imKeller(pos), kb = imKeller(ziel), P = treppenPunkte(haus.keller.treppe);
+    if (ka && kb) return rampenUmweg(wer, pos, ziel) || ziel;   // Beide im Keller: Der Keller ist ein großer Raum
+    if (ka) { wer.tw = { k: 0, reihe: [P.vor, P.unten, P.oben, P.absatz] }; return wer.tw.reihe[0]; }
+    if (kb) {
+      if (abstand2D(pos.x, pos.z, P.absatz.x, P.absatz.z) < 0.6 && Math.abs(pos.y - P.absatz.y) < 1.2) { wer.tw = { k: 0, reihe: [P.absatz, P.oben, P.unten, P.vor] }; return wer.tw.reihe[0]; }
+      ziel = P.absatz;   // Erst mal oben zur Kellertreppe
+    }
   }
   // Rein ins Gartenhäuschen oder raus? Dann durch seine Tür!
   const sa = schuppenBei(pos.x, pos.z), sb = schuppenBei(ziel.x, ziel.z);
@@ -2010,6 +2038,23 @@ function baueHaus() {
     haus.raeume[oben].treppeRunter = t;
     if (j > 0) { gesperrt.add(tuerSchluessel(unten, unten - haus.breit)); gesperrt.add(tuerSchluessel(oben, oben - haus.breit)); }
   }
+  // 1b. 🧪 Die Kellertreppe: Von einem Raum im Erdgeschoss geht es runter in den Keller
+  //     (am liebsten in der vordersten Reihe vom Keller, damit die Treppe an der Kellerwand steht)
+  haus.keller = null;
+  if (KELLER_AN && (ld.chemiker || KELLER_SCHAETZE)) {
+    const K = KELLER, kandidaten = [];
+    for (let j = K.j; j < K.j + K.tief; j++) for (let i = K.i; i < K.i + K.breit; i++) kandidaten.push([i, j]);
+    const passt = ([i, j]) => i < haus.breit && j < haus.tief && !benutzt.has(`${i},${j}`) && !saalVon(i, j, 0) && raumNr(i, j, 0) !== haus.start;
+    const wahl = kandidaten.find(([i, j]) => j === K.j && passt([i, j])) || kandidaten.find(passt);
+    if (wahl) {
+      const [i, j] = wahl, oben = raumNr(i, j, 0);
+      const t = { e: -1, i, j, unten: -1, oben, x0: i * RAUM, z0: j * RAUM, basis: -ETAGE_HOEHE, keller: true };
+      haus.raeume[oben].treppeRunter = t;
+      if (j > 0) gesperrt.add(tuerSchluessel(oben, oben - haus.breit));
+      haus.keller = { x1: K.i * RAUM, x2: Math.min(haus.breit, K.i + K.breit) * RAUM, z1: K.j * RAUM, z2: Math.min(haus.tief, K.j + K.tief) * RAUM,
+        boden: -ETAGE_HOEHE, decke: -GRUBE_TIEFE, treppe: t };
+    }
+  }
   // 2. Türen: Pro Stockwerk erst ein Weg zu jedem Raum (wie ein Labyrinth), dann noch ein paar Abkürzungen
   const verbinde = (a, b) => haus.tueren.set(tuerSchluessel(a, b), rnd() < 0.2 ? DURCHGANG_BREITE : TUER_BREITE);
   const gleicheEtage = r => nachbarn(r).filter(n => haus.raeume[n].e === haus.raeume[r].e && !gesperrt.has(tuerSchluessel(r, n)));
@@ -2032,6 +2077,7 @@ function baueHaus() {
     if (R.j + 1 < S.j + S.tief) haus.tueren.set(tuerSchluessel(R.nr, R.nr + haus.breit), OFFEN);
   }
   for (const t of haus.treppen) haus.tueren.set(tuerSchluessel(t.unten, t.oben), -1);   // Treppe = Verbindung nach oben
+  if (haus.keller) haus.treppen.push(haus.keller.treppe);   // (Die Kellertreppe kommt erst jetzt dazu – sie ist keine Verbindung zwischen zwei Räumen)
   // Wie breit sind die Türen an jeder Seite? (0 = keine Tür)
   for (const R of haus.raeume) {
     const breite = n => haus.tueren.get(tuerSchluessel(R.nr, n)) || 0;
@@ -2082,12 +2128,14 @@ function baueHaus() {
     t.repeat.set(R.art.boden === 'holz' ? 3.3 : 5, R.art.boden === 'holz' ? 3.3 : 5);
     const bodenMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 });
     if (R.e === 0) {   // Erdgeschoss: dicke Platten (so tief wie eine Grube), darauf der Boden
-      platteMitLoch(R, R.bodenloch, (xa, za, xb, zb) => {
+      const kt = R.treppeRunter, kellerLoch = kt ? { x1: kt.x0 + LOCH.x1, x2: kt.x0 + LOCH.x2, z1: kt.z0 + LOCH.z1, z2: kt.z0 + LOCH.z2 } : null;
+      platteMitLoch(R, R.bodenloch || kellerLoch, (xa, za, xb, zb) => {
         const b = xb - xa, t = zb - za;
         if (b <= 0.01 || t <= 0.01) return;
         const klotz = new THREE.Mesh(new THREE.BoxGeometry(b, GRUBE_TIEFE, t), erdeMat);
         klotz.position.set((xa + xb) / 2, -GRUBE_TIEFE / 2 - 0.002, (za + zb) / 2);
         hausGruppe.add(klotz);
+        if (imKellerXZ((xa + xb) / 2, (za + zb) / 2)) sichtBlocker.push(klotz);   // Aus dem Keller sieht man nicht durch die Decke
         festerKoerper((xa + xb) / 2, -GRUBE_TIEFE / 2, (za + zb) / 2, b, GRUBE_TIEFE, t);
         bodenFlaeche(R, xa, za, xb, zb, 0, bodenMat);
       });
@@ -2095,6 +2143,8 @@ function baueHaus() {
         const L = R.bodenloch, grund = new THREE.Mesh(new THREE.PlaneGeometry(L.x2 - L.x1, L.z2 - L.z1), erdeMat);
         grund.rotation.x = -Math.PI / 2; grund.position.set((L.x1 + L.x2) / 2, -GRUBE_TIEFE + 0.002, (L.z1 + L.z2) / 2);
         hausGruppe.add(grund);
+        // Unter der Grube: ein fester Boden (ganz unten liegt jetzt der Keller!)
+        festerKlotz((L.x1 + L.x2) / 2, -GRUBE_TIEFE - 0.1, (L.z1 + L.z2) / 2, L.x2 - L.x1 + 0.02, 0.2, L.z2 - L.z1 + 0.02, erdeMat, imKellerXZ((L.x1 + L.x2) / 2, (L.z1 + L.z2) / 2));
       }
     } else baueZwischendecke(R, bodenMat);
     if (R.bodenloch) lochRand(R.bodenloch);
@@ -2142,6 +2192,9 @@ function baueHaus() {
   lampeHinzu(S.x0 + RAUM / 2, WAND_HOEHE - 0.4, S.z0 + RAUM / 2, '#c8ffe8', 2.2, 11, false);
   for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
 
+  // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
+  if (haus.keller) baueKeller();
+
   // 6. Möbel, Deko und Schätze in allen anderen Räumen
   for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
   for (const R of haus.raeume) wandDeko(R);
@@ -2164,6 +2217,12 @@ function baueHaus() {
     const pl = waldPlatz(); if (!pl) continue;
     neuesMonster('maulwurf', haus.start);
     Object.assign(monster[monster.length - 1], { x: pl.x, y: 0, z: pl.z, modus: 'graben' });
+  }
+
+  for (let k = 0; k < (ld.chemiker || 0) && haus.keller; k++) {   // 🧪 Der Chemiker wohnt in seinem Labor im Keller
+    neuesMonster('chemiker', haus.start);
+    const L = haus.keller.labor;
+    Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
   }
 
   // 8. Du startest in der Mitte vom Startraum und schaust zum Transporter. Deine Helfer stehen neben dir.
@@ -2571,6 +2630,10 @@ const MONSTER_ARTEN = {
   // krabbelTempo: so schnell krabbelt er oben (du läufst 4, rennst 6.5) · krabbelWeite: so weit riecht er dich oben (auch wenn du stillstehst!)
   maulwurf: { name: 'Achtarm-Maulwurf', emoji: '🐾', tempo: 2.5, jagdTempo: 5.8, schaden: 40, pause: 1.2, betaeubbar: true,
               fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 8, abtauchen: 0.6, schubs: 11, krabbelTempo: 5.2, krabbelWeite: 14 },
+  // 🧪 Der verrückte Chemiker wohnt im Keller und wirft mit Tränken (siehe TRAENKE oben)! Er verlässt seinen Keller nie.
+  // wurfWeite: so weit wirft er · ausholen: so lange holt er aus, bevor er wirft (deine Chance auszuweichen!) · nachladen: so lange bis zum nächsten Trank
+  chemiker: { name: 'Chemiker',   emoji: '🧪', tempo: 1.2, jagdTempo: 2.6, schaden: 15, sicht: 15, augen: 1.6, pause: 2, betaeubbar: true,
+              wurfWeite: 13, ausholen: 0.7, nachladen: 2.4 },
 };
 function baueMonsterMesh(art) {
   const g = new THREE.Group();
@@ -3842,7 +3905,7 @@ function updateHelfer(h, dt) {
   // 🚪 Zue Tür vor der Nase? Aufmachen!
   if (tempo > 0) { const tu = geschlosseneTuer(p.x, p.z, p.y - 0.35, 1.5); if (tu) tuerSetzen(tu, true, 'helfer'); }
   // In die Grube gefallen? Hopp, rausspringen!
-  if (p.y < -0.1 && Math.abs(v.y) < 0.3 && !bodenLochBei(ziel.x, ziel.z, 0, 0.3)) v.y = 5.5;
+  if (p.y < -0.1 && p.y > -1.5 && Math.abs(v.y) < 0.3 && !bodenLochBei(ziel.x, ziel.z, 0, 0.3)) v.y = 5.5;
   if (h.ausweichen > 0) {   // Seitlich ausweichen
     h.ausweichen -= dt;
     [dx, dz] = [-dz * h.ausweichSeite, dx * h.ausweichSeite];
@@ -4201,9 +4264,9 @@ function update(dt) {
     s.geworfen -= dt;
   }
   // Ist etwas aus dem Haus gefallen? (sollte nicht passieren, aber sicher ist sicher)
-  for (const s of schaetze) if (s.body.position.y < -2) { s.body.position.set(RAUM / 2, 1, haus.laster.z1 + 2); s.body.velocity.set(0, 0, 0); }
-  for (const h of helfer) if (h.body.position.y < -2) { h.body.position.set(RAUM / 2, 0.5, haus.laster.z1 + 2); h.body.velocity.set(0, 0, 0); }
-  if (spielerKoerper.position.y < -2) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
+  for (const s of schaetze) if (s.body.position.y < -ETAGE_HOEHE - 1.5) { s.body.position.set(RAUM / 2, 1, haus.laster.z1 + 2); s.body.velocity.set(0, 0, 0); }
+  for (const h of helfer) if (h.body.position.y < -ETAGE_HOEHE - 1.5) { h.body.position.set(RAUM / 2, 0.5, haus.laster.z1 + 2); h.body.velocity.set(0, 0, 0); }
+  if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
   for (const m of monster) updateMonster(m, dt);
   updateSchussSpuren(dt);
   blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
@@ -4230,7 +4293,7 @@ function updateEffekte(dt) {
     sp.t -= dt;
     sp.v.y -= 9.8 * dt;
     sp.mesh.position.addScaledVector(sp.v, dt);
-    const boden = etageVon(sp.mesh.position.y) * ETAGE_HOEHE + 0.03;
+    const boden = (sp.mesh.position.y < -1.2 ? -ETAGE_HOEHE : etageVon(sp.mesh.position.y) * ETAGE_HOEHE) + 0.03;
     if (sp.mesh.position.y < boden && sp.v.y < 0) { sp.mesh.position.y = boden; sp.v.set(sp.v.x * 0.5, 0, sp.v.z * 0.5); }
     sp.mesh.rotation.x += dt * 5;
     if (sp.t <= 0) szene.remove(sp.mesh);
@@ -5195,7 +5258,7 @@ function updateAlsGast(dt) {
   welt.step(1 / 60, dt, 3);
   totParken();
   pruefeBoden();
-  if (spielerKoerper.position.y < -2) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
+  if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(RAUM / 2, 0.6, haus.laster.z1 + 2); spielerKoerper.velocity.set(0, 0, 0); }
   updateSchussSpuren(dt);
   blitzLadung = Math.min(1, blitzLadung + dt / BLITZ_LADEN);
   if (blitzHell > 0) { blitzHell = Math.max(0, blitzHell - dt * 3); taschenlampe.intensity = 6 + blitzHell * 80; taschenlampe.angle = 0.55 + blitzHell * 0.35; }
