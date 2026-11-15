@@ -73,6 +73,10 @@ const BAUM_ANZAHL = 170;         // So viele Bäume stehen im Wald
 const WALD_SCHAETZE = 8;         // So viele Schätze liegen am Anfang draußen im Wald
 const GARTENHAUS_ANZAHL = 3;     // 🛖 So viele Gartenhäuschen stehen im Wald (mit wertvollen Schätzen drin!)
 const GARTENHAUS_SCHAETZE = 2;   // So viele wertvolle Schätze liegen in jedem Gartenhäuschen
+const GRAS_ANZAHL = 7000;        // 🌱 So viele Grasbüschel wachsen draußen (weniger = schneller)
+const BLUMEN_WIESEN = 45;        // 🌼 So viele kleine Blumenwiesen gibt es im Wald
+const BLUMEN_EINZELN = 300;      // ... und so viele Blumen wachsen einzeln irgendwo
+const BLUMEN_FARBEN = ['#ffffff', '#fff3a0', '#ffd23f', '#e8323c', '#4f7dff', '#9b5cff', '#ff8ad8'];   // Margerite, Butterblume, Löwenzahn, Mohn, Kornblume, Glockenblume, Rosa
 const WALD_NEU_ANTEIL = 0.25;    // So oft taucht ein neuer Schatz draußen auf statt im Haus (0.25 = jeder vierte)
 const MONSTER_DRAUSSEN = true;   // true = Monster folgen dir nach draußen · false = sie bleiben im Haus und warten an der Tür
 // ===== 🧪 Der Keller (unter dem Haus) – da wohnt der verrückte Chemiker! =====
@@ -1443,6 +1447,91 @@ const grasTextur = malTextur(256, 256, (g, b, h) => {
   for (let k = 0; k < 2600; k++) { g.fillStyle = ['#283a1f', '#141f0e', '#30442a', '#22301a'][k % 4]; g.fillRect(Math.random() * b, Math.random() * h, 2, 4 + Math.random() * 6); }   // Grashalme
   for (let k = 0; k < 45; k++) { g.fillStyle = 'rgba(80,55,30,0.45)'; g.beginPath(); g.arc(Math.random() * b, Math.random() * h, 3 + Math.random() * 8, 0, 7); g.fill(); }   // Altes Laub
 });
+// 🌱🌼 Gras und Wildblumen draußen (nur zum Anschauen – darum mit Math.random, das ändert nichts am Haus)
+const windZeit = { value: 0 };   // Damit sich das Gras im Wind wiegt (wird jedes Bild weitergezählt)
+function windig(mat, staerke) {   // Bringt einem Material bei, im Wind hin und her zu schwingen (oben mehr als unten)
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.wind = windZeit;
+    // (Gerechnet in der Welt: Je höher über dem Boden, desto mehr schwingt es – so schwingen Stiel und Blüte genau gleich)
+    sh.vertexShader = 'uniform float wind;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+      vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0);
+      float h = max(mvPosition.y, 0.0);
+      mvPosition.x += sin(wind * 1.6 + mvPosition.x * 0.35 + mvPosition.z * 0.21) * h * ${staerke.toFixed(2)};
+      mvPosition.z += cos(wind * 1.2 + mvPosition.z * 0.3 + mvPosition.x * 0.1) * h * ${(staerke * 0.6).toFixed(2)};
+      mvPosition = modelViewMatrix * mvPosition;
+      gl_Position = projectionMatrix * mvPosition;`);
+  };
+  mat.customProgramCacheKey = () => 'wind' + staerke;   // (Jede Wind-Stärke bekommt ihr eigenes Shader-Programm)
+  return mat;
+}
+function grasBueschelGeo() {   // Ein Büschel aus 7 spitzen Halmen, unten dunkel, oben hellgrün
+  const pos = [], farbe = [], unten = new THREE.Color('#132010'), oben = new THREE.Color('#4d7a2c');
+  for (let k = 0; k < 7; k++) {
+    const w = Math.random() * Math.PI * 2, r = Math.random() * 0.12, x = Math.cos(w) * r, z = Math.sin(w) * r;
+    const b = 0.035, kipp = (Math.random() - 0.5) * 0.25, h = 0.6 + Math.random() * 0.5;
+    const qx = Math.cos(w + 1.57) * b, qz = Math.sin(w + 1.57) * b;
+    pos.push(x - qx, 0, z - qz, x + qx, 0, z + qz, x + Math.cos(w) * kipp, h, z + Math.sin(w) * kipp);
+    const spitze = oben.clone().offsetHSL((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.08);
+    farbe.push(unten.r, unten.g, unten.b, unten.r, unten.g, unten.b, spitze.r, spitze.g, spitze.b);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(farbe, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+function baueWiese(B, T, M) {
+  const ok = (x, z) => {
+    if (x > -0.4 && x < B + 0.4 && z > -0.4 && z < T + 0.4) return false;                      // Nicht im Haus
+    if (x < -M + 0.4 || x > B + M - 0.4 || z < -M + 0.4 || z > T + M - 0.4) return false;     // Nicht hinterm Zaun
+    if (schuppenBei(x, z, 0.3)) return false;                                                  // Nicht im Gartenhäuschen
+    return !(haus.baeume || []).some(b => abstand2D(x, z, b.x, b.z) < 0.4);                    // Nicht im Baumstamm
+  };
+  const platz = () => { for (let v = 0; v < 30; v++) { const x = -M + Math.random() * (B + 2 * M), z = -M + Math.random() * (T + 2 * M); if (ok(x, z)) return { x, z }; } return null; };
+  const hilf = new THREE.Object3D();
+  // 1) Gras
+  const grasMat = windig(new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1 }), 0.12);
+  const gras = new THREE.InstancedMesh(grasBueschelGeo(), grasMat, GRAS_ANZAHL);
+  let n = 0;
+  for (let k = 0; k < GRAS_ANZAHL; k++) {
+    const p = platz(); if (!p) continue;
+    const g = 0.45 + Math.random() * 0.6;
+    hilf.position.set(p.x, 0, p.z); hilf.rotation.set(0, Math.random() * 6.3, 0); hilf.scale.set(g * 1.3, g, g * 1.3);
+    hilf.updateMatrix(); gras.setMatrixAt(n++, hilf.matrix);
+  }
+  gras.count = n; gras.receiveShadow = true; hausGruppe.add(gras);
+  // 2) Wildblumen: in kleinen Wiesen (immer ein paar Sorten zusammen) und einzeln
+  const blumen = [];
+  for (let w = 0; w < BLUMEN_WIESEN; w++) {
+    const mitte = platz(); if (!mitte) continue;
+    const sorten = [0, 1, 2].map(() => BLUMEN_FARBEN[Math.floor(Math.random() * BLUMEN_FARBEN.length)]), anzahl = 10 + Math.floor(Math.random() * 14);
+    for (let k = 0; k < anzahl; k++) {
+      const r = Math.sqrt(Math.random()) * 1.8, a = Math.random() * 6.3, x = mitte.x + Math.cos(a) * r, z = mitte.z + Math.sin(a) * r;
+      if (ok(x, z)) blumen.push({ x, z, farbe: sorten[k % 3] });
+    }
+  }
+  for (let k = 0; k < BLUMEN_EINZELN; k++) { const p = platz(); if (p) blumen.push({ ...p, farbe: BLUMEN_FARBEN[Math.floor(Math.random() * BLUMEN_FARBEN.length)] }); }
+  const stielMat = windig(new THREE.MeshStandardMaterial({ color: '#2f5a22', roughness: 1 }), 0.25);
+  const bluetenMat = windig(new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.7, emissive: '#222222', side: THREE.DoubleSide }), 0.25);
+  const mitteMat = windig(new THREE.MeshStandardMaterial({ color: '#ffcc33', roughness: 0.8 }), 0.25);
+  const stielGeo = new THREE.CylinderGeometry(0.008, 0.012, 1, 4).translate(0, 0.5, 0);
+  const bluetenGeo = new THREE.CircleGeometry(1, 6).rotateX(-Math.PI / 2);   // 6 Blütenblätter (von oben ein Sechseck)
+  const mitteGeo = new THREE.SphereGeometry(0.3, 6, 4).translate(0, 0.08, 0);
+  const stiele = new THREE.InstancedMesh(stielGeo, stielMat, blumen.length);
+  const blueten = new THREE.InstancedMesh(bluetenGeo, bluetenMat, blumen.length);
+  const mitten = new THREE.InstancedMesh(mitteGeo, mitteMat, blumen.length);
+  const farbe = new THREE.Color(), spitze = new THREE.Vector3();
+  blumen.forEach((b, k) => {
+    const h = 0.25 + Math.random() * 0.3, r = 0.045 + Math.random() * 0.035;
+    hilf.position.set(b.x, 0, b.z); hilf.rotation.set((Math.random() - 0.5) * 0.25, Math.random() * 6.3, (Math.random() - 0.5) * 0.25);
+    hilf.scale.set(1, h, 1); hilf.updateMatrix(); stiele.setMatrixAt(k, hilf.matrix);
+    spitze.set(0, 1, 0).applyMatrix4(hilf.matrix);   // Wo ist das obere Ende vom Stiel?
+    hilf.position.copy(spitze); hilf.scale.setScalar(r); hilf.updateMatrix();
+    blueten.setMatrixAt(k, hilf.matrix); mitten.setMatrixAt(k, hilf.matrix);   // Blüte oben auf den Stiel
+    blueten.setColorAt(k, farbe.set(b.farbe));
+  });
+  for (const m of [stiele, blueten, mitten]) hausGruppe.add(m);
+}
 const imHaus = (x, z) => x > 0 && x < haus.breit * RAUM && z > 0 && z < haus.tief * RAUM;
 // Schneidet die Strecke von a nach b das Rechteck? (Liang-Barsky – so prüft man das schnell)
 function streckeSchneidet(a, b, x1, z1, x2, z2) {
@@ -1756,6 +1845,7 @@ function baueWald() {
   haus.baeume = baeume;
   // 5) Schätze im Wald (im Laub versteckt ...)
   for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
+  baueWiese(B, T, M);   // 🌱🌼 Gras und Wildblumen
   // 6) Der Mond
   const mond = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: '#e9e6cf', fog: false }));
   mond.position.set(B / 2 + 40, 70, -110); hausGruppe.add(mond);
@@ -4852,6 +4942,7 @@ function zeichne3D() {
     if (o.userData.flackern === 'feuer') o.intensity = o.userData.stark * (0.75 + Math.random() * 0.35);
     else o.intensity = Math.random() < 0.06 ? 0.1 : o.userData.stark;
   });
+  windZeit.value = zeit;   // 🌱 Wind fürs Gras und die Blumen
   for (const d of haus.bewegteDeko) {
     if (d.userData.feuer) d.scale.y = 0.8 + Math.random() * 0.5;
     if (d.userData.pendel) d.position.x = Math.sin(zeit * 2.5) * 0.12;
