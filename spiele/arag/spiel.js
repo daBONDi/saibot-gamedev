@@ -1165,7 +1165,9 @@ let level = 1, konto = 0, ld = levelDaten(1);
 let rekord = 0;
 try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /* egal */ }
 let haus = null;            // Das aktuelle Haus
-let lobby = false, introZeit = -1, einblenden = 0, schrottZeit = -1;   // schrottZeit >= 0: Alle sind Schrott!   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
+let lobby = false, introZeit = -1, einblenden = 0, schrottZeit = -1;
+let mitBots = true;   // 🤖 Spielen die Helfer-Bots mit? (Schalter in der Lobby – das Spiel merkt es sich)
+try { mitBots = localStorage.getItem('arag-bots') !== '0'; } catch (e) { /* egal */ }   // schrottZeit >= 0: Alle sind Schrott!   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
 let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
 let schatzNummer = 0;       // Jeder Schatz bekommt eine Nummer (für den Multiplayer)
@@ -2005,7 +2007,15 @@ function baueFahrBus(ox, oz) {
   const knopfOben = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.1, 16), new THREE.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#aa0000', emissiveIntensity: 1 }));
   knopfOben.position.set(knopf.x, 1.05, knopf.z); gruppe.add(knopfOben);
   const knopfSchild = schildMesh('🔴 E = LOS!', 0.9, 0.3); knopfSchild.position.set(knopf.x + 0.12, 2.0, knopf.z); knopfSchild.rotation.y = -Math.PI / 2; gruppe.add(knopfSchild);
-  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
+  // 🤖 Der Bot-Schalter: Mit oder ohne Helfer-Bots? (Lampe grün = mit, grau = ohne)
+  const botKnopf = { x: X2 - 0.5, z: Z1 + 6.0 };
+  teil(botKnopf.x, 0.5, botKnopf.z, 0.35, 1.0, 0.35, metallGrauMat); festerKoerper(botKnopf.x, 0.5, botKnopf.z, 0.35, 1.0, 0.35);
+  const botLampe = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshBasicMaterial({ color: '#4ade80' }));
+  botLampe.position.set(botKnopf.x, 1.08, botKnopf.z); gruppe.add(botLampe);
+  const botSchild = canvasTextur(256, 96, () => {});
+  const botSchildM = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36), new THREE.MeshBasicMaterial({ map: botSchild.tex }));
+  botSchildM.position.set(botKnopf.x + 0.12, 2.0, botKnopf.z); botSchildM.rotation.y = -Math.PI / 2; gruppe.add(botSchildM);
+  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
 }
 function baueLandschaft(cx, mz) {   // Die Straße durch den nächtlichen Wald (alles bewegt sich nach hinten = der Bus fährt nach vorne)
   const g = new THREE.Group(); hausGruppe.add(g);
@@ -2813,7 +2823,7 @@ function baueHaus() {
   else { spielerKoerper.position.set(haus.spawn.x, KOERPER_RADIUS + 0.05, haus.spawn.z); blick.links = -Math.PI / 2; }
   spielerKoerper.velocity.set(0, 0, 0);
   blick.hoch = -0.1;
-  for (let k = 0; k < Math.min(HELFER_ANZAHL, HELFER.length); k++) neuerHelfer(HELFER[k], LOBBY_AN ? BUS.x2 - 0.7 : haus.spawn.x + 1.5, LOBBY_AN ? BUS.z2 - 1.2 - k * 1.3 : haus.spawn.z + 1.5 + k * 1.5);
+  for (let k = 0; k < (mitBots ? Math.min(HELFER_ANZAHL, HELFER.length) : 0); k++) neuerHelfer(HELFER[k], LOBBY_AN ? BUS.x2 - 0.7 : haus.spawn.x + 1.5, LOBBY_AN ? BUS.z2 - 1.2 - k * 1.3 : haus.spawn.z + 1.5 + k * 1.5);
 }
 
 // Einen Raum einrichten: Lampe, Möbel in den Ecken, Teppich, Spinnweben, Schätze
@@ -4983,7 +4993,7 @@ function getroffen(menge, von) {
   loslassen();   // Vor Schreck lässt du alles fallen!
   const zeuge = helfer.find(h => h.kaputt <= 0 && abstand3D(h.body.position, spielerKoerper.position) < 15);
   if (zeuge) sagen(zeuge, 'aufpassen', {}, 1);
-  if (energie <= 0 && (mp.aktiv || HELFER_ANZAHL > 0)) {   // Nicht Schluss: Dein Kopf fällt runter – jemand muss ihn zur Abgabe bringen!
+  if (energie <= 0) {   // Nicht Schluss: Dein Kopf fällt runter – jemand muss ihn zur Abgabe bringen! (Allein ohne Bots: alle Schrott → zurück in die Lobby)
     spielerStirbt(von);
     return;
   }
@@ -5369,9 +5379,42 @@ function lobbyWillkommen() {
   zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E – dann sind wir da!' : '🚌 Willkommen im ARAG-Bus! Drück am roten Knopf 🔴 E – dann sind wir da!', 5);
 }
 function startNachricht() { zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); }
-function amKnopf() {
+function lobbyKnopf() {   // Vor welchem Knopf im Bus stehst du? ('los', 'bots' oder null)
   const B = haus && haus.fahrBus, p = spielerKoerper.position;
-  return !!B && !tot && abstand2D(p.x, p.z, B.knopf.x, B.knopf.z) < 1.6;
+  if (!B || tot) return null;
+  const dLos = abstand2D(p.x, p.z, B.knopf.x, B.knopf.z), dBots = abstand2D(p.x, p.z, B.botKnopf.x, B.botKnopf.z);
+  if (Math.min(dLos, dBots) > 1.4) return null;
+  return dLos < dBots ? 'los' : 'bots';
+}
+const amKnopf = () => lobbyKnopf() === 'los';
+function botSchildMalen() {
+  const F = haus && haus.fahrBus;
+  if (!F) return;
+  const g = F.botSchild.g;
+  g.fillStyle = '#10202a'; g.fillRect(0, 0, 256, 96);
+  g.strokeStyle = mitBots ? '#4ade80' : '#8a8f9e'; g.lineWidth = 6; g.strokeRect(3, 3, 250, 90);
+  g.fillStyle = mitBots ? '#4ade80' : '#c9c3ff'; g.font = 'bold 30px Arial, sans-serif'; g.textAlign = 'center';
+  g.fillText(mitBots ? '🤖 MIT BOTS' : '🚫 OHNE BOTS', 128, 46);
+  g.fillStyle = '#ffffff'; g.font = '20px Arial, sans-serif'; g.fillText('E = umschalten', 128, 78);
+  F.botSchild.tex.needsUpdate = true;
+  F.botLampe.material.color.set(mitBots ? '#4ade80' : '#555a63');
+}
+function botsSetzen(an) {   // 🤖 Bots mit- oder abmelden (nur in der Lobby)
+  if (!lobby) return;
+  mitBots = an;
+  try { localStorage.setItem('arag-bots', an ? '1' : '0'); } catch (e) { /* egal */ }
+  const F = haus.fahrBus;
+  if (an && !helfer.length) {
+    for (let k = 0; k < Math.min(HELFER_ANZAHL, HELFER.length); k++) neuerHelfer(HELFER[k], F.x2 - 0.7, F.z2 - 1.2 - k * 1.3);
+    if (helfer.length) sagen(helfer[0], 'neustart', {}, 2);
+  } else if (!an && helfer.length) {
+    for (const h of helfer) { welt.removeBody(h.body); szene.remove(h.teile.g); szene.remove(h.strahl.g); }
+    helfer = [];
+  }
+  botSchildMalen();
+  ton(an ? 660 : 440, 0, 0.1, 'square', 0.07); ton(an ? 880 : 330, 0.1, 0.12, 'square', 0.07);   // Klick-klack
+  zeigeNachricht(an ? '🤖 Mit Helfer-Bots! Bolzen und Funke kommen mit.' : '🚫 Ohne Bots! Jetzt seid ihr auf euch allein gestellt ...', 3);
+  if (mp.rolle === 'host') mpAnAlle({ t: 'bots', an });
 }
 function losGehts() {   // 🔴 Der Knopf wurde gedrückt: Der Bus kommt an der Spukvilla an!
   if (!lobby) return;
@@ -5436,6 +5479,7 @@ function maleMonitor() {
   g.fillText(`💰 Rekord: ${euro(rekord)}`, 22, 175);
   const team = [mp.aktiv ? MP_ROBOTER[mp.nr]?.name || 'Du' : 'Du', ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
   g.fillStyle = '#ffd166'; g.fillText(`🤖 Team: ${team.join(', ')}`, 22, 205);
+  g.fillStyle = mitBots ? '#4ade80' : '#8a8f9e'; g.fillText(mitBots ? '🤖 Mit Helfer-Bots' : '🚫 Ohne Helfer-Bots', 300, 145);
   if (Math.floor(zeit) % 2 === 0) { g.fillStyle = '#ff6b6b'; g.font = 'bold 22px Arial, sans-serif'; g.fillText('🔴 Roter Knopf + E = LOS!', 22, 255); }
   M.tex.needsUpdate = true;
 }
@@ -5444,6 +5488,7 @@ function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby t
   text('🚌💨 LOBBY – Der ARAG-Bus fährt zur Spukvilla', W / 2, 38, 18, '#7cf5c6');
   text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Alle bereit? Einer drückt den roten Knopf 🔴` : 'Bereit? Lauf zum roten Knopf 🔴 an der Tür!', W / 2, 62, 13, '#c9c3ff', 'center', false);
   if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
+  else if (lobbyKnopf() === 'bots') text(`🤖 E: ${mitBots ? 'OHNE' : 'MIT'} Bots spielen`, W / 2, H / 2 + 150, 20, mitBots ? '#c9c3ff' : '#4ade80');
 }
 // ===== 💀 Alle Roboter Schrott = Spiel aus → zurück in den Bus (Lobby) =====
 function alleSchrott() {
@@ -5482,14 +5527,14 @@ function neuesSpiel() {
 }
 function starteLevel(startzahl = KARTE.startzahl) {
   mitStartzahl(startzahl, baueHaus);   // Gleiche Startzahl = gleiches Haus
-  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto }); }
+  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto, bots: mitBots }); }
   if (mp.rolle === 'gast') mpGastVorbereiten();
   energie = 100; ausdauer = AUSDAUER_MAX;
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
   lobby = LOBBY_AN; introZeit = -1; einblenden = 1; schrottZeit = -1;
-  if (lobby) lobbyWillkommen();          // Erst fährt der Bus (Lobby) ...
+  if (lobby) { lobbyWillkommen(); botSchildMalen(); }   // Erst fährt der Bus (Lobby) ...
   else if (INTRO_AN) introStarten();     // ... ohne Lobby gleich das Intro
   else ausTuer();
   mausFangen();
@@ -5955,7 +6000,11 @@ addEventListener('keydown', e => {
   if (k === 'f') blitzen();
   if (k === 'n' && mp.aktiv && VOICE_AN) { voice.aus = !voice.aus; zeigeNachricht(voice.aus ? '🔇 Voice-Chat AUS (du hörst niemanden, und keiner hört dich)' : '🎙️ Voice-Chat AN – halte V gedrückt zum Sprechen', 3); }
   if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
-  if (k === 'e' && zustand === 'spiel' && lobby && amKnopf()) { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); return; }   // 🔴 LOS!
+  if (k === 'e' && zustand === 'spiel' && lobby && lobbyKnopf()) {   // 🔴 LOS! oder 🤖 Bots an/aus
+    if (lobbyKnopf() === 'los') { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); }
+    else if (mp.rolle === 'gast') mpSende({ t: 'botsBitte' }); else botsSetzen(!mitBots);
+    return;
+  }
   if (k === 'e' && zustand === 'spiel' && !tot && !pause) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
@@ -6111,7 +6160,7 @@ function mpNeuerGast(conn) {
     const g = { id: conn.peer, conn, nr, ...MP_ROBOTER[nr], x: 0, y: -50, z: 0, w: 0, dk: false, hg: -1, hz: null, k: null, r: null };
     mp.andere.set(g.id, g);
     conn.send({ t: 'hallo', nr, code: mp.code });
-    conn.send({ t: 'start', level, seed: mp.startzahl, konto });
+    conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0 });
     zeigeNachricht(`🤖 ${g.name} ist dem Raum beigetreten!`, 3);
     sound.abgabe();
   });
@@ -6142,6 +6191,7 @@ function mpVomGast(g, d) {
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
     g.hg = -1;
   } else if (d.t === 'losBitte') losGehts();   // 🔴 Ein Gast hat im Bus den Knopf gedrückt
+  else if (d.t === 'botsBitte') botsSetzen(!mitBots);   // 🤖 Ein Gast hat den Bot-Schalter gedrückt
   else if (d.t === 'blitz') {   // Ein Gast blitzt: Monster blenden, und alle sehen seine Lampe aufblitzen
     blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
     g.blitzHell = 1;
@@ -6236,6 +6286,7 @@ function mpVomHost(d) {
   if (d.t === 'voll') { mpVerbindungWeg('Der Raum ist voll (höchstens 4 Spieler).'); return; }
   if (d.t === 'start') {
     level = d.level; konto = d.konto;
+    if (typeof d.bots === 'boolean') mitBots = d.bots;   // (Der Gastgeber bestimmt, ob Bots mitspielen)
     starteLevel(d.seed);
     zeigeNachricht(`🌐 Du bist ${MP_ROBOTER[mp.nr].name}! Raum ${mp.code} – Level ${level}`, 4, MP_ROBOTER[mp.nr].farbe);
     return;
@@ -6261,6 +6312,7 @@ function mpVomHost(d) {
   }
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
   else if (d.t === 'los') losGehts();   // 🔴 Einer hat den Knopf gedrückt!
+  else if (d.t === 'bots') botsSetzen(d.an);   // 🤖 Bots an/aus
   else if (d.t === 'schrott') { if (schrottZeit < 0) { schrottZeit = 0; schrottSound(); } }   // 💀 Alle sind Schrott! (Der Gastgeber startet gleich neu)
   else if (d.t === 'trank') trankStart(d.id, d.art, d.p, d.v);                  // 🧪 Der Chemiker wirft
   else if (d.t === 'platsch') trankPlatsch(d.id, d.art, d.p[0], d.p[1], d.p[2]);   // ... und der Trank zerplatzt
