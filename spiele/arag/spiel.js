@@ -119,7 +119,7 @@ const HELFER_TRAGE_TEMPO = 2.2;  // ... und so schnell, wenn sie was tragen
 const BEIN_LAENGE = 0.3;         // So weit fahren die Roboter-Beine aus (0 = keine Beine)
 const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn er kein Leben mehr hat (nur wenn HELFER_SOFORT_ZURUECK = false)
 const HELFER_SOFORT_ZURUECK = true;   // true = Ein kaputter Helfer taucht SOFORT wieder am Start auf (mit vollen Leben) – nur wenn HELFER_KOPF = false
-const BOT_BAUCH = 0.7;          // 🤖 So dick ist der Bauch der Roboter (1 = so dick wie früher, 0.5 = ganz schlank)
+const BOT_BAUCH = 0.5;          // 🤖 So dick ist der Bauch der Roboter (1 = so dick wie früher, 0.5 = ganz schlank)
 const HELFER_KOPF = true;        // 💀 true = Ein kaputter Helfer verliert seinen KOPF – bringt ihn zur Abgabe, dann ist er wieder da!
 const HELFER_WIEDERBELEBEN_PREIS = 500;   // So viel kostet es, einen Helfer-Bot wiederzubeleben
 const SCHROTT_ZEIT = 6;          // 💀 Sind ALLE Roboter Schrott (Spieler und Helfer), ist das Spiel aus – nach so vielen Sekunden geht's zurück in die Lobby
