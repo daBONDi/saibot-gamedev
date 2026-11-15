@@ -105,6 +105,7 @@ const SAETZE = {
   aufpassen: ['Pass auf!', 'Bist du okay?', 'Lauf weg!'],
   genug: ['Wir haben genug! Ab zum Transporter!', 'Das Ziel ist voll! Drück E!'],
   volltreffer: ['Volltreffer!', 'Guter Wurf!', 'Ha! Erwischt!'],
+  blitz: ['Bitte lächeln! 📸', 'Augen zu! 📸', 'Nimm das! 📸', 'Cheese! 📸', 'BLITZ! 📸'],
 };
 
 // ===== Die Schätze =====
@@ -3694,7 +3695,7 @@ function helferBlitzPruefen(h, dt) {
   helferBlitzEffekt(h);
   if (mp.rolle === 'host') mpAnAlle({ t: 'blitzSicht', h: helfer.indexOf(h) });
   sagen(h, 'blitz', { name: bestes.info.name }, 2);
-  if (abstand3D(p, spielerKoerper.position) < 15) zeigeNachricht(`📸 ${h.name} hat den ${bestes.info.name} geblitzt!`, 2, '#ffd166');
+  if (abstand3D(p, spielerKoerper.position) < 15) zeigeNachricht(`📸 ${h.name} blitzt: ${bestes.info.emoji} ${bestes.info.name} ist geblendet!`, 2, '#ffd166');
 }
 function helferBlitzEffekt(h) {   // Die Lampe blitzt hell auf (das sehen alle)
   h.blitzHell = 1;
@@ -4620,7 +4621,7 @@ function zeichneTitel() {
   text(`Schätze zur Abgabe 🚚 = sofort Geld 💰 · Kaputt? Dein Kopf 🤖 muss zur Abgabe – Wiederbeleben kostet ${euro(WIEDERBELEBEN_PREIS)}`, W / 2, 380, 14, '#ffb4b4', 'center', false);
   text('WASD: Laufen · Maus: Umschauen · Shift: Rennen (laut!) · Leertaste: Springen · C: Ducken (leise, unter Tische, durch Mauselöcher 🐭!) · F: Blitzlampe 📸 · E: Tür auf/zu 🚪', W / 2, 425, 13, '#c9c3ff', 'center', false);
   text('Linksklick halten: Greifstrahl · Rechtsklick: Werfen · Mausrad: näher/weiter', W / 2, 446, 13, '#c9c3ff', 'center', false);
-  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster! 📸', W / 2, 468, 12, '#8a8fb0', 'center', false);
+  text('Tipps: Das Haus hat Treppen 🪜 – auch oben liegen Schätze! Mit der Blitzlampe (F) blendest du Monster – deine Helfer blitzen auch! 📸', W / 2, 468, 12, '#8a8fb0', 'center', false);
   const puls = 1 + Math.sin(zeit * 4) * 0.04;
   text('▶ Klicken zum Starten', W / 2, 525, 26 * puls, '#ffd166');
   text('🌐 Mit Freunden spielen? Oben rechts einen Raum erstellen oder einen Code eingeben!', W / 2, 548, 12, '#7cf5c6', 'center', false);
