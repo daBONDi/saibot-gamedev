@@ -118,7 +118,9 @@ const HELFER_TEMPO = 3.2;        // So schnell fahren die Helfer
 const HELFER_TRAGE_TEMPO = 2.2;  // ... und so schnell, wenn sie was tragen
 const BEIN_LAENGE = 0.3;         // So weit fahren die Roboter-Beine aus (0 = keine Beine)
 const HELFER_PAUSE = 8;          // So lange ist ein Helfer kaputt, wenn er kein Leben mehr hat (nur wenn HELFER_SOFORT_ZURUECK = false)
-const HELFER_SOFORT_ZURUECK = true;   // true = Ein kaputter Helfer taucht SOFORT wieder am Start auf (mit vollen Leben)
+const HELFER_SOFORT_ZURUECK = true;   // true = Ein kaputter Helfer taucht SOFORT wieder am Start auf (mit vollen Leben) – nur wenn HELFER_KOPF = false
+const HELFER_KOPF = true;        // 💀 true = Ein kaputter Helfer verliert seinen KOPF – bringt ihn zur Abgabe, dann ist er wieder da!
+const HELFER_WIEDERBELEBEN_PREIS = 500;   // So viel kostet es, einen Helfer-Bot wiederzubeleben
 const HELFER_LEBEN = 3;          // So viele Treffer hält ein Helfer aus, bevor er kaputt geht ❤️
 const HELFER_HEILEN = 20;        // Alle 20 Sekunden bekommt ein Helfer ein Leben zurück (0 = nie)
 // Was die Helfer sagen ({name}, {wert} und {monster} werden ersetzt)
@@ -4618,9 +4620,19 @@ function helferKaputt(h, info, monster) {
   }
   sound.autsch();
   if (abstand3D(p, spielerKoerper.position) < 15) zeigeNachricht(`${info.emoji} Der ${info.name} hat ${h.name} erwischt!`, 2, '#ffb347');
+  if (HELFER_KOPF) {   // 💀 Kopf ab! Der Körper bleibt kopflos liegen, der Kopf muss zur Abgabe
+    h.kaputt = 1e9;   // (So lange, bis jemand den Kopf abgibt)
+    const kopf = neuerKopf(helferKopfId(h), h.farbe, p.x, p.y + 0.6, p.z);
+    kopf.body.velocity.set(zufall(-2, 2), 4, zufall(-2, 2));   // Plopp – der Kopf fliegt ein Stück weg
+    const t = `💀 ${h.name} hat seinen Kopf verloren! Bringt ihn zur Abgabe 🚚 (${euro(HELFER_WIEDERBELEBEN_PREIS)})`;
+    zeigeNachricht(t, 4, '#ff6b6b'); if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: t, farbe: '#ff6b6b' });
+    return;
+  }
   if (HELFER_SOFORT_ZURUECK) { helferAmStart(h); return; }
   sagen(h, 'kaputt', {}, 2);
 }
+const helferKopfId = h => `helfer-${helfer.indexOf(h)}`;   // So heißt der Besitzer vom Kopf eines Helfers
+const istHelferKopf = s => String(s.besitzer).startsWith('helfer-');
 function helferAmStart(h) {   // Zack – zurück am Start! (neben der Abgabe, jeder Helfer an seinem Platz)
   const k = Math.max(0, helfer.indexOf(h));
   h.kaputt = 0; h.leben = HELFER_LEBEN; h.heilZeit = HELFER_HEILEN; h.wackelt = 0; h.angst = 0; h.tw = null;
@@ -4779,6 +4791,7 @@ function zeigeHelfer(h) {
   T.kopf.rotation.y += (kopfDreh - T.kopf.rotation.y) * 0.15;
   T.kopf.rotation.z = h.angst > 0 ? Math.sin(zeit * 30) * 0.06 : 0;   // Zittern vor Angst
   T.antenne.visible = h.kaputt > 0 ? Math.sin(zeit * 20) > 0 : (zeit * 2 + h.blinzelVersatz) % 1.5 < 1.2;
+  T.kopf.visible = !(h.kaputt > 1000);   // 💀 Kopf ab (der liegt woanders ...)
   T.lampen.forEach((l, k) => { l.visible = h.kaputt > 0 ? false : (zeit * 3 + k) % 3 > 0.6; });
   T.blase.visible = h.blasenZeit > 0;
   malGesicht(h);
@@ -5171,17 +5184,18 @@ function schatzEntfernen(s) {   // Einen Schatz ganz aus dem Spiel nehmen
 function abgeben(s) {
   const p = s.body.position;
   if (s.typ.id === 'kopf') {   // Ein Kopf! Genug Geld zum Wiederbeleben?
-    if (konto < WIEDERBELEBEN_PREIS) {
+    const preis = istHelferKopf(s) ? HELFER_WIEDERBELEBEN_PREIS : WIEDERBELEBEN_PREIS;   // (Helfer-Bots sind billiger)
+    if (konto < preis) {
       if (zeit - (s.hinweisZeit || -99) > 4) {
         s.hinweisZeit = zeit;
-        const t = `🤖 Noch ${euro(WIEDERBELEBEN_PREIS - konto)} fürs Wiederbeleben! Bringt mehr Schätze!`;
+        const t = `🤖 Noch ${euro(preis - konto)} fürs Wiederbeleben! Bringt mehr Schätze!`;
         zeigeNachricht(t, 3, '#ffd166'); if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: t, farbe: '#ffd166' });
       }
       return;
     }
-    konto -= WIEDERBELEBEN_PREIS;
-    schwebeText(p.x, p.y + 0.6, p.z, `🔧 Wiederbelebt! -${euro(WIEDERBELEBEN_PREIS)}`, '#7cf5c6');
-    if (mp.rolle === 'host') mpAnAlle({ t: 'verkauft', id: s.id, text: `🔧 Wiederbelebt! -${euro(WIEDERBELEBEN_PREIS)}`, x: r2(p.x), y: r2(p.y), z: r2(p.z) });
+    konto -= preis;
+    schwebeText(p.x, p.y + 0.6, p.z, `🔧 Wiederbelebt! -${euro(preis)}`, '#7cf5c6');
+    if (mp.rolle === 'host') mpAnAlle({ t: 'verkauft', id: s.id, text: `🔧 Wiederbelebt! -${euro(preis)}`, x: r2(p.x), y: r2(p.y), z: r2(p.z) });
     wiederbeleben(s.besitzer);
     schatzEntfernen(s);
     return;
@@ -5233,6 +5247,11 @@ function spielerStirbt(von) {
 }
 function wiederbeleben(besitzer) {   // Beim Gastgeber: Wer bekommt sein Leben zurück?
   if (besitzer === meineId()) { spielerWiederbeleben(); return; }
+  if (String(besitzer).startsWith('helfer-')) {   // 🤖 Ein Helfer-Bot bekommt seinen Kopf zurück!
+    const h = helfer[Number(besitzer.slice(7))];
+    if (h) { helferAmStart(h); const t = `🔧 ${h.name} hat seinen Kopf wieder! Danke! 🤖💚`; zeigeNachricht(t, 3); if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: t }); }
+    return;
+  }
   const g = mp.andere.get(besitzer);
   if (g) { mpSendeAn(g, { t: 'leben' }); const t = `🔧 ${g.name} ist wieder da!`; zeigeNachricht(t, 3); mpAnAlle({ t: 'info', text: t }); }
 }
@@ -5547,7 +5566,7 @@ function zeichneHUD() {
   text(`💰 ${euro(konto)}`, W - 147, 32, 17, '#ffd166');
   helfer.forEach((h, k) => {
     const wo = ETAGEN_NAMEN[etageVon(h.body.position.y)] === ETAGEN_NAMEN[raum.e] ? '' : ` (${ETAGEN_NAMEN[etageVon(h.body.position.y)]})`;
-    const was = h.kaputt > 0 ? `💤 kaputt (${Math.ceil(h.kaputt)} s)` : h.modus === 'tragen' ? `trägt ${h.auftrag.typ.emoji}${wo}` : h.modus === 'hinlaufen' ? `holt ${h.auftrag.typ.emoji}${wo}` : 'wartet';
+    const was = h.kaputt > 1000 ? '💀 Kopf ab! Zur Abgabe bringen' : h.kaputt > 0 ? `💤 kaputt (${Math.ceil(h.kaputt)} s)` : h.modus === 'tragen' ? `trägt ${h.auftrag.typ.emoji}${wo}` : h.modus === 'hinlaufen' ? `holt ${h.auftrag.typ.emoji}${wo}` : 'wartet';
     text(`🤖 ${h.name} ${h.kaputt > 0 ? '' : '❤️'.repeat(h.leben)}: ${was}`, W - 272, 60 + k * 22, 12, h.kaputt > 0 ? '#8a8f9e' : h.farbe, 'left', false);
   });
   text(tonAn ? '🔊 M' : '🔇 M', W - 30, 68 + helfer.length * 22, 13, '#fff', 'center', false);
