@@ -1363,6 +1363,7 @@ function nutzeFaehigkeit() {
   if (!a.moeglich) { zeigeNachricht(a.hinweis, 2); return; }
   if (mp.rolle === 'gast') {   // 🌐 Mitspieler: Der Gastgeber rechnet die Fähigkeit aus – hier zeigen wir schon mal, was passiert
     mpSende({ t: 'faehigkeit', z: a.ziel ? schafe.indexOf(a.ziel) : -1 });
+    spieler.faehigkeitZeit = zeit;
     if (spieler.rolle === 'bastler') { effektAn(spieler, 'werkzeug', 1.3); funken(spieler.x, spieler.y - 55, 15, GOLD, 120, 3, 0.6, 150); zeigeNachricht('🔧 Repariert!', 2); }
     else if (spieler.rolle !== 'spuernase') a.tun();   // (Was die Spürnase riecht, sagt uns der Gastgeber)
     spieler.faehigkeit = faehigkeitsPause();
@@ -3936,8 +3937,9 @@ function mpSchnappschuss(d) {
     s.lebt = !!a[4];
     if (s !== spieler) s.inGrube = a[5] ? 0 : null;
     else if (!a[5] && s.inGrube != null && zeit - (s.grubeSeit || 0) > 1.5) s.inGrube = null;   // Der Gastgeber sagt: Du bist nicht (mehr) in der Grube
-    s.unsichtbar = a[6] ? 1 : 0;
-    s.verkleidet = a[7] >= 0 && schafe[a[7]] ? { als: schafe[a[7]], t: 1 } : null;
+    const geradeBenutzt = s === spieler && zeit - (spieler.faehigkeitZeit || -9) < 1;   // (Deine Fähigkeit ist noch unterwegs zum Gastgeber – nicht gleich wieder wegnehmen!)
+    if (!(geradeBenutzt && s.unsichtbar > 0 && !a[6])) s.unsichtbar = a[6] ? Math.max(1, s.unsichtbar) : 0;
+    if (!(geradeBenutzt && s.verkleidet && a[7] < 0)) s.verkleidet = a[7] >= 0 && schafe[a[7]] ? { als: schafe[a[7]], t: 1 } : null;
   });
   wolle = d.wo.map(a => ({ x: a[0], y: a[1], opfer: schafe[a[2]] || spieler, angst: !!a[3], aufloesen: a[4] >= 0 ? a[4] : null, aufloeseMax: E.aufloesen, ort: naechsterOrt({ x: a[0], y: a[1] }) }));
   sabotage = d.sab ? { art: d.sab[0], t: d.sab[1] } : null;
