@@ -4574,7 +4574,8 @@ function lookAnbauen(T, info) {
   const mat = (farbe, extra = {}) => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.6, ...extra });
   const teil = (geo, m, x, y, z, eltern) => { const k = new THREE.Mesh(geo, m); k.position.set(x, y, z); k.castShadow = true; eltern.add(k); return k; };
   const halbKugel = (r) => new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-  const K = T.kopf, O = T.oben, b = BOT_BAUCH, oben = 0.16;
+  const K = new THREE.Group(), O = T.oben, b = BOT_BAUCH, oben = 0.16;   // K = der Hut (eigene Gruppe – beim Ducken wird er zusammengedrückt)
+  T.kopf.add(K); T.hut = K;
   let hoch = 0;   // Wie hoch der Hut ist (dann muss das Namensschild höher)
   const gold = mat('#e8b923', { metalness: 0.8, roughness: 0.3, emissive: '#3a2a05' });
   switch (info.hut) {
@@ -4686,14 +4687,14 @@ function lookAnbauen(T, info) {
   switch (info.extra) {
     case 'brille': {
       const glas = new THREE.MeshStandardMaterial({ color: '#111', metalness: 0.9, roughness: 0.1 });
-      for (const sx of [-1, 1]) teil(new THREE.BoxGeometry(0.12, 0.07, 0.012), glas, sx * 0.08, 0.025, 0.172, K);
-      teil(new THREE.BoxGeometry(0.06, 0.015, 0.012), glas, 0, 0.045, 0.172, K);
-      for (const sx of [-1, 1]) teil(new THREE.BoxGeometry(0.012, 0.015, 0.16), glas, sx * 0.205, 0.045, 0.09, K);
+      for (const sx of [-1, 1]) teil(new THREE.BoxGeometry(0.12, 0.07, 0.012), glas, sx * 0.08, 0.025, 0.172, T.kopf);
+      teil(new THREE.BoxGeometry(0.06, 0.015, 0.012), glas, 0, 0.045, 0.172, T.kopf);
+      for (const sx of [-1, 1]) teil(new THREE.BoxGeometry(0.012, 0.015, 0.16), glas, sx * 0.205, 0.045, 0.09, T.kopf);
       break;
     }
     case 'bart': {
       const braun = mat('#5c3b1e', { roughness: 0.9 });
-      for (const sx of [-1, 1]) { const h = teil(new THREE.SphereGeometry(0.05, 10, 8), braun, sx * 0.045, -0.055, 0.17, K); h.scale.set(1.3, 0.45, 0.4); h.rotation.z = sx * 0.3; }
+      for (const sx of [-1, 1]) { const h = teil(new THREE.SphereGeometry(0.05, 10, 8), braun, sx * 0.045, -0.055, 0.17, T.kopf); h.scale.set(1.3, 0.45, 0.4); h.rotation.z = sx * 0.3; }
       break;
     }
     case 'fliege': {
@@ -4728,6 +4729,19 @@ function lookAnbauen(T, info) {
     }
   }
   if (T.schild) T.schild.position.y = 1.35 + hoch;   // Das Namensschild über den Hut schieben
+}
+// 🐭 Geduckt: Der Roboter schiebt sich zusammen wie eine Ziehharmonika – Kopf in den Körper, Hut platt –
+// damit er (bei den anderen!) ganz durchs Mauseloch passt und nicht halb in der Wand steckt
+const DUCK_KOPF_RUNTER = 0.3;   // So weit zieht sich der Kopf in den Körper ein
+const DUCK_KLEINER = 0.75;      // So klein wird der Oberkörper (1 = gar nicht)
+function duckForm(T, geduckt, dt) {
+  T.duck = (T.duck || 0) + ((geduckt ? 1 : 0) - (T.duck || 0)) * Math.min(1, dt * 10);
+  const d = T.duck;
+  T.oben.scale.y = 1 - (1 - DUCK_KLEINER) * d;
+  T.kopf.position.y = 0.88 - DUCK_KOPF_RUNTER * d;
+  T.kopf.scale.y = 1 - 0.5 * d;
+  if (T.hut) T.hut.scale.y = 1 - 0.6 * d;
+  if (T.schild) T.schild.scale.y = 0.225 / T.oben.scale.y;   // (Das Namensschild soll nicht platt werden)
 }
 function lookAnimieren(T, dt) {   // Propeller drehen, Flammen flackern, Umhang wehen
   if (T.propeller) T.propeller.rotation.y += dt * 14;
@@ -6886,6 +6900,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     T.g.position.set(o.ax, o.ay, o.az);
     T.g.rotation.set(0, wink, 0);
     beineAnimieren(T, o.dk ? 0 : BEIN_LAENGE, true, 1 / 60);   // (Wie schnell er läuft, misst der Roboter selbst)   // Geduckt: Beine einfahren!
+    duckForm(T, o.dk, 1 / 60);   // 🐭 ... und Kopf + Körper einziehen
     const haelt = o.hg >= 0 ? schatzMitId(o.hg) : null;
     // Hält er einen Mitspieler hoch? (vielleicht sogar DICH!)
     const packtPos = !o.pg ? null : o.pg === mp.peer.id ? spielerKoerper.position : mp.andere.get(o.pg) ? (q => ({ x: q.ax, y: q.ay + 0.6, z: q.az }))(mp.andere.get(o.pg)) : null;
