@@ -402,6 +402,10 @@ const monsterSound = {
     if (!LEHRER_DASH) { ton(110, 0, 0.08, 'triangle', 0.09 * laut, 80); ton(104, 0.5, 0.08, 'triangle', 0.08 * laut, 75); }   // (Beim Hüpfen macht die Landung WUMM)
     if (jagt) { monsterSound.lehrerGlocke(laut * 0.7); if (Math.random() < 0.5) ton(2600, 0.3, 0.25, 'sine', 0.025 * laut, 3400); }
   },
+  lehrerKlatsch(laut) {   // KLATSCH! (der Stock in seiner Hand)
+    if (laut <= 0.02) return;
+    rauschen(0, 0.05, 0.14 * laut, 'highpass', 1800); ton(180, 0, 0.05, 'triangle', 0.06 * laut, 120);
+  },
   lehrerZisch(laut) {   // ZISCH! (der Zeigestock saust durch die Luft)
     if (laut <= 0.02) return;
     rauschen(0, 0.16, 0.12 * laut, 'bandpass', 1800, null, 5000);
@@ -1938,6 +1942,7 @@ const SCHUL_ANDERE = ['globus', 'pokal', 'uhr', 'teddy', 'sanduhr', 'geige', 'sp
 const TEST_FRAGEN = 3;   // 📝 So viele Fragen hat der Nachsitz-Test
 const TEST_ZEIT = 20;    // So viele Sekunden hast du für jede Frage
 const LEHRER_RUHE = 12;
+const LEHRER_KLOPFEN = 2.6;       // 👋 So oft pro Sekunde klopft er sich den Stock in die Hand, wenn er stehen bleibt
 const LEHRER_DASH = true;          // 💨 true = Herr Kreidemann dasht: Stock hochreißen – ZISCH! nach vorne sausen – TOCK! – kurz stehen – ...
 const LEHRER_DASH_TAKT = { takt: 1.1, jagdTakt: 0.7, sausen: 0.25 };   // takt: so lange dauert ein Dash mit Pause (Sekunden) · sausen: so viel davon saust er los  // So lange lässt der Lehrer alle in Ruhe, nachdem er jemanden erwischt hat
 const KARTEN = {
@@ -4221,8 +4226,10 @@ function baueMonsterMesh(art) {
     teil(new THREE.BoxGeometry(0.05, 0.012, 0.012), dunkel, 0, 0.03, 0.14, kopf);
     teil(new THREE.BoxGeometry(0.12, 0.015, 0.01), dunkel, 0, -0.09, 0.132, kopf);   // Schmaler, strenger Mund
     g.userData.arme = [-1, 1].map(s => { const a = new THREE.Group(); a.position.set(s * 0.28, 1.92, 0); g.add(a); teil(new THREE.BoxGeometry(0.1, 0.75, 0.12), mantel, 0, -0.36, 0, a); teil(new THREE.SphereGeometry(0.055, 8, 6), haut, 0, -0.76, 0, a); return a; });
-    teil(new THREE.CylinderGeometry(0.012, 0.018, 1.1, 6), new THREE.MeshStandardMaterial({ color: '#8b5a2b' }), 0, -1.3, 0.03, g.userData.arme[1]);   // Rechts: der Zeigestock
-    const gl = new THREE.Group(); gl.position.set(0, -0.82, 0.04); g.userData.arme[0].add(gl);                                              // Links: die Handglocke
+    // (arme[0] = sein RECHTER Arm, arme[1] = sein LINKER – er schaut ja nach vorne, zu dir)
+    const stock = new THREE.Group(); stock.position.set(0, -0.76, 0); g.userData.arme[0].add(stock);   // Rechts: der Zeigestock (quer in der Hand)
+    teil(new THREE.CylinderGeometry(0.012, 0.018, 1.1, 6), new THREE.MeshStandardMaterial({ color: '#8b5a2b' }), 0.5, 0, 0, stock).rotation.z = Math.PI / 2;
+    const gl = new THREE.Group(); gl.position.set(0.3, 0.98, 0.12); gl.rotation.z = 0.3; g.add(gl);                                          // Die Handglocke hängt am Gürtel
     teil(new THREE.CylinderGeometry(0.025, 0.025, 0.12, 8), new THREE.MeshStandardMaterial({ color: '#4a2c17' }), 0, 0.04, 0, gl);
     teil(new THREE.CylinderGeometry(0.04, 0.09, 0.12, 14), goldMat, 0, -0.08, 0, gl);
   } else if (art === 'jaeger') {
@@ -5088,10 +5095,12 @@ function zeigeMonster(m) {
     U.beine[0].rotation.x = ruck * 0.45 + (saust ? 0.5 : 0); U.beine[1].rotation.x = -ruck * 0.45 - (saust ? 0.5 : 0);   // Beim Sausen: weiter Schritt
     if (saust) g.rotation.x += 0.22;   // ... und er lehnt sich nach vorne
     // Der Zeigestock: Beim Stehen reißt er ihn über den Kopf hoch – beim Sausen schwingt er ihn nach vorne runter: ZISCH!
-    const ausholen = Math.min(1, (U.stehT || 0) / 0.25), schlag = Math.min(1, (U.hopT || 0) / 0.12);
-    U.arme[1].rotation.x = !LEHRER_DASH ? (jagt ? -1.4 + Math.sin(zeit * 6) * 0.15 : -0.1 - ruck * 0.2)
-      : saust ? -2.9 + schlag * 2.1 : -0.8 - ausholen * 2.1;   // -2.9 = Stock hoch über dem Kopf · -0.8 = Stock nach vorne
-    U.arme[0].rotation.x = jagt ? -0.5 + Math.sin(zeit * 18) * 0.35 : ruck * 0.3;        // ... und läutet die Glocke
+    // 👋 Die linke Hand hält er offen vor sich hin – und mit der rechten klopft er den Stock hinein: KLATSCH! KLATSCH!
+    U.arme[1].rotation.set(-1.1, 0, -0.1);
+    const klopf = (U.stehT || 0) * LEHRER_KLOPFEN;   // (Klopfer pro Sekunde, nur wenn er steht)
+    const steht = !m.laeuft;
+    U.arme[0].rotation.x = steht ? -1.25 - 0.52 * Math.pow(Math.sin(klopf * Math.PI), 2) : -1.75;   // -1.75 = Stock hoch · -1.25 = Stock liegt auf der Hand
+    if (steht && Math.floor(klopf) !== Math.floor(klopf - LEHRER_KLOPFEN / 60) && klopf > 0.5) monsterSound.lehrerKlatsch(monsterLautstaerke(m));
     U.kopf.rotation.z = jagt ? Math.sin(zeit * 3) * 0.08 : Math.sin(zeit * 0.7 + m.phase) > 0.95 ? 0.4 : 0;   // Manchmal legt er den Kopf schief ...
     U.brille.color.set(m.lehrerRuhe > 0 ? '#7a2020' : jagt && Math.sin(zeit * 20) > 0 ? '#ffffff' : '#ff2a2a');
   } else if (m.art === 'jaeger') {
