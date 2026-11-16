@@ -176,7 +176,17 @@ const SCHAETZE = [
   { id: 'schaedel', name: 'Kristallschädel', emoji: '💀', wert: [2800, 4000], zerbrechlich: 1.7, masse: 2,  groesse: [0.24, 0.28, 0.3],  haeufig: 0.18 },
   { id: 'statue',   name: 'Goldene Statue', emoji: '🗽', wert: [3500, 4800], zerbrechlich: 0.2, masse: 22,  groesse: [0.4, 0.9, 0.4],    haeufig: 0.15, boden: true },   // Schwer!
   { id: 'goldkiste', name: 'Kiste voller Gold', emoji: '💰', wert: [4500, 6500], zerbrechlich: 0.25, masse: 28, groesse: [0.7, 0.5, 0.45], haeufig: 0.1, boden: true },   // Das Wertvollste von allem!
+  // ⛏️ Minen-Schätze (die gibt es nur in der Glückauf-Mine – mine: true):
+  { id: 'goldklumpen', name: 'Goldklumpen', emoji: '🪙', wert: [400, 800],   zerbrechlich: 0.1, masse: 4,  groesse: [0.3, 0.22, 0.26],  haeufig: 3, mine: true },
+  { id: 'amethyst', name: 'Amethyst-Druse', emoji: '🟣', wert: [600, 1000],  zerbrechlich: 1.2, masse: 3,  groesse: [0.42, 0.32, 0.36], haeufig: 2, mine: true },
+  { id: 'bergkristall', name: 'Bergkristall', emoji: '💠', wert: [500, 900], zerbrechlich: 1.4, masse: 1.5, groesse: [0.26, 0.42, 0.26], haeufig: 2, mine: true },
+  { id: 'saphir',   name: 'Riesensaphir',   emoji: '💙', wert: [1500, 2300], zerbrechlich: 1.5, masse: 0.5, groesse: [0.2, 0.2, 0.2],   haeufig: 0.6, mine: true, rund: true },
+  { id: 'grubenlampe', name: 'Alte Grubenlampe', emoji: '🏮', wert: [250, 450], zerbrechlich: 0.8, masse: 1.5, groesse: [0.2, 0.4, 0.2], haeufig: 2, mine: true },
+  { id: 'erzwagen', name: 'Erz-Wägelchen',  emoji: '🛒', wert: [1000, 1500], zerbrechlich: 0.2, masse: 30, groesse: [0.8, 0.55, 0.5],  haeufig: 0.5, mine: true, boden: true },   // Schwer!
+  { id: 'goldader', name: 'Goldader-Brocken', emoji: '🪨', wert: [1800, 2800], zerbrechlich: 0.15, masse: 18, groesse: [0.6, 0.45, 0.5], haeufig: 0.35, mine: true, boden: true },
+  { id: 'fossil',   name: 'Dino-Fossil',    emoji: '🦴', wert: [1200, 2000], zerbrechlich: 0.9, masse: 5,  groesse: [0.7, 0.16, 0.42],  haeufig: 0.6, mine: true },
 ];
+const VILLA_SCHAETZE = SCHAETZE.filter(t => !t.mine);   // In der Spukvilla gibt es keine Minen-Schätze
 const WERTVOLL_AB = 1400;   // Schätze, die mindestens so viel wert sind, gelten als "wertvoll" (die liegen in den Gartenhäuschen)
 
 // ===== Die große Spukvilla (immer dieselbe Karte – keine Level mehr!) =====
@@ -388,6 +398,10 @@ function gruselTon(hoehe, start, dauer, klang, laut, hoeheEnde, zittern = 6, zie
   } catch (e) { /* egal */ }
 }
 const monsterSound = {
+  bergmann(laut, jagt) {   // ⛏️ Klong! ... klong! (die Spitzhacke) – und beim Jagen ein geisterhaftes Heulen
+    for (let k = 0; k < 2; k++) { ton(1250 + Math.random() * 200, k * 0.42, 0.12, 'square', 0.035 * laut, 900); ton(320, k * 0.42, 0.08, 'triangle', 0.06 * laut, 200); rauschen(k * 0.42, 0.06, 0.06 * laut, 'highpass', 2500); }
+    if (jagt) { ton(196, 0, 0.6, 'sine', 0.08 * laut, 220); ton(165, 0.6, 0.9, 'sine', 0.08 * laut, 147); ton(392, 0, 1.5, 'triangle', 0.02 * laut, 330); }
+  },
   chemiker(laut, jagt) {   // 🐷 Grunz, grunz ... (und beim Jagen ein irres Oink-Lachen)
     monsterSound.grunzen(laut, 0); if (Math.random() < 0.6) monsterSound.grunzen(laut * 0.8, 0.3);
     if (jagt) monsterSound.chemikerLacht(laut * 0.7);
@@ -595,6 +609,18 @@ const MUSIK_LIEDER = {
       F5 Eb5 D5 Eb5 | F5 Gb5 Ab5 - | G5 Eb5 Db5 B4 | C5 - . . |`),
   },
 
+  // ⛏️ Geister-Bergmann: „Die Geisterbahn im Stollen“ – ein ratternder Rhythmus wie Räder auf Schienen
+  // und eine schaurige Orgel-Melodie obendrauf. (Eine EIGENE Melodie!)
+  bergmann: {
+    tempo: 160, grund: 98, verzerrung: 40, gitarre: 0.35, melodieKlang: 'orgel', becken: 'achtel',
+    riff: [
+      0, null, 0, 0,  7, null, 0, 0,  5, null, 0, 0,  3, null, 2, null,
+      0, null, 0, 0,  7, null, 0, 0,  8, null, 7, null,  5, 3, 2, null,
+    ],
+    kick: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    snare: [4, 12],
+    melodie: [12, 15, 14, 12, 10, null, 7, 8],
+  },
   // 👻 Staubgeist: Spuk-Orgel mit Geisterchor und Glöckchen – unheimlich und schwebend
   geist: {
     tempo: 140, grund: 110, verzerrung: 15, gitarre: 0.25, melodieKlang: 'orgel', becken: 'glocke',
@@ -1684,7 +1710,7 @@ function baueGartenhaus(S) {
     f.position.set(fx + Math.sin(dreh) * 0.16 * aus, 1.7, fz + Math.cos(dreh) * 0.16 * aus); f.rotation.y = aus > 0 ? dreh : dreh + Math.PI; hausGruppe.add(f);
   }
   // Ein Regal an der Rückwand und die wertvollen Schätze
-  const wertvoll = SCHAETZE.filter(x => x.wert[0] >= WERTVOLL_AB);
+  const wertvoll = VILLA_SCHAETZE.filter(x => x.wert[0] >= WERTVOLL_AB);
   for (let k = 0; k < GARTENHAUS_SCHAETZE; k++) {
     const quer = (k - (GARTENHAUS_SCHAETZE - 1) / 2) * 1.5, typ = gewichtetWaehlen(wertvoll);
     const px = cx - S.nx * 0.9 + (S.nz ? quer : 0), pz = cz - S.nz * 0.9 + (S.nx ? quer : 0);
@@ -1848,7 +1874,7 @@ function baueKeller() {
   sackgassen.forEach((c, k) => {
     const m = mitte(c), [n] = kellerNachbarn(c), o = mitte(n);
     const hx = Math.sign(m.x - o.x) * 0.55, hz = Math.sign(m.z - o.z) * 0.55;   // Ein Stück nach hinten (weg vom Eingang)
-    if (k < KELLER_SCHAETZE) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, m.x + hx, b + typ.groesse[1] / 2 + 0.05, m.z + hz); }
+    if (k < KELLER_SCHAETZE) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, m.x + hx, b + typ.groesse[1] / 2 + 0.05, m.z + hz); }
     else if (rnd() < 0.6) fass(m.x + hx * 1.1 + (hz ? zufall(-0.5, 0.5) : 0), m.z + hz * 1.1 + (hx ? zufall(-0.5, 0.5) : 0));
   });
   // 6) Leuchtende Pilze an den Wänden (so findet man sich ein bisschen zurecht)
@@ -1873,6 +1899,483 @@ function baueKeller() {
 // ===== 🚌 Der ARAG-Einsatzbus (die Lobby), die Abgabe und der Parkplatz =====
 // =====================================================================
 // Das Firmenlogo: ein Roboterkopf mit Bildschirm-Gesicht und daneben ARAG (s = Größe in Pixeln)
+// =====================================================================
+// ===== ⛏️ DIE GLÜCKAUF-MINE (die zweite Map!) =====
+// =====================================================================
+// Im Lobby-Bus suchst du mit dem Karten-Schalter aus, wohin die Fahrt geht: 🏚️ Spukvilla oder ⛏️ Mine.
+// Die Mine liegt weit weg von der Villa (bei x = MINE_ORT). Vorne ist ein Hof mit dem Bus und der Abgabe,
+// dahinter im Berg ein Labyrinth aus Stollen und großen Höhlen – mit Schienen und einer Lore zum Mitfahren! 🚃
+// Alles ist in Zellen eingeteilt (wie ein Schachbrett). Monster und Helfer finden ihren Weg von Zelle zu Zelle.
+const MINE_ORT = 300;   // Hier fängt der Berg an (weit weg von der Villa)
+const MINE = {
+  zelle: 3,             // So groß ist ein Stück Stollen (in Metern)
+  hof: 7,               // So viele Zellen breit ist der Hof vor dem Berg
+  breit: 20, tief: 18,  // So viele Zellen hat der Berg (nach hinten / zur Seite)
+  hoehe: 3.0,           // So hoch sind die Stollen
+  eingang: 8,           // In welcher Reihe der Mineneingang ist
+  hoehlen: 5,           // So viele große Höhlen (mit dem Lore-Bahnhof)
+  abkuerzungen: 35,     // Extra-Durchgänge (sonst gibt es überall nur EINEN Weg hin)
+  schaetze: 55,         // So viele Schätze liegen am Anfang in der Mine
+  balken: 0.35,         // So viele Stollen-Stücke haben Holzbalken (0 bis 1)
+};
+const MINE_MONSTER = { bergmann: 2, geist: 1, formwandler: 1 };   // Diese Monster wohnen in der Mine
+const MINE_SCHATZ_ANTEIL = 0.75;   // So viele Schätze in der Mine sind Minen-Schätze (Gold, Kristalle ...) – der Rest sind andere wertvolle Sachen
+const MINE_ANDERE = ['goldbarren', 'diamant', 'smaragd', 'rubin', 'truhe', 'goldkiste', 'kristall', 'schaedel'];
+const LORE_TEMPO = 5;   // 🚃 So schnell fährt die Lore (Meter pro Sekunde)
+const LORE_HALT = 5;    // So lange hält sie an jedem Bahnhof (Sekunden)
+const KARTEN = {
+  villa: { name: 'Spukvilla', emoji: '🏚️', farbe: '#c9c3ff' },
+  mine: { name: 'Glückauf-Mine', emoji: '⛏️', farbe: '#ffb02e' },
+};
+let kartenWahl = 'villa';   // Wohin fährt der Bus? (wird gespeichert)
+try { if (localStorage.getItem('arag-karte') === 'mine') kartenWahl = 'mine'; } catch (e) { /* egal */ }
+
+// ----- Zellen, Wege -----
+const mineKante = (a, b) => a < b ? a * 100000 + b : b * 100000 + a;
+const imMineGebiet = (x, z) => !!haus && !!haus.mine && x > haus.mine.x0 && x < haus.mine.x1 && z > haus.mine.z0 && z < haus.mine.z1;
+const imBerg = (x, z) => imMineGebiet(x, z) && x > MINE_ORT;   // Drinnen im Berg (nicht auf dem Hof)
+function mineZelle(x, z) {
+  const M = haus.mine;
+  return begrenzt(Math.floor((z - M.z0) / M.zelle), 0, M.nz - 1) * M.nx + begrenzt(Math.floor((x - M.x0) / M.zelle), 0, M.nx - 1);
+}
+function mineMitte(c) {
+  const M = haus.mine;
+  return { x: M.x0 + (c % M.nx + 0.5) * M.zelle, y: 0, z: M.z0 + (Math.floor(c / M.nx) + 0.5) * M.zelle };
+}
+function mineNachbarn(c, auchGesperrt = false) {   // Zellen daneben, zu denen ein Durchgang führt
+  const M = haus.mine, x = c % M.nx, z = Math.floor(c / M.nx), liste = [];
+  for (const [n, ok] of [[c - 1, x > 0], [c + 1, x < M.nx - 1], [c - M.nx, z > 0], [c + M.nx, z < M.nz - 1]]) {
+    if (ok && M.offen.has(mineKante(c, n)) && (auchGesperrt || !M.gesperrt.has(n))) liste.push(n);
+  }
+  return liste;
+}
+function mineAbstaende(start) {   // Wie viele Zellen ist jede Zelle von start weg? (Breitensuche)
+  const tiefe = new Map([[start, 0]]), schlange = [start];
+  for (let k = 0; k < schlange.length; k++) for (const n of mineNachbarn(schlange[k])) if (!tiefe.has(n)) { tiefe.set(n, tiefe.get(schlange[k]) + 1); schlange.push(n); }
+  return tiefe;
+}
+function mineWeg(pos, ziel) {   // Wohin als Nächstes? (der kürzeste Weg durch die Stollen)
+  const M = haus.mine, a = mineZelle(pos.x, pos.z), b = mineZelle(ziel.x, ziel.z);
+  if (a === b || M.gesperrt.has(a) || M.gesperrt.has(b)) return ziel;
+  const vorher = new Map([[a, -1]]), schlange = [a];
+  for (let k = 0; k < schlange.length && !vorher.has(b); k++) for (const n of mineNachbarn(schlange[k])) if (!vorher.has(n)) { vorher.set(n, schlange[k]); schlange.push(n); }
+  if (!vorher.has(b)) return ziel;
+  let n = b;
+  while (vorher.get(n) !== a) n = vorher.get(n);
+  // Schräg zum Durchgang? Dann erst in die Mitte der eigenen Zelle (sonst bleibt man an der Ecke hängen)
+  const am = mineMitte(a), quer = Math.abs(n - a) === 1 ? Math.abs(pos.z - am.z) : Math.abs(pos.x - am.x);
+  return quer > 0.6 ? am : mineMitte(n);
+}
+function mineZufallsZiel(m) {   // Monster wandern ein paar Zellen weiter (meistens im Berg, selten auf den Hof)
+  const M = haus.mine;
+  let c = mineZelle(m.x, m.z);
+  for (let k = 0, n = 2 + Math.floor(Math.random() * 5); k < n; k++) {
+    const nb = mineNachbarn(c).filter(x => x % M.nx >= M.hof || Math.random() < 0.15);
+    if (!nb.length) break;
+    c = nb[Math.floor(Math.random() * nb.length)];
+  }
+  const p = mineMitte(c);
+  return { x: p.x + zufall(-0.6, 0.6), y: 0, z: p.z + zufall(-0.6, 0.6) };
+}
+function mineWeitWeg(m) {   // Eine Zelle im Berg, weit weg (für den Formwandler, wenn er abhaut)
+  const M = haus.mine;
+  for (let v = 0; v < 60; v++) {
+    const c = Math.floor(Math.random() * M.nx * M.nz);
+    if (c % M.nx < M.hof || M.gesperrt.has(c)) continue;
+    const p = mineMitte(c);
+    if (abstand2D(p.x, p.z, m.x, m.z) > 18) return p;
+  }
+  return mineMitte(M.start);
+}
+function mineSchatzTyp() {   // Was für ein Schatz liegt in der Mine?
+  return rnd() < MINE_SCHATZ_ANTEIL ? gewichtetWaehlen(SCHAETZE.filter(t => t.mine)) : gewichtetWaehlen(SCHAETZE.filter(t => MINE_ANDERE.includes(t.id)));
+}
+function mineSchatzPlatz(zz) {   // Ein guter Platz für einen Schatz: Sackgassen und Höhlen sind beliebt
+  const M = haus.mine;
+  for (let v = 0; v < 80; v++) {
+    const c = Math.floor(zz() * M.nx * M.nz), x = c % M.nx;
+    if (x < M.hof || M.gesperrt.has(c) || M.bahnhofZellen.has(c)) continue;
+    const sack = mineNachbarn(c).length === 1, hoehle = M.hoehlenZellen.has(c);
+    if (!sack && !hoehle && zz() < 0.55) continue;
+    const p = mineMitte(c);
+    return { x: p.x + (zz() - 0.5) * 1.3, z: p.z + (zz() - 0.5) * 1.3 };
+  }
+  return null;
+}
+
+// ----- Texturen -----
+const felsTextur = malTextur(256, 256, (g, b, h) => {   // Rauer Fels: braun-grau mit Rissen
+  g.fillStyle = '#4a4038'; g.fillRect(0, 0, b, h);
+  for (let k = 0; k < 2200; k++) { const s = 2 + Math.random() * 7; g.fillStyle = ['#3b322b', '#564b42', '#2e2722', '#62564b', '#463d36'][k % 5]; g.fillRect(Math.random() * b, Math.random() * h, s, s * (0.5 + Math.random())); }
+  g.strokeStyle = 'rgba(20,15,12,0.6)'; g.lineWidth = 2;
+  for (let k = 0; k < 18; k++) { g.beginPath(); let x = Math.random() * b, y = Math.random() * h; g.moveTo(x, y); for (let s = 0; s < 5; s++) { x += (Math.random() - 0.5) * 50; y += Math.random() * 30; g.lineTo(x, y); } g.stroke(); }
+});
+const erdTextur = malTextur(128, 128, (g, b, h) => {   // Staubiger Minenboden
+  g.fillStyle = '#3a3029'; g.fillRect(0, 0, b, h);
+  for (let k = 0; k < 900; k++) { g.fillStyle = ['#463a31', '#2c241f', '#52453a', '#332a24'][k % 4]; g.fillRect(Math.random() * b, Math.random() * h, 1 + Math.random() * 3, 1 + Math.random() * 3); }
+});
+const felsMatCache = new Map();
+function felsMat(laenge, hoehe = MINE.hoehe) {   // Felswand (die Textur passt sich der Länge an – sonst wird sie gestreckt)
+  const k = `${Math.max(1, Math.round(laenge / 2))}|${Math.round(hoehe)}`;
+  if (!felsMatCache.has(k)) {
+    const t = felsTextur.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round(laenge / 2)) * 0.6, Math.max(1, hoehe / 3));
+    felsMatCache.set(k, new THREE.MeshStandardMaterial({ map: t, roughness: 1 }));
+  }
+  return felsMatCache.get(k);
+}
+const holzBalkenMat = new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 0.9 });
+const schienenMat = new THREE.MeshStandardMaterial({ color: '#8a8f96', metalness: 0.8, roughness: 0.4 });
+const laternenGlas = new THREE.MeshBasicMaterial({ color: '#ffcf6b' });
+
+// ----- Bauen -----
+function baueMineKarte() {   // Statt der Villa-Einrichtung: der Hof, der Berg, die Stollen ...
+  const Z = MINE.zelle, mz = (MINE.eingang + 0.5) * Z;
+  haus.parkplatz = []; haus.baeume = [];
+  baueMine();
+  // Die Abgabe und der Bus (genau wie bei der Villa: Bus – Abgabe – Eingang)
+  haus.laster = { x1: MINE_ORT - 8.5, x2: MINE_ORT - 4.0, z1: mz - 2.3, z2: mz + 2.2 };
+  baueAbgabe();
+  baueBus(mz, MINE_ORT);
+  haus.schuppen = [haus.bus.schuppen];   // 🚌 Rein und raus nur durch die Bustür
+  // Gesperrte Zellen (da steht der Bus oder die Abgabe – da laufen Monster und Helfer nicht durch)
+  const M = haus.mine, B = haus.bus, L = haus.laster;
+  for (let c = 0; c < M.nx * M.nz; c++) {
+    const p = mineMitte(c);
+    if (p.x > B.x1 - 0.5 && p.x < B.x2 + 0.5 && p.z > B.z1 && p.z < B.z2) M.gesperrt.add(c);
+    if (p.x > L.x1 - 0.5 && p.x < L.x2 + 0.5 && p.z > L.z1 - 0.8 && p.z < L.z2 + 0.8) M.gesperrt.add(c);
+  }
+  M.abstand = mineAbstaende(M.start);
+  // Die Lore: vom Bahnhof (gleich hinter dem Eingang) bis zur weitesten Höhle
+  baueLore();
+  // Schätze
+  for (let k = 0; k < MINE.schaetze; k++) {
+    const pl = mineSchatzPlatz(rnd);
+    if (!pl) continue;
+    const typ = mineSchatzTyp();
+    neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z);
+  }
+  // Monster – weit weg vom Eingang
+  const weit = [...M.abstand.entries()].filter(([c, d]) => d >= 9 && c % M.nx >= M.hof).map(([c]) => c);
+  const lager = M.hoehlen.find(h => h.art === 'lager');
+  for (const [art, anzahl] of Object.entries(MINE_MONSTER)) for (let k = 0; k < anzahl; k++) {
+    neuesMonster(art, haus.start);
+    const m = monster[monster.length - 1];
+    const c = art === 'bergmann' && lager && k === 0 ? lager.mitteZelle : weit.length ? weit[Math.floor(rnd() * weit.length)] : M.start;
+    const p = mineMitte(c);
+    Object.assign(m, { x: p.x + zufall(-0.5, 0.5), y: 0, z: p.z + zufall(-0.5, 0.5) });
+    if (art === 'formwandler') { m.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; m.tarnTyp = tarnSchatzWaehlen(); }
+  }
+}
+function baueMine() {
+  const Z = MINE.zelle, H = MINE.hoehe, D = 0.4, nx = MINE.hof + MINE.breit, nz = MINE.tief;
+  const x0 = MINE_ORT - MINE.hof * Z, z0 = 0;
+  const M = haus.mine = { zelle: Z, nx, nz, x0, z0, x1: x0 + nx * Z, z1: z0 + nz * Z, hof: MINE.hof, offen: new Set(), gesperrt: new Set(),
+    hoehlen: [], hoehlenZellen: new Set(), bahnhofZellen: new Set(), lichter: [], laternen: [] };
+  const zelle = (x, z) => z * nx + x, imB = (x, z) => x >= MINE.hof && x < nx && z >= 0 && z < nz;
+  const auf = (a, b) => M.offen.add(mineKante(a, b)), istAuf = (a, b) => M.offen.has(mineKante(a, b));
+  // 1) Der Hof: überall offen
+  for (let z = 0; z < nz; z++) for (let x = 0; x < MINE.hof; x++) {
+    if (x + 1 < MINE.hof) auf(zelle(x, z), zelle(x + 1, z));
+    if (z + 1 < nz) auf(zelle(x, z), zelle(x, z + 1));
+  }
+  // 2) Der Berg: ein Labyrinth (immer ein Stück weitergraben, bis es nicht mehr geht, dann zurück)
+  const start = M.start = zelle(MINE.hof, MINE.eingang);
+  const besucht = new Set([start]), stapel = [start];
+  while (stapel.length) {
+    const c = stapel[stapel.length - 1], x = c % nx, z = Math.floor(c / nx);
+    const frei = [[c - 1, x - 1, z], [c + 1, x + 1, z], [c - nx, x, z - 1], [c + nx, x, z + 1]].filter(([n, a, b]) => imB(a, b) && !besucht.has(n));
+    if (!frei.length) { stapel.pop(); continue; }
+    const w = frei[Math.floor(rnd() * frei.length)][0];
+    auf(c, w); besucht.add(w); stapel.push(w);
+  }
+  // 3) Höhlen: große, offene Räume
+  const hoehle = (x1, z1, b, t, art) => {
+    const H0 = { x1, z1, b, t, art, mitteZelle: zelle(x1 + Math.floor(b / 2), z1 + Math.floor(t / 2)) };
+    for (let z = z1; z < z1 + t; z++) for (let x = x1; x < x1 + b; x++) {
+      M.hoehlenZellen.add(zelle(x, z));
+      if (x + 1 < x1 + b) auf(zelle(x, z), zelle(x + 1, z));
+      if (z + 1 < z1 + t) auf(zelle(x, z), zelle(x, z + 1));
+    }
+    M.hoehlen.push(H0);
+    return H0;
+  };
+  const bahnhof = hoehle(MINE.hof, MINE.eingang - 1, 3, 3, 'bahnhof');
+  for (let z = bahnhof.z1; z < bahnhof.z1 + 3; z++) for (let x = bahnhof.x1; x < bahnhof.x1 + 3; x++) M.bahnhofZellen.add(zelle(x, z));
+  const arten = ['kristall', 'gold', 'lager', 'see', 'kristall'];
+  for (let v = 0; M.hoehlen.length < MINE.hoehlen && v < 400; v++) {
+    const b = 3 + Math.floor(rnd() * 2), t = 3, x1 = MINE.hof + 4 + Math.floor(rnd() * (MINE.breit - 4 - b)), z1 = Math.floor(rnd() * (nz - t));
+    if (M.hoehlen.some(h => x1 < h.x1 + h.b + 1 && x1 + b + 1 > h.x1 && z1 < h.z1 + h.t + 1 && z1 + t + 1 > h.z1)) continue;
+    hoehle(x1, z1, b, t, arten[(M.hoehlen.length - 1) % arten.length]);
+  }
+  // 4) Abkürzungen (damit man im Kreis laufen und Monstern ausweichen kann)
+  for (let k = 0; k < MINE.abkuerzungen; k++) {
+    const x = MINE.hof + Math.floor(rnd() * MINE.breit), z = Math.floor(rnd() * nz), rechts = rnd() < 0.5;
+    if (rechts && imB(x + 1, z)) auf(zelle(x, z), zelle(x + 1, z));
+    else if (!rechts && imB(x, z + 1)) auf(zelle(x, z), zelle(x, z + 1));
+  }
+  // 5) Der Eingang: vom Hof in den Berg
+  auf(zelle(MINE.hof - 1, MINE.eingang), start);
+
+  // ----- Jetzt bauen, was man sieht -----
+  const gx = (x0 + M.x1) / 2, gz = (z0 + M.z1) / 2;
+  festerKoerper(gx, -0.25, gz, M.x1 - x0 + 4, 0.5, M.z1 - z0 + 4);   // Der Boden (fest)
+  const hofT = kiesTextur.clone(); hofT.needsUpdate = true; hofT.repeat.set(MINE.hof * Z / 3, nz * Z / 3);
+  const hofBoden = new THREE.Mesh(new THREE.PlaneGeometry(MINE.hof * Z, nz * Z), new THREE.MeshStandardMaterial({ map: hofT, roughness: 1 }));
+  hofBoden.rotation.x = -Math.PI / 2; hofBoden.position.set(x0 + MINE.hof * Z / 2, 0.005, gz); hofBoden.receiveShadow = true; hausGruppe.add(hofBoden);
+  const bergB = MINE.breit * Z, erdT = erdTextur.clone(); erdT.needsUpdate = true; erdT.repeat.set(bergB / 3, nz * Z / 3);
+  const bergBoden = new THREE.Mesh(new THREE.PlaneGeometry(bergB, nz * Z), new THREE.MeshStandardMaterial({ map: erdT, roughness: 1 }));
+  bergBoden.rotation.x = -Math.PI / 2; bergBoden.position.set(MINE_ORT + bergB / 2, 0.005, gz); bergBoden.receiveShadow = true; hausGruppe.add(bergBoden);
+  // Die Decke im Berg (und darüber der Berg selbst)
+  festerKoerper(MINE_ORT + bergB / 2, H + 0.5, gz, bergB, 1, nz * Z);
+  const deckT = felsTextur.clone(); deckT.needsUpdate = true; deckT.repeat.set(bergB / 4, nz * Z / 4);
+  const decke = new THREE.Mesh(new THREE.PlaneGeometry(bergB, nz * Z), new THREE.MeshStandardMaterial({ map: deckT, roughness: 1 }));
+  decke.rotation.x = Math.PI / 2; decke.position.set(MINE_ORT + bergB / 2, H, gz); hausGruppe.add(decke);
+  const bergT = felsTextur.clone(); bergT.needsUpdate = true; bergT.repeat.set(bergB / 5, 3);
+  const berg = new THREE.Mesh(new THREE.BoxGeometry(bergB + 2, 10, nz * Z + 2), new THREE.MeshStandardMaterial({ map: bergT, roughness: 1 }));
+  berg.position.set(MINE_ORT + bergB / 2, H + 5, gz); hausGruppe.add(berg);
+  for (let k = 0; k < 14; k++) {   // Felsspitzen oben auf dem Berg
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(zufall(4, 9), zufall(5, 12), 6), felsMat(10, 6));
+    sp.position.set(MINE_ORT + 3 + rnd() * (bergB - 6), H + 10 + 2, z0 + rnd() * nz * Z); sp.rotation.y = rnd() * 3; hausGruppe.add(sp);
+  }
+  // Die Stollen-Wände (nebeneinanderliegende Wandstücke werden zu einer langen Wand zusammengefasst)
+  const wand = (xa, za, xb, zb) => {
+    const l = Math.hypot(xb - xa, zb - za), entlangX = za === zb;
+    festerKlotz((xa + xb) / 2, H / 2, (za + zb) / 2, entlangX ? l + D : D, H, entlangX ? D : l + D, felsMat(l), true);
+  };
+  for (let k = 0; k <= nz; k++) {   // Wände entlang x (zwischen Reihe k-1 und k)
+    let anfang = -1;
+    for (let x = 0; x <= nx; x++) {
+      const brauch = x < nx && (imB(x, k - 1) || imB(x, k)) && !(k > 0 && k < nz && istAuf(zelle(x, k - 1), zelle(x, k)));
+      if (brauch && anfang < 0) anfang = x;
+      if (!brauch && anfang >= 0) { wand(x0 + anfang * Z, z0 + k * Z, x0 + x * Z, z0 + k * Z); anfang = -1; }
+    }
+  }
+  for (let k = MINE.hof; k <= nx; k++) {   // Wände entlang z (zwischen Spalte k-1 und k)
+    let anfang = -1;
+    for (let z = 0; z <= nz; z++) {
+      const brauch = z < nz && (imB(k - 1, z) || imB(k, z)) && !(k > 0 && k < nx && istAuf(zelle(k - 1, z), zelle(k, z)));
+      if (brauch && anfang < 0) anfang = z;
+      if (!brauch && anfang >= 0) { wand(x0 + k * Z, z0 + anfang * Z, x0 + k * Z, z0 + z * Z); anfang = -1; }
+    }
+  }
+  // Die Felswände rund um den Hof (hoch – da kommt keiner drüber). Hinten (Süden) ist die Zufahrt mit einer Schranke.
+  const klippe = (x, z, b, t) => festerKlotz(x, 4.5, z, b, 9, t, felsMat(Math.max(b, t), 9), true);
+  const zuX1 = x0 + 3.5, zuX2 = x0 + 10.5;   // Die Zufahrt (da kommt der Bus rein)
+  klippe((x0 + MINE_ORT) / 2, z0 - 1, MINE_ORT - x0 + 2, 2);
+  klippe(x0 - 1, gz, 2, nz * Z + 4);
+  klippe((x0 + zuX1) / 2 - 1, M.z1 + 1, zuX1 - x0 + 2, 2);
+  klippe((zuX2 + MINE_ORT) / 2, M.z1 + 1, MINE_ORT - zuX2, 2);
+  festerKoerper((zuX1 + zuX2) / 2, 3, M.z1 + 0.3, zuX2 - zuX1, 6, 0.4);   // Unsichtbare Sperre in der Zufahrt
+  for (const x of [zuX1 + 0.3, zuX2 - 0.3]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.2, 0.25), metallGrauMat); p.position.set(x, 0.6, M.z1 + 0.3); hausGruppe.add(p); }
+  const schrankeTex = malTextur(128, 16, (g) => { for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#ffffff' : '#e03131'; g.fillRect(k * 16, 0, 16, 16); } }, false);
+  const schranke = new THREE.Mesh(new THREE.BoxGeometry(zuX2 - zuX1 - 0.4, 0.12, 0.1), new THREE.MeshStandardMaterial({ map: schrankeTex }));
+  schranke.position.set((zuX1 + zuX2) / 2, 1.1, M.z1 + 0.3); hausGruppe.add(schranke);
+  const strasse = new THREE.Mesh(new THREE.PlaneGeometry(zuX2 - zuX1 + 2, 70), new THREE.MeshStandardMaterial({ map: kiesTextur, roughness: 1 }));
+  strasse.rotation.x = -Math.PI / 2; strasse.position.set((zuX1 + zuX2) / 2, 0.004, M.z1 + 35); hausGruppe.add(strasse);
+  for (let k = 0; k < 40; k++) {   // Felsbrocken an den Rändern (Deko)
+    const r = zufall(0.4, 1.4), seite = Math.floor(rnd() * 3);
+    const x = seite === 0 ? x0 + rnd() * (MINE_ORT - x0) : seite === 1 ? x0 + 0.5 : x0 + rnd() * (MINE_ORT - x0);
+    const z = seite === 0 ? z0 + 0.6 : seite === 1 ? z0 + rnd() * nz * Z : M.z1 - 0.6;
+    if (seite === 2 && x > zuX1 - 1 && x < zuX2 + 1) continue;
+    const b = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), felsMat(3, 3)); b.position.set(x, r * 0.5, z); b.rotation.set(rnd() * 3, rnd() * 3, 0); hausGruppe.add(b);
+  }
+  // Der Mineneingang: ein Holzrahmen mit Schild und Laterne
+  const ez = z0 + (MINE.eingang + 0.5) * Z;
+  for (const s of [-1, 1]) festerKlotz(MINE_ORT - 0.1, H / 2 + 0.2, ez + s * (Z / 2 - 0.15), 0.35, H + 0.4, 0.3, holzBalkenMat, false);
+  festerKlotz(MINE_ORT - 0.1, H + 0.2, ez, 0.4, 0.35, Z + 0.4, holzBalkenMat, false);
+  const schild = schildMesh('⛏️ GLÜCKAUF-MINE', 3.2, 0.6, '#ffb02e');
+  schild.position.set(MINE_ORT - 0.35, H + 0.85, ez); schild.rotation.y = -Math.PI / 2; hausGruppe.add(schild);
+  lampeHinzu(MINE_ORT - 1.2, H - 0.3, ez - 2, '#ffc46b', 2.2, 12, true);
+  lampeHinzu(x0 + MINE.hof * Z * 0.35, 5, z0 + 4, '#b9c8ff', 1.4, 18, false);   // Eine Lampe über dem Hof
+  // Holzbalken in den Stollen (und manchmal eine Laterne daran)
+  for (let c = 0; c < nx * nz; c++) {
+    const x = c % nx, z = Math.floor(c / nx);
+    if (x < MINE.hof || M.hoehlenZellen.has(c)) continue;
+    const ox = istAuf(c, c - 1) && x > 0 && istAuf(c, c + 1), oz = z > 0 && istAuf(c, c - nx) && istAuf(c, c + nx);
+    if (ox === oz || rnd() > MINE.balken) continue;   // Nur in geraden Stollen
+    const p = mineMitte(c), w = Z / 2 - D / 2 - 0.12;
+    const posten = (dx, dz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, H, 0.2), holzBalkenMat); m.position.set(p.x + dx, H / 2, p.z + dz); hausGruppe.add(m); };
+    if (ox) { posten(0, -w); posten(0, w); } else { posten(-w, 0); posten(w, 0); }
+    const quer = new THREE.Mesh(new THREE.BoxGeometry(ox ? 0.22 : w * 2 + 0.2, 0.22, ox ? w * 2 + 0.2 : 0.22), holzBalkenMat);
+    quer.position.set(p.x, H - 0.15, p.z); hausGruppe.add(quer);
+    if (rnd() < 0.45) {   // Eine Laterne (leuchtet nur ein bisschen – echtes Licht gibt es in den Höhlen)
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.12), laternenGlas); l.position.set(p.x, H - 0.42, p.z); hausGruppe.add(l);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glanzTextur, color: '#ffb347', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+      glow.scale.setScalar(1.1); glow.position.copy(l.position); hausGruppe.add(glow);
+      M.laternen.push({ glow, phase: rnd() * 6 });
+    }
+  }
+  // Die Höhlen einrichten
+  for (const h of M.hoehlen) baueHoehle(h);
+}
+function baueHoehle(h) {
+  const M = haus.mine, Z = M.zelle, H = MINE.hoehe;
+  const cx = M.x0 + (h.x1 + h.b / 2) * Z, cz = M.z0 + (h.z1 + h.t / 2) * Z;
+  h.x = cx; h.z = cz;
+  const zufallsPunkt = (rand = 0.8) => ({ x: M.x0 + h.x1 * Z + rand + rnd() * (h.b * Z - 2 * rand), z: M.z0 + h.z1 * Z + rand + rnd() * (h.t * Z - 2 * rand) });
+  if (h.art === 'bahnhof') {
+    lampeHinzu(cx, H - 0.4, cz, '#ffd59a', 2.4, 13, false);
+    const s = schildMesh('🚃 BAHNHOF – E = EINSTEIGEN', 3, 0.45, '#ffd166');
+    s.position.set(M.x0 + (h.x1 + h.b) * Z - 0.25, 2.2, cz); s.rotation.y = -Math.PI / 2; hausGruppe.add(s);
+  } else if (h.art === 'kristall') {   // 💎 Leuchtende Kristalle überall
+    const farbe = rnd() < 0.5 ? '#b388ff' : '#5ee7ff';
+    lampeHinzu(cx, H - 0.6, cz, farbe, 2.6, 12, false);
+    const mat = new THREE.MeshStandardMaterial({ color: farbe, emissive: farbe, emissiveIntensity: 0.9, transparent: true, opacity: 0.85, roughness: 0.15 });
+    for (let k = 0; k < 26; k++) {
+      const p = zufallsPunkt(0.5), hoch = zufall(0.4, 1.4);
+      const kr = new THREE.Mesh(new THREE.ConeGeometry(zufall(0.08, 0.2), hoch, 6), mat);
+      const oben = rnd() < 0.3;   // Manche hängen von der Decke!
+      kr.position.set(p.x, oben ? H - hoch / 2 : hoch / 2, p.z); kr.rotation.set(oben ? Math.PI : zufall(-0.3, 0.3), 0, oben ? 0 : zufall(-0.3, 0.3));
+      hausGruppe.add(kr);
+    }
+  } else if (h.art === 'gold') {   // 🪙 Eine Goldader: glitzernde Punkte am Boden, eine alte Lore voll Gold
+    lampeHinzu(cx, H - 0.5, cz, '#ffd166', 2.2, 11, true);
+    const gold = new THREE.MeshStandardMaterial({ color: '#ffd23f', emissive: '#a07000', emissiveIntensity: 0.8, metalness: 0.9, roughness: 0.3 });
+    for (let k = 0; k < 40; k++) { const p = zufallsPunkt(0.4); const g = new THREE.Mesh(new THREE.DodecahedronGeometry(zufall(0.03, 0.09), 0), gold); g.position.set(p.x, 0.04, p.z); hausGruppe.add(g); }
+  } else if (h.art === 'lager') {   // ⛏️ Das alte Lager vom Geister-Bergmann: Fässer, Kisten, Werkzeug
+    lampeHinzu(cx, H - 0.5, cz, '#8fb8ff', 1.8, 11, true);
+    for (let k = 0; k < 6; k++) { const p = zufallsPunkt(1); festerKlotz(p.x, 0.35, p.z, 0.7, 0.7, 0.7, kistenMat); }
+    const s = schildMesh('⚠️ BETRETEN VERBOTEN', 2.4, 0.45, '#ff6b6b');
+    s.position.set(cx, 2.3, M.z0 + h.z1 * Z + 0.25); hausGruppe.add(s);
+  } else if (h.art === 'see') {   // 💧 Ein unterirdischer See (nur ganz flach – man kann durchlaufen)
+    lampeHinzu(cx, H - 0.5, cz, '#4dd0ff', 1.8, 11, false);
+    const see = new THREE.Mesh(new THREE.CircleGeometry(Math.min(h.b, h.t) * Z * 0.38, 32), new THREE.MeshStandardMaterial({ color: '#0e4a6b', emissive: '#063048', metalness: 0.6, roughness: 0.05, transparent: true, opacity: 0.85 }));
+    see.rotation.x = -Math.PI / 2; see.position.set(cx, 0.02, cz); hausGruppe.add(see);
+  }
+  // Stalagmiten in jeder Höhle (Deko an den Rändern)
+  for (let k = 0; k < 6; k++) {
+    const p = zufallsPunkt(0.35), hoch = zufall(0.4, 1.1), oben = rnd() < 0.5;
+    const st = new THREE.Mesh(new THREE.ConeGeometry(zufall(0.12, 0.25), hoch, 7), felsMat(2, 2));
+    st.position.set(p.x, oben ? H - hoch / 2 : hoch / 2, p.z); if (oben) st.rotation.x = Math.PI; hausGruppe.add(st);
+  }
+}
+
+// ----- 🚃 Die Lore -----
+function baueLore() {
+  const M = haus.mine, bahnhof = M.hoehlen.find(h => h.art === 'bahnhof');
+  const ziele = M.hoehlen.filter(h => h.art !== 'bahnhof');
+  if (!bahnhof || !ziele.length) return;
+  const A = bahnhof.mitteZelle;
+  const abst = mineAbstaende(A);
+  const end = ziele.reduce((a, b) => (abst.get(b.mitteZelle) || 0) > (abst.get(a.mitteZelle) || 0) ? b : a);
+  // Weg suchen (Breitensuche rückwärts)
+  const vorher = new Map([[A, -1]]), schlange = [A];
+  for (let k = 0; k < schlange.length && !vorher.has(end.mitteZelle); k++) for (const n of mineNachbarn(schlange[k])) if (!vorher.has(n)) { vorher.set(n, schlange[k]); schlange.push(n); }
+  if (!vorher.has(end.mitteZelle)) return;
+  const zellen = [];
+  for (let c = end.mitteZelle; c !== -1; c = vorher.get(c)) zellen.unshift(c);
+  const punkte = zellen.map(c => mineMitte(c));
+  const laengen = [0];
+  for (let k = 1; k < punkte.length; k++) laengen.push(laengen[k - 1] + abstand2D(punkte[k].x, punkte[k].z, punkte[k - 1].x, punkte[k - 1].z));
+  // Schienen und Schwellen
+  const schwellen = [];
+  for (let k = 1; k < punkte.length; k++) {
+    const a = punkte[k - 1], b = punkte[k], l = laengen[k] - laengen[k - 1], entlangX = Math.abs(b.x - a.x) > 0.1;
+    for (const s of [-0.42, 0.42]) {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(entlangX ? l + 0.1 : 0.06, 0.06, entlangX ? 0.06 : l + 0.1), schienenMat);
+      r.position.set((a.x + b.x) / 2 + (entlangX ? 0 : s), 0.09, (a.z + b.z) / 2 + (entlangX ? s : 0)); hausGruppe.add(r);
+    }
+    for (let d = 0; d < l; d += 0.6) schwellen.push([a.x + (b.x - a.x) * d / l, a.z + (b.z - a.z) * d / l, entlangX]);
+  }
+  const sw = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.06, 1.15), holzBalkenMat, schwellen.length);
+  const hilf = new THREE.Object3D();
+  schwellen.forEach(([x, z, entlangX], k) => { hilf.position.set(x, 0.03, z); hilf.rotation.set(0, entlangX ? 0 : Math.PI / 2, 0); hilf.updateMatrix(); sw.setMatrixAt(k, hilf.matrix); });
+  hausGruppe.add(sw);
+  // Die Lore selbst
+  const g = new THREE.Group(); hausGruppe.add(g);
+  const eisen = new THREE.MeshStandardMaterial({ color: '#5a4636', metalness: 0.5, roughness: 0.6 }), rand = new THREE.MeshStandardMaterial({ color: '#2b2b30', metalness: 0.8, roughness: 0.4 });
+  const teil = (b, h, t, x, y, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+  teil(1.1, 0.08, 1.5, 0, 0.32, 0, eisen);                                                   // Boden
+  for (const s of [-1, 1]) { teil(0.08, 0.6, 1.5, s * 0.55, 0.62, 0, eisen); teil(1.1, 0.6, 0.08, 0, 0.62, s * 0.75, eisen); }   // Wände
+  for (const s of [-1, 1]) { teil(0.1, 0.06, 1.55, s * 0.56, 0.94, 0, rand); teil(1.15, 0.06, 0.1, 0, 0.94, s * 0.76, rand); }  // Oberer Rand
+  for (const sx of [-0.42, 0.42]) for (const sz of [-0.5, 0.5]) {
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 14), rand); r.rotation.z = Math.PI / 2; r.position.set(sx, 0.18, sz); g.add(r);
+  }
+  const lampe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.06), laternenGlas); lampe.position.set(0, 0.8, 0.8); g.add(lampe);
+  M.lore = { punkte, laengen, laenge: laengen[laengen.length - 1], s: 0, zeigS: 0, richtung: 1, warten: LORE_HALT, g, drin: false, rumpel: 0 };
+}
+function lorePunkt(L, s) {   // Wo ist die Lore, wenn sie s Meter gefahren ist? (und wohin zeigt sie)
+  s = begrenzt(s, 0, L.laenge);
+  let k = 1;
+  while (k < L.laengen.length - 1 && L.laengen[k] < s) k++;
+  const a = L.punkte[k - 1], b = L.punkte[k], l = Math.max(0.001, L.laengen[k] - L.laengen[k - 1]), u = (s - L.laengen[k - 1]) / l;
+  return { x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u, winkel: Math.atan2(b.x - a.x, b.z - a.z) };
+}
+function loreUpdate(dt) {   // Fahren (rechnet der Gastgeber) und zeigen (alle)
+  const L = haus && haus.mine && haus.mine.lore;
+  if (!L) return;
+  if (mp.rolle !== 'gast') {
+    if (L.warten > 0) L.warten -= dt;
+    else {
+      L.s += L.richtung * LORE_TEMPO * dt;
+      if (L.s >= L.laenge) { L.s = L.laenge; L.richtung = -1; L.warten = LORE_HALT; }
+      if (L.s <= 0) { L.s = 0; L.richtung = 1; L.warten = LORE_HALT; }
+    }
+    L.zeigS = L.s;
+  } else L.zeigS += (L.s - L.zeigS) * Math.min(1, dt * 8);
+  const q = lorePunkt(L, L.zeigS), faehrt = L.warten <= 0;
+  L.g.position.set(q.x, faehrt ? Math.abs(Math.sin(zeit * 17)) * 0.015 : 0, q.z);
+  if (faehrt) L.g.rotation.y = winkelHin(L.g.rotation.y, q.winkel + (L.richtung < 0 ? Math.PI : 0), Math.min(1, dt * 6));
+  // Rumpeln (je näher, desto lauter)
+  L.rumpel -= dt;
+  if (faehrt && L.rumpel <= 0 && !lobby) {
+    L.rumpel = 0.32;
+    const laut = L.drin ? 1 : lautBei({ x: q.x, y: 0.5, z: q.z });
+    if (laut > 0.05) { ton(55 + Math.random() * 10, 0, 0.25, 'sawtooth', 0.04 * laut, 45); rauschen(0, 0.12, 0.05 * laut, 'lowpass', 400); }
+  }
+}
+function loreNah() {   // Stehst du neben der Lore?
+  const L = haus && haus.mine && haus.mine.lore, p = spielerKoerper.position;
+  return !!L && !tot && abstand2D(p.x, p.z, L.g.position.x, L.g.position.z) < 1.9 && p.y < 2.5;
+}
+function loreUmschalten() {   // E: Einsteigen oder Aussteigen
+  const L = haus && haus.mine && haus.mine.lore;
+  if (!L) return false;
+  if (L.drin) {
+    L.drin = false;
+    spielerKoerper.position.y = 1.4; spielerKoerper.velocity.set(0, 2, 0);
+    zeigeNachricht('🚃 Ausgestiegen!', 1.5); sound.sprung();
+    return true;
+  }
+  if (!loreNah()) return false;
+  loslassen(); if (geduckt) ducken(false);
+  L.drin = true;
+  zeigeNachricht('🚃 Eingestiegen! Festhalten ... (E = aussteigen)', 2.5, '#ffd166');
+  ton(330, 0, 0.1, 'square', 0.06); ton(440, 0.1, 0.12, 'square', 0.06);
+  return true;
+}
+function loreFahren() {   // Sitzt du drin? Dann fährst du mit (du klebst in der Lore)
+  const L = haus && haus.mine && haus.mine.lore;
+  if (!L || !L.drin) return false;
+  if (tot || lobby || zustand !== 'spiel') { L.drin = false; return false; }
+  const g = L.g.position;
+  spielerKoerper.position.set(g.x, 0.5 + KOERPER_RADIUS, g.z);
+  spielerKoerper.velocity.set(0, 0, 0);
+  return true;
+}
+
+// ----- Karte wählen (in der Lobby) -----
+function karteSchildMalen() {
+  const F = haus && haus.fahrBus;
+  if (!F || !F.karteSchild) return;
+  const g = F.karteSchild.g, K = KARTEN[kartenWahl];
+  g.fillStyle = '#10202a'; g.fillRect(0, 0, 256, 96);
+  g.strokeStyle = K.farbe; g.lineWidth = 6; g.strokeRect(3, 3, 250, 90);
+  g.fillStyle = K.farbe; g.font = 'bold 26px Arial, sans-serif'; g.textAlign = 'center';
+  g.fillText(`${K.emoji} ${K.name.toUpperCase()}`, 128, 44, 240);
+  g.fillStyle = '#ffffff'; g.font = '20px Arial, sans-serif'; g.fillText('E = andere Karte', 128, 78);
+  F.karteSchild.tex.needsUpdate = true;
+  F.karteLampe.material.color.set(K.farbe);
+}
+function karteSetzen(k) {   // 🗺️ Andere Karte: Die ganze Welt wird neu gebaut (nur in der Lobby)
+  if (!lobby || !KARTEN[k] || k === kartenWahl) return;
+  kartenWahl = k;
+  try { localStorage.setItem('arag-karte', k); } catch (e) { /* egal */ }
+  starteLevel(mp.aktiv && mp.startzahl ? mp.startzahl : KARTE.startzahl);
+  ton(523, 0, 0.12, 'square', 0.06); ton(784, 0.12, 0.18, 'square', 0.06);
+  zeigeNachricht(`🗺️ Neues Ziel: ${KARTEN[k].emoji} ${KARTEN[k].name}! Der Bus biegt ab ...`, 3.5, KARTEN[k].farbe);
+}
+
 function zeichneAragLogo(g, x, y, s, schriftFarbe = '#10202a') {
   g.save();
   g.strokeStyle = '#7cf5c6'; g.lineWidth = s * 0.06;
@@ -1913,8 +2416,8 @@ function busSeite(laenge, logo) {   // Eine Seite vom Bus: oben Fenster, unten L
     }
   }).tex;
 }
-function baueBus(mz) {
-  const X1 = -15.4, X2 = -12.0, Z1 = mz - 7, Z2 = mz + 5, H = 3.0, D = 0.15, cx = (X1 + X2) / 2, W = X2 - X1;
+function baueBus(mz, ox = 0) {   // ox: so weit nach rechts verschoben (bei der Mine)
+  const X1 = -15.4 + ox, X2 = -12.0 + ox, Z1 = mz - 7, Z2 = mz + 5, H = 3.0, D = 0.15, cx = (X1 + X2) / 2, W = X2 - X1;
   const TZ1 = Z1 + 1.3, TZ2 = Z1 + 2.7, TZ = (TZ1 + TZ2) / 2;   // Die Tür (rechts vorne – zum Haus hin)
   const gruppe = new THREE.Group(); hausGruppe.add(gruppe);   // (Im Intro fährt die ganze Gruppe heran)
   const lack = new THREE.MeshStandardMaterial({ color: '#eef3f1', roughness: 0.5 });
@@ -1940,7 +2443,7 @@ function baueBus(mz) {
   teil(X2 - D / 2, H / 2, (TZ2 + Z2) / 2, D, H, Z2 - TZ2, mat6(0, new THREE.MeshStandardMaterial({ map: busSeite(Z2 - TZ2, true), roughness: 0.5 }), innen(Z2 - TZ2)));   // Rechts mit Logo
   const front = canvasTextur(384, 336, (g, b, h) => {   // Vorne: Leuchtschrift, Windschutzscheibe, Scheinwerfer
     g.fillStyle = '#eef3f1'; g.fillRect(0, 0, b, h);
-    g.fillStyle = '#111'; g.fillRect(30, 10, b - 60, 42); g.fillStyle = '#ffb02e'; g.font = 'bold 30px monospace'; g.textAlign = 'center'; g.fillText('SPUKVILLA', b / 2, 42);
+    g.fillStyle = '#111'; g.fillRect(30, 10, b - 60, 42); g.fillStyle = '#ffb02e'; g.font = 'bold 30px monospace'; g.textAlign = 'center'; g.fillText(kartenWahl === 'mine' ? 'GLUECKAUF-MINE' : 'SPUKVILLA', b / 2, 42, b - 70);
     g.fillStyle = '#0e1a2b'; g.beginPath(); g.roundRect(14, 62, b - 28, 120, 14); g.fill();
     g.fillStyle = 'rgba(124,245,198,0.12)'; g.fillRect(30, 70, 60, 100);
     g.fillStyle = '#7cf5c6'; g.fillRect(0, 196, b, 12);
@@ -2280,7 +2783,7 @@ function baueWald() {
   if (haus.bus) haus.schuppen.push(haus.bus.schuppen);   // 🚌 Der Bus funktioniert wie ein Gartenhäuschen: rein und raus nur durch die Tür
   if (haus.parkplatz) bauePlatzBoden();
   // 5) Schätze im Wald (im Laub versteckt ...)
-  for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
+  for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
   baueWiese(B, T, M);   // 🌱🌼 Gras und Wildblumen
   // 6) Der Mond
   const mond = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: '#e9e6cf', fog: false }));
@@ -2949,7 +3452,7 @@ function raumEinrichten(R) {
   const anzahl = zufallGanz(1, 3);
   const frei = (x1, z1, x2, z2) => R.belegt.every(b => x2 < b[0] || x1 > b[2] || z2 < b[1] || z1 > b[3]);
   for (let k = 0; k < anzahl; k++) {
-    const typ = gewichtetWaehlen(SCHAETZE);
+    const typ = gewichtetWaehlen(VILLA_SCHAETZE);
     const [sb, sh, st] = typ.groesse;
     if (!typ.boden && R.ablagen.length && rnd() < 0.65) {
       const a = auswahl(R.ablagen);
@@ -3179,6 +3682,43 @@ function baueSchatzMesh(typ) {
     add(new THREE.BoxGeometry(0.05, 0.3, 0.05), goldMat, 0.12, 0.2, 0).rotation.z = -0.3;   // Arm hoch (mit Fackel)
     add(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd166' }), 0.17, 0.37, 0);
     for (let k = 0; k < 5; k++) { const w = k / 5 * Math.PI * 2; add(new THREE.ConeGeometry(0.02, 0.07, 4), goldMat, Math.cos(w) * 0.08, 0.3, Math.sin(w) * 0.08); }   // Strahlenkrone
+  } else if (typ.id === 'goldklumpen') {   // 🪙 Ein unförmiger Klumpen Gold
+    for (const [x, y, z, r] of [[0, -0.02, 0, 0.11], [0.07, 0.03, 0.04, 0.08], [-0.07, 0.02, -0.03, 0.08], [0.02, 0.06, -0.06, 0.06]]) add(new THREE.DodecahedronGeometry(r, 0), goldMat, x, y, z).rotation.set(x * 9, y * 9, z * 9);
+  } else if (typ.id === 'amethyst') {   // 🟣 Ein grauer Stein – innen voller lila Kristalle
+    add(new THREE.SphereGeometry(b * 0.48, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#5b5560', roughness: 1 }), 0, -h / 2, 0).scale.set(1, h / (b * 0.48), t / b);
+    const lila = new THREE.MeshStandardMaterial({ color: '#a35cff', emissive: '#5a1fa8', emissiveIntensity: 0.7, roughness: 0.15, metalness: 0.2 });
+    for (let k = 0; k < 9; k++) { const w = k / 9 * Math.PI * 2, r = k % 3 === 0 ? 0.02 : 0.09; add(new THREE.ConeGeometry(0.035, 0.16, 5), lila, Math.cos(w) * r, h * 0.25, Math.sin(w) * r).rotation.set(Math.sin(w) * 0.4, 0, Math.cos(w) * 0.4); }
+  } else if (typ.id === 'bergkristall') {   // 💠 Ein Büschel durchsichtiger Kristalle
+    const klar = new THREE.MeshStandardMaterial({ color: '#d8fbff', emissive: '#3fc6e0', emissiveIntensity: 0.5, transparent: true, opacity: 0.75, roughness: 0.05 });
+    for (const [x, z, l, kipp] of [[0, 0, 0.3, 0], [0.07, 0.03, 0.2, 0.4], [-0.07, 0.02, 0.22, -0.35], [0.02, -0.07, 0.18, 0.3], [-0.03, 0.07, 0.16, -0.3]]) {
+      const kr = new THREE.Group(); kr.position.set(x, -h / 2, z); kr.rotation.set(z * 4, 0, kipp); g.add(kr);
+      const s1 = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, l, 6), klar); s1.position.y = l / 2; kr.add(s1);
+      const s2 = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.08, 6), klar); s2.position.y = l + 0.04; kr.add(s2);
+    }
+  } else if (typ.id === 'saphir') {   // 💙 Ein riesiger blauer Edelstein
+    add(new THREE.OctahedronGeometry(0.1, 0), new THREE.MeshStandardMaterial({ color: '#2f6bff', emissive: '#0d2a8a', emissiveIntensity: 0.8, metalness: 0.3, roughness: 0.05 }));
+  } else if (typ.id === 'grubenlampe') {   // 🏮 Eine alte Bergmanns-Lampe aus Messing (sie leuchtet noch!)
+    const messing = new THREE.MeshStandardMaterial({ color: '#b5893a', metalness: 0.8, roughness: 0.35 });
+    add(new THREE.CylinderGeometry(0.08, 0.09, 0.08, 14), messing, 0, -h / 2 + 0.04, 0);
+    add(new THREE.CylinderGeometry(0.06, 0.06, 0.16, 14), new THREE.MeshStandardMaterial({ color: '#ffd27a', emissive: '#ffb030', emissiveIntensity: 1.2, transparent: true, opacity: 0.85 }), 0, -h / 2 + 0.16, 0);
+    for (let k = 0; k < 3; k++) { const w = k / 3 * Math.PI * 2; add(new THREE.CylinderGeometry(0.008, 0.008, 0.16), messing, Math.cos(w) * 0.065, -h / 2 + 0.16, Math.sin(w) * 0.065); }
+    add(new THREE.ConeGeometry(0.075, 0.07, 14), messing, 0, -h / 2 + 0.275, 0);
+    add(new THREE.TorusGeometry(0.05, 0.008, 6, 14), messing, 0, -h / 2 + 0.34, 0);
+  } else if (typ.id === 'erzwagen') {   // 🛒 Ein kleines Wägelchen voller Erz und Gold
+    const eisen = new THREE.MeshStandardMaterial({ color: '#5a4636', metalness: 0.5, roughness: 0.6 }), stein = new THREE.MeshStandardMaterial({ color: '#4a4038', roughness: 1 });
+    add(new THREE.BoxGeometry(b * 0.9, h * 0.6, t * 0.8), eisen, 0, h * 0.05, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12), schwarzMat, sx * b * 0.3, -h / 2 + 0.09, sz * t * 0.42).rotation.x = Math.PI / 2;
+    for (let k = 0; k < 7; k++) add(new THREE.DodecahedronGeometry(0.09, 0), k % 2 ? goldMat : stein, (k % 4 - 1.5) * 0.15, h * 0.3 + (k % 2) * 0.03, (k % 3 - 1) * 0.1);
+  } else if (typ.id === 'goldader') {   // 🪨 Ein schwerer Felsbrocken mit Gold drin
+    add(new THREE.DodecahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: '#5d544b', roughness: 1 }), 0, 0, 0).scale.set(1, 0.75, 0.83);
+    for (let k = 0; k < 14; k++) { const w = k * 2.4, u = (k % 5) / 5; add(new THREE.BoxGeometry(0.08, 0.035, 0.06), goldMat, Math.cos(w) * 0.25 * (1 - u * 0.3), (u - 0.4) * 0.3, Math.sin(w) * 0.21 * (1 - u * 0.3)).rotation.y = w; }
+  } else if (typ.id === 'fossil') {   // 🦴 Ein Dino-Skelett in einer Steinplatte
+    add(new THREE.BoxGeometry(b, h * 0.5, t), new THREE.MeshStandardMaterial({ color: '#a89a82', roughness: 1 }), 0, -h / 4, 0);
+    const knochen = new THREE.MeshStandardMaterial({ color: '#f1e6cc', roughness: 0.8 });
+    add(new THREE.CylinderGeometry(0.02, 0.02, b * 0.7, 8), knochen, 0, 0.02, 0).rotation.z = Math.PI / 2;   // Wirbelsäule
+    for (let k = 0; k < 6; k++) add(new THREE.BoxGeometry(0.02, 0.02, 0.24 - Math.abs(k - 2.5) * 0.03), knochen, -0.16 + k * 0.06, 0.02, 0);   // Rippen
+    add(new THREE.SphereGeometry(0.06, 10, 8), knochen, b * 0.38, 0.03, 0).scale.set(1.5, 0.6, 1);   // Schädel
+    add(new THREE.BoxGeometry(0.16, 0.015, 0.015), knochen, -b * 0.42, 0.02, 0).rotation.y = 0.3;   // Schwanz
   } else if (typ.id === 'goldkiste') {   // 💰 Eine offene Holzkiste, randvoll mit Goldmünzen
     add(new THREE.BoxGeometry(0.7, 0.38, 0.45), new THREE.MeshStandardMaterial({ color: '#5a3a1f', roughness: 0.8 }), 0, -0.06, 0);
     for (const x of [-0.3, 0.3]) add(new THREE.BoxGeometry(0.05, 0.4, 0.47), goldMat, x, -0.06, 0);   // Goldbeschläge
@@ -3264,6 +3804,7 @@ function lasterWert() {
 // 👂 Lauscher: ist blind, hört aber alles! Lauter Krach lockt ihn an. Steh still oder duck dich, dann findet er dich nicht.
 // 🗿 Starrer: eine Steinstatue. Sie bewegt sich NUR, wenn du nicht hinschaust! Lass sie nicht aus den Augen ...
 const MONSTER_ARTEN = {
+  bergmann: { name: 'Geister-Bergmann', emoji: '⛏️', tempo: 1.3, jagdTempo: 3.5, schaden: 35, sicht: 13, augen: 1.6, pause: 1.8, betaeubbar: true },   // Nur in der Mine!
   geist:    { name: 'Staubgeist', emoji: '👻', tempo: 1.6, jagdTempo: 3.3, schaden: 30, sicht: 14, augen: 1.3, pause: 2, betaeubbar: true },
   lauscher: { name: 'Lauscher',   emoji: '👂', tempo: 1.0, jagdTempo: 4.6, schaden: 45, hoeren: 2.5, pause: 2, betaeubbar: true },
   starrer:  { name: 'Starrer',    emoji: '🗿', tempo: 1.2, jagdTempo: 4.8, schaden: 50, pause: 3, betaeubbar: false },
@@ -3466,6 +4007,30 @@ function baueMonsterMesh(art) {
     const mund = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.02), new THREE.MeshBasicMaterial({ color: '#000' }));
     mund.position.set(0, 1.9, 0.27); g.add(mund);
     g.userData.ohrMat = ohrMat;
+  } else if (art === 'bergmann') {   // ⛏️ Der Geister-Bergmann: durchsichtig, Helm mit Lampe, Spitzhacke und Laterne
+    const geist = (farbe, o = 0.82) => new THREE.MeshStandardMaterial({ color: farbe, transparent: true, opacity: o, emissive: '#2a5a7a', emissiveIntensity: 0.6, roughness: 0.7 });
+    const blau = geist('#3d5a80'), haut = geist('#bfe6ff', 0.75), bart = geist('#f0f6ff', 0.85), holz = geist('#7a5230'), eisen = geist('#9aa4ae'), gelb = geist('#e0b000', 0.9);
+    const teil = (geo, mat, x, y, z, eltern = g) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); eltern.add(m); return m; };
+    g.userData.beine = [-1, 1].map(s => { const b = new THREE.Group(); b.position.set(s * 0.13, 0.85, 0); g.add(b); teil(new THREE.BoxGeometry(0.17, 0.8, 0.2), blau, 0, -0.4, 0, b); teil(new THREE.BoxGeometry(0.19, 0.12, 0.3), geist('#3a2a1a'), 0, -0.8, 0.05, b); return b; });
+    teil(new THREE.BoxGeometry(0.5, 0.6, 0.32), blau, 0, 1.15, 0);                   // Latzhose
+    teil(new THREE.BoxGeometry(0.52, 0.06, 0.34), geist('#6b4a2b'), 0, 0.88, 0);     // Gürtel
+    teil(new THREE.SphereGeometry(0.2, 14, 10), haut, 0, 1.62, 0);                   // Kopf
+    teil(new THREE.ConeGeometry(0.17, 0.32, 10), bart, 0, 1.43, 0.1).rotation.x = Math.PI + 0.25;   // Langer weißer Bart
+    teil(new THREE.SphereGeometry(0.23, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), gelb, 0, 1.68, 0);   // Helm
+    teil(new THREE.CylinderGeometry(0.27, 0.27, 0.025, 18), gelb, 0, 1.68, 0);
+    teil(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10), new THREE.MeshBasicMaterial({ color: '#fff3b0' }), 0, 1.8, 0.2).rotation.x = Math.PI / 2;   // Helmlampe ...
+    const kegel = new THREE.Mesh(KEGEL_GEO, new THREE.MeshBasicMaterial({ color: '#cfe8ff', alphaMap: KEGEL_TEX, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    kegel.position.set(0, 1.8, 0.22); kegel.rotation.x = 0.35; kegel.scale.setScalar(6); kegel.raycast = () => {}; g.add(kegel);   // ... mit Lichtstrahl
+    const auge = new THREE.MeshBasicMaterial({ color: '#7df9ff', fog: false });
+    for (const s of [-1, 1]) teil(new THREE.SphereGeometry(0.035, 8, 6), auge, s * 0.075, 1.65, 0.18);
+    // Arme: rechts die Spitzhacke, links die Laterne
+    g.userData.arme = [-1, 1].map(s => { const a = new THREE.Group(); a.position.set(s * 0.32, 1.38, 0); g.add(a); teil(new THREE.BoxGeometry(0.12, 0.55, 0.14), blau, 0, -0.25, 0, a); teil(new THREE.SphereGeometry(0.07, 8, 6), haut, 0, -0.55, 0, a); return a; });
+    const hacke = new THREE.Group(); hacke.position.set(0, -0.55, 0.05); g.userData.arme[1].add(hacke);
+    teil(new THREE.CylinderGeometry(0.025, 0.025, 0.85, 8), holz, 0, 0, 0.3, hacke).rotation.x = Math.PI / 2;
+    teil(new THREE.ConeGeometry(0.04, 0.5, 6), eisen, 0, 0, 0.7, hacke).rotation.z = Math.PI / 2;
+    const laterne = teil(new THREE.BoxGeometry(0.13, 0.2, 0.13), new THREE.MeshBasicMaterial({ color: '#ffd27a' }), 0, -0.68, 0.05, g.userData.arme[0]);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glanzTextur, color: '#ffc061', transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.scale.setScalar(1.3); laterne.add(glow); g.userData.glow = glow;
   } else if (art === 'jaeger') {
     // 🤠 Der verrückte Jäger: Stiefel, grüne Jacke, Hut, wilder Bart und eine Schrotflinte
     const mat = f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.9 });
@@ -4304,6 +4869,15 @@ function zeigeMonster(m) {
     g.position.set(m.x, m.y + Math.abs(schritt) * 0.08, m.z);
     g.rotation.set(m.betaeubt > 0 ? 0.3 : 0, m.winkel, schritt * 0.05);
     g.userData.ohrMat.emissive.set(m.modus === 'jagen' ? '#7a1f5a' : '#000000');   // Ohren glühen, wenn er was gehört hat
+  } else if (m.art === 'bergmann') {
+    const U = g.userData, jagt = m.modus === 'jagen', schritt = m.laeuft ? Math.sin(m.phase * (jagt ? 11 : 6)) : 0;
+    g.position.set(m.x, m.y + 0.05 + Math.sin(m.phase * 2) * 0.04, m.z);   // Er schwebt ein kleines bisschen (er ist ja ein Geist)
+    g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel + (m.betaeubt > 0 ? Math.sin(zeit * 8) * 0.4 : 0), 0);
+    U.beine[0].rotation.x = schritt * 0.5; U.beine[1].rotation.x = -schritt * 0.5;
+    const hackt = !m.laeuft && m.modus === 'wandern' && m.betaeubt <= 0;   // Steht er rum? Dann hackt er an der Wand herum!
+    U.arme[1].rotation.x = jagt ? -1.6 + Math.sin(zeit * 9) * 0.9 : hackt ? -0.6 - Math.max(0, Math.sin(zeit * 4)) * 1.6 : -schritt * 0.4 - 0.3;
+    U.arme[0].rotation.x = -0.5 + schritt * 0.3;
+    U.glow.material.opacity = 0.55 + Math.sin(zeit * 13 + m.phase) * 0.12;
   } else if (m.art === 'jaeger') {
     const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 11 : 6)) : 0;
     g.position.set(m.x, m.y + Math.abs(schritt) * 0.05, m.z);
@@ -5513,11 +6087,11 @@ function abgeben(s) {
 function neuerSchatzIrgendwo() {   // Ein neuer Schatz in einem zufälligen Raum (nicht in der Garage) – oder draußen im Wald
   if (haus.baeume && Math.random() < WALD_NEU_ANTEIL) {
     const pl = waldPlatz((a, b) => a + Math.random() * (b - a));
-    if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); return; }
+    if (pl) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); return; }
   }
   const raeume = haus.raeume.filter(R => R.nr !== haus.start);
   const R = raeume[Math.floor(Math.random() * raeume.length)];
-  const typ = gewichtetWaehlen(SCHAETZE), sh = typ.groesse[1];
+  const typ = gewichtetWaehlen(VILLA_SCHAETZE), sh = typ.groesse[1];
   if (!typ.boden && R.ablagen.length && Math.random() < 0.6) {
     const a = R.ablagen[Math.floor(Math.random() * R.ablagen.length)];
     neuerSchatz(typ, a.x + zufall(-a.b / 2, a.b / 2) * 0.7, a.y + sh / 2 + 0.03, a.z + zufall(-a.t / 2, a.t / 2) * 0.7);
