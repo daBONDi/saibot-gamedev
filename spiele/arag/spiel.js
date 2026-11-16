@@ -2292,7 +2292,7 @@ function baueSchule() {
   const hilf = new THREE.Object3D(), farben = ['#3d6fb0', '#b03d3d', '#3d9a5b', '#c9a227', '#7a7f87'].map(f => new THREE.Color(f));
   spinde.forEach(([x, z, w], k) => { hilf.position.set(x, 0.95, z); hilf.rotation.set(0, w, 0); hilf.updateMatrix(); spindM.setMatrixAt(k, hilf.matrix); spindM.setColorAt(k, farben[Math.floor(rnd() * farben.length)]); });
   hausGruppe.add(spindM);
-  for (const [lx, z] of [[3, 8], [10, 8], [16, 8], [10, 2], [10, 14]]) { const p = schulMitte(zelle(lx, z)); lampeHinzu(p.x, H - 0.3, p.z, '#e6efff', 1.6, 12, true); }
+  for (const [lx, z] of [[3, 8], [14, 8], [10, 2], [10, 14]]) { const p = schulMitte(zelle(lx, z)); lampeHinzu(p.x, H - 0.3, p.z, '#e6efff', 1.6, 12, true); }
   // Die Räume einrichten
   const tische = [];
   for (const R of M.raeume) raumEinrichtenSchule(R, tische);
@@ -2501,7 +2501,7 @@ function testUpdate(dt) {   // Die Zeit läuft ... (wird jedes Bild aufgerufen)
   if (nachsitzen.zeit <= 0) { const F = nachsitzen.fragen[nachsitzen.nr]; testEnde(false, `⏰ ZEIT UM! ${F.text} = ${F.loesung}`); }
 }
 function lehrerFaengt(m) {   // 👨‍🏫 Hat er jemanden erwischt? Dann: Nachsitzen! (statt Energie abziehen)
-  if (m.angriffPause > 0 || m.lehrerRuhe > 0) return;
+  if (m.lehrerRuhe > 0 || m.betaeubt > 0) return;   // (Nach dem Erwischen ist er eine Weile zufrieden)
   const p = spielerKoerper.position, fuss = p.y - (geduckt ? DUCK_RADIUS : KOERPER_RADIUS), nah = (x, z, y) => abstand2D(m.x, m.z, x, z) < 1.1 && Math.abs(y - m.y) < 1.2;
   const zufrieden = () => { m.angriffPause = m.info.pause; m.lehrerRuhe = LEHRER_RUHE; m.modus = 'wandern'; m.ziel = null; };
   if (!tot && !nachsitzen && nah(p.x, p.z, fuss)) { zufrieden(); nachsitzenStart(); return; }
