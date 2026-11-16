@@ -6960,7 +6960,20 @@ function geworfenWerden(v, von) {
   zeigeNachricht(`🚀 ${von} hat dich geworfen! Wiiiiii!`, 2, '#ffd166');
   sound.sprung();
 }
+// 🚧 Niemand kommt über den Zaun – egal ob hochgehoben, geworfen oder gesprungen (der Zaun reicht unsichtbar bis zum Himmel)
+const ZAUN_INNEN = 0.5;   // So weit bleibst du mindestens vom Zaun weg
+function imZaun(x, z) {   // Den Punkt (x, z) zurück hinter den Zaun schieben
+  const M = WALD_RAND - ZAUN_INNEN, B = haus.breit * RAUM, T = haus.tief * RAUM;
+  return { x: begrenzt(x, -M, B + M), z: begrenzt(z, -M, T + M) };
+}
+function zaunHalten() {
+  if (lobby || introZeit >= 0 || !haus || tot) return;   // (Die Lobby ist weit weg, und im Intro fährt der Bus erst rein – da gilt der Zaun nicht)
+  const p = spielerKoerper.position, v = spielerKoerper.velocity, q = imZaun(p.x, p.z);
+  if (q.x !== p.x) { p.x = q.x; v.x = 0; }
+  if (q.z !== p.z) { p.z = q.z; v.z = 0; }
+}
 function gehaltenWerden(dt) {   // Hält mich gerade jemand mit seinem Strahl hoch?
+  zaunHalten();
   if (!mp.aktiv || !mp.peer) return;
   freiZeit -= dt;
   let packer = null;
@@ -6975,8 +6988,8 @@ function gehaltenWerden(dt) {   // Hält mich gerade jemand mit seinem Strahl ho
     return;
   }
   // Zum Strahl-Punkt ziehen (wie bei einem Schatz)
-  const p = spielerKoerper.position;
-  let vx = (packer.hz[0] - p.x) * 8, vy = (packer.hz[1] - p.y) * 8, vz = (packer.hz[2] - p.z) * 8;
+  const p = spielerKoerper.position, ziel = lobby ? { x: packer.hz[0], z: packer.hz[2] } : imZaun(packer.hz[0], packer.hz[2]);   // (Nicht hinter den Zaun ziehen!)
+  let vx = (ziel.x - p.x) * 8, vy = (packer.hz[1] - p.y) * 8, vz = (ziel.z - p.z) * 8;
   const l = Math.hypot(vx, vy, vz);
   if (l > 9) { vx *= 9 / l; vy *= 9 / l; vz *= 9 / l; }
   spielerKoerper.velocity.set(vx, vy, vz);
