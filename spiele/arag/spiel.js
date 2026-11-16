@@ -399,8 +399,12 @@ function gruselTon(hoehe, start, dauer, klang, laut, hoeheEnde, zittern = 6, zie
 }
 const monsterSound = {
   lehrer(laut, jagt) {   // 👨‍🏫 Schwere, steife Schritte (tock ... tock) – beim Jagen: Glocke und quietschende Kreide
-    ton(110, 0, 0.08, 'triangle', 0.09 * laut, 80); ton(104, 0.5, 0.08, 'triangle', 0.08 * laut, 75);
+    if (!LEHRER_HUEPFT) { ton(110, 0, 0.08, 'triangle', 0.09 * laut, 80); ton(104, 0.5, 0.08, 'triangle', 0.08 * laut, 75); }   // (Beim Hüpfen macht die Landung WUMM)
     if (jagt) { monsterSound.lehrerGlocke(laut * 0.7); if (Math.random() < 0.5) ton(2600, 0.3, 0.25, 'sine', 0.025 * laut, 3400); }
+  },
+  lehrerLandet(laut) {   // WUMM! (er landet nach einem Hüpfer)
+    if (laut <= 0.02) return;
+    ton(70, 0, 0.18, 'sine', 0.16 * laut, 40); rauschen(0, 0.12, 0.08 * laut, 'lowpass', 300);
   },
   lehrerGlocke(laut) {   // RRRING! Die Handglocke
     for (let k = 0; k < 6; k++) { ton(1320, k * 0.07, 0.25, 'triangle', 0.05 * laut, 1300); ton(1980, k * 0.07, 0.18, 'sine', 0.03 * laut); }
@@ -1929,7 +1933,9 @@ const SCHUL_SCHATZ_ANTEIL = 0.7;   // So viele Schätze sind Schul-Schätze – 
 const SCHUL_ANDERE = ['globus', 'pokal', 'uhr', 'teddy', 'sanduhr', 'geige', 'spieluhr', 'bild', 'kristall'];
 const TEST_FRAGEN = 3;   // 📝 So viele Fragen hat der Nachsitz-Test
 const TEST_ZEIT = 20;    // So viele Sekunden hast du für jede Frage
-const LEHRER_RUHE = 12;  // So lange lässt der Lehrer alle in Ruhe, nachdem er jemanden erwischt hat
+const LEHRER_RUHE = 12;
+const LEHRER_HUEPFT = true;        // 🦘 true = Herr Kreidemann hüpft (Sprung – Landung – kurz stehen – Sprung ...)
+const LEHRER_SPRUNG = { hoehe: 0.35, takt: 0.95, jagdTakt: 0.6, inDerLuft: 0.5 };   // takt: so lange dauert ein Hüpfer (Sekunden) · inDerLuft: so viel davon ist er in der Luft  // So lange lässt der Lehrer alle in Ruhe, nachdem er jemanden erwischt hat
 const KARTEN = {
   villa: { name: 'Spukvilla', emoji: '🏚️', farbe: '#c9c3ff' },
   schule: { name: 'Verfluchte Schule', emoji: '📚', farbe: '#7cc4ff' },
@@ -4470,6 +4476,11 @@ function updateMonster(m, dt) {
       }
     }
     tempo = m.modus === 'wandern' ? info.tempo : info.jagdTempo;
+    if (m.art === 'lehrer' && LEHRER_HUEPFT) {   // 🦘 Hüpfen: nur in der Luft kommt er vorwärts (dafür schneller – im Schnitt gleich schnell)
+      const takt = m.modus === 'jagen' ? LEHRER_SPRUNG.jagdTakt : LEHRER_SPRUNG.takt;
+      m.hopZeit = ((m.hopZeit || 0) + dt) % takt;
+      tempo = m.hopZeit < takt * LEHRER_SPRUNG.inDerLuft ? tempo / LEHRER_SPRUNG.inDerLuft : 0;
+    }
     if (m.art === 'jaeger' && jaegerZielt(m, dt)) tempo = 0;   // Beim Zielen bleibt er stehen
     if (m.art === 'chemiker' && chemikerWirft(m, dt)) tempo = 0;   // Beim Ausholen bleibt er stehen
   }
@@ -4507,7 +4518,7 @@ function updateMonster(m, dt) {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     m.winkel += begrenzt(diff, -dt * 6, dt * 6);
-  } else if (m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) {
+  } else if ((m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) && !(m.art === 'lehrer' && d > 0.2)) {   // (Der Lehrer steht beim Hüpfen nur kurz – er ist noch nicht da!)
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
   if (haus.schule) { const M = haus.schule; m.x = begrenzt(m.x, M.x0 + 0.4, M.x1 - 0.4); m.z = begrenzt(m.z, M.z0 + 0.4, M.z1 - 0.4); }   // 📚 Nicht aus der Schule raus
@@ -5063,10 +5074,15 @@ function zeigeMonster(m) {
     g.userData.ohrMat.emissive.set(m.modus === 'jagen' ? '#7a1f5a' : '#000000');   // Ohren glühen, wenn er was gehört hat
   } else if (m.art === 'lehrer') {
     const U = g.userData, jagt = m.modus === 'jagen', schritt = m.laeuft ? Math.sin(m.phase * (jagt ? 10 : 5)) : 0;
-    const ruck = Math.round(schritt * 3) / 3;   // Er geht steif und ruckartig – wie eine Aufziehpuppe ...
-    g.position.set(m.x, m.y + Math.abs(ruck) * 0.04, m.z);
+    const ruck = LEHRER_HUEPFT ? 0 : Math.round(schritt * 3) / 3;   // (Ohne Hüpfen: steif und ruckartig – wie eine Aufziehpuppe)
+    // 🦘 Hüpfen: Solange er sich bewegt, ist er in der Luft. Bleibt er stehen, ist er gelandet: WUMM!
+    const luft = (m.modus === 'jagen' ? LEHRER_SPRUNG.jagdTakt : LEHRER_SPRUNG.takt) * LEHRER_SPRUNG.inDerLuft;
+    if (LEHRER_HUEPFT && m.laeuft) U.hopT = (U.hopT || 0) + 1 / 60;
+    else { if (U.hopT > 0.12) monsterSound.lehrerLandet(monsterLautstaerke(m)); U.hopT = 0; }
+    const bogen = LEHRER_HUEPFT && U.hopT > 0 ? Math.sin(Math.min(1, U.hopT / luft) * Math.PI) : 0;
+    g.position.set(m.x, m.y + Math.abs(ruck) * 0.04 + bogen * LEHRER_SPRUNG.hoehe, m.z);
     g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel + (m.betaeubt > 0 ? Math.sin(zeit * 8) * 0.4 : 0), 0);
-    U.beine[0].rotation.x = ruck * 0.45; U.beine[1].rotation.x = -ruck * 0.45;
+    U.beine[0].rotation.x = ruck * 0.45 - bogen * 0.25; U.beine[1].rotation.x = -ruck * 0.45 - bogen * 0.25;   // Beim Sprung: beide Beine zusammen nach vorne
     U.arme[1].rotation.x = jagt ? -1.4 + Math.sin(zeit * 6) * 0.15 : -0.1 - ruck * 0.2;   // Beim Jagen zeigt er mit dem Stock auf dich!
     U.arme[0].rotation.x = jagt ? -0.5 + Math.sin(zeit * 18) * 0.35 : ruck * 0.3;        // ... und läutet die Glocke
     U.kopf.rotation.z = jagt ? Math.sin(zeit * 3) * 0.08 : Math.sin(zeit * 0.7 + m.phase) > 0.95 ? 0.4 : 0;   // Manchmal legt er den Kopf schief ...
