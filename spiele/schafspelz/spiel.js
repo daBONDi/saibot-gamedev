@@ -635,6 +635,15 @@ function bewegeSpieler(dt) {
   if (tasten['arrowdown'] || tasten['s']) dy += 1;
   if (joystick.id !== null && Math.hypot(joystick.dx, joystick.dy) > 0.2) { dx = joystick.dx; dy = joystick.dy; }
 
+  if (D3.an && d3Aktiv()) {   // 🎮 3D: W = dahin, wohin du schaust · A/D = zur Seite · ← → = drehen
+    klickZiel = null;
+    if (tasten['arrowleft']) D3.yaw += D3_DREHEN * dt;
+    if (tasten['arrowright']) D3.yaw -= D3_DREHEN * dt;
+    let vor = (tasten['w'] || tasten['arrowup'] ? 1 : 0) - (tasten['s'] || tasten['arrowdown'] ? 1 : 0), seite = (tasten['d'] ? 1 : 0) - (tasten['a'] ? 1 : 0);
+    if (joystick.id !== null && Math.hypot(joystick.dx, joystick.dy) > 0.2) { vor = -joystick.dy; seite = joystick.dx; }
+    const si = Math.sin(D3.yaw), co = Math.cos(D3.yaw);
+    dx = vor * -si + seite * co; dy = vor * -co - seite * si;
+  }
   if (dx || dy) klickZiel = null;
   else if (klickZiel) {
     const zx = klickZiel.x - spieler.x, zy = klickZiel.y - spieler.y, d = Math.hypot(zx, zy);
@@ -3067,6 +3076,11 @@ function zeichneFaehigkeitRund() {
 }
 
 function zeichneTonKnopf() {
+  // 🎮 Der 3D-Knopf (daneben)
+  const K = KNOPF_3D, ueber = imRechteck(maus, K) && !d3Gefangen();
+  ctx.fillStyle = D3.an ? (ueber ? '#8fd3ff' : 'rgba(60,140,230,0.95)') : (ueber ? 'rgba(70,70,120,0.95)' : 'rgba(20,20,50,0.8)');
+  rundesRechteck(K.x, K.y, K.w, K.h, 10); ctx.fill();
+  text(D3.laedt ? '⏳' : D3.an ? '2D' : '3D', K.x + K.w / 2, K.y + K.h / 2 + 1, 16, '#fff', 'center', false);
   const T = TON_KNOPF;
   ctx.fillStyle = 'rgba(20,20,50,0.8)';
   rundesRechteck(T.x, T.y, T.w, T.h, 10); ctx.fill();
@@ -3411,10 +3425,20 @@ function zeichneTitel() {
 
 function zeichne() {
   ctx.clearRect(0, 0, W, H);
+  const in3d = d3Aktiv();   // 🎮 3D-Ansicht?
+  d3Sichtbar(in3d);
   if (zustand === 'titel') { zeichneTitel(); return; }
   if (zustand === 'einstellungen') { zeichneEinstellungen(); return; }
   if (zustand === 'intro') { zeichneIntro(); return; }
   if (zustand === 'cutscene') { zeichneCutscene(); return; }
+  if (in3d) {   // 🎮 In 3D: Welt in 3D – darüber die normalen Anzeigen
+    d3Zeichnen(); d3Overlay(); zeichneHUD();
+    if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
+    if (zustand === 'treffen') zeichneTreffen();
+    if (zustand === 'ende') zeichneEnde();
+    zeichneTonKnopf();
+    return;
+  }
 
   kamera.x = begrenzt(spieler.x - W / 2, 0, WELT_B - W);
   kamera.y = begrenzt(spieler.y - H / 2, 0, WELT_H - H);
@@ -3465,6 +3489,462 @@ function zeichne() {
   zeichneTonKnopf();
 }
 
+// =====================================================================
+// ===== 🎮 3D-Ansicht: Du siehst die Welt aus den Augen deines Schafs! =====
+// =====================================================================
+// Knopf "3D" oben rechts (oder Taste V). Die Spielregeln bleiben genau gleich – nur das Bild ist anders.
+// Im 2D-Spiel ist alles in Pixeln. In 3D sind 40 Pixel = 1 Meter. Aus (x, y) im 2D-Spiel wird (x, Höhe, y) in 3D.
+// Three.js (die 3D-Library) wird erst geladen, wenn du zum ersten Mal auf "3D" drückst.
+const D3_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const METER = 1 / 40;                 // 40 Pixel = 1 Meter
+const D3_AUGEN = 0.95;             // So hoch sind deine Augen (in Metern)
+const D3_AUGEN_GEIST = 2.4;        // ... als Geist schwebst du höher
+const D3_AUGEN_GRUBE = 0.3;        // ... in der Grube guckst du nur knapp raus
+const D3_MAUS = 0.0026;            // Wie schnell du dich mit der Maus umschaust
+const D3_DREHEN = 2.4;             // Wie schnell du dich mit den Pfeiltasten ← → drehst
+const KNOPF_3D = { x: W - 296, y: 12, w: 46, h: 36 };
+const MINIKARTE = { x: W - 194, y: 150, w: 180, h: 130 };
+const D3 = { an: false, laedt: false, T: null, renderer: null, szene: null, kam: null, yaw: 0, pitch: -0.05, welt: null, dekoRef: null,
+  schafe: new Map(), wolle: [], drehen: [], orte: [], blickFinger: null, blickX: 0, blickY: 0, w: 0, h: 0 };
+let d3Wunsch = false;
+try { d3Wunsch = localStorage.getItem('schafspelz-3d') === '1'; } catch (e) { /* egal */ }
+
+const d3Gefangen = () => document.pointerLockElement === canvas;
+function d3Aktiv() {   // Wird gerade in 3D gezeichnet?
+  return D3.an && !!D3.T && !!spieler && schafe.length > 0 && (zustand === 'spiel' || zustand === 'treffen' || zustand === 'ende');
+}
+async function d3Laden() {
+  if (D3.T) return true;
+  if (D3.laedt) return false;
+  D3.laedt = true;
+  zeigeNachricht('⏳ 3D wird geladen ...', 2);
+  try {
+    const T = await import(D3_URL);
+    D3.renderer = new T.WebGLRenderer({ antialias: true });
+    D3.T = T;
+  } catch (e) {
+    D3.laedt = false;
+    zeigeNachricht('❌ 3D geht leider nicht (kein Internet oder kein 3D im Browser).', 3);
+    return false;
+  }
+  const T = D3.T;
+  D3.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  const c = D3.renderer.domElement;
+  Object.assign(c.style, { position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', borderRadius: '1rem', pointerEvents: 'none', display: 'none', boxShadow: 'none' });
+  canvas.parentNode.insertBefore(c, canvas);
+  canvas.style.position = 'relative'; canvas.style.zIndex = '1';
+  D3.szene = new T.Scene();
+  D3.kam = new T.PerspectiveCamera(72, W / H, 0.05, 250);
+  D3.kam.rotation.order = 'YXZ';
+  D3.laedt = false;
+  return true;
+}
+async function d3Umschalten() {
+  if (!D3.an && !(await d3Laden())) return;
+  D3.an = !D3.an;
+  try { localStorage.setItem('schafspelz-3d', D3.an ? '1' : '0'); } catch (e) { /* egal */ }
+  klickZiel = null;
+  if (D3.an) {
+    sound.klack();
+    zeigeNachricht(touchModus ? '🎮 3D! Wisch über den Bildschirm, um dich umzuschauen.' : '🎮 3D! Klick ins Bild, dann schaust du dich mit der Maus um. (W A S D laufen · ← → drehen · Esc = Maus frei)', 5);
+  } else {
+    if (d3Gefangen()) document.exitPointerLock();
+    zeigeNachricht('🗺️ Zurück in 2D', 1.5);
+  }
+}
+function d3Sichtbar(an) {   // 3D-Bild zeigen oder verstecken (und das 2D-Bild durchsichtig machen)
+  if (!D3.renderer) return;
+  const c = D3.renderer.domElement, d = an ? 'block' : 'none';
+  if (c.style.display !== d) c.style.display = d;
+  const bg = an ? 'transparent' : '';
+  if (canvas.style.background !== bg) canvas.style.background = bg;
+  if (!an && d3Gefangen()) document.exitPointerLock();
+}
+
+// ----- Kleine Helfer zum Bauen -----
+const d3Pos = (x, y, h = 0) => [x * METER, h, y * METER];
+function d3Mat(farbe, extra = {}) { return new D3.T.MeshLambertMaterial({ color: farbe, ...extra }); }
+function d3Teil(eltern, geo, mat, x = 0, y = 0, z = 0) { const m = new D3.T.Mesh(geo, mat); m.position.set(x, y, z); eltern.add(m); return m; }
+function d3Schild(text, farbe = '#ffffff', breite = 2.4, groesse = 44, imDunkeln = true) {   // Ein Schild mit Schrift, das immer zu dir schaut
+  const T = D3.T, c = document.createElement('canvas'); c.width = 512; c.height = 96;   // imDunkeln: true = auch im Dunkeln zu sehen
+  const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false, fog: !imDunkeln }));
+  sp.scale.set(breite, breite * 96 / 512, 1);
+  sp.userData.malen = (t, f, g2 = groesse) => {
+    const g = c.getContext('2d'); g.clearRect(0, 0, 512, 96);
+    g.font = `bold ${g2}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(t, 256, 50, 500); g.fillStyle = f; g.fillText(t, 256, 50, 500);
+    sp.material.map.needsUpdate = true;
+  };
+  sp.userData.malen(text, farbe);
+  return sp;
+}
+function dach(eltern, breite, tiefe, hoehe, y, mat) {   // Ein Satteldach: ein liegendes Dreieck-Prisma, Spitze oben
+  const m = d3Teil(eltern, new D3.T.CylinderGeometry(1, 1, tiefe, 3, 1), mat, 0, y + hoehe / 3, 0);
+  m.rotation.x = -Math.PI / 2;                       // (Ein Zylinder mit nur 3 Ecken ist ein Dreieck – jetzt liegt er)
+  m.scale.set(breite / 1.732, 1, hoehe / 1.5);       // So breit und so hoch wie gewünscht
+  return m;
+}
+
+// ----- Die Welt bauen (einmal pro Spiel) -----
+function d3WeltBauen() {
+  const T = D3.T, S = D3.szene;
+  if (D3.welt) S.remove(D3.welt);
+  for (const m of D3.schafe.values()) S.remove(m.g);
+  D3.schafe.clear(); D3.wolle.forEach(w => S.remove(w)); D3.wolle = []; D3.drehen = []; D3.orte = [];
+  const G = D3.welt = new T.Group(); S.add(G);
+  D3.dekoRef = deko;
+  const B = WELT_B * METER, Hh = WELT_H * METER;
+  // Licht und Himmel
+  G.add(new T.HemisphereLight(KARTE.himmel[1], '#2a2a3a', 1.1));
+  const mond = new T.DirectionalLight('#c8d4ff', 0.9); mond.position.set(B * 0.3, 30, Hh * 0.2); mond.target.position.set(B / 2, 0, Hh / 2); G.add(mond, mond.target);
+  G.add(new T.AmbientLight('#ffffff', 0.25));
+  S.fog = new T.Fog('#141a3a', 3, 12); S.background = new T.Color('#141a3a');
+  const sterne = [];
+  for (let k = 0; k < 400; k++) { const w = Math.random() * Math.PI * 2, h = 0.15 + Math.random() * 0.8, r = 90; sterne.push(B / 2 + Math.cos(w) * r * Math.cos(h), Math.sin(h) * r, Hh / 2 + Math.sin(w) * r * Math.cos(h)); }
+  const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(sterne, 3));
+  G.add(new T.Points(sg, new T.PointsMaterial({ color: '#ffffff', size: 0.35, fog: false })));
+  // Boden: genau wie im 2D-Bild (Wege, Platz, Blümchen, Gruben) – als Bild auf eine große Fläche gemalt
+  const bc = document.createElement('canvas'); bc.width = 1350; bc.height = 975;
+  const g = bc.getContext('2d'); g.scale(bc.width / WELT_B, bc.height / WELT_H);
+  g.fillStyle = KARTE.boden; g.fillRect(0, 0, WELT_B, WELT_H);
+  for (const d of deko) if (d.art === 'punkt') { g.fillStyle = d.f; g.fillRect(d.x, d.y, 5, 5); }
+  g.strokeStyle = KARTE.weg; g.lineWidth = 34; g.lineCap = 'round';
+  for (const o of ORTE) { g.beginPath(); g.moveTo(GLOCKE.x, GLOCKE.y); g.lineTo(o.x, o.y); g.stroke(); }
+  g.fillStyle = KARTE.platz; g.beginPath(); g.ellipse(GLOCKE.x, GLOCKE.y, 150, 110, 0, 0, 7); g.fill();
+  for (const gr of KARTE.gruben) {
+    g.fillStyle = '#6b4f3a'; g.beginPath(); g.ellipse(gr.x, gr.y, 42, 26, 0, 0, 7); g.fill();
+    g.fillStyle = '#140c06'; g.beginPath(); g.ellipse(gr.x, gr.y, 33, 19, 0, 0, 7); g.fill();
+  }
+  const bt = new T.CanvasTexture(bc); bt.colorSpace = T.SRGBColorSpace; bt.anisotropy = 8;
+  const boden = d3Teil(G, new T.PlaneGeometry(B, Hh), new T.MeshLambertMaterial({ map: bt }), B / 2, 0, Hh / 2); boden.rotation.x = -Math.PI / 2;
+  const aussen = d3Teil(G, new T.PlaneGeometry(400, 400), d3Mat(KARTE.rand === 'meer' ? '#2a7fb8' : new T.Color(KARTE.boden).multiplyScalar(0.7)), B / 2, -0.03, Hh / 2); aussen.rotation.x = -Math.PI / 2;
+  // Der Rand: Zaun ... oder das Meer
+  if (KARTE.rand === 'meer') {
+    for (const [x, z, b, t] of [[B / 2, 0.5, B, 1], [B / 2, Hh - 0.5, B, 1], [0.5, Hh / 2, 1, Hh], [B - 0.5, Hh / 2, 1, Hh]]) d3Teil(G, new T.BoxGeometry(b, 0.06, t), d3Mat('#bfe8ff', { transparent: true, opacity: 0.7 }), x, 0.02, z);   // Schaumkrone
+  } else {
+    const holz = d3Mat('#8d6e4c'), pf = [], r = 10 * METER;
+    for (let x = r; x <= B - r; x += 1.5) pf.push([x, r], [x, Hh - r]);
+    for (let z = r; z <= Hh - r; z += 1.5) pf.push([r, z], [B - r, z]);
+    const im = new T.InstancedMesh(new T.BoxGeometry(0.12, 1.1, 0.12), holz, pf.length), hilf = new T.Object3D();
+    pf.forEach(([x, z], k) => { hilf.position.set(x, 0.55, z); hilf.updateMatrix(); im.setMatrixAt(k, hilf.matrix); });
+    G.add(im);
+    for (const y of [0.45, 0.85]) for (const [x, z, b, t] of [[B / 2, r, B - 2 * r, 0.06], [B / 2, Hh - r, B - 2 * r, 0.06], [r, Hh / 2, 0.06, Hh - 2 * r], [B - r, Hh / 2, 0.06, Hh - 2 * r]]) d3Teil(G, new T.BoxGeometry(b, 0.1, t), holz, x, y, z);
+  }
+  // Bäume
+  for (const d of deko) {
+    const [x, , z] = d3Pos(d.x, d.y);
+    if (d.art === 'tannen') {
+      const t = new T.Group(); t.position.set(x, 0, z); t.scale.setScalar(d.g); G.add(t);
+      d3Teil(t, new T.CylinderGeometry(0.12, 0.16, 0.8), d3Mat('#5a3d22'), 0, 0.4, 0);
+      [[1.1, 1.6, 1.4], [0.85, 1.3, 2.2], [0.55, 1.0, 2.9]].forEach(([r, h, y]) => d3Teil(t, new T.ConeGeometry(r, h, 9), d3Mat('#1f5d3a'), 0, y, 0));
+      if (KARTE.schnee) d3Teil(t, new T.ConeGeometry(0.3, 0.4, 9), d3Mat('#ffffff'), 0, 3.35, 0);
+    } else if (d.art === 'palmen') {
+      const t = new T.Group(); t.position.set(x, 0, z); t.scale.setScalar(d.g); G.add(t);
+      const st = d3Teil(t, new T.CylinderGeometry(0.1, 0.16, 3.2, 7), d3Mat('#8a6a43'), 0.15, 1.6, 0); st.rotation.z = -0.1;
+      for (let k = 0; k < 6; k++) { const bl = d3Teil(t, new T.ConeGeometry(0.35, 1.8, 4), d3Mat('#2f9e44'), 0.32, 3.15, 0); bl.rotation.set(0, k * Math.PI / 3, 1.9); bl.scale.set(1, 1, 0.25); bl.position.x = 0.32 + Math.cos(k * Math.PI / 3) * 0.6; bl.position.z = Math.sin(k * Math.PI / 3) * 0.6; }
+    }
+  }
+  // Die Orte (mit Namensschild und „!“, wenn du dort eine Aufgabe hast)
+  ORTE.forEach((o, i) => {
+    const og = d3Ort(o); G.add(og);
+    const [x, , z] = d3Pos(o.x, o.y);
+    const ausrufe = d3Schild('❗', '#ffd166', 1.4, 80); ausrufe.position.set(x, 2.3, z); G.add(ausrufe);
+    D3.orte[i] = { ausrufe };
+  });
+  // Glocke
+  const [gx, , gz] = d3Pos(GLOCKE.x, GLOCKE.y), holz = d3Mat('#6e4b2a');
+  d3Teil(G, new T.BoxGeometry(0.2, 2.4, 0.2), holz, gx, 1.2, gz);
+  d3Teil(G, new T.BoxGeometry(1.6, 0.18, 0.2), holz, gx, 2.4, gz);
+  D3.glockeMat = d3Mat('#f1c40f', { emissive: '#3a2a00' });
+  const glocke = d3Teil(G, new T.CylinderGeometry(0.12, 0.38, 0.6, 16, 1, true), D3.glockeMat, gx, 1.95, gz); glocke.material.side = T.DoubleSide;
+  d3Teil(G, new T.SphereGeometry(0.13, 10, 8), D3.glockeMat, gx, 2.25, gz);
+  const gs = d3Schild('🔔 Glocke', '#ffffff', 2.2); gs.position.set(gx, 3.0, gz); G.add(gs);
+  // Laterne
+  const L = KARTE.laterne, [lx, , lz] = d3Pos(L.x, L.y);
+  d3Teil(G, new T.CylinderGeometry(0.07, 0.09, 2.2, 8), d3Mat('#333'), lx, 1.1, lz);
+  D3.laterneMat = new T.MeshBasicMaterial({ color: '#ffe680' });
+  d3Teil(G, new T.BoxGeometry(0.4, 0.5, 0.4), D3.laterneMat, lx, 2.45, lz);
+  D3.laterneLicht = new T.PointLight('#ffe08a', 6, 10, 1); D3.laterneLicht.position.set(lx, 2.4, lz); G.add(D3.laterneLicht);
+  const ls = d3Schild('🏮 Laterne', '#ffffff', 2.2); ls.position.set(lx, 3.2, lz); G.add(ls);
+  // Gatter (geht auf bei Sabotage!)
+  const Tt = KARTE.gatter, [tx, , tz] = d3Pos(Tt.x, Tt.y), gh = d3Mat('#6e4b2a'), gl = d3Mat('#a0703c');
+  for (const dx of [-2.75, -1.1, 1.1, 2.75]) d3Teil(G, new T.BoxGeometry(0.2, 1.7, 0.2), gh, tx + dx, 0.85, tz);
+  for (const s of [-1, 1]) for (const y of [0.55, 1.2]) d3Teil(G, new T.BoxGeometry(1.6, 0.12, 0.1), gh, tx + s * 1.92, y, tz);
+  const tor = new T.Group(); tor.position.set(tx - 1.0, 0, tz); G.add(tor); D3.tor = tor;
+  for (const y of [0.55, 1.25]) d3Teil(tor, new T.BoxGeometry(2.0, 0.14, 0.1), gl, 1.0, y, 0);
+  const schraeg = d3Teil(tor, new T.BoxGeometry(2.2, 0.12, 0.08), gl, 1.0, 0.9, 0); schraeg.rotation.z = 0.33;
+  D3.torSchild = d3Schild('🚪 Gatter', '#ffffff', 2.4); D3.torSchild.position.set(tx, 2.4, tz); G.add(D3.torSchild);
+  // Gruben: ein paar Steine drumherum
+  for (const gr of KARTE.gruben) { const [x, , z] = d3Pos(gr.x, gr.y); for (const [dx, dz, r] of [[-1.0, 0.2, 0.18], [0.95, -0.15, 0.15], [0.3, 0.6, 0.12]]) d3Teil(G, new T.DodecahedronGeometry(r, 0), d3Mat('#8a8a8a'), x + dx, r * 0.5, z + dz); }
+  // Schneeflocken (im Winterdorf)
+  D3.schnee = null;
+  if (KARTE.schnee) {
+    const p = []; for (let k = 0; k < 900; k++) p.push((Math.random() - 0.5) * 30, Math.random() * 10, (Math.random() - 0.5) * 30);
+    const sg2 = new T.BufferGeometry(); sg2.setAttribute('position', new T.Float32BufferAttribute(p, 3));
+    D3.schnee = new T.Points(sg2, new T.PointsMaterial({ color: '#ffffff', size: 0.06 })); G.add(D3.schnee);
+  }
+}
+
+// ----- Die Orte in 3D (das Gebäude steht ein Stück HINTER dem Aufgaben-Platz) -----
+function d3Ort(o) {
+  const T = D3.T, g = new T.Group(), f = o.farben || [];
+  const [x, , z] = d3Pos(o.x, o.y);
+  g.position.set(x, 0, z - 2.3);   // (Gebäude nach Norden versetzt – vorne ist der Platz für die Aufgabe)
+  let hoehe = 3.5;
+  switch (o.bild) {
+    case 'stall': {
+      d3Teil(g, new T.BoxGeometry(4, 2.5, 3), d3Mat(f[0] || '#c0392b'), 0, 1.25, 0);
+      dach(g, 4.6, 3.2, 1.5, 2.5, d3Mat(f[1] || '#7b241c'));
+      d3Teil(g, new T.BoxGeometry(1.1, 1.4, 0.06), d3Mat('#ffffff'), 0, 0.7, 1.51); d3Teil(g, new T.BoxGeometry(0.9, 1.25, 0.08), d3Mat('#5d2e0c'), 0, 0.63, 1.53);
+      d3Teil(g, new T.BoxGeometry(1.1, 0.7, 0.7), d3Mat('#f4d03f'), 1.7, 0.35, 2.4);   // Heuballen
+      hoehe = 4.3; break;
+    }
+    case 'scheune': {
+      d3Teil(g, new T.BoxGeometry(5, 3, 3.6), d3Mat(f[0] || '#9c5a2c'), 0, 1.5, 0);
+      dach(g, 5.6, 3.8, 1.8, 3, d3Mat(f[1] || '#5d3a1a'));
+      d3Teil(g, new T.BoxGeometry(1.8, 2, 0.08), d3Mat('#5d3a1a'), 0, 1, 1.82);
+      for (const s of [-1, 1]) { const x2 = d3Teil(g, new T.BoxGeometry(2.4, 0.12, 0.05), d3Mat('#ffffff'), 0, 1, 1.87); x2.rotation.z = s * 0.84; }
+      hoehe = 5.2; break;
+    }
+    case 'muehle': {
+      d3Teil(g, new T.CylinderGeometry(1.0, 1.4, 4.6, 12), d3Mat(f[0] || '#d9c7a3'), 0, 2.3, 0);
+      d3Teil(g, new T.ConeGeometry(1.3, 1.4, 12), d3Mat(f[1] || '#7b3f22'), 0, 5.3, 0);
+      d3Teil(g, new T.BoxGeometry(0.8, 1.2, 0.08), d3Mat('#5d2e0c'), 0, 0.6, 1.36);
+      const fluegel = new T.Group(); fluegel.position.set(0, 4.2, 1.15); g.add(fluegel);
+      for (let k = 0; k < 4; k++) { const fl = d3Teil(fluegel, new T.BoxGeometry(0.35, 2.4, 0.05), d3Mat('#f4ecd8'), 0, 1.2, 0); const arm = new T.Group(); arm.rotation.z = k * Math.PI / 2; arm.add(fl); fluegel.add(arm); }
+      D3.drehen.push({ obj: fluegel, achse: 'z', tempo: 0.8 });
+      hoehe = 6.4; break;
+    }
+    case 'teich': {
+      const wasser = d3Teil(g, new T.CircleGeometry(2.2, 32), new T.MeshLambertMaterial({ color: f[0] || '#3a9ad9', emissive: '#0a2a44' }), 0, 0.02, 0.9); wasser.rotation.x = -Math.PI / 2;
+      for (let k = 0; k < 4; k++) { const b = d3Teil(g, new T.CircleGeometry(0.25, 10), d3Mat(f[1] ? f[1] : '#3f9a4a'), Math.cos(k * 1.7) * 1.2, 0.035, 0.9 + Math.sin(k * 1.7) * 1.0); b.rotation.x = -Math.PI / 2; }
+      for (let k = 0; k < 8; k++) d3Teil(g, new T.CylinderGeometry(0.03, 0.03, 0.9, 5), d3Mat('#5a7d2a'), -2.0 + k * 0.12, 0.45, -0.3);   // Schilf
+      hoehe = 2; break;
+    }
+    case 'wiese': {
+      const farben = ['#ff9ecf', '#ffe066', '#c9a0ff', '#ffffff', '#ff7b7b'];
+      for (let k = 0; k < 40; k++) { const r = Math.random() * 2.2, w = Math.random() * 7; d3Teil(g, new T.CylinderGeometry(0.015, 0.015, 0.35, 4), d3Mat('#3d8b2f'), Math.cos(w) * r, 0.17, 1.4 + Math.sin(w) * r * 0.7); d3Teil(g, new T.SphereGeometry(0.08, 6, 5), d3Mat(farben[k % 5]), Math.cos(w) * r, 0.36, 1.4 + Math.sin(w) * r * 0.7); }
+      d3Teil(g, new T.CylinderGeometry(0.15, 0.18, 0.3, 10), d3Mat('#3d6fb0'), 1.8, 0.15, 2.4);   // Gießkanne
+      hoehe = 1.6; break;
+    }
+    case 'garten': {
+      const zaun = d3Mat('#a0703c');
+      for (const [x2, z2, b, t] of [[0, -0.5, 4, 0.08], [-2, 1.0, 0.08, 3], [2, 1.0, 0.08, 3]]) d3Teil(g, new T.BoxGeometry(b, 0.6, t), zaun, x2, 0.3, z2);
+      for (let r = 0; r < 3; r++) for (let k = 0; k < 6; k++) { const gruen = r === 1; d3Teil(g, gruen ? new T.SphereGeometry(0.17, 8, 6) : new T.ConeGeometry(0.07, 0.3, 6), d3Mat(gruen ? '#4caf50' : '#ff922b'), -1.5 + k * 0.6, gruen ? 0.15 : 0.1, 0.1 + r * 0.7).rotation.x = gruen ? 0 : Math.PI; }
+      hoehe = 1.8; break;
+    }
+    case 'krippe': {
+      const h = d3Mat('#8a5a2b');
+      d3Teil(g, new T.BoxGeometry(2.2, 0.6, 0.8), h, 0, 0.5, 0.8); d3Teil(g, new T.BoxGeometry(2.0, 0.25, 0.6), d3Mat('#f4d03f'), 0, 0.85, 0.8);
+      for (const s of [-1, 1]) d3Teil(g, new T.BoxGeometry(0.15, 2.4, 0.15), h, s * 1.3, 1.2, 0.8);
+      dach(g, 3.0, 1.6, 0.9, 2.4, d3Mat(KARTE.schnee ? '#ffffff' : '#7b241c')).position.z = 0.8;
+      hoehe = 3.8; break;
+    }
+    case 'iglu': {
+      d3Teil(g, new T.SphereGeometry(1.8, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), d3Mat('#f4f8ff'), 0, 0, 0);
+      const gang = d3Teil(g, new T.CylinderGeometry(0.7, 0.7, 1.2, 16, 1, false, 0, Math.PI), d3Mat('#e6eef8'), 0, 0, 1.8); gang.rotation.set(Math.PI / 2, Math.PI / 2, 0);
+      d3Teil(g, new T.CircleGeometry(0.55, 16, 0, Math.PI), new T.MeshBasicMaterial({ color: '#10141c' }), 0, 0.01, 2.41);
+      hoehe = 2.6; break;
+    }
+    case 'glashaus': {
+      d3Teil(g, new T.BoxGeometry(3.6, 2.3, 2.8), new T.MeshLambertMaterial({ color: '#cdeeff', transparent: true, opacity: 0.35, depthWrite: false }), 0, 1.15, 0);
+      dach(g, 4.0, 3.0, 1.0, 2.3, new T.MeshLambertMaterial({ color: '#cdeeff', transparent: true, opacity: 0.35, depthWrite: false }));
+      for (let k = 0; k < 6; k++) d3Teil(g, new T.SphereGeometry(0.3, 8, 6), d3Mat(['#4caf50', '#ff9ecf', '#ffe066'][k % 3]), -1.2 + (k % 3) * 1.2, 0.35, k < 3 ? -0.6 : 0.6);
+      hoehe = 4; break;
+    }
+    case 'brunnen': {
+      const stein = d3Mat('#9a9a9a');
+      d3Teil(g, new T.CylinderGeometry(0.9, 0.95, 0.8, 16, 1, true), stein, 0, 0.4, 0.8).material.side = D3.T.DoubleSide;
+      const wasser = d3Teil(g, new T.CircleGeometry(0.85, 16), new T.MeshLambertMaterial({ color: '#2a6f9a', emissive: '#0a2a44' }), 0, 0.5, 0.8); wasser.rotation.x = -Math.PI / 2;
+      for (const s of [-1, 1]) d3Teil(g, new T.BoxGeometry(0.12, 1.8, 0.12), d3Mat('#6e4b2a'), s * 0.85, 1.1, 0.8);
+      d3Teil(g, new T.ConeGeometry(1.4, 0.8, 4), d3Mat('#7b241c'), 0, 2.3, 0.8).rotation.y = Math.PI / 4;
+      hoehe = 3.2; break;
+    }
+    case 'leuchtturm': {
+      for (let k = 0; k < 6; k++) d3Teil(g, new T.CylinderGeometry(0.9 - k * 0.08, 1.0 - k * 0.08, 1.2, 14), d3Mat(k % 2 ? '#ffffff' : '#e03131'), 0, 0.6 + k * 1.2, 0);
+      d3Teil(g, new T.CylinderGeometry(0.55, 0.55, 0.8, 12), new T.MeshBasicMaterial({ color: '#fff3a0' }), 0, 7.6, 0);
+      d3Teil(g, new T.ConeGeometry(0.7, 0.7, 12), d3Mat('#e03131'), 0, 8.35, 0);
+      const strahl = new T.Group(); strahl.position.set(0, 7.6, 0); g.add(strahl);
+      const kegel = d3Teil(strahl, new T.ConeGeometry(1.4, 9, 16, 1, true), new T.MeshBasicMaterial({ color: '#fff6c0', transparent: true, opacity: 0.12, depthWrite: false, side: T.DoubleSide, fog: false }), 4.5, 0, 0); kegel.rotation.z = Math.PI / 2;
+      D3.drehen.push({ obj: strahl, achse: 'y', tempo: 0.9 });
+      hoehe = 9.2; break;
+    }
+    case 'boot': {
+      const wasser = d3Teil(g, new T.PlaneGeometry(5, 3), new T.MeshLambertMaterial({ color: '#2a7fb8', emissive: '#0a2a44' }), 0, 0.02, -0.5); wasser.rotation.x = -Math.PI / 2;
+      const h = d3Mat('#8a5a2b');
+      d3Teil(g, new T.BoxGeometry(1.0, 0.15, 3.2), h, 0, 0.3, 0.6);   // Steg
+      const boot = new T.Group(); boot.position.set(1.4, 0.15, -0.6); g.add(boot);
+      d3Teil(boot, new T.BoxGeometry(1.0, 0.4, 2.2), d3Mat(f[0] || '#c0392b'), 0, 0.15, 0);
+      d3Teil(boot, new T.ConeGeometry(0.5, 0.7, 4), d3Mat(f[0] || '#c0392b'), 0, 0.15, 1.4).rotation.set(Math.PI / 2, Math.PI / 4, 0);
+      d3Teil(boot, new T.CylinderGeometry(0.04, 0.04, 1.8), h, 0, 1.0, 0);
+      hoehe = 2.6; break;
+    }
+  }
+  const schild = d3Schild(`${o.name}`, '#ffffff', 3.2); schild.position.set(0, hoehe + 0.5, 0); g.add(schild);
+  return g;
+}
+
+// ----- Schafe -----
+function d3SchafBauen() {
+  const T = D3.T, g = new T.Group();
+  const woll = new T.MeshLambertMaterial({ color: '#ffffff' }), dunkel = d3Mat('#2b2b2b');
+  for (const [x, y, z, r] of [[0, 0.62, 0, 0.4], [0.24, 0.66, 0.18, 0.3], [-0.24, 0.66, 0.18, 0.3], [0.22, 0.64, -0.22, 0.3], [-0.22, 0.64, -0.22, 0.3], [0, 0.86, 0.02, 0.3]]) d3Teil(g, new T.SphereGeometry(r, 12, 9), woll, x, y, z);
+  const kopf = new T.Group(); kopf.position.set(0, 0.8, 0.46); g.add(kopf);
+  d3Teil(kopf, new T.SphereGeometry(0.19, 12, 9), dunkel, 0, 0, 0.05).scale.set(0.9, 1, 1.2);
+  for (const s of [-1, 1]) {
+    d3Teil(kopf, new T.SphereGeometry(0.07, 8, 6), dunkel, s * 0.18, 0.08, -0.02).scale.set(1.8, 0.6, 1);   // Ohren
+    d3Teil(kopf, new T.SphereGeometry(0.04, 8, 6), d3Mat('#ffffff'), s * 0.08, 0.06, 0.24);                 // Augen
+    d3Teil(kopf, new T.SphereGeometry(0.02, 6, 5), d3Mat('#000000'), s * 0.08, 0.06, 0.275);
+  }
+  d3Teil(kopf, new T.SphereGeometry(0.12, 10, 8), woll, 0, 0.17, -0.02);   // Wuschel auf dem Kopf
+  const beine = [];
+  for (const [x, z] of [[0.18, 0.22], [-0.18, 0.22], [0.18, -0.22], [-0.18, -0.22]]) {
+    const b = new T.Group(); b.position.set(x, 0.42, z); g.add(b);
+    d3Teil(b, new T.CylinderGeometry(0.055, 0.05, 0.42, 6), dunkel, 0, -0.21, 0);
+    beine.push(b);
+  }
+  const label = d3Schild('', '#ffffff', 2.2, 44, false); label.position.y = 1.45; g.add(label);   // (Verschwindet im Dunkeln – sonst wäre es geschummelt!)
+  const blase = d3Teil(g, new T.SphereGeometry(0.8, 16, 12), new T.MeshBasicMaterial({ color: '#8fd3ff', transparent: true, opacity: 0.18, depthWrite: false }), 0, 0.6, 0);
+  const ring = d3Teil(g, new T.TorusGeometry(0.6, 0.05, 6, 24), new T.MeshBasicMaterial({ color: '#ffd166' }), 0, 0.05, 0); ring.rotation.x = Math.PI / 2;
+  D3.szene.add(g);
+  return { g, woll, kopf, beine, label, blase, ring, key: '', winkel: 0, lx: null, ly: null };
+}
+function d3SchafZeigen(s) {
+  let m = D3.schafe.get(s);
+  if (!m) { m = d3SchafBauen(); D3.schafe.set(s, m); }
+  const zeigen = s !== spieler && s.lebt && s.inGrube == null && !(s.unsichtbar > 0);
+  m.g.visible = zeigen;
+  if (m.lx === null) { m.lx = s.x; m.ly = s.y; }
+  const dx = s.x - m.lx, dy = s.y - m.ly;
+  if (Math.hypot(dx, dy) > 0.6) m.winkel = Math.atan2(dx, dy);   // Wohin läuft es? Dahin schaut es auch
+  m.lx = s.x; m.ly = s.y;
+  if (!zeigen) return;
+  const [x, , z] = d3Pos(s.x, s.y);
+  const huepf = s.laeuft ? Math.abs(Math.sin(s.phase * 0.5)) * 0.06 : 0;
+  m.g.position.set(x, huepf, z);
+  let diff = m.winkel - m.g.rotation.y; while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+  m.g.rotation.y += diff * 0.2;
+  m.beine.forEach((b, k) => { b.rotation.x = s.laeuft ? Math.sin(s.phase * 0.5 + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI : 0)) * 0.5 : 0; });
+  // Wie sieht es aus? (Verkleidet? Dann wie das andere Schaf!)
+  const als = s.verkleidet ? s.verkleidet.als : s;
+  m.woll.color.set(als.farbe);
+  const freund = spielerIstWolf && s.istWolf;   // Wölfe erkennen sich!
+  let symbol = '';
+  if (freund) symbol += ' 🐺';
+  if (spieler.rolle === 'spuernase' && s.geruch) symbol += s.geruch === 'wolf' ? ' 🐺' : ' ✅';
+  if (s.beschuetztVonDir && s.geschuetzt) symbol += ' 🛡️';
+  const key = als.name + symbol + freund;
+  if (key !== m.key) { m.key = key; m.label.userData.malen(als.name + symbol, freund ? '#ff6b6b' : '#ffffff'); }
+  m.blase.visible = !!(s.beschuetztVonDir && s.geschuetzt);
+  m.ring.visible = zielModus && stabZiele(spieler).includes(s);
+  if (m.ring.visible) m.ring.scale.setScalar(1 + Math.sin(zeit * 8) * 0.12);
+}
+function d3WolleZeigen() {   // Wollhaufen (da wurde jemand gefressen ...)
+  const T = D3.T;
+  while (D3.wolle.length < wolle.length) {
+    const g = new T.Group();
+    for (let k = 0; k < 7; k++) d3Teil(g, new T.SphereGeometry(0.18 + Math.random() * 0.1, 8, 6), new T.MeshLambertMaterial({ color: '#ffffff' }), (Math.random() - 0.5) * 0.8, 0.1, (Math.random() - 0.5) * 0.6);
+    D3.szene.add(g); D3.wolle.push(g);
+  }
+  D3.wolle.forEach((g, k) => {
+    const w = wolle[k];
+    g.visible = !!w;
+    if (!w) return;
+    const rest = w.aufloesen == null ? 1 : Math.max(0.05, w.aufloesen / w.aufloeseMax);
+    const [x, , z] = d3Pos(w.x, w.y); g.position.set(x, 0, z); g.scale.setScalar(0.4 + rest * 0.6);
+    g.children.forEach(c => c.material.color.set(w.aufloesen != null ? '#c8f5c8' : w.opfer ? w.opfer.farbe : '#ffffff'));
+  });
+}
+
+// ----- Jedes Bild: 3D zeichnen -----
+function d3Zeichnen() {
+  const T = D3.T, R = D3.renderer, c = R.domElement;
+  if (D3.dekoRef !== deko) d3WeltBauen();
+  const w = c.clientWidth || W, h = c.clientHeight || H;
+  if (w !== D3.w || h !== D3.h) { D3.w = w; D3.h = h; R.setSize(w, h, false); D3.kam.aspect = w / h; D3.kam.updateProjectionMatrix(); }
+  if (d3Gefangen() && (zustand !== 'spiel' || miniSpiel)) document.exitPointerLock();   // Für Mini-Spiele und Treffen brauchst du die Maus
+  // Kamera = deine Augen
+  const augen = !spieler.lebt ? D3_AUGEN_GEIST + Math.sin(zeit * 2) * 0.1 : spieler.inGrube != null ? D3_AUGEN_GRUBE : D3_AUGEN;
+  const wippen = spieler.laeuft && spieler.lebt ? Math.abs(Math.sin(spieler.phase * 0.5)) * 0.05 : 0;
+  D3.kam.position.set(spieler.x * METER, augen + wippen, spieler.y * METER);
+  D3.kam.rotation.set(D3.pitch, D3.yaw, 0);
+  // Nebel = wie weit du siehst (Nacht, Nebel-Sabotage, Wolf sieht weiter, Geister sehen alles)
+  const nebel = sabotage && sabotage.art === 'nebel', weit = sicht * METER;
+  D3.szene.fog.color.set(nebel ? '#5a5f6e' : '#141a3a'); D3.szene.background.copy(D3.szene.fog.color);
+  D3.szene.fog.near = weit * 0.45; D3.szene.fog.far = weit * 1.35;
+  // Welt-Dinge, die sich ändern
+  D3.glockeMat.color.set(glockeGenutzt ? '#999999' : '#f1c40f');
+  D3.laterneMat.color.set(nebel ? '#555555' : '#ffe680'); D3.laterneLicht.intensity = nebel ? 0 : 6;
+  const offen = sabotage && sabotage.art === 'gatter';
+  D3.tor.rotation.y += ((offen ? -1.3 : 0) - D3.tor.rotation.y) * 0.1;
+  const torText = offen ? '🚪 Gatter (OFFEN!)' : '🚪 Gatter';
+  if (D3.torSchild.userData.text !== torText) { D3.torSchild.userData.text = torText; D3.torSchild.userData.malen(torText, offen ? '#ff6b6b' : '#ffffff'); }
+  for (const d of D3.drehen) d.obj.rotation[d.achse] += d.tempo / 60;
+  D3.orte.forEach((o, i) => { o.ausrufe.visible = spieler.aufgaben.includes(i) && spieler.lebt; o.ausrufe.position.y = 2.3 + Math.sin(zeit * 4) * 0.12; });
+  if (D3.schnee) { const p = D3.schnee.geometry.attributes.position; for (let k = 1; k < p.array.length; k += 3) { p.array[k] -= 0.02; if (p.array[k] < 0) p.array[k] = 10; } p.needsUpdate = true; D3.schnee.position.set(spieler.x * METER, 0, spieler.y * METER); }
+  for (const s of schafe) d3SchafZeigen(s);
+  for (const [s, m] of D3.schafe) if (!schafe.includes(s)) { D3.szene.remove(m.g); D3.schafe.delete(s); }
+  d3WolleZeigen();
+  R.render(D3.szene, D3.kam);
+}
+
+// ----- Über dem 3D-Bild: Fadenkreuz, Pfeil zur Sabotage, Mini-Karte -----
+function d3ImBlick(liste, maxWinkel = 0.45) {   // Welches Tier ist in der Mitte vom Bild?
+  const fx = -Math.sin(D3.yaw), fy = -Math.cos(D3.yaw);
+  let best = null, bw = maxWinkel;
+  for (const s of liste) {
+    const dx = s.x - spieler.x, dy = s.y - spieler.y, l = Math.hypot(dx, dy) || 1;
+    const w = Math.acos(begrenzt((dx * fx + dy * fy) / l, -1, 1));
+    if (w < bw) { bw = w; best = s; }
+  }
+  return best;
+}
+function d3HirtenKlick() {   // 🧑‍🌾 Schäfer in 3D: Das Tier in der Bildmitte bekommt den Hirtenstab!
+  const ziel = d3ImBlick(stabZiele(spieler));
+  if (ziel) hirtenstab(spieler, ziel);
+  else zeigeNachricht('🧑‍🌾 Kein Tier in der Mitte vom Bild! Schau ein Tier mit gelbem Ring an.', 2);
+}
+function d3Pfeil(ziel, farbe, text1) {   // Ein Pfeil oben in der Mitte zeigt, wohin du musst
+  const a = Math.atan2(ziel.x - spieler.x, -(ziel.y - spieler.y)) + D3.yaw;
+  ctx.save(); ctx.translate(W / 2, 98); ctx.rotate(a);
+  ctx.fillStyle = farbe; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(16, 10); ctx.lineTo(5, 6); ctx.lineTo(5, 22); ctx.lineTo(-5, 22); ctx.lineTo(-5, 6); ctx.lineTo(-16, 10); ctx.closePath(); ctx.stroke(); ctx.fill();
+  ctx.restore();
+  text(text1, W / 2, 140, 13, farbe);
+}
+function d3Minikarte() {
+  const M = MINIKARTE, sx = M.w / WELT_B, sy = M.h / WELT_H, P = p => [M.x + p.x * sx, M.y + p.y * sy];
+  ctx.fillStyle = 'rgba(20,20,50,0.8)'; rundesRechteck(M.x - 5, M.y - 5, M.w + 10, M.h + 10, 8); ctx.fill();
+  ctx.fillStyle = KARTE.boden; ctx.fillRect(M.x, M.y, M.w, M.h);
+  ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 3;
+  for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(...P(GLOCKE)); ctx.lineTo(...P(o)); ctx.stroke(); }
+  ORTE.forEach((o, i) => {
+    const [x, y] = P(o), aufgabe = spieler.aufgaben.includes(i) && spieler.lebt;
+    ctx.fillStyle = aufgabe ? '#ffd166' : '#6b5b4a'; ctx.beginPath(); ctx.arc(x, y, aufgabe ? 5 : 3.5, 0, 7); ctx.fill();
+  });
+  const [gx, gy] = P(GLOCKE); ctx.fillStyle = glockeGenutzt ? '#999' : '#f1c40f'; ctx.fillRect(gx - 3, gy - 3, 6, 6);
+  if (spielerIstWolf) for (const g of KARTE.gruben) { const [x, y] = P(g); ctx.fillStyle = '#140c06'; ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); }
+  if (sabotage && Math.sin(zeit * 8) > 0) { const [x, y] = P(sabotagePunkt()); ctx.fillStyle = '#ff6b6b'; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); }
+  // Du (Pfeil in deine Blickrichtung)
+  const [px, py] = P(spieler);
+  ctx.save(); ctx.translate(px, py); ctx.rotate(-D3.yaw);
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+function d3Overlay() {
+  if (zustand !== 'spiel') return;
+  if (!miniSpiel) {
+    // Fadenkreuz
+    ctx.strokeStyle = zielModus ? '#ffd166' : 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 8, H / 2); ctx.lineTo(W / 2 + 8, H / 2); ctx.moveTo(W / 2, H / 2 - 8); ctx.lineTo(W / 2, H / 2 + 8); ctx.stroke();
+    if (zielModus) { const z = d3ImBlick(stabZiele(spieler)); text(z ? `🧑‍🌾 Klick = Hirtenstab auf ${z.name}!` : '🧑‍🌾 Schau ein Tier mit gelbem Ring an!', W / 2, H / 2 + 40, 15, '#ffd166'); }
+    if (!touchModus && !d3Gefangen()) text('🖱️ Klick ins Bild, um dich umzuschauen', W / 2, H / 2 + 70, 14, '#c9c3ff');
+  }
+  if (sabotage) d3Pfeil(sabotagePunkt(), '#ff6b6b', sabotage.art === 'nebel' ? 'Zur Laterne!' : 'Zum Gatter!');
+  d3Minikarte();
+}
+
 // ===== Eingabe =====
 addEventListener('keydown', e => {
   tonStart();
@@ -3475,6 +3955,7 @@ addEventListener('keydown', e => {
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   if (mp.aktiv && !miniSpiel && (k === 't' || (k === 'enter' && (zustand === 'spiel' || zustand === 'treffen')))) { e.preventDefault(); chatOeffnen(); return; }
+  if (k === 'v' && ['spiel', 'treffen', 'ende', 'titel'].includes(zustand)) { d3Umschalten(); return; }   // 🎮 V = 3D an/aus
   if (mp.rolle === 'gast' && (zustand === 'titel' || zustand === 'ende')) return;   // Der Gastgeber startet das Spiel
   if (zustand === 'einstellungen' && k === 'escape') zustand = 'titel';
   else if (zustand === 'titel' && (k === 'arrowleft' || k === 'arrowright')) kartenNr = (kartenNr + (k === 'arrowright' ? 1 : KARTEN.length - 1)) % KARTEN.length;
@@ -3502,9 +3983,14 @@ function punkt(e) {
 }
 canvas.addEventListener('pointerdown', e => {
   tonStart();
+  if (d3Gefangen()) {   // 🎮 3D mit gefangener Maus: Klick = Aktion (oder Hirtenstab)
+    if (zustand === 'spiel' && !miniSpiel) { if (zielModus) d3HirtenKlick(); else if (spieler.inGrube == null) aktion(); }
+    return;
+  }
   if (e.pointerType === 'touch' || e.pointerType === 'pen') touchModus = true;
   else if (e.pointerType === 'mouse') touchModus = false;
   const p = punkt(e);
+  if (imRechteck(p, KNOPF_3D) && ['spiel', 'treffen', 'ende'].includes(zustand)) { d3Umschalten(); return; }   // 🎮 3D an/aus
 
   // Ton-Knopf oben rechts
   if (imRechteck(p, TON_KNOPF) && zustand !== 'intro' && zustand !== 'cutscene') { tonUmschalten(); return; }
@@ -3533,17 +4019,24 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'spiel') {
     if (touchModus && dist(p, FAEHIGKEIT_RUND) < FAEHIGKEIT_RUND.r + 8 && rollenAktion()) { nutzeFaehigkeit(); return; }
     if (!touchModus && imRechteck(p, ROLLE_KNOPF)) { nutzeFaehigkeit(); return; }
-    if (zielModus) { hirtenKlick(p); return; }
+    if (zielModus) { if (d3Aktiv()) d3HirtenKlick(); else hirtenKlick(p); return; }
     if (spielerIstWolf && imRechteck(p, SAB_NEBEL)) { wolfSabotage('nebel'); return; }
     if (spielerIstWolf && imRechteck(p, SAB_GATTER)) { wolfSabotage('gatter'); return; }
     if (spieler.inGrube != null) { grubenKlick(p); return; }
     const aufAktion = dist(p, AKTION_KNOPF) < AKTION_KNOPF.r + 4;
     if (aufAktion && moeglicheAktion()) { aktion(); return; }
     if (aufAktion && touchModus) return;
+    if (d3Aktiv()) {   // 🎮 3D: Maus fangen (zum Umschauen) – am Handy: mit dem Finger wischen
+      if (touchModus) { D3.blickFinger = e.pointerId; D3.blickX = p.x; D3.blickY = p.y; try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* egal */ } }
+      else { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) { /* egal */ } }
+      return;
+    }
     klickZiel = { x: p.x + kamera.x, y: p.y + kamera.y };
   }
 });
 canvas.addEventListener('pointermove', e => {
+  if (D3.an && d3Gefangen()) { D3.yaw -= (e.movementX || 0) * D3_MAUS; D3.pitch = begrenzt(D3.pitch - (e.movementY || 0) * D3_MAUS, -1.2, 1.2); return; }   // 🎮 Umschauen
+  if (e.pointerId === D3.blickFinger) { const q = punkt(e); D3.yaw -= (q.x - D3.blickX) * 0.006; D3.pitch = begrenzt(D3.pitch - (q.y - D3.blickY) * 0.005, -1, 1); D3.blickX = q.x; D3.blickY = q.y; return; }
   if (e.pointerId === joystick.id) { joystickSetzen(punkt(e)); return; }
   maus = punkt(e);
   if (miniSpiel) { miniBewegt(maus); return; }
@@ -3552,6 +4045,7 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 function loslassen(e) {
+  if (e.pointerId === D3.blickFinger) { D3.blickFinger = null; return; }
   if (e.pointerId === joystick.id) { joystickLos(); return; }
   if (miniSpiel) miniLos();
 }
@@ -4095,3 +4589,4 @@ function schleife(jetzt) {
   requestAnimationFrame(schleife);
 }
 requestAnimationFrame(schleife);
+if (d3Wunsch) d3Umschalten();   // 🎮 Letztes Mal hattest du 3D an? Dann gleich wieder!
