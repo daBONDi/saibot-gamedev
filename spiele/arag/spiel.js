@@ -1199,6 +1199,9 @@ function lookSauber(l) {   // Nur erlaubte Sachen (auch wenn ein Mitspieler Quat
 }
 let aussehen = lookSauber(null);
 try { aussehen = lookSauber(JSON.parse(localStorage.getItem('arag-aussehen') || 'null')); } catch (e) { /* egal */ }
+let werkstattOffen = false;   // Ist gerade das Werkstatt-Menü offen?
+const lookArray = l => [l.farbe || '', l.hut || '', l.extra || ''];   // (kurz zum Verschicken)
+const lookAusArray = a => lookSauber(Array.isArray(a) ? { farbe: a[0], hut: a[1], extra: a[2] } : null);
 try { mitBots = localStorage.getItem('arag-bots') !== '0'; } catch (e) { /* egal */ }   // schrottZeit >= 0: Alle sind Schrott!   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
 let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
@@ -2057,8 +2060,8 @@ function baueFahrBus(ox, oz) {
   pcSchirm.position.set(pc.x - 0.005, 1.2, pc.z); pcSchirm.rotation.y = Math.PI / 2; gruppe.add(pcSchirm);
   teil(pc.x + 0.1, 0.92, pc.z, 0.22, 0.03, 0.55, new THREE.MeshStandardMaterial({ color: '#202530' }));   // Tastatur
   const puppe = { x: X1 + 0.6, z: Z1 + 4.45, T: null, schluessel: '' };
-  const scheibe = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.08, 28), new THREE.MeshStandardMaterial({ color: '#2b3038', metalness: 0.6, roughness: 0.4 }));
-  scheibe.position.set(puppe.x, 0.04, puppe.z); gruppe.add(scheibe);
+  const drehScheibe = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.08, 28), new THREE.MeshStandardMaterial({ color: '#2b3038', metalness: 0.6, roughness: 0.4 }));
+  drehScheibe.position.set(puppe.x, 0.04, puppe.z); gruppe.add(drehScheibe);
   const scheibenRing = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.015, 6, 32), new THREE.MeshBasicMaterial({ color: '#7cf5c6' }));
   scheibenRing.rotation.x = Math.PI / 2; scheibenRing.position.set(puppe.x, 0.085, puppe.z); gruppe.add(scheibenRing);
   festerKoerper(puppe.x, 0.7, puppe.z, 0.6, 1.4, 0.6);
@@ -5755,6 +5758,142 @@ function maleMonitor() {
   if (Math.floor(zeit) % 2 === 0) { g.fillStyle = '#ff6b6b'; g.font = 'bold 22px Arial, sans-serif'; g.fillText('🔴 Roter Knopf + E = LOS!', 22, 255); }
   M.tex.needsUpdate = true;
 }
+// =====================================================================
+// ===== 🎨🎩 Die Roboter-Werkstatt im Lobby-Bus =====
+// =====================================================================
+// Am Computer (E) suchst du dir Farbe, Hut und ein Extra aus. Die Puppe auf der Drehscheibe zeigt, wie du aussiehst.
+// Du selbst siehst dich ja nicht (du schaust aus deinen Augen) – aber deine Mitspieler sehen dich so!
+const werkstattStil = document.createElement('style');
+werkstattStil.textContent = `
+#werkstatt { position: absolute; z-index: 3; top: 3%; right: 1.5%; bottom: 3%; width: min(42%, 25rem); display: none; flex-direction: column; gap: 0.5rem;
+  padding: 0.8rem; box-sizing: border-box; overflow-y: auto; border-radius: 1rem; background: rgba(10, 12, 18, 0.9); border: 2px solid #ff6b9d88;
+  color: #fff; font: 0.9rem system-ui, sans-serif; }
+#werkstatt h2 { margin: 0; font-size: 1.15rem; color: #ff6b9d; }
+#werkstatt h3 { margin: 0.2rem 0 0; font-size: 0.85rem; color: #c9c3ff; }
+#werkstatt .reihe { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+#werkstatt .reihe button { min-width: 2.3rem; height: 2.3rem; padding: 0 0.3rem; border-radius: 0.55rem; border: 2px solid #ffffff22; background: #1d2230; color: #fff; font-size: 1.25rem; cursor: pointer; }
+#werkstatt .reihe button.farbe { width: 2.1rem; min-width: 0; }
+#werkstatt .reihe button.an { border-color: #fff; box-shadow: 0 0 0 2px #ff6b9d; }
+#werkstatt .reihe button:hover { border-color: #ffffffaa; }
+#werkstatt input { padding: 0.35rem 0.5rem; border-radius: 0.5rem; border: 1px solid #7cf5c6; background: #0d0f14; color: #fff; font: bold 0.95rem system-ui, sans-serif; }
+#werkstatt .unten { display: flex; gap: 0.4rem; margin-top: auto; }
+#werkstatt .unten button { flex: 1; padding: 0.5rem; border: none; border-radius: 0.6rem; font: bold 0.95rem system-ui, sans-serif; cursor: pointer; }
+#werkstatt .gewaehlt { color: #ffd166; font-size: 0.8rem; min-height: 1em; }
+`;
+document.head.appendChild(werkstattStil);
+const werkstattBox = document.createElement('div');
+werkstattBox.id = 'werkstatt';
+(document.getElementById('buehne') || document.body).appendChild(werkstattBox);
+werkstattBox.addEventListener('keydown', e => e.stopPropagation());   // Tippen im Namensfeld ≠ Laufen
+function werkstattBauen() {   // Das Menü (neu) malen – mit allen Knöpfen
+  const D = werkstattBox, std = mp.aktiv ? MP_ROBOTER[mp.nr || 0].farbe : '#7cf5c6';
+  D.innerHTML = '';
+  const neu = (tag, eltern, text) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; eltern.appendChild(el); return el; };
+  neu('h2', D, '🎨 Roboter-Werkstatt');
+  neu('h3', D, '🏷️ Name');
+  const name = neu('input', D); name.maxLength = NAME_MAX; name.placeholder = 'Dein Roboter-Name'; name.value = eigenerName; name.autocomplete = 'off';
+  name.addEventListener('input', () => nameSetzen(name.value));
+  const reihe = (titel, liste, aktiv, setzen) => {
+    neu('h3', D, titel);
+    const R = neu('div', D); R.className = 'reihe';
+    for (const x of liste) {
+      const k = neu('button', R, x.emoji); k.title = x.name;
+      if (x.id === aktiv) k.className = 'an';
+      k.addEventListener('click', () => setzen(x.id));
+    }
+  };
+  neu('h3', D, '🎨 Farbe');
+  const F = neu('div', D); F.className = 'reihe';
+  for (const c of LOOK_FARBEN) {
+    const k = neu('button', F); k.className = 'farbe' + ((aussehen.farbe || std) === c ? ' an' : ''); k.style.background = c; k.title = c;
+    k.addEventListener('click', () => lookSetzen({ ...aussehen, farbe: c }));
+  }
+  reihe('🎩 Hut', LOOK_HUETE, aussehen.hut, id => lookSetzen({ ...aussehen, hut: id }));
+  reihe('✨ Extra', LOOK_EXTRAS, aussehen.extra, id => lookSetzen({ ...aussehen, extra: id }));
+  const hut = LOOK_HUETE.find(h => h.id === aussehen.hut), ex = LOOK_EXTRAS.find(h => h.id === aussehen.extra);
+  neu('div', D, `Du trägst: ${aussehen.hut ? hut.emoji + ' ' + hut.name : 'keinen Hut'}${aussehen.extra ? ' + ' + ex.emoji + ' ' + ex.name : ''}`).className = 'gewaehlt';
+  const U = neu('div', D); U.className = 'unten';
+  const zufall = neu('button', U, '🎲 Zufall'); zufall.style.background = '#b388ff';
+  zufall.addEventListener('click', () => lookSetzen({ farbe: irgendein(LOOK_FARBEN), hut: irgendein(LOOK_HUETE).id, extra: irgendein(LOOK_EXTRAS).id }));
+  const fertig = neu('button', U, '✅ Fertig (E)'); fertig.style.background = '#4ade80';
+  fertig.addEventListener('click', () => werkstattZu());
+}
+function nameSetzen(v) {   // 🏷️ (auch vom Feld auf dem Titelbild benutzt)
+  eigenerName = nameSauber(v);
+  try { localStorage.setItem('arag-name', eigenerName); } catch (e) { /* egal */ }
+  if (mpEl.name && mpEl.name.value !== eigenerName && document.activeElement !== mpEl.name) mpEl.name.value = eigenerName;
+  if (mp.aktiv && mp.rolle === 'gast') mpSende({ t: 'name', name: eigenerName });
+}
+const irgendein = arr => arr[Math.floor(Math.random() * arr.length)];   // (Math.random – damit der Zufall vom Haus gleich bleibt)
+function lookSetzen(neu) {
+  aussehen = lookSauber(neu);
+  try { localStorage.setItem('arag-aussehen', JSON.stringify(aussehen)); } catch (e) { /* egal */ }
+  if (mp.aktiv && mp.rolle === 'gast') mpSende({ t: 'look', lk: lookArray(aussehen) });
+  const F = haus && haus.fahrBus;
+  if (F) F.puppe.jubel = 1.2;   // Die Puppe freut sich und winkt!
+  ton(700, 0, 0.06, 'square', 0.05); ton(1050, 0.06, 0.1, 'square', 0.05);   // Pling!
+  if (werkstattOffen) werkstattBauen();
+}
+function werkstattAuf() {
+  const F = haus && haus.fahrBus;
+  if (!F || werkstattOffen) return;
+  werkstattOffen = true;
+  for (const k in tasten) tasten[k] = false;
+  loslassen();
+  // Zur Puppe schauen
+  const p = spielerKoerper.position, dx = F.puppe.x - p.x, dz = F.puppe.z - p.z;
+  blick.links = Math.atan2(-dx, -dz); blick.hoch = -0.12;
+  werkstattBauen();
+  werkstattBox.style.display = 'flex';
+  if (document.pointerLockElement) document.exitPointerLock();   // Maus frei zum Klicken
+  ton(520, 0, 0.08, 'sine', 0.06); ton(780, 0.08, 0.12, 'sine', 0.06);
+}
+function werkstattZu(mausWieder = true) {
+  if (!werkstattOffen) return;
+  werkstattOffen = false;
+  werkstattBox.style.display = 'none';
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (mausWieder && zustand === 'spiel') mausFangen();
+}
+function pcSchirmMalen(F) {   // Der Bildschirm vom Werkstatt-Computer
+  const g = F.pcBild.g, hut = LOOK_HUETE.find(h => h.id === aussehen.hut), ex = LOOK_EXTRAS.find(h => h.id === aussehen.extra);
+  g.fillStyle = '#10141c'; g.fillRect(0, 0, 320, 224);
+  g.strokeStyle = '#ff6b9d'; g.lineWidth = 6; g.strokeRect(3, 3, 314, 218);
+  g.textAlign = 'center'; g.fillStyle = '#ff6b9d'; g.font = 'bold 26px Arial, sans-serif'; g.fillText('🎨 WERKSTATT', 160, 42);
+  LOOK_FARBEN.forEach((c, k) => { g.fillStyle = c; g.fillRect(22 + k * 23, 62, 19, 19); });
+  g.fillStyle = '#ffffff'; g.font = '40px Arial, sans-serif'; g.fillText(`${hut.emoji} ${ex.emoji}`, 160, 135);
+  if (Math.floor(zeit * 2) % 2 === 0) { g.fillStyle = '#ffd166'; g.font = 'bold 24px Arial, sans-serif'; g.fillText('E drücken!', 160, 190); }
+  F.pcBild.tex.needsUpdate = true;
+}
+function puppeUpdate(dt) {   // Die Anprobe-Puppe: zeigt immer DEIN Aussehen und dreht sich
+  const F = haus && haus.fahrBus;
+  if (werkstattOffen && (!F || !lobby || zustand !== 'spiel')) werkstattZu(false);   // Bus ist da – Menü zu!
+  if (!F || !lobby) return;
+  const P = F.puppe, farbe = meineFarbe(), schluessel = [meinName(), farbe, aussehen.hut, aussehen.extra].join('|');
+  if (P.schluessel !== schluessel) {   // Neu bauen
+    if (P.T) { P.gruppe.remove(P.T.g); }
+    P.T = baueHelferMesh({ name: meinName(), farbe, hut: aussehen.hut, extra: aussehen.extra });
+    if (P.T.g.parent) P.T.g.parent.remove(P.T.g);
+    P.gruppe.add(P.T.g); P.T.g.position.set(P.x, 0.08, P.z); P.T.g.rotation.y = P.drehung || Math.PI / 2;
+    P.T.lampe.kegel.visible = false;
+    P.gesicht = { gesicht: P.T.gesicht, farbe, kaputt: 0, angst: 0, froh: 1, redet: 0, blinzelVersatz: 0.7 };
+    P.ring.material.color.set(farbe);
+    P.schluessel = schluessel;
+  }
+  const T = P.T;
+  P.drehung = (P.drehung ?? Math.PI / 2) + dt * (werkstattOffen ? 0.6 : 0.35);
+  T.g.rotation.y = P.drehung;
+  P.jubel = Math.max(0, (P.jubel || 0) - dt);
+  beineAnimieren(T, BEIN_LAENGE, 0, dt);
+  T.arme[1].rotation.x = 0.9;
+  T.arme[0].rotation.x = P.jubel > 0 ? -2.3 + Math.sin(zeit * 14) * 0.4 : 0.9;   // Winken!
+  T.antenne.visible = (zeit * 2) % 1.5 < 1.2;
+  T.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
+  P.gesicht.froh = P.jubel > 0 ? 1 : 0;
+  malGesicht(P.gesicht);
+  lookAnimieren(T, dt);
+  if (zeit - (F.pcZeit ?? -9) > 0.5) { F.pcZeit = zeit; pcSchirmMalen(F); }
+}
 function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby tun?
   ctx.fillStyle = 'rgba(10,12,18,0.82)'; rr(W / 2 - 260, 14, 520, 62, 12); ctx.fill();
   text('🚌💨 LOBBY – Der ARAG-Bus fährt zur Spukvilla', W / 2, 38, 18, '#7cf5c6');
@@ -6384,6 +6523,10 @@ function mpSendeAn(g, nachricht) {
 function mpSende(nachricht) {   // Gast -> Gastgeber
   try { if (mp.conn && mp.conn.open) mp.conn.send(nachricht); } catch (e) { /* egal */ }
 }
+function lookAnwenden(o, lk) {   // 🎨🎩 Farbe, Hut und Extra eines Mitspielers merken
+  o.look = lk; o.hut = lk.hut; o.extra = lk.extra;
+  o.farbe = lk.farbe || MP_ROBOTER[o.nr]?.farbe || '#7cf5c6';
+}
 function mpMeshWeg(o) {
   if (o.teile) szene.remove(o.teile.g);
   if (o.strahl) szene.remove(o.strahl.g);
@@ -6437,6 +6580,7 @@ function mpNeuerGast(conn) {
     const g = { id: conn.peer, conn, nr, ...MP_ROBOTER[nr], x: 0, y: -50, z: 0, w: 0, dk: false, hg: -1, hz: null, k: null, r: null };
     const wunsch = nameSauber(conn.metadata && conn.metadata.name);
     if (wunsch) g.name = wunsch;   // 🏷️ Der Gast hat sich einen eigenen Namen ausgesucht
+    lookAnwenden(g, lookSauber(conn.metadata && conn.metadata.look));   // 🎨🎩 ... und sein Aussehen
     mp.andere.set(g.id, g);
     conn.send({ t: 'hallo', nr, code: mp.code });
     conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0 });
@@ -6457,6 +6601,7 @@ function mpGastWeg(id) {
 function mpVomGast(g, d) {
   if (!d || !d.t) return;
   if (d.t === 'name') { const n = nameSauber(d.name); if (n) g.name = n; return; }
+  if (d.t === 'look') { lookAnwenden(g, lookAusArray(d.lk)); return; }
   if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, vo: d.vo || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
@@ -6504,9 +6649,9 @@ function mpHostSendet() {
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const hz = gepackt ? halteZiel() : null;
-  const sp = [{ id: mp.peer.id, nr: 0, na: meinName(), x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const sp = [{ id: mp.peer.id, nr: 0, na: meinName(), lk: lookArray(aussehen), x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
-  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, na: g.name, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
+  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, na: g.name, lk: lookArray(g.look || {}), x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
     r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null, m.tarnTyp ?? -1]);
   const he = helfer.map(h => {
@@ -6536,7 +6681,7 @@ async function mpBeitreten() {
   const peer = new window.Peer();
   mp.peer = peer; voicePeer(peer);
   peer.on('open', () => {
-    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true, metadata: { name: eigenerName } });
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true, metadata: { name: eigenerName, look: aussehen } });
     mp.conn = conn;
     conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code }); mpStatus('✅ Verbunden! Das Haus wird gebaut ...'); });
     conn.on('data', d => mpVomHost(d));
@@ -6618,6 +6763,7 @@ function mpSchnappschuss(d) {
     let o = mp.andere.get(a.id);
     if (!o) { o = { id: a.id, nr: a.nr, ...MP_ROBOTER[a.nr] }; mp.andere.set(a.id, o); }
     if (a.na) o.name = nameSauber(a.na) || o.name;   // 🏷️ Sein Name
+    if (a.lk) lookAnwenden(o, lookAusArray(a.lk));     // 🎨🎩 Sein Aussehen
     Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, n: a.n || 0, vo: a.vo || 0, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
   }
   for (const [id, o] of mp.andere) if (!da.has(id)) { mpMeshWeg(o); mp.andere.delete(id); }
@@ -6721,8 +6867,11 @@ function mpUpdate(dt) {
 function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
   for (const o of mp.andere.values()) {
     if (o.y === undefined || o.y < -10) { if (o.teile) { o.teile.g.visible = false; o.strahl.g.visible = false; } continue; }   // Kaputt oder noch nicht da
+    const lookKey = [o.farbe, o.hut || '', o.extra || ''].join('|');
+    if (o.teile && o.lookKey !== lookKey) mpMeshWeg(o);   // 🎨🎩 Neues Aussehen? Roboter neu bauen!
     if (!o.teile) {
-      o.teile = baueHelferMesh({ name: o.name, farbe: o.farbe });
+      o.teile = baueHelferMesh({ name: o.name, farbe: o.farbe, hut: o.hut, extra: o.extra });
+      o.lookKey = lookKey; o.schildName = o.name;
       o.strahl = neuerStrahl(o.farbe, 0.025);
       o.geraet = baueGreifGeraet(o.farbe); o.geraet.position.set(0, -0.02, 0.33); o.teile.arme[0].add(o.geraet);   // 🔫 Greifer in die rechte Hand
       o.teile.g.traverse(k => { k.userData.spielerId = o.id; });   // Damit der Greifstrahl weiß, wer das ist
@@ -6756,6 +6905,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
     o.ahoch = (o.ahoch || 0) + ((o.n || 0) - (o.ahoch || 0)) * f;   // Wohin schaut er hoch/runter? (weich)
     o.blitzHell = Math.max(0, (o.blitzHell || 0) - 3 / 60);
     kopflampeZeigen(T, true, o.ahoch, o.blitzHell);
+    lookAnimieren(T, 1 / 60);
     if (zielPunkt) {   // ⚡ Der Strahl kommt aus der Spitze vom Greifer
       o.geraet.updateMatrixWorld(true);
       const von = G.spitze.getWorldPosition(new THREE.Vector3());
@@ -6955,11 +7105,7 @@ if (mpEl.name) {   // 🏷️ Namensfeld: Was du eintippst, wird gespeichert
   mpEl.name.maxLength = NAME_MAX;
   mpEl.name.value = eigenerName;
   mpEl.name.addEventListener('keydown', e => e.stopPropagation());
-  mpEl.name.addEventListener('input', () => {
-    eigenerName = nameSauber(mpEl.name.value);
-    try { localStorage.setItem('arag-name', eigenerName); } catch (e) { /* egal */ }
-    if (mp.aktiv && mp.rolle === 'gast') mpSende({ t: 'name', name: eigenerName });
-  });
+  mpEl.name.addEventListener('input', () => nameSetzen(mpEl.name.value));
 }
 if (mpEl.code) mpEl.code.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tonStart(); mpBeitreten(); } });
 addEventListener('beforeunload', () => { try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ } });
