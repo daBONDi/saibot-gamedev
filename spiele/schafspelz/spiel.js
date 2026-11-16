@@ -944,11 +944,13 @@ function grubenZeugen(p, w) {
   const nebel = sabotage && sabotage.art === 'nebel';
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf || s === taeter || s.meldet) continue;
+    if (s.mensch) continue;   // (Mitspieler sehen selbst, was passiert)
     if (dist(s, p) < (nebel ? 150 : 300)) {
       s.verdacht = { wer: taeter, ort: naechsterOrt(p), grube: true };
       s.meldet = true;
       s.ziel = { x: GLOCKE.x, y: GLOCKE.y, ort: null }; s.warte = 0; s.amOrt = null;
       if (w.istSpieler) zeigeNachricht(`👀 Oh nein! ${s.name} hat dich gesehen und rennt zur Glocke!`, 3);
+      else if (w.mensch) mpNachrichtAn(w, `👀 Oh nein! ${s.name} hat dich gesehen und rennt zur Glocke!`);
     }
   }
 }
@@ -957,8 +959,10 @@ function springeInGrube(w, i) {
   const g = KARTE.gruben[i];
   w.inGrube = i; w.x = g.x; w.y = g.y;
   w.jagt = null; w.ziel = null;
+  if (w === spieler) { klickZiel = null; w.grubeSeit = zeit; }
   effekte.push({ x: g.x, y: g.y, t: 0.8, art: 'plumps' });
   if (w.istSpieler || dist(g, spieler) < sicht + 20) sound.plumps();
+  if (mp.rolle === 'gast' && w === spieler) { mpSende({ t: 'grube', i }); return; }   // 🌐 Wer dich sieht, rechnet der Gastgeber
   grubenZeugen(g, w);
 }
 
@@ -967,6 +971,7 @@ function kletterRaus(w, i) {
   w.inGrube = null; w.x = g.x; w.y = g.y + 28;
   effekte.push({ x: g.x, y: g.y, t: 0.8, art: 'plumps' });
   if (w.istSpieler || dist(g, spieler) < sicht + 20) sound.plumps();
+  if (mp.rolle === 'gast' && w === spieler) { mpSende({ t: 'raus', i }); return; }
   grubenZeugen(g, w);
 }
 
@@ -976,6 +981,7 @@ function wechsleGrube(richtung) {
   spieler.inGrube = i;
   spieler.x = KARTE.gruben[i].x; spieler.y = KARTE.gruben[i].y;
   sound.klack();
+  if (mp.rolle === 'gast') mpSende({ t: 'grubeWechsel', i });
 }
 
 function grubenTaste(k) {
@@ -1220,7 +1226,7 @@ function rollenAktion() {
   const z = naechstesSchaf(70);
   switch (spieler.rolle) {
     case 'spuernase': return {
-      text: z ? `Schnuppern (${z.name})` : 'Schnuppern', moeglich: !!z, hinweis: 'Geh näher an ein Schaf heran!',
+      text: z ? `Schnuppern (${z.name})` : 'Schnuppern', moeglich: !!z, ziel: z, hinweis: 'Geh näher an ein Schaf heran!',
       tun() {
         z.geruch = z.istWolf ? 'wolf' : 'schaf';
         effektAn(z, 'schnuppern', 1.8, { wolf: z.istWolf });
@@ -1235,7 +1241,7 @@ function rollenAktion() {
         effektAn(spieler, 'icon', 1, { text: '💨' });
       } };
     case 'beschuetzer': return {
-      text: z ? `Beschützen (${z.name})` : 'Beschützen', moeglich: !!z, hinweis: 'Geh näher an ein Schaf heran!',
+      text: z ? `Beschützen (${z.name})` : 'Beschützen', moeglich: !!z, ziel: z, hinweis: 'Geh näher an ein Schaf heran!',
       tun() {
         for (const s of schafe) if (s.beschuetztVonDir) { s.geschuetzt = false; s.beschuetztVonDir = false; }
         z.geschuetzt = true; z.beschuetztVonDir = true;
@@ -1280,7 +1286,7 @@ function rollenAktion() {
     case 'verkleider': {
       const v = naechstesSchaf(110);
       return {
-        text: v ? `Verkleiden (als ${v.name})` : 'Verkleiden', moeglich: !!v, hinweis: 'Geh näher an das Schaf, als das du dich verkleiden willst!',
+        text: v ? `Verkleiden (als ${v.name})` : 'Verkleiden', moeglich: !!v, ziel: v, hinweis: 'Geh näher an das Schaf, als das du dich verkleiden willst!',
         tun() {
           spieler.verkleidet = { als: v, t: E.verkleidung }; sound.plopp(); zeigeNachricht(`🎭 Du siehst jetzt aus wie ${v.name}!`, 2.5);
           funken(spieler.x, spieler.y, 35, RAUCH, 100, 11, 1, -60);
@@ -1303,14 +1309,16 @@ function stabZiele(sch) {
 
 // 🧑‍🌾 Der Schäfer schlägt mit dem Hirtenstab zu!
 function hirtenstab(sch, ziel) {
-  sch.faehigkeit = sch.istSpieler ? faehigkeitsPause() : 30;
+  sch.faehigkeit = sch.istSpieler ? faehigkeitsPause() : sch.mensch ? Math.max(1, Math.round(ROLLEN.schaefer.pause * STUFEN[E.faehigkeitPause].w)) : 30;
   if (sch.istSpieler) zielModus = false;
   sound.bonk();
+  if (mp.rolle === 'gast') { mpSende({ t: 'stab', z: schafe.indexOf(ziel) }); return; }   // 🌐 Ob's der Wolf war, weiß nur der Gastgeber!
   if (ziel.istWolf) {
     // Erwischt! Cutscene: Der Schäfer wirft den Wolf raus
     miniSpiel = null; joystickLos();
     zustand = 'cutscene';
     cutscene = { t: 0, art: 'hirte', raus: ziel, hirte: sch };
+    if (mp.rolle === 'host') mpAnAlle({ t: 'hirte', raus: schafe.indexOf(ziel), hirte: schafe.indexOf(sch) });   // Alle sehen die Cutscene!
     return;
   }
   // Oh nein, das war ein Schaf! Der Schäfer muss gehen.
@@ -1319,7 +1327,10 @@ function hirtenstab(sch, ziel) {
   sch.lebt = false;
   sch.erledigt = sch.gesamt;
   sound.traurig();
-  if (sch.istSpieler) { beende('wolf', `Oh nein! ${ziel.name} war ein Schaf. Du musstest den Hof verlassen! 😵`); return; }
+  if (sch.istSpieler && !mp.aktiv) { beende('wolf', `Oh nein! ${ziel.name} war ein Schaf. Du musstest den Hof verlassen! 😵`); return; }
+  if (sch.istSpieler) zeigeNachricht(`😵 Oh nein! ${ziel.name} war ein Schaf. Du musst den Hof verlassen – jetzt bist du ein Geist!`, 4);
+  if (sch.mensch) mpNachrichtAn(sch, `😵 Oh nein! ${ziel.name} war ein Schaf. Du musst den Hof verlassen – jetzt bist du ein Geist!`);
+  if (sch.istSpieler || sch.mensch) { pruefeWolfSieg(); return; }
   zeigeNachricht(`😵 Schäfer ${sch.name} hat aus Versehen ${ziel.istSpieler ? 'DICH' : ziel.name} erwischt und muss gehen!`, 3.5);
   pruefeWolfSieg();
 }
@@ -1350,8 +1361,42 @@ function nutzeFaehigkeit() {
   if (!a) return;
   if (spieler.faehigkeit > 0) { zeigeNachricht(`Noch ${Math.ceil(spieler.faehigkeit)} Sekunden warten ...`, 1.5); return; }
   if (!a.moeglich) { zeigeNachricht(a.hinweis, 2); return; }
+  if (mp.rolle === 'gast') {   // 🌐 Mitspieler: Der Gastgeber rechnet die Fähigkeit aus – hier zeigen wir schon mal, was passiert
+    mpSende({ t: 'faehigkeit', z: a.ziel ? schafe.indexOf(a.ziel) : -1 });
+    if (spieler.rolle === 'bastler') { effektAn(spieler, 'werkzeug', 1.3); funken(spieler.x, spieler.y - 55, 15, GOLD, 120, 3, 0.6, 150); zeigeNachricht('🔧 Repariert!', 2); }
+    else if (spieler.rolle !== 'spuernase') a.tun();   // (Was die Spürnase riecht, sagt uns der Gastgeber)
+    spieler.faehigkeit = faehigkeitsPause();
+    return;
+  }
   a.tun();
   spieler.faehigkeit = faehigkeitsPause();
+}
+// 🌐 Ein Mitspieler benutzt seine Fähigkeit – der Gastgeber prüft und rechnet sie aus
+function gastFaehigkeit(s, z) {
+  if (s.faehigkeit > 0.5 || zustand !== 'spiel' || !s.lebt) return;
+  const nah = (o, max) => o && o.lebt && o !== s && dist(o, s) < max;
+  switch (s.rolle) {
+    case 'spuernase':
+      if (!nah(z, 110)) return;
+      mpSendeAn(mpGastVon(s), { t: 'geruch', z: schafe.indexOf(z), wolf: !!z.istWolf });
+      break;
+    case 'flitzer': s.sprint = E.sprint; break;   // (Laufen tut der Mitspieler selbst – das hier ist für die Staubwolken)
+    case 'beschuetzer':
+      if (!nah(z, 110)) return;
+      for (const o of schafe) if (o.beschuetztVon === s) { o.geschuetzt = false; o.beschuetztVon = null; }
+      z.geschuetzt = true; z.beschuetztVon = s;
+      break;
+    case 'bastler': if (!sabotage) return; repariert(s); break;
+    case 'ziege':
+      for (const h of schafe) if (h.lebt && !h.istSpieler && !h.mensch && !h.istWolf && h !== s && !h.verdacht && dist(h, s) < 220) h.verdacht = { wer: s, ort: naechsterOrt(s), komisch: true };
+      effektAn(s, 'meckern', 1.3);
+      if (dist(s, spieler) < sicht + 20) sound.meckern();
+      break;
+    case 'schleicher': if (!s.istWolf) return; s.unsichtbar = E.unsichtbar; break;
+    case 'verkleider': if (!s.istWolf || !nah(z, 150)) return; s.verkleidet = { als: z, t: E.verkleidung }; break;
+    default: return;
+  }
+  s.faehigkeit = Math.max(1, Math.round((ROLLEN[s.rolle].pause || 0) * STUFEN[E.faehigkeitPause].w));
 }
 
 function updateFaehigkeiten(dt) {
@@ -1371,7 +1416,7 @@ function updateFaehigkeiten(dt) {
       partikel.push({ x: s.x - s.richtung * 18, y: s.y + 18, vx: -s.richtung * 40 + (Math.random() - 0.5) * 30, vy: -20 * Math.random(), t: 0.45, max: 0.45, farbe: '#d6c7a8', groesse: 6 + Math.random() * 4, g: 0 });
     }
     // Computer-Ziegen benehmen sich komisch
-    if (!s.istSpieler && s.lebt && s.rolle === 'ziege') {
+    if (!s.istSpieler && !s.mensch && s.lebt && s.rolle === 'ziege') {
       s.schnupperZeit -= dt;
       if (s.schnupperZeit <= 0) {
         s.schnupperZeit = 35;
@@ -1383,7 +1428,7 @@ function updateFaehigkeiten(dt) {
       }
     }
     // Computer-Schäfer jagen Tiere, die sie für den Wolf halten
-    if (!s.istSpieler && s.lebt && !s.istWolf && s.rolle === 'schaefer' && s.faehigkeit <= 0 && zustand === 'spiel') {
+    if (!s.istSpieler && !s.mensch && s.lebt && !s.istWolf && s.rolle === 'schaefer' && s.faehigkeit <= 0 && zustand === 'spiel') {
       const v = s.verdacht;
       if (v && !v.komisch && v.wer.lebt && v.wer.inGrube == null && !(v.wer.unsichtbar > 0)) {
         s.ziel = { x: v.wer.x, y: v.wer.y, ort: null }; s.warte = 0; s.amOrt = null;
@@ -1391,7 +1436,7 @@ function updateFaehigkeiten(dt) {
       }
     }
     // Computer-Spürnasen schnuppern auch!
-    if (!s.istSpieler && s.lebt && !s.istWolf && s.rolle === 'spuernase') {
+    if (!s.istSpieler && !s.mensch && s.lebt && !s.istWolf && s.rolle === 'spuernase') {
       s.schnupperZeit -= dt;
       if (s.schnupperZeit <= 0) {
         const z = schafe.find(o => o.lebt && o !== s && dist(o, s) < 120 && !(o.unsichtbar > 0));
@@ -1433,6 +1478,7 @@ function endeCutscene() {
   if (mp.rolle === 'gast') {   // Gast: Danach einfach weiterspielen (das Spiel rechnet der Gastgeber)
     zustand = 'spiel';
     if (c.art === 'gefressen') zeigeNachricht('👻 Jetzt bist du ein Geist. Schau zu – und red im Geister-Chat!', 4);
+    if (c.art === 'hirte' && c.raus === spieler) zeigeNachricht('🧑‍🌾 Der Schäfer hat dich erwischt! Jetzt bist du ein Geist ...', 4);
     return;
   }
   if (c.art === 'gefressen') {   // Weiter geht's als Geist!
@@ -3518,7 +3564,8 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());   // kein Menü
 // Einer macht einen Raum auf (Gastgeber). Die anderen geben den Code ein.
 // Der Gastgeber rechnet das ganze Spiel (Bots, Wolf, Treffen ...) und schickt allen 15-mal pro Sekunde, wo alle sind.
 // Jeder Gast steuert ein Schaf (vielleicht ist er ja der Wolf! 🐺) und schickt, was er tut.
-// Spezial-Rollen und Gruben gibt es für Mitspieler erst später – die Computer-Schafe haben sie aber!
+// Auch Mitspieler haben Spezial-Rollen! Ihre Fähigkeit schicken sie an den Gastgeber, der sie ausrechnet (gastFaehigkeit).
+// Gast-Wölfe können auch durch die Gruben schleichen.
 const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const MP_VORSILBE = 'schafspelz-herde-';
 const MP_MAX = 6;                    // So viele echte Spieler (mit Gastgeber)
@@ -3630,12 +3677,7 @@ function mpGastWeg(id) {
 function mpSpielStart() {
   for (const s of schafe) s.mensch = null;
   mp.stimmen = new Map(); mp.gewaehlt = false;
-  // Der Gastgeber: im Multiplayer ohne Spezial-Rolle (die kommen später)
-  if (spielerIstWolf) spieler.rolle = 'wolf';
-  else if (spieler.rolle !== 'normal') {
-    spieler.rolle = 'normal';
-    if (!spieler.gesamt) { spieler.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 5); spieler.alleAufgaben = [...spieler.aufgaben]; spieler.gesamt = 5; }
-  }
+  // Jeder behält seine Rolle! (Der Gastgeber seine eigene, die Gäste die vom Computer-Schaf, das sie übernehmen)
   for (const g of mp.andere.values()) {
     const s = schafe[g.nr];
     g.schaf = null;
@@ -3643,11 +3685,9 @@ function mpSpielStart() {
     s.mensch = g.id; g.schaf = s;
     s.name = g.name; s.farbe = g.farbe;
     s.ziel = null; s.jagt = null; s.grubenPlan = null;
-    if (s.istWolf) { s.rolle = 'wolf'; s.cooldown = 12; }
-    else {
-      s.rolle = 'normal';
-      if (!s.gesamt) { s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 4); s.gesamt = 4; s.erledigt = 0; }
-    }
+    s.faehigkeit = 0; s.geschuetzt = false; s.verdacht = null; s.meldet = false;
+    if (s.istWolf) s.cooldown = 12;
+    else if (!s.gesamt && s.rolle !== 'ziege' && s.rolle !== 'schaefer') { s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 4); s.gesamt = 4; s.erledigt = 0; }
     s.alleAufgaben = [...s.aufgaben];
   }
   const namen = schafe.map(s => [s.istSpieler ? MP_HOST_NAME : s.name, s.farbe]);
@@ -3656,7 +3696,7 @@ function mpSpielStart() {
     const s = g.schaf;
     mpSendeAn(g, {
       t: 'start', karte: kartenNr, E, nr: schafe.indexOf(s), namen,
-      istWolf: s.istWolf, woelfe: s.istWolf ? woelfe.map(w => schafe.indexOf(w)) : [],
+      istWolf: s.istWolf, woelfe: s.istWolf ? woelfe.map(w => schafe.indexOf(w)) : [], rolle: s.rolle,
       aufgaben: s.istWolf ? [] : s.aufgaben,
       pos: schafe.map(x => [Math.round(x.x), Math.round(x.y)]),
     });
@@ -3719,7 +3759,8 @@ function mpVomGast(g, d) {
   if (d.t === 'chat') { mpChatVerteilen(g, d.text); return; }
   if (!s) return;
   switch (d.t) {
-    case 'pos': s.x = begrenzt(d.x, 50, WELT_B - 50); s.y = begrenzt(d.y, 60, WELT_H - 50); s.richtung = d.r; s.laeuft = !!d.l; if (s.laeuft) s.phase += 0.8; break;
+    case 'pos': if (s.inGrube != null) break;   // (In der Grube bestimmt der Gastgeber, wo du bist)
+      s.x = begrenzt(d.x, 50, WELT_B - 50); s.y = begrenzt(d.y, 60, WELT_H - 50); s.richtung = d.r; s.laeuft = !!d.l; if (s.laeuft) s.phase += 0.8; break;
     case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; } break;
     case 'melden': { const w = wolle[d.w]; if (zustand === 'spiel' && s.lebt && w && dist(s, w) < 130) starteTreffen(s, w); break; }
     case 'glocke': if (zustand === 'spiel' && s.lebt && !glockeGenutzt && dist(s, GLOCKE) < 120) { glockeGenutzt = true; starteTreffen(s, null); } break;
@@ -3730,6 +3771,15 @@ function mpVomGast(g, d) {
       else if (sabotagePause > 0) mpNachrichtAn(s, `Sabotage geht erst in ${Math.ceil(sabotagePause)} Sekunden wieder`);
       else starteSabotage(d.art === 'nebel' ? 'nebel' : 'gatter');
     } break;
+    case 'faehigkeit': gastFaehigkeit(s, d.z >= 0 ? schafe[d.z] : null); break;
+    case 'stab': {   // 🧑‍🌾 Ein Mitspieler-Schäfer haut zu
+      const z = schafe[d.z];
+      if (zustand === 'spiel' && s.lebt && s.rolle === 'schaefer' && s.faehigkeit <= 0.5 && z && z.lebt && z !== s && z.inGrube == null && dist(s, z) < SCHAEFER_REICHWEITE + 40) hirtenstab(s, z);
+      break;
+    }
+    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
+    case 'grubeWechsel': { const g = KARTE.gruben[d.i]; if (s.inGrube != null && g) { s.inGrube = d.i; s.x = g.x; s.y = g.y; } break; }
+    case 'raus': if (s.inGrube != null && KARTE.gruben[d.i]) kletterRaus(s, d.i); break;
     case 'stimme': if (treffen && treffen.phase === 'waehlen' && s.lebt && !mp.stimmen.has(s)) { mp.stimmen.set(s, d.z >= 0 ? schafe[d.z] : null); mpAbstimmungPruefen(); } break;
   }
 }
@@ -3796,7 +3846,8 @@ function mpGastStart(d) {
   spielerIstWolf = d.istWolf;
   for (const i of d.woelfe) { schafe[i].istWolf = true; schafe[i].rolle = 'wolf'; }   // Nur Wölfe kennen die anderen Wölfe!
   spieler.istWolf = d.istWolf;
-  spieler.rolle = d.istWolf ? 'wolf' : 'normal';
+  spieler.rolle = ROLLEN[d.rolle] ? d.rolle : d.istWolf ? 'wolf' : 'normal';   // 🎭 Deine Spezial-Rolle!
+  spieler.faehigkeit = 0; spieler.sprint = 0; spieler.inGrube = null;
   woelfe = schafe.filter(s => s.istWolf); wolf = woelfe[0] || null;
   spieler.aufgaben = [...d.aufgaben]; spieler.alleAufgaben = [...d.aufgaben]; spieler.gesamt = d.aufgaben.length; spieler.erledigt = 0;
   spieler.cooldown = 12;
@@ -3821,7 +3872,23 @@ function mpVomHost(d) {
   if (!schafe.length || !spieler) return;
   switch (d.t) {
     case 's': mpSchnappschuss(d); break;
-    case 'teleport': spieler.x = d.x; spieler.y = d.y; klickZiel = null; break;
+    case 'teleport': spieler.x = d.x; spieler.y = d.y; klickZiel = null; spieler.inGrube = null; break;
+    case 'geruch': {   // 👃 Was hat deine Spürnase gerochen?
+      const z = schafe[d.z];
+      if (!z) break;
+      z.geruch = d.wolf ? 'wolf' : 'schaf';
+      effektAn(z, 'schnuppern', 1.8, { wolf: d.wolf });
+      zeigeNachricht(d.wolf ? `👃 ${z.name} riecht nach WOLF! 🐺` : `👃 ${z.name} riecht nach Schaf. 🐑`, 3);
+      sound.schnuppern();
+      break;
+    }
+    case 'hirte': {   // 🧑‍🌾 Der Schäfer hat zugeschlagen – und es WAR ein Wolf!
+      const raus = schafe[d.raus], hirte = schafe[d.hirte];
+      if (!raus || !hirte) break;
+      miniSpiel = null; zielModus = false; klickZiel = null; joystickLos();
+      zustand = 'cutscene'; cutscene = { t: 0, art: 'hirte', raus, hirte };
+      break;
+    }
     case 'gefressen':
       miniSpiel = null; zielModus = false; klickZiel = null; joystickLos();
       spieler.lebt = false;
@@ -3867,7 +3934,8 @@ function mpSchnappschuss(d) {
     if (!s) return;
     if (s !== spieler) { s.zx = a[0]; s.zy = a[1]; s.richtung = a[2]; s.laeuft = !!a[3]; }
     s.lebt = !!a[4];
-    s.inGrube = a[5] ? 0 : null;
+    if (s !== spieler) s.inGrube = a[5] ? 0 : null;
+    else if (!a[5] && s.inGrube != null && zeit - (s.grubeSeit || 0) > 1.5) s.inGrube = null;   // Der Gastgeber sagt: Du bist nicht (mehr) in der Grube
     s.unsichtbar = a[6] ? 1 : 0;
     s.verkleidet = a[7] >= 0 && schafe[a[7]] ? { als: schafe[a[7]], t: 1 } : null;
   });
@@ -3882,13 +3950,17 @@ function mpSchnappschuss(d) {
   if (d.z === 'treffen' && zustand === 'spiel' && treffen) zustand = 'treffen';   // (z. B. nach der eigenen Fress-Animation)
 }
 function moeglicheAktionGast() {
-  if (!spieler.lebt) return null;
+  if (!spieler.lebt || spieler.inGrube != null) return null;
   if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
     return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => mpSende({ t: 'reparieren' }) };
   }
   if (spielerIstWolf && spieler.cooldown <= 0) {
     const opfer = schafe.find(s => s.lebt && s !== spieler && !s.istWolf && dist(s, spieler) < 50);
     if (opfer) return { text: 'Fressen!', tun: () => { mpSende({ t: 'fressen', z: schafe.indexOf(opfer) }); spieler.cooldown = 2; } };
+  }
+  if (spielerIstWolf) {   // 🕳️ Durch die Gruben schleichen
+    const g = naechsteGrube(spieler, 50);
+    if (g !== null) return { text: 'In die Grube', tun: () => springeInGrube(spieler, g) };
   }
   for (let i = 0; i < wolle.length; i++) if (dist(spieler, wolle[i]) < 80) return { text: 'Wolle melden!', tun: () => mpSende({ t: 'melden', w: i }) };
   for (const i of spieler.aufgaben) {
@@ -3901,6 +3973,7 @@ function mpGastUpdate(dt) {
   if (miniSpiel) miniUpdate(dt);
   bewegeSpieler(dt);
   spieler.cooldown -= dt;
+  spieler.faehigkeit -= dt; spieler.sprint -= dt;   // 🎭 Deine Fähigkeit lädt wieder auf
   // Sicht (wie beim Gastgeber)
   let zielSicht = SICHT;
   if (!spieler.lebt) zielSicht = 2500;
