@@ -87,6 +87,11 @@
       letter-spacing: 0.15em;
       text-align: center;
     }
+    #mp #mp-name {
+      text-transform: none;
+      letter-spacing: normal;
+      font: bold 0.95rem system-ui, sans-serif;
+    }
     #mp .oder { color: #8a8fb0; text-align: center; font-size: 0.75rem; }
     #mp-status { color: #ffd166; min-height: 1em; font-size: 0.8rem; }
     /* Vollbild: nur noch das Spiel */
@@ -104,6 +109,9 @@
     <canvas id="spiel" width="960" height="600"></canvas>
     <div id="mp">
       <b>🌐 Mit Freunden spielen</b>
+      <div class="zeile">
+        <input id="mp-name" maxlength="14" placeholder="🏷️ Dein Roboter-Name" autocomplete="off" spellcheck="false">
+      </div>
       <button id="mp-erstellen">🏠 Raum erstellen</button>
       <div class="oder">– oder Code eingeben –</div>
       <div class="zeile">
@@ -122,6 +130,6 @@
     });
   </script>
   <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-  <script type="module" src="spiel.js?v=50"></script>
+  <script type="module" src="spiel.js?v=51"></script>
 </body>
 </html>

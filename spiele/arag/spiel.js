@@ -1075,14 +1075,20 @@ function schildMesh(t, b, h, farbe = '#7cf5c6') {
   return new THREE.Mesh(new THREE.PlaneGeometry(b, h), new THREE.MeshBasicMaterial({ map: tex }));
 }
 function namensSchild(t, farbe) {   // Ein Namensschild, das immer zu dir schaut
-  const tex = malTextur(256, 64, (g) => {
+  const tex = malTextur(512, 64, (g) => {
     g.font = 'bold 40px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.8)'; g.strokeText(t, 128, 34);
-    g.fillStyle = farbe; g.fillText(t, 128, 34);
+    g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.8)'; g.strokeText(t, 256, 34, 500);
+    g.fillStyle = farbe; g.fillText(t, 256, 34, 500);
   }, false);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  s.scale.set(0.9, 0.225, 1);
+  s.scale.set(1.8, 0.225, 1);
   return s;
+}
+function namensSchildNeu(T, name, farbe) {   // 🏷️ Neuer Name? Dann ein neues Schild malen
+  const alt = T.schild, neu = namensSchild(`🤖 ${name}`, farbe);
+  neu.position.copy(alt.position); alt.parent.add(neu); alt.parent.remove(alt);
+  alt.material.map.dispose(); alt.material.dispose();
+  T.schild = neu;
 }
 
 // ===== Der Greifstrahl (sieht man bei dir und bei den Helfern) =====
@@ -1168,6 +1174,11 @@ try { rekord = Number(localStorage.getItem('arag-rekord')) || 0; } catch (e) { /
 let haus = null;            // Das aktuelle Haus
 let lobby = false, introZeit = -1, einblenden = 0, schrottZeit = -1;
 let mitBots = true;   // 🤖 Spielen die Helfer-Bots mit? (Schalter in der Lobby – das Spiel merkt es sich)
+// 🏷️ Dein eigener Roboter-Name (wird auf deinem Computer gespeichert)
+const NAME_MAX = 14;           // So viele Zeichen darf ein Name höchstens haben
+const nameSauber = t => String(t || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+let eigenerName = '';
+try { eigenerName = nameSauber(localStorage.getItem('arag-name')); } catch (e) { /* egal */ }
 try { mitBots = localStorage.getItem('arag-bots') !== '0'; } catch (e) { /* egal */ }   // schrottZeit >= 0: Alle sind Schrott!   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
 let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
@@ -4502,7 +4513,7 @@ function baueHelferMesh(info) {
   const blase = new THREE.Sprite(new THREE.SpriteMaterial({ map: blasenTex, transparent: true, depthWrite: false }));
   blase.scale.set(2.0, 0.5, 1); blase.position.y = 1.75; blase.visible = false; oben.add(blase);
   szene.add(g);
-  const T = { g, oben, beine, ausgefahren: BEIN_LAENGE, schrittPhase: Math.random() * 6, kopf, arme, antenne, lampen, lampe, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
+  const T = { g, oben, schild, beine, ausgefahren: BEIN_LAENGE, schrittPhase: Math.random() * 6, kopf, arme, antenne, lampen, lampe, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
   beineAnimieren(T, BEIN_LAENGE, false, 0);
   return T;
 }
@@ -5299,7 +5310,7 @@ function spielerStirbt(von) {
   if (mp.rolle === 'gast') mpSende({ t: 'tot', x: r2(x), y: r2(y), z: r2(z), von });
   else {
     neuerKopf(meineId(), meineFarbe(), x, y + 0.3, z);
-    if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: `💀 ${MP_ROBOTER[0].name} ist kaputt! Bringt den Kopf 🤖 zur Abgabe 🚚`, farbe: '#ff6b6b' });
+    if (mp.rolle === 'host') mpAnAlle({ t: 'info', text: `💀 ${meinName()} ist kaputt! Bringt den Kopf 🤖 zur Abgabe 🚚`, farbe: '#ff6b6b' });
   }
   spielerKoerper.position.set(TOT_PLATZ.x, TOT_PLATZ.y, TOT_PLATZ.z); spielerKoerper.velocity.set(0, 0, 0);
   zeigeNachricht(`💀 Kaputt! (${von}) Dein Kopf 🤖 liegt im Haus ...`, 4, '#ff6b6b');
@@ -5521,7 +5532,7 @@ function maleMonitor() {
   g.fillText('🏚️ Auftrag: Die große Spukvilla (wir sind unterwegs!)', 22, 115);
   g.fillText(`🏆 Ziel: ${gewinnZiel()} Schätze verkaufen`, 22, 145);
   g.fillText(`💰 Rekord: ${euro(rekord)}`, 22, 175);
-  const team = [mp.aktiv ? MP_ROBOTER[mp.nr]?.name || 'Du' : 'Du', ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
+  const team = [meinName(), ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
   g.fillStyle = '#ffd166'; g.fillText(`🤖 Team: ${team.join(', ')}`, 22, 205);
   g.fillStyle = mitBots ? '#4ade80' : '#8a8f9e'; g.fillText(mitBots ? '🤖 Mit Helfer-Bots' : '🚫 Ohne Helfer-Bots', 300, 145);
   if (Math.floor(zeit) % 2 === 0) { g.fillStyle = '#ff6b6b'; g.font = 'bold 22px Arial, sans-serif'; g.fillText('🔴 Roter Knopf + E = LOS!', 22, 255); }
@@ -6100,11 +6111,12 @@ const MP_ROBOTER = [           // Namen und Farben der Spieler-Roboter
   { name: 'Kolben', farbe: '#b388ff' },
   { name: 'Zahnrad', farbe: '#ff8a65' },
 ];
+const meinName = () => eigenerName || (mp.aktiv ? MP_ROBOTER[mp.nr || 0].name : 'Du');
 const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, andere: new Map(), sendeZeit: 0, nr: 0, zaehler: 0, startzahl: 0, abfahrZeit: 0 };
 const r2 = v => Math.round(v * 100) / 100;   // Auf 2 Kommastellen runden (spart Daten)
 const mpEl = {
   box: document.getElementById('mp'), erstellen: document.getElementById('mp-erstellen'),
-  code: document.getElementById('mp-code'), beitreten: document.getElementById('mp-beitreten'), status: document.getElementById('mp-status'),
+  name: document.getElementById('mp-name'), code: document.getElementById('mp-code'), beitreten: document.getElementById('mp-beitreten'), status: document.getElementById('mp-status'),
 };
 function mpMenueZeigen(an) {
   if (!mpEl.box) return;
@@ -6203,6 +6215,8 @@ function mpNeuerGast(conn) {
     while (belegt.has(nr)) nr++;
     if (nr >= MP_MAX_SPIELER) { conn.send({ t: 'voll' }); setTimeout(() => conn.close(), 500); return; }
     const g = { id: conn.peer, conn, nr, ...MP_ROBOTER[nr], x: 0, y: -50, z: 0, w: 0, dk: false, hg: -1, hz: null, k: null, r: null };
+    const wunsch = nameSauber(conn.metadata && conn.metadata.name);
+    if (wunsch) g.name = wunsch;   // 🏷️ Der Gast hat sich einen eigenen Namen ausgesucht
     mp.andere.set(g.id, g);
     conn.send({ t: 'hallo', nr, code: mp.code });
     conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0 });
@@ -6222,6 +6236,7 @@ function mpGastWeg(id) {
 }
 function mpVomGast(g, d) {
   if (!d || !d.t) return;
+  if (d.t === 'name') { const n = nameSauber(d.name); if (n) g.name = n; return; }
   if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, vo: d.vo || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
@@ -6269,9 +6284,9 @@ function mpHostSendet() {
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const hz = gepackt ? halteZiel() : null;
-  const sp = [{ id: mp.peer.id, nr: 0, x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const sp = [{ id: mp.peer.id, nr: 0, na: meinName(), x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
-  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
+  for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, na: g.name, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
     r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null]);
   const he = helfer.map(h => {
@@ -6301,7 +6316,7 @@ async function mpBeitreten() {
   const peer = new window.Peer();
   mp.peer = peer; voicePeer(peer);
   peer.on('open', () => {
-    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true });
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true, metadata: { name: eigenerName } });
     mp.conn = conn;
     conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code }); mpStatus('✅ Verbunden! Das Haus wird gebaut ...'); });
     conn.on('data', d => mpVomHost(d));
@@ -6333,7 +6348,7 @@ function mpVomHost(d) {
     level = d.level; konto = d.konto;
     if (typeof d.bots === 'boolean') mitBots = d.bots;   // (Der Gastgeber bestimmt, ob Bots mitspielen)
     starteLevel(d.seed);
-    zeigeNachricht(`🌐 Du bist ${MP_ROBOTER[mp.nr].name}! Raum ${mp.code} – Level ${level}`, 4, MP_ROBOTER[mp.nr].farbe);
+    zeigeNachricht(`🌐 Du bist ${meinName()}! Raum ${mp.code} – Level ${level}`, 4, MP_ROBOTER[mp.nr].farbe);
     return;
   }
   if (d.t === 'geschafft') {
@@ -6382,6 +6397,7 @@ function mpSchnappschuss(d) {
     da.add(a.id);
     let o = mp.andere.get(a.id);
     if (!o) { o = { id: a.id, nr: a.nr, ...MP_ROBOTER[a.nr] }; mp.andere.set(a.id, o); }
+    if (a.na) o.name = nameSauber(a.na) || o.name;   // 🏷️ Sein Name
     Object.assign(o, { x: a.x, y: a.y, z: a.z, w: a.w, n: a.n || 0, vo: a.vo || 0, dk: a.dk, hg: a.hg, pg: a.pg || null, hz: a.hz || null });
   }
   for (const [id, o] of mp.andere) if (!da.has(id)) { mpMeshWeg(o); mp.andere.delete(id); }
@@ -6492,6 +6508,7 @@ function mpZeigeAndere() {   // Die Roboter der anderen Spieler zeichnen
       Object.assign(o, { gesicht: o.teile.gesicht, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: Math.random() * 3, ax: o.x, ay: o.y, az: o.z, aw: o.w });
     }
     o.teile.g.visible = introZeit < 0;
+    if (o.schildName !== o.name) { if (o.schildName !== undefined) namensSchildNeu(o.teile, o.name, o.farbe); o.schildName = o.name; }   // 🏷️ Name geändert?
     const f = 0.25;
     o.ax += (o.x - o.ax) * f; o.ay += (o.y - o.ay) * f; o.az += (o.z - o.az) * f;
     o.aw = winkelHin(o.aw, o.w, f);
@@ -6560,7 +6577,7 @@ function spielerWerfen() {
   kamera.getWorldDirection(r);
   const v = [r2(r.x * SPIELER_WURF), r2(r.y * SPIELER_WURF + 4), r2(r.z * SPIELER_WURF)];
   const o = mp.andere.get(gepackt);
-  if (mp.rolle === 'host') { if (o) mpSendeAn(o, { t: 'wirf', v, von: MP_ROBOTER[0].name }); }
+  if (mp.rolle === 'host') { if (o) mpSendeAn(o, { t: 'wirf', v, von: meinName() }); }
   else mpSende({ t: 'wirf', ziel: gepackt, v });
   if (o) zeigeNachricht(`🚀 ${o.name} fliegt!`, 1.5, o.farbe);
   gepackt = null;
@@ -6705,7 +6722,7 @@ function voiceHUD(zeilen) {   // Unter der Spielerliste: Wie funktioniert's? Wer
 }
 function mpHUD() {
   if (!mp.aktiv) return;
-  const namen = [mp.rolle === 'host' ? MP_ROBOTER[0] : MP_ROBOTER[mp.nr], ...[...mp.andere.values()].map(o => MP_ROBOTER[o.nr])];
+  const namen = [{ name: meinName(), farbe: meineFarbe() }, ...[...mp.andere.values()].map(o => ({ name: o.name, farbe: o.farbe }))];
   ctx.fillStyle = 'rgba(10,12,18,0.8)'; rr(12, 112, 280, 30 + namen.length * 18 + (VOICE_AN ? 40 : 0), 12); ctx.fill();
   text(`🌐 Raum ${mp.code} · ${namen.length} Spieler${mp.rolle === 'host' ? ' · du bist Gastgeber' : ''}`, 24, 128, 13, '#7cf5c6', 'left', false);
   namen.forEach((n, k) => text(`🤖 ${n.name}${k === 0 ? ' (du)' : ''}`, 24, 148 + k * 18, 12, n.farbe, 'left', false));
@@ -6713,6 +6730,16 @@ function mpHUD() {
 }
 if (mpEl.erstellen) mpEl.erstellen.addEventListener('click', () => { tonStart(); mpRaumErstellen(); });
 if (mpEl.beitreten) mpEl.beitreten.addEventListener('click', () => { tonStart(); mpBeitreten(); });
+if (mpEl.name) {   // 🏷️ Namensfeld: Was du eintippst, wird gespeichert
+  mpEl.name.maxLength = NAME_MAX;
+  mpEl.name.value = eigenerName;
+  mpEl.name.addEventListener('keydown', e => e.stopPropagation());
+  mpEl.name.addEventListener('input', () => {
+    eigenerName = nameSauber(mpEl.name.value);
+    try { localStorage.setItem('arag-name', eigenerName); } catch (e) { /* egal */ }
+    if (mp.aktiv && mp.rolle === 'gast') mpSende({ t: 'name', name: eigenerName });
+  });
+}
 if (mpEl.code) mpEl.code.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tonStart(); mpBeitreten(); } });
 addEventListener('beforeunload', () => { try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ } });
 
