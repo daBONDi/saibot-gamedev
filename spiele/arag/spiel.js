@@ -527,7 +527,7 @@ function monsterGeraeusche(m, dt) {
   else if (m.art === 'schrank') m.geraeuschZeit = jagt ? zufall(0.35, 0.5) : zufall(5, 9);
   else if (m.art === 'maulwurf') m.geraeuschZeit = jagt ? zufall(0.3, 0.45) : zufall(1.2, 2);
   else if (m.art === 'oma') { m.geraeuschZeit = jagt ? zufall(0.25, 0.35) : zufall(0.9, 1.3); if (!m.laeuft && !jagt) return; }   // Steht sie, klopft der Stock nicht
-  else if (m.art === 'formwandler') { m.geraeuschZeit = jagt ? zufall(0.6, 1) : zufall(7, 13); if (m.modus === 'tarnPokal' || m.modus === 'abhauen') return; }   // Als Pokal ist er still
+  else if (m.art === 'formwandler') { m.geraeuschZeit = jagt ? zufall(0.6, 1) : zufall(7, 13); if (m.modus === 'tarnSchatz' || m.modus === 'abhauen') return; }   // Als Schatz ist er still
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
   if (laut > 0) monsterSound[m.art](laut, jagt);
 }
@@ -1179,6 +1179,26 @@ const NAME_MAX = 14;           // So viele Zeichen darf ein Name höchstens habe
 const nameSauber = t => String(t || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
 let eigenerName = '';
 try { eigenerName = nameSauber(localStorage.getItem('arag-name')); } catch (e) { /* egal */ }
+// 🎨🎩 Dein Aussehen (in der Roboter-Werkstatt im Lobby-Bus aussuchen – wird auf deinem Computer gespeichert)
+const LOOK_FARBEN = ['#7cf5c6', '#ffe66d', '#b388ff', '#ff8a65', '#ff6b9d', '#4dabf7', '#4ade80', '#ff4444', '#ffa94d', '#ffffff', '#3b3f4a', '#c9a227'];
+const LOOK_HUETE = [
+  { id: '', name: 'Kein Hut', emoji: '🚫' }, { id: 'cap', name: 'Cap', emoji: '🧢' }, { id: 'zylinder', name: 'Zylinder', emoji: '🎩' },
+  { id: 'krone', name: 'Krone', emoji: '👑' }, { id: 'party', name: 'Partyhut', emoji: '🥳' }, { id: 'cowboy', name: 'Cowboyhut', emoji: '🤠' },
+  { id: 'propeller', name: 'Propellermütze', emoji: '🚁' }, { id: 'helm', name: 'Bauhelm', emoji: '⛑️' }, { id: 'zauberer', name: 'Zauberhut', emoji: '🧙' },
+  { id: 'wikinger', name: 'Wikingerhelm', emoji: '🐂' }, { id: 'koch', name: 'Kochmütze', emoji: '👨‍🍳' }, { id: 'pirat', name: 'Piratenhut', emoji: '🏴‍☠️' },
+  { id: 'blumen', name: 'Blumenkranz', emoji: '🌼' }, { id: 'ohren', name: 'Hasenohren', emoji: '🐰' },
+];
+const LOOK_EXTRAS = [
+  { id: '', name: 'Nichts', emoji: '🚫' }, { id: 'brille', name: 'Sonnenbrille', emoji: '🕶️' }, { id: 'bart', name: 'Schnurrbart', emoji: '🥸' },
+  { id: 'fliege', name: 'Fliege', emoji: '🎀' }, { id: 'schal', name: 'Schal', emoji: '🧣' }, { id: 'umhang', name: 'Superhelden-Umhang', emoji: '🦸' },
+  { id: 'jetpack', name: 'Raketen-Rucksack', emoji: '🚀' },
+];
+function lookSauber(l) {   // Nur erlaubte Sachen (auch wenn ein Mitspieler Quatsch schickt)
+  l = l && typeof l === 'object' ? l : {};
+  return { farbe: LOOK_FARBEN.includes(l.farbe) ? l.farbe : null, hut: LOOK_HUETE.some(h => h.id === l.hut) ? l.hut : '', extra: LOOK_EXTRAS.some(h => h.id === l.extra) ? l.extra : '' };
+}
+let aussehen = lookSauber(null);
+try { aussehen = lookSauber(JSON.parse(localStorage.getItem('arag-aussehen') || 'null')); } catch (e) { /* egal */ }
 try { mitBots = localStorage.getItem('arag-bots') !== '0'; } catch (e) { /* egal */ }   // schrottZeit >= 0: Alle sind Schrott!   // 🚌 Bist du noch in der Lobby? Läuft gerade das Intro? (-1 = nein)
 let traenke = [], pfuetzen = [], trankNummer = 0, nebelZeit = 0, klebZeit = 0;   // 🧪 Fliegende Tränke, Pfützen, und wie lange du noch im Nebel bist / festklebst
 let schaetze = [];          // Alle Schätze im Haus
@@ -2830,7 +2850,7 @@ function baueHaus() {
   for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
   for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
   for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
-  for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnPokal'; }
+  for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; f.tarnTyp = tarnSchatzWaehlen(); }
   for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
   for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
   for (let k = 0; k < (ld.maulwurf || 0) && haus.baeume; k++) {   // 🐾 Der Maulwurf wohnt draußen im Wald
@@ -3267,10 +3287,8 @@ function baueMonsterMesh(art) {
     g.add(T.g); T.blase.visible = false;
     g.userData.bot = T;
     g.userData.botGesicht = { gesicht: T.gesicht, farbe: falsch.farbe, kaputt: 0, angst: 0, froh: 0, redet: 0, blinzelVersatz: 1.3 };
-    // 2) Tarnung als goldener Pokal
-    const pokal = baueSchatzMesh(SCHAETZE.find(t => t.id === 'pokal'));
-    if (pokal.parent) pokal.parent.remove(pokal);
-    pokal.position.y = 0.25; g.add(pokal); g.userData.pokal = pokal;
+    // 2) Tarnung als Schatz: JEDER Schatz geht! (wird erst gebaut, wenn er ihn braucht – siehe tarnSchatzMesh)
+    g.userData.tarnSchaetze = {};
     // 3) Die echte Form: ein dunkles Roboter-Monster mit vielen roten Augen und Krallen
     const echt = new THREE.Group(); g.add(echt); g.userData.echt = echt;
     const metall = new THREE.MeshStandardMaterial({ color: '#1d1f26', metalness: 0.8, roughness: 0.35 });
@@ -3968,13 +3986,25 @@ function omaUpdate(m, dt) {
   if (!m.ziel || m.zielZeit <= 0 || abstand3D(m, m.ziel) < 0.5) { m.modus = 'wandern'; m.ziel = zufallsZiel(m); m.zielZeit = zufall(5, 10); }
   return info.tempo;
 }
-// 🤖👾 Der Formwandler: tarnBot / tarnPokal → (jemand kommt nah) verwandeln → jagen → abhauen (in einen anderen Raum) → neue Tarnung
+// 👾 In welchen Schatz verwandelt er sich? (Nummer in SCHAETZE – irgendeiner!)
+const tarnSchatzWaehlen = () => Math.floor(Math.random() * SCHAETZE.length);
+function tarnSchatzMesh(U, nr) {   // Das Aussehen für Schatz Nummer nr (einmal bauen, dann merken)
+  const typ = SCHAETZE[nr] || SCHAETZE[0];
+  if (!U.tarnSchaetze[typ.id]) {
+    const mesh = baueSchatzMesh(typ);
+    if (mesh.parent) mesh.parent.remove(mesh);
+    mesh.position.y = typ.groesse[1] / 2;
+    U.echt.parent.add(mesh); U.tarnSchaetze[typ.id] = mesh;
+  }
+  return U.tarnSchaetze[typ.id];
+}
+// 🤖👾 Der Formwandler: tarnBot / tarnSchatz (irgendein Schatz!) → (jemand kommt nah) verwandeln → jagen → abhauen (in einen anderen Raum) → neue Tarnung
 function formwandlerUpdate(m, dt) {
   const info = m.info;
   if (m.modus === 'wandern' || m.modus === 'nachsehen') { m.modus = 'abhauen'; m.ziel = null; }   // (nach dem Betäuben)
-  if (m.modus === 'tarnBot' || m.modus === 'tarnPokal') {
+  if (m.modus === 'tarnBot' || m.modus === 'tarnSchatz') {
     if (schrankOpfer(m, info.aufwachWeite)) { m.modus = 'verwandeln'; m.warnZeit = info.verwandeln; return 0; }
-    if (m.modus === 'tarnPokal') { m.ziel = { x: m.x, y: m.y, z: m.z }; return 0; }   // Ein Pokal bewegt sich nicht ... meistens
+    if (m.modus === 'tarnSchatz') { m.ziel = { x: m.x, y: m.y, z: m.z }; return 0; }   // Ein Schatz bewegt sich nicht ... meistens
     m.zielZeit -= dt;   // Als falscher Helfer-Bot langsam durchs Haus fahren
     if (!m.ziel || m.zielZeit <= 0 || abstand3D(m, m.ziel) < 0.5) { m.ziel = zufallsZiel(m); m.zielZeit = zufall(5, 10); }
     return info.tarnTempo;
@@ -4003,7 +4033,8 @@ function formwandlerUpdate(m, dt) {
     m.ziel = { x: R.x0 + RAUM / 2 + zufall(-1.5, 1.5), y: R.basis, z: R.z0 + RAUM / 2 + zufall(-1.5, 1.5) };
   }
   if (abstand2D(m.x, m.z, m.ziel.x, m.ziel.z) < 0.4 && Math.abs(m.y - m.ziel.y) < 1) {
-    m.modus = Math.random() < 0.5 ? 'tarnBot' : 'tarnPokal'; m.ziel = null; m.zielZeit = 0;
+    m.modus = Math.random() < 0.5 ? 'tarnBot' : 'tarnSchatz'; m.ziel = null; m.zielZeit = 0;
+    m.tarnTyp = tarnSchatzWaehlen();   // Jedes Mal ein ANDERER Schatz!
     return 0;
   }
   return info.tempo;
@@ -4289,9 +4320,11 @@ function zeigeMonster(m) {
   } else if (m.art === 'formwandler') {
     const U = g.userData, glitch = m.modus === 'verwandeln';
     // Welche Form sieht man? Beim Verwandeln flackert es zwischen allen Formen hin und her!
-    const form = glitch ? ['bot', 'echt', 'pokal', 'echt'][Math.floor(zeit * 14) % 4]
-      : m.modus === 'tarnBot' ? 'bot' : m.modus === 'tarnPokal' ? 'pokal' : 'echt';
-    U.bot.g.visible = form === 'bot'; U.pokal.visible = form === 'pokal'; U.echt.visible = form === 'echt';
+    const form = glitch ? ['bot', 'echt', 'schatz', 'echt'][Math.floor(zeit * 14) % 4]
+      : m.modus === 'tarnBot' ? 'bot' : m.modus === 'tarnSchatz' ? 'schatz' : 'echt';
+    const tarn = tarnSchatzMesh(U, m.tarnTyp ?? 0);
+    for (const t of Object.values(U.tarnSchaetze)) t.visible = form === 'schatz' && t === tarn;
+    U.bot.g.visible = form === 'bot'; U.echt.visible = form === 'echt';
     const zucken = glitch ? (Math.random() - 0.5) * 0.15 : 0;
     g.position.set(m.x + zucken, m.y, m.z - zucken);
     g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel, glitch ? zucken : 0);
@@ -4305,8 +4338,8 @@ function zeigeMonster(m) {
       U.bot.lampen.forEach((l, k) => { l.visible = (zeit * 3 + k) % 3 > 0.6; });
       U.bot.g.visible = F.kaputt ? Math.random() < 0.5 : true;
       malGesicht(F);
-    } else if (form === 'pokal') {   // Ein Pokal ... der ganz selten ein bisschen wackelt
-      U.pokal.rotation.z = Math.sin(zeit * 1.3 + m.phase) > 0.97 ? Math.sin(zeit * 40) * 0.08 : 0;
+    } else if (form === 'schatz') {   // Ein Schatz ... der ganz selten ein bisschen wackelt
+      tarn.rotation.z = Math.sin(zeit * 1.3 + m.phase) > 0.97 ? Math.sin(zeit * 40) * 0.08 : 0;
     } else {
       const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 13 : 7)) : 0;
       U.beine[0].rotation.x = schritt * 0.6; U.beine[1].rotation.x = -schritt * 0.6;
@@ -5300,7 +5333,7 @@ function neuerKopf(besitzer, farbe, x, y, z, id = null) {
   return s;
 }
 const meineId = () => mp.aktiv && mp.peer ? mp.peer.id : 'ich';
-const meineFarbe = () => mp.aktiv ? MP_ROBOTER[mp.nr || 0].farbe : '#7cf5c6';
+const meineFarbe = () => aussehen.farbe || (mp.aktiv ? MP_ROBOTER[mp.nr || 0].farbe : '#7cf5c6');
 const TOT_PLATZ = { x: -60, y: 5, z: -60 };   // Hier "parkt" der Körper, solange du kaputt bist (außerhalb vom Haus)
 function spielerStirbt(von) {
   const p = spielerKoerper.position, x = p.x, y = p.y, z = p.z;
@@ -6288,7 +6321,7 @@ function mpHostSendet() {
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
   for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, na: g.name, x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
-    r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null]);
+    r2(m.bewegtSeit), m.gesehen ? 1 : 0, m.nachladen > 0 ? 1 : 0, m.laserZiel ? [r2(m.laserZiel.x), r2(m.laserZiel.y), r2(m.laserZiel.z)] : null, m.tarnTyp ?? -1]);
   const he = helfer.map(h => {
     const q = h.body.position;
     return [r2(q.x), r2(q.y), r2(q.z), r2(h.winkel), h.modus, Math.ceil(Math.max(0, h.kaputt)), h.leben, h.auftrag ? h.auftrag.id : -1, h.angst > 0 ? 1 : 0, h.wackelt > 0 ? 1 : 0, h.froh > 0 ? 1 : 0];
@@ -6407,6 +6440,7 @@ function mpSchnappschuss(d) {
     if (!m) return;
     Object.assign(m, { zx: a[0], zy: a[1], zz: a[2], zw: a[3], modus: a[4], betaeubt: a[5], zielen: a[6], laeuft: !!a[7], bewegtSeit: a[8], gesehen: !!a[9], nachladen: a[10] });
     m.laserZiel = a[11] ? { x: a[11][0], y: a[11][1], z: a[11][2] } : null;
+    if (a[12] >= 0) m.tarnTyp = a[12];   // 👾 Als welcher Schatz ist der Formwandler getarnt?
   });
   // Helfer
   d.he.forEach((a, i) => {
