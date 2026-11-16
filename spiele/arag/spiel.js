@@ -1396,6 +1396,8 @@ function wegPunkt(wer, pos, ziel) {
     if (abstand2D(pos.x, pos.z, sb.aussen.x, sb.aussen.z) > 0.6) ziel = sb.aussen;
     else { wer.tw = { k: 0, reihe: [sb.innen] }; return sb.innen; }
   }
+  // ⛏️ In der Mine: von Zelle zu Zelle durch die Stollen
+  if (haus.mine) return mineWeg(pos, ziel);
   // Drinnen <-> draußen? Dann durch die nächste Haustür!
   const drinnen = imHaus(pos.x, pos.z);
   if (!drinnen && !imHaus(ziel.x, ziel.z)) return umsHaus(pos, ziel);   // Beide draußen: hin (ums Haus herum, wenn es im Weg ist)
@@ -2585,7 +2587,15 @@ function baueFahrBus(ox, oz) {
   const botSchild = canvasTextur(256, 96, () => {});
   const botSchildM = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36), new THREE.MeshBasicMaterial({ map: botSchild.tex }));
   botSchildM.position.set(botKnopf.x + 0.12, 2.0, botKnopf.z); botSchildM.rotation.y = -Math.PI / 2; gruppe.add(botSchildM);
-  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, pc, pcBild, puppe, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
+  // 🗺️ Der Karten-Schalter: Wohin fährt der Bus? (Spukvilla oder Mine)
+  const karteKnopf = { x: X2 - 0.5, z: Z1 + 7.3 };
+  teil(karteKnopf.x, 0.5, karteKnopf.z, 0.35, 1.0, 0.35, metallGrauMat); festerKoerper(karteKnopf.x, 0.5, karteKnopf.z, 0.35, 1.0, 0.35);
+  const karteLampe = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshBasicMaterial({ color: '#ffb02e' }));
+  karteLampe.position.set(karteKnopf.x, 1.08, karteKnopf.z); gruppe.add(karteLampe);
+  const karteSchild = canvasTextur(256, 96, () => {});
+  const karteSchildM = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36), new THREE.MeshBasicMaterial({ map: karteSchild.tex }));
+  karteSchildM.position.set(karteKnopf.x + 0.12, 2.0, karteKnopf.z); karteSchildM.rotation.y = -Math.PI / 2; gruppe.add(karteSchildM);
+  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, pc, pcBild, puppe, karteKnopf, karteLampe, karteSchild, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
 }
 function baueLandschaft(cx, mz) {   // Die Straße durch den nächtlichen Wald (alles bewegt sich nach hinten = der Bus fährt nach vorne)
   const g = new THREE.Group(); hausGruppe.add(g);
@@ -3344,46 +3354,51 @@ function baueHaus() {
   }
   for (const t of haus.treppen) baueTreppe(t);
 
-  // 5. 🅿️ Draußen vor der Haustür vom Startraum: der Parkplatz mit dem ARAG-Bus und der Abgabe
-  const S = startR, mz = S.z0 + RAUM / 2;
-  haus.parkplatz = [{ x1: -21, x2: -0.6, z1: mz - 11, z2: mz + 10 }, { x1: -17.5, x2: -10, z1: mz + 9, z2: haus.tief * RAUM + WALD_RAND }];   // Parkplatz + Waldweg (da kommt der Bus her)
-  haus.laster = { x1: -8.5, x2: -4.0, z1: mz - 2.3, z2: mz + 2.2 };
-  baueAbgabe();
-  baueBus(mz);
-  haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby: der Bus auf der Fahrt
-  for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
+  if (kartenWahl === 'mine') {   // ⛏️ Die Glückauf-Mine (das leere Villa-Gerüst steht weit weg – da kommt keiner hin)
+    baueMineKarte();
+    haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby
+  } else {
+    // 5. 🅿️ Draußen vor der Haustür vom Startraum: der Parkplatz mit dem ARAG-Bus und der Abgabe
+    const S = startR, mz = S.z0 + RAUM / 2;
+    haus.parkplatz = [{ x1: -21, x2: -0.6, z1: mz - 11, z2: mz + 10 }, { x1: -17.5, x2: -10, z1: mz + 9, z2: haus.tief * RAUM + WALD_RAND }];   // Parkplatz + Waldweg (da kommt der Bus her)
+    haus.laster = { x1: -8.5, x2: -4.0, z1: mz - 2.3, z2: mz + 2.2 };
+    baueAbgabe();
+    baueBus(mz);
+    haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby: der Bus auf der Fahrt
+    for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
 
-  // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
-  if (haus.keller) baueKeller();
+    // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
+    if (haus.keller) baueKeller();
 
-  // 6. Möbel, Deko und Schätze in allen anderen Räumen
-  for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
-  for (const R of haus.raeume) wandDeko(R);
-  for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
-  baueWald();   // 🌲 Draußen (nach den Lampen drinnen – die sind wichtiger)
+    // 6. Möbel, Deko und Schätze in allen anderen Räumen
+    for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
+    for (const R of haus.raeume) wandDeko(R);
+    for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
+    baueWald();   // 🌲 Draußen (nach den Lampen drinnen – die sind wichtiger)
 
-  // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
-  const weit = [];
-  for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= MONSTER_START_ABSTAND) weit.push(r);
-  if (!weit.length) for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
-  if (!weit.length) for (let r = 0; r < anzahl; r++) if (r !== haus.start) weit.push(r);
-  for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
-  for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
-  for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
-  for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
-  for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; f.tarnTyp = tarnSchatzWaehlen(); }
-  for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
-  for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
-  for (let k = 0; k < (ld.maulwurf || 0) && haus.baeume; k++) {   // 🐾 Der Maulwurf wohnt draußen im Wald
-    const pl = waldPlatz(); if (!pl) continue;
-    neuesMonster('maulwurf', haus.start);
-    Object.assign(monster[monster.length - 1], { x: pl.x, y: 0, z: pl.z, modus: 'graben' });
-  }
+    // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
+    const weit = [];
+    for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= MONSTER_START_ABSTAND) weit.push(r);
+    if (!weit.length) for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
+    if (!weit.length) for (let r = 0; r < anzahl; r++) if (r !== haus.start) weit.push(r);
+    for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
+    for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
+    for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
+    for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
+    for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; f.tarnTyp = tarnSchatzWaehlen(); }
+    for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
+    for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
+    for (let k = 0; k < (ld.maulwurf || 0) && haus.baeume; k++) {   // 🐾 Der Maulwurf wohnt draußen im Wald
+      const pl = waldPlatz(); if (!pl) continue;
+      neuesMonster('maulwurf', haus.start);
+      Object.assign(monster[monster.length - 1], { x: pl.x, y: 0, z: pl.z, modus: 'graben' });
+    }
 
-  for (let k = 0; k < (ld.chemiker || 0) && haus.keller; k++) {   // 🧪 Der Chemiker wohnt in seinem Labor im Keller
-    neuesMonster('chemiker', haus.start);
-    const L = haus.keller.labor;
-    Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
+    for (let k = 0; k < (ld.chemiker || 0) && haus.keller; k++) {   // 🧪 Der Chemiker wohnt in seinem Labor im Keller
+      neuesMonster('chemiker', haus.start);
+      const L = haus.keller.labor;
+      Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
+    }
   }
 
   // 8. Du startest im ARAG-Bus (Lobby). Deine Helfer stehen neben dir.
@@ -4208,6 +4223,7 @@ function starrerGesehen(m) {
   return freieSicht(kamera.position.clone(), kopf);
 }
 function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum, auch mal die Treppe hoch)
+  if (haus.mine) return mineZufallsZiel(m);   // ⛏️ In der Mine
   if (m.art === 'chemiker' && haus.keller) {   // 🧪 Der Chemiker bleibt in seinem Keller – meistens rührt er im Labor herum
     const K = haus.keller, L = Math.random() < 0.4 ? K.laborMitte : null;
     if (L) return { x: L.x + zufall(-1.5, 1.5), y: K.boden, z: L.z + zufall(-1.5, 1.5) };
@@ -4323,8 +4339,11 @@ function updateMonster(m, dt) {
   } else if (m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) {
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
-  const zaun = MONSTER_DRAUSSEN ? WALD_RAND - 0.5 : -0.4;   // Nicht durch den Zaun (oder: nicht durch die Außenwand)
-  m.x = begrenzt(m.x, -zaun, haus.breit * RAUM + zaun); m.z = begrenzt(m.z, -zaun, haus.tief * RAUM + zaun);
+  if (haus.mine) { const M = haus.mine; m.x = begrenzt(m.x, M.x0 + 0.4, M.x1 - 0.4); m.z = begrenzt(m.z, M.z0 + 0.4, M.z1 - 0.4); }   // ⛏️ Nicht aus der Mine raus
+  else {
+    const zaun = MONSTER_DRAUSSEN ? WALD_RAND - 0.5 : -0.4;   // Nicht durch den Zaun (oder: nicht durch die Außenwand)
+    m.x = begrenzt(m.x, -zaun, haus.breit * RAUM + zaun); m.z = begrenzt(m.z, -zaun, haus.tief * RAUM + zaun);
+  }
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
   // Angriff! Auf dich ... (Die Oma schlägt nur zu, wenn sie wütend ist)
   const reichweite = m.art === 'oma' ? 1.3 : m.art === 'maulwurf' ? 1.8 : 1.0, schubs = info.schubs || 9;
@@ -4610,6 +4629,7 @@ function formwandlerUpdate(m, dt) {
     return info.jagdTempo;
   }
   // Abhauen: in einen anderen Raum (weit weg von allen), dort neu tarnen
+  if (!m.ziel && haus.mine) m.ziel = mineWeitWeg(m);   // ⛏️ In der Mine: in einen anderen Stollen
   if (!m.ziel) {
     const raeume = haus.raeume.filter(R => R.nr !== haus.start && raumAbstand(haus.start, R.nr) >= 2 && raumNrVon(m.x, m.y + 0.5, m.z) !== R.nr);
     const R = raeume.length ? auswahl(raeume) : haus.raeume[0];
@@ -6085,6 +6105,11 @@ function abgeben(s) {
   schatzEntfernen(s);
 }
 function neuerSchatzIrgendwo() {   // Ein neuer Schatz in einem zufälligen Raum (nicht in der Garage) – oder draußen im Wald
+  if (haus.mine) {   // ⛏️ In der Mine: irgendwo in den Stollen
+    const pl = mineSchatzPlatz(Math.random);
+    if (pl) { const typ = mineSchatzTyp(); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); }
+    return;
+  }
   if (haus.baeume && Math.random() < WALD_NEU_ANTEIL) {
     const pl = waldPlatz((a, b) => a + Math.random() * (b - a));
     if (pl) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); return; }
@@ -6157,6 +6182,11 @@ function lautBei(p) {
 // ===== 🎬 Intro und 🚌 Lobby =====
 // =====================================================================
 // Das Intro: Die Kamera fliegt durch den Wald, der Bus kommt angefahren, am Ende das Logo
+const INTRO_TEXTE_MINE = [
+  [0.8, 4.3, '⛰️ Irgendwo, tief in den Bergen ...'],
+  [4.5, 8.2, '⛏️ ... liegt eine alte Mine. Voller Gold – und voller Geister.'],
+  [8.4, 10.3, '🚌 Zum Glück gibt es ...'],
+];
 const INTRO_TEXTE = [
   [0.8, 4.3, '🌲 Irgendwo, tief in einem dunklen Wald ...'],
   [4.5, 8.2, '🏚️ ... steht eine alte Spukvilla. Voller Schätze – und voller Monster.'],
@@ -6165,7 +6195,8 @@ const INTRO_TEXTE = [
 const busVersatz = t => { const u = begrenzt((t - 1.5) / 7.5, 0, 1); return 40 * Math.pow(1 - u, 2.2); };   // Wie weit der Bus noch weg ist (er bremst am Ende sanft)
 function introStarten() {
   introZeit = 0;
-  const B = haus.bus, cx = (B.x1 + B.x2) / 2, mz = (B.z1 + B.z2) / 2, hx = haus.breit * RAUM / 2, hz = haus.tief * RAUM / 2;
+  const B = haus.bus, cx = (B.x1 + B.x2) / 2, mz = (B.z1 + B.z2) / 2;
+  const hx = haus.mine ? MINE_ORT + 12 : haus.breit * RAUM / 2, hz = haus.mine ? (haus.mine.z0 + haus.mine.z1) / 2 : haus.tief * RAUM / 2;   // Dahin schaut die Kamera am Anfang
   const v = (x, y, z) => new THREE.Vector3(x, y, z);
   B.introWeg = new THREE.CatmullRomCurve3([v(cx - 32, 30, B.z2 + 50), v(cx - 20, 12, B.z2 + 30), v(cx - 12, 4, mz + 10), v(B.x2 + 5.5, 1.9, mz + 1.5), v(B.x2 + 4, 1.7, B.tuerZ)]);
   B.introBlick = new THREE.CatmullRomCurve3([v(hx, 4, hz), v(cx, 1.5, B.z2 + 22), v(cx, 1.5, mz), v(B.x2, 1.6, mz + 1.5), v(B.x2, 1.3, B.tuerZ)]);
@@ -6195,7 +6226,7 @@ function introKamera() {
 function zeichneIntro() {
   const t = introZeit, sicht = (a, b) => t >= a && t < b ? Math.min(1, (t - a) / 0.6, (b - t) / 0.6) : 0;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H * 0.1); ctx.fillRect(0, H * 0.9, W, H * 0.1);   // Kino-Balken
-  for (const [a, b, txt] of INTRO_TEXTE) { const s = sicht(a, b); if (s > 0) { ctx.globalAlpha = s; text(txt, W / 2, H * 0.84, 26, '#fff'); ctx.globalAlpha = 1; } }
+  for (const [a, b, txt] of kartenWahl === 'mine' ? INTRO_TEXTE_MINE : INTRO_TEXTE) { const s = sicht(a, b); if (s > 0) { ctx.globalAlpha = s; text(txt, W / 2, H * 0.84, 26, '#fff'); ctx.globalAlpha = 1; } }
   const s = sicht(10.4, INTRO_DAUER - 0.3);
   if (s > 0) {   // Das Logo!
     ctx.globalAlpha = s;
@@ -6212,12 +6243,15 @@ function zeichneIntro() {
 function lobbyWillkommen() {
   zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E – dann sind wir da!' : '🚌 Willkommen im ARAG-Bus! Drück am roten Knopf 🔴 E – dann sind wir da!', 5);
 }
-function startNachricht() { zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); }
+function startNachricht() {
+  if (kartenWahl === 'mine') { zeigeNachricht(`⛏️ Die Glückauf-Mine! Holt ${gewinnZiel()} Schätze aus den Stollen in die Abgabe 🚚 – Vorsicht vor dem Geister-Bergmann! (🚃 Lore: E)`, 6); return; }
+  zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); 
+}
 function lobbyKnopf() {   // Vor welchem Knopf im Bus stehst du? ('los', 'bots', 'pc' oder null)
   const B = haus && haus.fahrBus, p = spielerKoerper.position;
   if (!B || tot) return null;
   let best = null, bestD = 1.4;
-  for (const [was, q] of [['los', B.knopf], ['bots', B.botKnopf], ['pc', B.pc], ['pc', B.puppe]]) {
+  for (const [was, q] of [['los', B.knopf], ['bots', B.botKnopf], ['karte', B.karteKnopf], ['pc', B.pc], ['pc', B.puppe]]) {
     const d = abstand2D(p.x, p.z, q.x, q.z);
     if (d < bestD) { bestD = d; best = was; }
   }
@@ -6310,6 +6344,10 @@ function busUpdate(dt) {
   const B = haus && haus.bus;
   if (!B) return;
   heilUpdate(B, dt);
+  if (haus.mine) {   // ⛏️ Die Lore fährt, die Laternen flackern
+    loreUpdate(dt);
+    for (const l of haus.mine.laternen) l.glow.material.opacity = 0.45 + Math.sin(zeit * 7 + l.phase) * 0.08 + (Math.random() < 0.02 ? -0.3 : 0);
+  }
   B.gruppe.position.z = introZeit >= 0 ? busVersatz(introZeit) : 0;   // Im Intro kommt der Bus angefahren
   const F = haus.fahrBus;
   if (B.licht) {   // Das Licht: in der Lobby im fahrenden Bus, danach im echten Bus (im Intro erst, wenn er angekommen ist)
@@ -6337,7 +6375,7 @@ function maleMonitor() {
   zeichneAragLogo(g, 22, 30, 42, '#ffffff');
   g.textAlign = 'left'; g.fillStyle = '#7cf5c6'; g.font = 'bold 20px Arial, sans-serif'; g.fillText('EINSATZ-BUS · LOBBY', 245, 52);
   g.fillStyle = '#ffffff'; g.font = '19px Arial, sans-serif';
-  g.fillText('🏚️ Auftrag: Die große Spukvilla (wir sind unterwegs!)', 22, 115);
+  g.fillText(kartenWahl === 'mine' ? '⛏️ Auftrag: Die Glückauf-Mine (wir sind unterwegs!)' : '🏚️ Auftrag: Die große Spukvilla (wir sind unterwegs!)', 22, 115);
   g.fillText(`🏆 Ziel: ${gewinnZiel()} Schätze verkaufen`, 22, 145);
   g.fillText(`💰 Rekord: ${euro(rekord)}`, 22, 175);
   const team = [meinName(), ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
@@ -6488,6 +6526,7 @@ function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby t
   text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Alle bereit? Einer drückt den roten Knopf 🔴` : 'Bereit? Lauf zum roten Knopf 🔴 an der Tür!', W / 2, 62, 13, '#c9c3ff', 'center', false);
   if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
   else if (lobbyKnopf() === 'bots') text(`🤖 E: ${mitBots ? 'OHNE' : 'MIT'} Bots spielen`, W / 2, H / 2 + 150, 20, mitBots ? '#c9c3ff' : '#4ade80');
+  else if (lobbyKnopf() === 'karte') { const K = KARTEN[kartenWahl === 'mine' ? 'villa' : 'mine']; text(`🗺️ E: Lieber zur ${K.emoji} ${K.name} fahren`, W / 2, H / 2 + 150, 20, K.farbe); }
   else if (lobbyKnopf() === 'pc' && !werkstattOffen) text('🎨 E: Roboter-Werkstatt (Farbe, Hüte & mehr!)', W / 2, H / 2 + 150, 20, '#ff6b9d');
 }
 // ===== 💀 Alle Roboter Schrott = Spiel aus → zurück in den Bus (Lobby) =====
@@ -6527,14 +6566,14 @@ function neuesSpiel() {
 }
 function starteLevel(startzahl = KARTE.startzahl) {
   mitStartzahl(startzahl, baueHaus);   // Gleiche Startzahl = gleiches Haus
-  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto, bots: mitBots }); }
+  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto, bots: mitBots, karte: kartenWahl }); }
   if (mp.rolle === 'gast') mpGastVorbereiten();
   energie = 100; ausdauer = AUSDAUER_MAX;
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
   lobby = LOBBY_AN; introZeit = -1; einblenden = 1; schrottZeit = -1;
-  if (lobby) { lobbyWillkommen(); botSchildMalen(); }   // Erst fährt der Bus (Lobby) ...
+  if (lobby) { lobbyWillkommen(); botSchildMalen(); karteSchildMalen(); }   // Erst fährt der Bus (Lobby) ...
   else if (INTRO_AN) introStarten();     // ... ohne Lobby gleich das Intro
   else ausTuer();
   mausFangen();
@@ -6663,8 +6702,12 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(lobby ? '📍 🚌💨 Im ARAG-Bus – unterwegs' : imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  text(lobby ? '📍 🚌💨 Im ARAG-Bus – unterwegs' : haus.mine && imBerg(p.x, p.z) ? (haus.mine.hoehlenZellen.has(mineZelle(p.x, p.z)) ? '📍 ⛏️ In einer Höhle' : '📍 ⛏️ Im Stollen') : haus.mine && !schuppenBei(p.x, p.z) ? '📍 🏔️ Vor der Mine' : imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
+  if (!tot && !lobby && haus.mine && haus.mine.lore) {   // 🚃 Die Lore
+    if (haus.mine.lore.drin) text(haus.mine.lore.warten > 0 ? '🚃 Die Lore hält gleich an ... (E = aussteigen)' : '🚃 Wuuusch! (E = aussteigen)', W / 2, H / 2 + 170, 16, '#ffd166');
+    else if (loreNah()) text('🚃 E: In die Lore einsteigen', W / 2, H / 2 + 170, 16, '#ffd166');
+  }
   if (lobby) zeichneLobbyHUD();
   else if (haus.bus && !tot && aufHeilplatte(p.x, p.z, p.y)) text(energie < 100 ? `🔧 Reparatur ... ${Math.floor(energie)} %` : '✅ Voll repariert!', W / 2, H / 2 + 150, 18, '#4ade80');
   const zielN = gewinnZiel(), fertig = verkauft >= zielN;
@@ -7004,10 +7047,12 @@ addEventListener('keydown', e => {
   if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
   if (k === 'e' && zustand === 'spiel' && lobby && lobbyKnopf()) {   // 🔴 LOS! oder 🤖 Bots an/aus oder 🎨 Werkstatt
     if (lobbyKnopf() === 'pc') werkstattAuf();
+    else if (lobbyKnopf() === 'karte') { if (mp.rolle === 'gast') mpSende({ t: 'karteBitte' }); else karteSetzen(kartenWahl === 'mine' ? 'villa' : 'mine'); }
     else if (lobbyKnopf() === 'los') { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); }
     else if (mp.rolle === 'gast') mpSende({ t: 'botsBitte' }); else botsSetzen(!mitBots);
     return;
   }
+  if (k === 'e' && zustand === 'spiel' && !lobby && !tot && haus.mine && loreUmschalten()) return;   // 🚃 Lore: ein- oder aussteigen
   if (k === 'e' && zustand === 'spiel' && !tot && !pause) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
@@ -7171,7 +7216,7 @@ function mpNeuerGast(conn) {
     lookAnwenden(g, lookSauber(conn.metadata && conn.metadata.look));   // 🎨🎩 ... und sein Aussehen
     mp.andere.set(g.id, g);
     conn.send({ t: 'hallo', nr, code: mp.code });
-    conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0 });
+    conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0, karte: kartenWahl });
     zeigeNachricht(`🤖 ${g.name} ist dem Raum beigetreten!`, 3);
     sound.abgabe();
   });
@@ -7203,7 +7248,8 @@ function mpVomGast(g, d) {
     const s = schatzMitId(d.id);
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
     g.hg = -1;
-  } else if (d.t === 'losBitte') losGehts();   // 🔴 Ein Gast hat im Bus den Knopf gedrückt
+  } else if (d.t === 'losBitte') losGehts();
+  else if (d.t === 'karteBitte') karteSetzen(kartenWahl === 'mine' ? 'villa' : 'mine');   // 🗺️ Ein Gast will die andere Karte   // 🔴 Ein Gast hat im Bus den Knopf gedrückt
   else if (d.t === 'botsBitte') botsSetzen(!mitBots);   // 🤖 Ein Gast hat den Bot-Schalter gedrückt
   else if (d.t === 'blitz') {   // Ein Gast blitzt: Monster blenden, und alle sehen seine Lampe aufblitzen
     blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
@@ -7254,7 +7300,8 @@ function mpHostSendet() {
     const alt = s.mpAlt;
     if (alle || !alt || a.some((v, i) => Math.abs(v - alt[i]) > 0.004)) { sc.push(a); s.mpAlt = a; }
   }
-  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, lb: lobby ? 1 : 0, tu: alle ? tuerListe.filter(x => x.auf).map(x => x.id) : null, ids: alle ? schaetze.map(x => x.id) : null,
+  const L = haus.mine && haus.mine.lore;
+  mpAnAlle({ t: 's', sp, mo, he, sc, ko: konto, vk: verkauft, lo: L ? [r2(L.s), L.richtung, r2(L.warten)] : null, lb: lobby ? 1 : 0, tu: alle ? tuerListe.filter(x => x.auf).map(x => x.id) : null, ids: alle ? schaetze.map(x => x.id) : null,
     koepfe: alle ? schaetze.filter(x => x.typ.id === 'kopf').map(x => [x.id, x.besitzer, x.typ.farbe]) : null,
     neu: alle ? schaetze.filter(x => x.typ.id !== 'kopf').map(x => [x.id, x.typ.id]) : null });
 }
@@ -7300,6 +7347,7 @@ function mpVomHost(d) {
   if (d.t === 'start') {
     level = d.level; konto = d.konto;
     if (typeof d.bots === 'boolean') mitBots = d.bots;   // (Der Gastgeber bestimmt, ob Bots mitspielen)
+    if (KARTEN[d.karte]) kartenWahl = d.karte;            // ... und wohin die Fahrt geht
     starteLevel(d.seed);
     zeigeNachricht(`🌐 Du bist ${meinName()}! Raum ${mp.code} – Level ${level}`, 4, MP_ROBOTER[mp.nr].farbe);
     return;
@@ -7375,6 +7423,7 @@ function mpSchnappschuss(d) {
   // Schätze
   if (typeof d.vk === 'number') verkauft = d.vk;
   if (d.tu) { const offen = new Set(d.tu); for (const t of tuerListe) if (t.auf !== offen.has(t.id)) tuerSetzen(t, offen.has(t.id), 'sync', true); }
+  if (d.lo && haus.mine && haus.mine.lore) { const L = haus.mine.lore; L.s = d.lo[0]; L.richtung = d.lo[1]; L.warten = d.lo[2]; }   // 🚃 Wo ist die Lore?
   if (typeof d.ko === 'number') { konto = d.ko; if (konto > rekord) { rekord = konto; try { localStorage.setItem('arag-rekord', String(rekord)); } catch (e) { /* egal */ } } }
   // Neue Schätze und Köpfe, die der Gastgeber hat, ich aber noch nicht
   for (const [id, typId] of d.neu || []) if (!schatzMitId(id)) { const typ = SCHAETZE.find(t => t.id === typId); if (typ) neuerSchatz(typ, 0, -40, 0).id = id; }
@@ -7552,6 +7601,7 @@ function geworfenWerden(v, von) {
 // 🚧 Niemand kommt über den Zaun – egal ob hochgehoben, geworfen oder gesprungen (der Zaun reicht unsichtbar bis zum Himmel)
 const ZAUN_INNEN = 0.5;   // So weit bleibst du mindestens vom Zaun weg
 function imZaun(x, z) {   // Den Punkt (x, z) zurück hinter den Zaun schieben
+  if (haus.mine) { const M = haus.mine; return { x: begrenzt(x, M.x0 + 0.5, M.x1 - 0.5), z: begrenzt(z, M.z0 + 0.5, M.z1 - 0.5) }; }   // ⛏️ Die Mine
   const M = WALD_RAND - ZAUN_INNEN, B = haus.breit * RAUM, T = haus.tief * RAUM;
   return { x: begrenzt(x, -M, B + M), z: begrenzt(z, -M, T + M) };
 }
@@ -7563,6 +7613,7 @@ function zaunHalten() {
 }
 function gehaltenWerden(dt) {   // Hält mich gerade jemand mit seinem Strahl hoch?
   zaunHalten();
+  if (loreFahren()) return;   // 🚃 In der Lore? Dann fährst du mit
   if (!mp.aktiv || !mp.peer) return;
   freiZeit -= dt;
   let packer = null;
