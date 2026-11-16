@@ -2046,8 +2046,23 @@ function baueFahrBus(ox, oz) {
   malGesicht({ gesicht: fahrer.gesicht, farbe: '#ffd166', kaputt: 0, angst: 0, froh: 1, redet: 0, blinzelVersatz: 0 });
   // Bänke, der Bildschirm und der große rote Knopf
   const bankMat = new THREE.MeshStandardMaterial({ color: '#2f6b5a', roughness: 0.8 });
-  teil(X1 + 0.45, 0.22, mz + 1.5, 0.6, 0.44, 7, bankMat); festerKoerper(X1 + 0.45, 0.22, mz + 1.5, 0.6, 0.44, 7);
-  teil(X1 + 0.2, 0.75, mz + 1.5, 0.12, 0.65, 7, bankMat);
+  teil(X1 + 0.45, 0.22, mz + 2.2, 0.6, 0.44, 5.6, bankMat); festerKoerper(X1 + 0.45, 0.22, mz + 2.2, 0.6, 0.44, 5.6);
+  teil(X1 + 0.2, 0.75, mz + 2.2, 0.12, 0.65, 5.6, bankMat);
+  // 🎨🎩 Die Roboter-Werkstatt: ein Computer (links vorne) und daneben eine Drehscheibe mit deiner Anprobe-Puppe
+  const pc = { x: X1 + 0.35, z: Z1 + 3.0 };
+  teil(pc.x, 0.45, pc.z, 0.5, 0.9, 0.9, new THREE.MeshStandardMaterial({ color: '#3a4250', roughness: 0.6 })); festerKoerper(pc.x, 0.6, pc.z, 0.5, 1.2, 0.9);
+  teil(pc.x - 0.05, 1.2, pc.z, 0.08, 0.6, 0.85, new THREE.MeshStandardMaterial({ color: '#15181e', roughness: 0.4 }));
+  const pcBild = canvasTextur(320, 224, () => {});
+  const pcSchirm = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.54), new THREE.MeshBasicMaterial({ map: pcBild.tex }));
+  pcSchirm.position.set(pc.x - 0.005, 1.2, pc.z); pcSchirm.rotation.y = Math.PI / 2; gruppe.add(pcSchirm);
+  teil(pc.x + 0.1, 0.92, pc.z, 0.22, 0.03, 0.55, new THREE.MeshStandardMaterial({ color: '#202530' }));   // Tastatur
+  const puppe = { x: X1 + 0.6, z: Z1 + 4.45, T: null, schluessel: '' };
+  const scheibe = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.08, 28), new THREE.MeshStandardMaterial({ color: '#2b3038', metalness: 0.6, roughness: 0.4 }));
+  scheibe.position.set(puppe.x, 0.04, puppe.z); gruppe.add(scheibe);
+  const scheibenRing = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.015, 6, 32), new THREE.MeshBasicMaterial({ color: '#7cf5c6' }));
+  scheibenRing.rotation.x = Math.PI / 2; scheibenRing.position.set(puppe.x, 0.085, puppe.z); gruppe.add(scheibenRing);
+  festerKoerper(puppe.x, 0.7, puppe.z, 0.6, 1.4, 0.6);
+  Object.assign(puppe, { gruppe, ring: scheibenRing });
   const monitor = canvasTextur(512, 288, () => {});
   const bild = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 1.3), new THREE.MeshBasicMaterial({ map: monitor.tex }));
   bild.position.set(cx, 1.75, Z2 - D - 0.02); bild.rotation.y = Math.PI; gruppe.add(bild);
@@ -2064,7 +2079,7 @@ function baueFahrBus(ox, oz) {
   const botSchild = canvasTextur(256, 96, () => {});
   const botSchildM = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36), new THREE.MeshBasicMaterial({ map: botSchild.tex }));
   botSchildM.position.set(botKnopf.x + 0.12, 2.0, botKnopf.z); botSchildM.rotation.y = -Math.PI / 2; gruppe.add(botSchildM);
-  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
+  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, pc, pcBild, puppe, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
 }
 function baueLandschaft(cx, mz) {   // Die Straße durch den nächtlichen Wald (alles bewegt sich nach hinten = der Bus fährt nach vorne)
   const g = new THREE.Group(); hausGruppe.add(g);
@@ -4547,8 +4562,174 @@ function baueHelferMesh(info) {
   blase.scale.set(2.0, 0.5, 1); blase.position.y = 1.75; blase.visible = false; oben.add(blase);
   szene.add(g);
   const T = { g, oben, schild, beine, ausgefahren: BEIN_LAENGE, schrittPhase: Math.random() * 6, kopf, arme, antenne, lampen, lampe, blase, gesicht: { g: gesichtCanvas.getContext('2d'), tex: gesichtTex, alt: '' }, blasenG: blasenCanvas.getContext('2d'), blasenTex };
+  if (info.hut || info.extra) lookAnbauen(T, info);   // 🎩 Hut und Extras drauf
   beineAnimieren(T, BEIN_LAENGE, false, 0);
   return T;
+}
+// 🎩🕶️ Hüte und Extras an einen Roboter bauen (Kopf: oben bei y = 0.16, vorne ist +z)
+function lookAnbauen(T, info) {
+  const mat = (farbe, extra = {}) => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.6, ...extra });
+  const teil = (geo, m, x, y, z, eltern) => { const k = new THREE.Mesh(geo, m); k.position.set(x, y, z); k.castShadow = true; eltern.add(k); return k; };
+  const halbKugel = (r) => new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  const K = T.kopf, O = T.oben, b = BOT_BAUCH, oben = 0.16;
+  let hoch = 0;   // Wie hoch der Hut ist (dann muss das Namensschild höher)
+  const gold = mat('#e8b923', { metalness: 0.8, roughness: 0.3, emissive: '#3a2a05' });
+  switch (info.hut) {
+    case 'cap': {
+      const rot = mat('#e03131');
+      teil(halbKugel(0.2), rot, 0, oben, -0.01, K).scale.set(1.1, 0.6, 0.85);
+      teil(new THREE.BoxGeometry(0.32, 0.015, 0.17), mat('#f8f9fa'), 0, oben + 0.01, 0.22, K);
+      teil(new THREE.SphereGeometry(0.02, 8, 6), mat('#f8f9fa'), 0, oben + 0.12, -0.01, K);
+      hoch = 0.14; break;
+    }
+    case 'zylinder': {
+      const schwarz = mat('#15161a');
+      teil(new THREE.CylinderGeometry(0.26, 0.26, 0.02, 24), schwarz, 0, oben + 0.01, 0, K);
+      teil(new THREE.CylinderGeometry(0.15, 0.15, 0.32, 24), schwarz, 0, oben + 0.17, 0, K);
+      teil(new THREE.CylinderGeometry(0.153, 0.153, 0.05, 24), mat('#c92a2a'), 0, oben + 0.05, 0, K);
+      hoch = 0.34; break;
+    }
+    case 'krone': {
+      teil(new THREE.CylinderGeometry(0.17, 0.17, 0.1, 20, 1, true), gold, 0, oben + 0.05, 0, K).material.side = THREE.DoubleSide;
+      for (let k = 0; k < 6; k++) { const w = k / 6 * Math.PI * 2; teil(new THREE.ConeGeometry(0.035, 0.1, 6), gold, Math.sin(w) * 0.17, oben + 0.14, Math.cos(w) * 0.17, K); }
+      ['#ff2a4a', '#3b82f6', '#22c55e'].forEach((c, k) => { const w = (k - 1) * 0.7; teil(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: c }), Math.sin(w) * 0.172, oben + 0.05, Math.cos(w) * 0.172, K); });
+      hoch = 0.2; break;
+    }
+    case 'party': {
+      const huetchen = new THREE.Group(); huetchen.position.set(0.04, oben, 0); huetchen.rotation.z = -0.2; K.add(huetchen);
+      const streifen = malTextur(64, 64, (g) => { for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#ffd43b' : '#f06595'; g.fillRect(0, k * 8, 64, 8); } }, false);
+      teil(new THREE.ConeGeometry(0.12, 0.34, 18), new THREE.MeshStandardMaterial({ map: streifen }), 0, 0.17, 0, huetchen);
+      teil(new THREE.SphereGeometry(0.04, 10, 8), mat('#4dabf7'), 0, 0.35, 0, huetchen);
+      hoch = 0.38; break;
+    }
+    case 'cowboy': {
+      const braun = mat('#8b5a2b');
+      const krempe = teil(new THREE.CylinderGeometry(0.34, 0.34, 0.02, 28), braun, 0, oben + 0.02, 0, K); krempe.scale.set(1, 1, 0.85);
+      teil(new THREE.CylinderGeometry(0.15, 0.18, 0.17, 20), braun, 0, oben + 0.1, 0, K);
+      teil(new THREE.CylinderGeometry(0.182, 0.182, 0.04, 20), mat('#3b2412'), 0, oben + 0.05, 0, K);
+      hoch = 0.2; break;
+    }
+    case 'propeller': {
+      const kappe = new THREE.Group(); kappe.position.y = oben; K.add(kappe);
+      ['#e03131', '#ffd43b', '#4dabf7', '#40c057'].forEach((c, k) => teil(new THREE.SphereGeometry(0.2, 8, 8, k * Math.PI / 2, Math.PI / 2, 0, Math.PI / 2), mat(c), 0, 0, 0, kappe).scale.set(1.1, 0.6, 0.9));
+      teil(new THREE.CylinderGeometry(0.012, 0.012, 0.08), mat('#adb5bd'), 0, 0.15, 0, kappe);
+      const prop = new THREE.Group(); prop.position.y = 0.19; kappe.add(prop);
+      teil(new THREE.BoxGeometry(0.4, 0.012, 0.06), mat('#e03131'), 0, 0, 0, prop).rotation.x = 0.25;
+      teil(new THREE.BoxGeometry(0.06, 0.012, 0.4), mat('#4dabf7'), 0, 0, 0, prop).rotation.z = 0.25;
+      T.propeller = prop;
+      hoch = 0.22; break;
+    }
+    case 'helm': {
+      const gelb = mat('#fcc419', { roughness: 0.35 });
+      teil(halbKugel(0.22), gelb, 0, oben - 0.03, 0, K).scale.set(1.05, 0.75, 0.95);
+      teil(new THREE.CylinderGeometry(0.26, 0.26, 0.015, 24), gelb, 0, oben - 0.01, 0.02, K).scale.set(1, 1, 1.05);
+      teil(new THREE.BoxGeometry(0.04, 0.03, 0.4), gelb, 0, oben + 0.13, 0, K);
+      hoch = 0.15; break;
+    }
+    case 'zauberer': {
+      const blau = mat('#2b2d8f');
+      teil(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 24), blau, 0, oben + 0.01, 0, K);
+      const spitze = new THREE.Group(); spitze.position.y = oben; K.add(spitze);
+      teil(new THREE.ConeGeometry(0.17, 0.55, 20), blau, 0, 0.27, 0, spitze);
+      spitze.children[0].rotation.z = 0.15;
+      const stern = new THREE.MeshBasicMaterial({ color: '#ffe066' });
+      for (const [x, y, z] of [[0.08, 0.15, 0.12], [-0.07, 0.28, 0.09], [0.02, 0.4, 0.06], [-0.1, 0.1, -0.1]]) teil(new THREE.OctahedronGeometry(0.025), stern, x, y, z, spitze);
+      hoch = 0.56; break;
+    }
+    case 'wikinger': {
+      teil(halbKugel(0.21), mat('#868e96', { metalness: 0.7, roughness: 0.35 }), 0, oben - 0.03, 0, K).scale.set(1.05, 0.8, 0.95);
+      teil(new THREE.CylinderGeometry(0.222, 0.222, 0.04, 22), mat('#8b5a2b'), 0, oben - 0.01, 0, K);
+      for (const sx of [-1, 1]) {
+        const horn = teil(new THREE.ConeGeometry(0.045, 0.24, 12), mat('#f1e3c0'), sx * 0.24, oben + 0.1, 0, K);
+        horn.rotation.z = -sx * 0.9;
+      }
+      hoch = 0.2; break;
+    }
+    case 'koch': {
+      const weiss = mat('#ffffff', { roughness: 0.9 });
+      teil(new THREE.CylinderGeometry(0.15, 0.15, 0.16, 20), weiss, 0, oben + 0.08, 0, K);
+      for (const [x, z] of [[0, 0], [0.08, 0.06], [-0.08, 0.06], [0.08, -0.06], [-0.08, -0.06]]) teil(new THREE.SphereGeometry(0.11, 12, 10), weiss, x, oben + 0.22, z, K);
+      hoch = 0.33; break;
+    }
+    case 'pirat': {
+      const schwarz = mat('#1a1a1f');
+      teil(new THREE.CylinderGeometry(0.18, 0.21, 0.1, 20), schwarz, 0, oben + 0.05, 0, K);
+      const segel = teil(new THREE.CircleGeometry(0.27, 20, 0, Math.PI), new THREE.MeshStandardMaterial({ color: '#1a1a1f', side: THREE.DoubleSide }), 0, oben + 0.02, 0.03, K);
+      segel.scale.y = 0.75;
+      const schaedel = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+      teil(new THREE.SphereGeometry(0.035, 10, 8), schaedel, 0, oben + 0.1, 0.035, K);
+      for (const w of [0.7, -0.7]) teil(new THREE.BoxGeometry(0.1, 0.012, 0.005), schaedel, 0, oben + 0.05, 0.036, K).rotation.z = w;
+      hoch = 0.22; break;
+    }
+    case 'blumen': {
+      const farben = ['#ff6b9d', '#ffd43b', '#b388ff', '#ffffff', '#ff8a65', '#4dabf7'];
+      for (let k = 0; k < 10; k++) {
+        const w = k / 10 * Math.PI * 2, x = Math.sin(w) * 0.2, z = Math.cos(w) * 0.16;
+        teil(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshStandardMaterial({ color: farben[k % farben.length], roughness: 0.8 }), x, oben + 0.01, z, K).scale.y = 0.6;
+        teil(new THREE.SphereGeometry(0.015, 6, 5), new THREE.MeshBasicMaterial({ color: '#f59f00' }), x, oben + 0.035, z, K);
+      }
+      hoch = 0.06; break;
+    }
+    case 'ohren': {
+      const weiss = mat('#f8f9fa', { roughness: 0.9 }), rosa = mat('#ffa8c5', { roughness: 0.9 });
+      for (const sx of [-1, 1]) {
+        const ohr = new THREE.Group(); ohr.position.set(sx * 0.1, oben, 0); ohr.rotation.z = -sx * 0.2; K.add(ohr);
+        teil(new THREE.SphereGeometry(0.06, 12, 10), weiss, 0, 0.17, 0, ohr).scale.set(0.8, 3, 0.4);
+        teil(new THREE.SphereGeometry(0.04, 10, 8), rosa, 0, 0.17, 0.012, ohr).scale.set(0.7, 3, 0.3);
+      }
+      hoch = 0.36; break;
+    }
+  }
+  switch (info.extra) {
+    case 'brille': {
+      const glas = new THREE.MeshStandardMaterial({ color: '#111', metalness: 0.9, roughness: 0.1 });
+      for (const sx of [-1, 1]) teil(new THREE.BoxGeometry(0.12, 0.07, 0.012), glas, sx * 0.08, 0.025, 0.172, K);
+      teil(new THREE.BoxGeometry(0.06, 0.015, 0.012), glas, 0, 0.045, 0.172, K);
+      for (const sx of [-1, 1]) teil(new THREE.BoxGeometry(0.012, 0.015, 0.16), glas, sx * 0.205, 0.045, 0.09, K);
+      break;
+    }
+    case 'bart': {
+      const braun = mat('#5c3b1e', { roughness: 0.9 });
+      for (const sx of [-1, 1]) { const h = teil(new THREE.SphereGeometry(0.05, 10, 8), braun, sx * 0.045, -0.055, 0.17, K); h.scale.set(1.3, 0.45, 0.4); h.rotation.z = sx * 0.3; }
+      break;
+    }
+    case 'fliege': {
+      const rot = mat('#e03131');
+      for (const sx of [-1, 1]) teil(new THREE.ConeGeometry(0.04, 0.08, 4), rot, sx * 0.045, 0.7, 0.07, O).rotation.z = sx * Math.PI / 2;
+      teil(new THREE.SphereGeometry(0.022, 8, 6), rot, 0, 0.7, 0.075, O);
+      break;
+    }
+    case 'schal': {
+      const streifen = malTextur(64, 16, (g) => { for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#ffffff' : '#e03131'; g.fillRect(k * 8, 0, 8, 16); } }, false);
+      const sm = new THREE.MeshStandardMaterial({ map: streifen, roughness: 0.9 });
+      teil(new THREE.TorusGeometry(0.075, 0.032, 8, 18), sm, 0, 0.69, 0, O).rotation.x = Math.PI / 2;
+      const ende = teil(new THREE.BoxGeometry(0.06, 0.22, 0.02), sm, 0.05, 0.58, 0.1 + 0.18 * b * 0.3, O); ende.rotation.z = 0.15;
+      break;
+    }
+    case 'umhang': {
+      const umhang = teil(new THREE.PlaneGeometry(0.5, 0.62), new THREE.MeshStandardMaterial({ color: '#c92a2a', side: THREE.DoubleSide, roughness: 0.8 }), 0, 0.38, -0.18 * b - 0.12, O);
+      umhang.rotation.x = 0.12; T.umhang = umhang;
+      break;
+    }
+    case 'jetpack': {
+      const silber = mat('#ced4da', { metalness: 0.8, roughness: 0.3 }), z = -0.18 * b - 0.15;
+      const flamme = new THREE.MeshBasicMaterial({ color: '#ff922b', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+      T.flammen = [];
+      for (const sx of [-1, 1]) {
+        teil(new THREE.CylinderGeometry(0.06, 0.06, 0.32, 14), silber, sx * 0.075, 0.52, z, O);
+        teil(new THREE.ConeGeometry(0.06, 0.08, 14), mat('#e03131'), sx * 0.075, 0.72, z, O);
+        const f = teil(new THREE.ConeGeometry(0.045, 0.16, 10), flamme, sx * 0.075, 0.28, z, O); f.rotation.x = Math.PI; f.castShadow = false;
+        T.flammen.push(f);
+      }
+      break;
+    }
+  }
+  if (T.schild) T.schild.position.y = 1.35 + hoch;   // Das Namensschild über den Hut schieben
+}
+function lookAnimieren(T, dt) {   // Propeller drehen, Flammen flackern, Umhang wehen
+  if (T.propeller) T.propeller.rotation.y += dt * 14;
+  if (T.flammen) T.flammen.forEach((f, k) => { f.scale.y = 0.7 + Math.random() * 0.6; f.scale.x = f.scale.z = 0.85 + Math.sin(zeit * 30 + k) * 0.15; });
+  if (T.umhang) T.umhang.rotation.x = 0.15 + Math.sin(zeit * 3) * 0.06 + (T.armSchwung ? Math.abs(T.armSchwung) * 0.4 : 0);
 }
 // Beine bewegen: ziel = wie weit ausgefahren (0 = ganz eingefahren, z. B. beim Ducken)
 // laeuft: true = Schritte machen (wie schnell, misst der Roboter selbst) · eine Zahl = so schnell läuft er (Meter pro Sekunde) · false = steht
@@ -5441,12 +5622,15 @@ function lobbyWillkommen() {
   zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E – dann sind wir da!' : '🚌 Willkommen im ARAG-Bus! Drück am roten Knopf 🔴 E – dann sind wir da!', 5);
 }
 function startNachricht() { zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); }
-function lobbyKnopf() {   // Vor welchem Knopf im Bus stehst du? ('los', 'bots' oder null)
+function lobbyKnopf() {   // Vor welchem Knopf im Bus stehst du? ('los', 'bots', 'pc' oder null)
   const B = haus && haus.fahrBus, p = spielerKoerper.position;
   if (!B || tot) return null;
-  const dLos = abstand2D(p.x, p.z, B.knopf.x, B.knopf.z), dBots = abstand2D(p.x, p.z, B.botKnopf.x, B.botKnopf.z);
-  if (Math.min(dLos, dBots) > 1.4) return null;
-  return dLos < dBots ? 'los' : 'bots';
+  let best = null, bestD = 1.4;
+  for (const [was, q] of [['los', B.knopf], ['bots', B.botKnopf], ['pc', B.pc], ['pc', B.puppe]]) {
+    const d = abstand2D(p.x, p.z, q.x, q.z);
+    if (d < bestD) { bestD = d; best = was; }
+  }
+  return best;
 }
 const amKnopf = () => lobbyKnopf() === 'los';
 function botSchildMalen() {
@@ -5577,6 +5761,7 @@ function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby t
   text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Alle bereit? Einer drückt den roten Knopf 🔴` : 'Bereit? Lauf zum roten Knopf 🔴 an der Tür!', W / 2, 62, 13, '#c9c3ff', 'center', false);
   if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
   else if (lobbyKnopf() === 'bots') text(`🤖 E: ${mitBots ? 'OHNE' : 'MIT'} Bots spielen`, W / 2, H / 2 + 150, 20, mitBots ? '#c9c3ff' : '#4ade80');
+  else if (lobbyKnopf() === 'pc' && !werkstattOffen) text('🎨 E: Roboter-Werkstatt (Farbe, Hüte & mehr!)', W / 2, H / 2 + 150, 20, '#ff6b9d');
 }
 // ===== 💀 Alle Roboter Schrott = Spiel aus → zurück in den Bus (Lobby) =====
 function alleSchrott() {
@@ -5853,7 +6038,7 @@ function zeichneHUD() {
     text(nachricht.text, W / 2, H / 2 - 90, 20, nachricht.farbe);
     ctx.globalAlpha = 1;
   }
-  if (pause) {
+  if (pause && !werkstattOffen) {
     ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, 0, W, H);
     text('⏸️ PAUSE', W / 2, H / 2 - 20, 48, '#7cf5c6');
     text('Klicken: Weiterspielen', W / 2, H / 2 + 30, 18, '#fff');
@@ -6082,6 +6267,7 @@ document.addEventListener('pointerlockchange', () => {
 addEventListener('keydown', e => {
   tonStart();
   const k = e.key.toLowerCase();
+  if (werkstattOffen) { if ((k === 'e' || k === 'escape') && !e.repeat) werkstattZu(); return; }   // 🎨 In der Werkstatt läufst du nicht herum
   tasten[k] = true;
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
@@ -6089,8 +6275,9 @@ addEventListener('keydown', e => {
   if (k === 'f') blitzen();
   if (k === 'n' && mp.aktiv && VOICE_AN) { voice.aus = !voice.aus; zeigeNachricht(voice.aus ? '🔇 Voice-Chat AUS (du hörst niemanden, und keiner hört dich)' : '🎙️ Voice-Chat AN – halte V gedrückt zum Sprechen', 3); }
   if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
-  if (k === 'e' && zustand === 'spiel' && lobby && lobbyKnopf()) {   // 🔴 LOS! oder 🤖 Bots an/aus
-    if (lobbyKnopf() === 'los') { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); }
+  if (k === 'e' && zustand === 'spiel' && lobby && lobbyKnopf()) {   // 🔴 LOS! oder 🤖 Bots an/aus oder 🎨 Werkstatt
+    if (lobbyKnopf() === 'pc') werkstattAuf();
+    else if (lobbyKnopf() === 'los') { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); }
     else if (mp.rolle === 'gast') mpSende({ t: 'botsBitte' }); else botsSetzen(!mitBots);
     return;
   }
@@ -6791,6 +6978,7 @@ function schleife(jetzt) {
       schwebendSpieler = gegriffen || gepackt || schwebend ? null : schauAufSpieler();
     }
   } catch (e) { console.error('Fehler in update:', e); }
+  try { puppeUpdate(dt); } catch (e) { console.error('Fehler bei der Puppe:', e); }
   try { zeichne(); } catch (e) { console.error('Fehler beim Zeichnen:', e); }
   requestAnimationFrame(schleife);
 }
