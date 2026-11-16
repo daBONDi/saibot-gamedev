@@ -176,7 +176,17 @@ const SCHAETZE = [
   { id: 'schaedel', name: 'Kristallschädel', emoji: '💀', wert: [2800, 4000], zerbrechlich: 1.7, masse: 2,  groesse: [0.24, 0.28, 0.3],  haeufig: 0.18 },
   { id: 'statue',   name: 'Goldene Statue', emoji: '🗽', wert: [3500, 4800], zerbrechlich: 0.2, masse: 22,  groesse: [0.4, 0.9, 0.4],    haeufig: 0.15, boden: true },   // Schwer!
   { id: 'goldkiste', name: 'Kiste voller Gold', emoji: '💰', wert: [4500, 6500], zerbrechlich: 0.25, masse: 28, groesse: [0.7, 0.5, 0.45], haeufig: 0.1, boden: true },   // Das Wertvollste von allem!
+  // 📚 Schul-Schätze (die gibt es nur in der verfluchten Schule – schule: true):
+  { id: 'mikroskop', name: 'Mikroskop',     emoji: '🔬', wert: [500, 900],   zerbrechlich: 1.2, masse: 3,   groesse: [0.25, 0.45, 0.3],  haeufig: 2, schule: true },
+  { id: 'skelett',  name: 'Lern-Skelett',   emoji: '💀', wert: [900, 1400],  zerbrechlich: 0.8, masse: 12,  groesse: [0.45, 1.6, 0.3],   haeufig: 0.6, schule: true, boden: true },   // Groß!
+  { id: 'schulglocke', name: 'Schulglocke', emoji: '🔔', wert: [400, 700],   zerbrechlich: 0.3, masse: 4,   groesse: [0.3, 0.34, 0.3],   haeufig: 1.5, schule: true },
+  { id: 'medaille', name: 'Sport-Medaille', emoji: '🏅', wert: [300, 600],   zerbrechlich: 0.1, masse: 0.5, groesse: [0.2, 0.25, 0.04],  haeufig: 2.5, schule: true },
+  { id: 'abakus',   name: 'Goldener Abakus', emoji: '🧮', wert: [700, 1100], zerbrechlich: 0.7, masse: 2,   groesse: [0.45, 0.35, 0.08], haeufig: 1.5, schule: true },
+  { id: 'aquarium', name: 'Klassen-Aquarium', emoji: '🐠', wert: [800, 1200], zerbrechlich: 2.0, masse: 10, groesse: [0.6, 0.4, 0.35],  haeufig: 0.7, schule: true, boden: true },   // Super zerbrechlich!
+  { id: 'schuluhr', name: 'Schuluhr',       emoji: '🕐', wert: [250, 450],   zerbrechlich: 1.0, masse: 1.5, groesse: [0.35, 0.35, 0.08], haeufig: 2, schule: true },
+  { id: 'klassenbuch', name: 'Das verfluchte Klassenbuch', emoji: '📕', wert: [1800, 2800], zerbrechlich: 0.3, masse: 1, groesse: [0.3, 0.06, 0.22], haeufig: 0.35, schule: true },
 ];
+const VILLA_SCHAETZE = SCHAETZE.filter(t => !t.schule);   // In der Spukvilla gibt es keine Schul-Schätze
 const WERTVOLL_AB = 1400;   // Schätze, die mindestens so viel wert sind, gelten als "wertvoll" (die liegen in den Gartenhäuschen)
 
 // ===== Die große Spukvilla (immer dieselbe Karte – keine Level mehr!) =====
@@ -388,6 +398,13 @@ function gruselTon(hoehe, start, dauer, klang, laut, hoeheEnde, zittern = 6, zie
   } catch (e) { /* egal */ }
 }
 const monsterSound = {
+  lehrer(laut, jagt) {   // 👨‍🏫 Schwere, steife Schritte (tock ... tock) – beim Jagen: Glocke und quietschende Kreide
+    ton(110, 0, 0.08, 'triangle', 0.09 * laut, 80); ton(104, 0.5, 0.08, 'triangle', 0.08 * laut, 75);
+    if (jagt) { monsterSound.lehrerGlocke(laut * 0.7); if (Math.random() < 0.5) ton(2600, 0.3, 0.25, 'sine', 0.025 * laut, 3400); }
+  },
+  lehrerGlocke(laut) {   // RRRING! Die Handglocke
+    for (let k = 0; k < 6; k++) { ton(1320, k * 0.07, 0.25, 'triangle', 0.05 * laut, 1300); ton(1980, k * 0.07, 0.18, 'sine', 0.03 * laut); }
+  },
   chemiker(laut, jagt) {   // 🐷 Grunz, grunz ... (und beim Jagen ein irres Oink-Lachen)
     monsterSound.grunzen(laut, 0); if (Math.random() < 0.6) monsterSound.grunzen(laut * 0.8, 0.3);
     if (jagt) monsterSound.chemikerLacht(laut * 0.7);
@@ -527,6 +544,7 @@ function monsterGeraeusche(m, dt) {
   else if (m.art === 'schrank') m.geraeuschZeit = jagt ? zufall(0.35, 0.5) : zufall(5, 9);
   else if (m.art === 'maulwurf') m.geraeuschZeit = jagt ? zufall(0.3, 0.45) : zufall(1.2, 2);
   else if (m.art === 'oma') { m.geraeuschZeit = jagt ? zufall(0.25, 0.35) : zufall(0.9, 1.3); if (!m.laeuft && !jagt) return; }   // Steht sie, klopft der Stock nicht
+  else if (m.art === 'lehrer') m.geraeuschZeit = jagt ? zufall(1.6, 2.2) : zufall(1.0, 1.3);   // Regelmäßige Schritte
   else if (m.art === 'formwandler') { m.geraeuschZeit = jagt ? zufall(0.6, 1) : zufall(7, 13); if (m.modus === 'tarnSchatz' || m.modus === 'abhauen') return; }   // Als Schatz ist er still
   else m.geraeuschZeit = jagt ? zufall(0.7, 1) : zufall(2.5, 4.5);
   if (laut > 0) monsterSound[m.art](laut, jagt);
@@ -595,6 +613,18 @@ const MUSIK_LIEDER = {
       F5 Eb5 D5 Eb5 | F5 Gb5 Ab5 - | G5 Eb5 Db5 B4 | C5 - . . |`),
   },
 
+  // 👨‍🏫 Herr Kreidemann: „Die Pausenglocke“ – eine EIGENE, schiefe Spieluhr-Melodie (wie ein Kinderlied, nur falsch ...)
+  // mit tickender Schuluhr und dumpfen Schritten
+  lehrer: {
+    tempo: 150, grund: 87, verzerrung: 30, gitarre: 0.3, melodieKlang: 'orgel', becken: 'tick',
+    riff: [
+      0, null, null, 7,  null, null, 6, null,  0, null, null, 7,  null, 3, 2, null,
+      0, null, null, 7,  null, null, 6, null,  1, null, 1, null,  0, null, null, null,
+    ],
+    kick: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    snare: [12],
+    melodie: [12, 16, 19, 18, 12, 16, 13, null],
+  },
   // 👻 Staubgeist: Spuk-Orgel mit Geisterchor und Glöckchen – unheimlich und schwebend
   geist: {
     tempo: 140, grund: 110, verzerrung: 15, gitarre: 0.25, melodieKlang: 'orgel', becken: 'glocke',
@@ -1370,6 +1400,8 @@ function wegPunkt(wer, pos, ziel) {
     if (abstand2D(pos.x, pos.z, sb.aussen.x, sb.aussen.z) > 0.6) ziel = sb.aussen;
     else { wer.tw = { k: 0, reihe: [sb.innen] }; return sb.innen; }
   }
+  // 📚 In der Schule: von Feld zu Feld durch Flure und Türen
+  if (haus.schule) return schulWeg(pos, ziel);
   // Drinnen <-> draußen? Dann durch die nächste Haustür!
   const drinnen = imHaus(pos.x, pos.z);
   if (!drinnen && !imHaus(ziel.x, ziel.z)) return umsHaus(pos, ziel);   // Beide draußen: hin (ums Haus herum, wenn es im Weg ist)
@@ -1684,7 +1716,7 @@ function baueGartenhaus(S) {
     f.position.set(fx + Math.sin(dreh) * 0.16 * aus, 1.7, fz + Math.cos(dreh) * 0.16 * aus); f.rotation.y = aus > 0 ? dreh : dreh + Math.PI; hausGruppe.add(f);
   }
   // Ein Regal an der Rückwand und die wertvollen Schätze
-  const wertvoll = SCHAETZE.filter(x => x.wert[0] >= WERTVOLL_AB);
+  const wertvoll = VILLA_SCHAETZE.filter(x => x.wert[0] >= WERTVOLL_AB);
   for (let k = 0; k < GARTENHAUS_SCHAETZE; k++) {
     const quer = (k - (GARTENHAUS_SCHAETZE - 1) / 2) * 1.5, typ = gewichtetWaehlen(wertvoll);
     const px = cx - S.nx * 0.9 + (S.nz ? quer : 0), pz = cz - S.nz * 0.9 + (S.nx ? quer : 0);
@@ -1848,7 +1880,7 @@ function baueKeller() {
   sackgassen.forEach((c, k) => {
     const m = mitte(c), [n] = kellerNachbarn(c), o = mitte(n);
     const hx = Math.sign(m.x - o.x) * 0.55, hz = Math.sign(m.z - o.z) * 0.55;   // Ein Stück nach hinten (weg vom Eingang)
-    if (k < KELLER_SCHAETZE) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, m.x + hx, b + typ.groesse[1] / 2 + 0.05, m.z + hz); }
+    if (k < KELLER_SCHAETZE) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, m.x + hx, b + typ.groesse[1] / 2 + 0.05, m.z + hz); }
     else if (rnd() < 0.6) fass(m.x + hx * 1.1 + (hz ? zufall(-0.5, 0.5) : 0), m.z + hz * 1.1 + (hx ? zufall(-0.5, 0.5) : 0));
   });
   // 6) Leuchtende Pilze an den Wänden (so findet man sich ein bisschen zurecht)
@@ -1873,6 +1905,639 @@ function baueKeller() {
 // ===== 🚌 Der ARAG-Einsatzbus (die Lobby), die Abgabe und der Parkplatz =====
 // =====================================================================
 // Das Firmenlogo: ein Roboterkopf mit Bildschirm-Gesicht und daneben ARAG (s = Größe in Pixeln)
+// =====================================================================
+// ===== 📚 DIE VERFLUCHTE SCHULE (die zweite Map!) =====
+// =====================================================================
+// Im Lobby-Bus suchst du mit dem Karten-Schalter aus, wohin die Fahrt geht: 🏚️ Spukvilla oder 📚 Schule.
+// Die Schule liegt weit weg von der Villa (bei x = SCHUL_ORT). Vorne ist der Schulhof mit Bus und Abgabe,
+// dahinter das Schulhaus: lange Flure mit Spinden, Klassenzimmer, Bibliothek, Turnhalle, Lehrerzimmer ...
+// Und Herr Kreidemann 👨‍🏫 ist IMMER NOCH DA. Erwischt er dich, musst du nachsitzen – und einen Test schreiben!
+// Alles ist in Zellen eingeteilt (wie ein Schachbrett). Monster und Helfer finden ihren Weg von Zelle zu Zelle.
+const SCHUL_ORT = 300;   // Hier fängt das Schulhaus an (weit weg von der Villa)
+const SCHULE = {
+  zelle: 3,             // So groß ist ein Feld (in Metern)
+  hof: 7,               // So viele Felder breit ist der Schulhof vor dem Haus
+  breit: 20, tief: 17,  // So viele Felder hat das Schulhaus (nach hinten / zur Seite) – NICHT ändern, der Plan passt genau!
+  hoehe: 3.2,           // So hoch sind die Räume
+  eingang: 8,           // In welcher Reihe der Eingang ist
+  tuer: 1.6,            // So breit sind die Türen
+  schaetze: 50,         // So viele Schätze liegen am Anfang in der Schule
+  nebenTuer: 0.35,      // So oft hat ein Raum eine zweite Tür (0 bis 1) – gut zum Abhauen!
+};
+const SCHUL_MONSTER = { lehrer: 1, lauscher: 1, formwandler: 1 };   // Diese Monster sind in der Schule
+const SCHUL_SCHATZ_ANTEIL = 0.7;   // So viele Schätze sind Schul-Schätze – der Rest sind andere
+const SCHUL_ANDERE = ['globus', 'pokal', 'uhr', 'teddy', 'sanduhr', 'geige', 'spieluhr', 'bild', 'kristall'];
+const TEST_FRAGEN = 3;   // 📝 So viele Fragen hat der Nachsitz-Test
+const TEST_ZEIT = 20;    // So viele Sekunden hast du für jede Frage
+const LEHRER_RUHE = 12;  // So lange lässt der Lehrer alle in Ruhe, nachdem er jemanden erwischt hat
+const KARTEN = {
+  villa: { name: 'Spukvilla', emoji: '🏚️', farbe: '#c9c3ff' },
+  schule: { name: 'Verfluchte Schule', emoji: '📚', farbe: '#7cc4ff' },
+};
+let kartenWahl = 'villa';   // Wohin fährt der Bus? (wird gespeichert)
+try { if (localStorage.getItem('arag-karte') === 'schule') kartenWahl = 'schule'; } catch (e) { /* egal */ }
+
+// ----- Felder, Wege -----
+const schulKante = (a, b) => a < b ? a * 100000 + b : b * 100000 + a;
+const imSchulGebiet = (x, z) => !!haus && !!haus.schule && x > haus.schule.x0 && x < haus.schule.x1 && z > haus.schule.z0 && z < haus.schule.z1;
+const imSchulhaus = (x, z) => imSchulGebiet(x, z) && x > SCHUL_ORT;   // Drinnen (nicht auf dem Schulhof)
+function schulZelle(x, z) {
+  const M = haus.schule;
+  return begrenzt(Math.floor((z - M.z0) / M.zelle), 0, M.nz - 1) * M.nx + begrenzt(Math.floor((x - M.x0) / M.zelle), 0, M.nx - 1);
+}
+function schulMitte(c) {
+  const M = haus.schule;
+  return { x: M.x0 + (c % M.nx + 0.5) * M.zelle, y: 0, z: M.z0 + (Math.floor(c / M.nx) + 0.5) * M.zelle };
+}
+function schulNachbarn(c, auchGesperrt = false) {   // Felder daneben, zu denen ein Durchgang führt
+  const M = haus.schule, x = c % M.nx, z = Math.floor(c / M.nx), liste = [];
+  for (const [n, ok] of [[c - 1, x > 0], [c + 1, x < M.nx - 1], [c - M.nx, z > 0], [c + M.nx, z < M.nz - 1]]) {
+    if (ok && M.offen.has(schulKante(c, n)) && (auchGesperrt || !M.gesperrt.has(n))) liste.push(n);
+  }
+  return liste;
+}
+function schulAbstaende(start) {   // Wie viele Felder ist jedes Feld von start weg? (Breitensuche)
+  const tiefe = new Map([[start, 0]]), schlange = [start];
+  for (let k = 0; k < schlange.length; k++) for (const n of schulNachbarn(schlange[k])) if (!tiefe.has(n)) { tiefe.set(n, tiefe.get(schlange[k]) + 1); schlange.push(n); }
+  return tiefe;
+}
+function schulWeg(pos, ziel) {   // Wohin als Nächstes? (der kürzeste Weg durch Flure und Türen)
+  const M = haus.schule, a = schulZelle(pos.x, pos.z), b = schulZelle(ziel.x, ziel.z);
+  if (a === b || M.gesperrt.has(a) || M.gesperrt.has(b)) return ziel;
+  const vorher = new Map([[a, -1]]), schlange = [a];
+  for (let k = 0; k < schlange.length && !vorher.has(b); k++) for (const n of schulNachbarn(schlange[k])) if (!vorher.has(n)) { vorher.set(n, schlange[k]); schlange.push(n); }
+  if (!vorher.has(b)) return ziel;
+  let n = b;
+  while (vorher.get(n) !== a) n = vorher.get(n);
+  // Nicht genau vor der Tür? Dann erst in die Mitte vom eigenen Feld (sonst bleibt man am Türrahmen hängen)
+  const am = schulMitte(a), quer = Math.abs(n - a) === 1 ? Math.abs(pos.z - am.z) : Math.abs(pos.x - am.x);
+  return quer > 0.3 ? am : schulMitte(n);
+}
+function schulZufallsZiel(m) {   // Monster wandern ein paar Felder weiter (meistens drinnen, selten auf den Hof)
+  const M = haus.schule;
+  let c = schulZelle(m.x, m.z);
+  for (let k = 0, n = 2 + Math.floor(Math.random() * 6); k < n; k++) {
+    const nb = schulNachbarn(c).filter(x => x % M.nx >= M.hof || Math.random() < 0.15);
+    if (!nb.length) break;
+    c = nb[Math.floor(Math.random() * nb.length)];
+  }
+  const p = schulMitte(c);
+  return { x: p.x + zufall(-0.3, 0.3), y: 0, z: p.z + zufall(-0.3, 0.3) };
+}
+function schulWeitWeg(m) {   // Ein Feld im Schulhaus, weit weg (für den Formwandler, wenn er abhaut)
+  const M = haus.schule;
+  for (let v = 0; v < 60; v++) {
+    const c = Math.floor(Math.random() * M.nx * M.nz);
+    if (c % M.nx < M.hof || M.gesperrt.has(c)) continue;
+    const p = schulMitte(c);
+    if (abstand2D(p.x, p.z, m.x, m.z) > 18) return p;
+  }
+  return schulMitte(M.start);
+}
+function schulSchatzTyp() {   // Was für ein Schatz liegt in der Schule?
+  return rnd() < SCHUL_SCHATZ_ANTEIL ? gewichtetWaehlen(SCHAETZE.filter(t => t.schule)) : gewichtetWaehlen(SCHAETZE.filter(t => SCHUL_ANDERE.includes(t.id)));
+}
+function schulSchatzPlatz(zz) {   // Ein Platz für einen Schatz: meistens in einem Raum, manchmal im Flur
+  const M = haus.schule;
+  for (let v = 0; v < 80; v++) {
+    const c = Math.floor(zz() * M.nx * M.nz);
+    if (c % M.nx < M.hof || M.gesperrt.has(c)) continue;
+    if (M.flur.has(c) && zz() < 0.8) continue;
+    const p = schulMitte(c), s = () => (zz() < 0.5 ? -1 : 1) * (0.45 + zz() * 0.4);
+    return { x: p.x + s(), z: p.z + s() };
+  }
+  return null;
+}
+function schulRaumBei(x, z) {   // In welchem Raum bist du? (oder null = Flur/Hof)
+  return imSchulhaus(x, z) ? haus.schule.raumVon.get(schulZelle(x, z)) || null : null;
+}
+
+// ----- Texturen -----
+const schulWandTextur = malTextur(256, 256, (g, b, h) => {   // Oben alte beige Farbe mit Flecken, unten grüne Kacheln
+  g.fillStyle = '#d6cba6'; g.fillRect(0, 0, b, h);
+  for (let k = 0; k < 300; k++) { g.fillStyle = `rgba(70,60,30,${Math.random() * 0.08})`; g.fillRect(Math.random() * b, Math.random() * h * 0.6, 4 + Math.random() * 14, 4 + Math.random() * 18); }
+  const y0 = h * 0.6;
+  g.fillStyle = '#5f8f7a'; g.fillRect(0, y0, b, h - y0);
+  g.strokeStyle = 'rgba(20,40,30,0.55)'; g.lineWidth = 2;
+  for (let x = 0; x <= b; x += 32) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, h); g.stroke(); }
+  for (let y = y0; y <= h; y += 25) { g.beginPath(); g.moveTo(0, y); g.lineTo(b, y); g.stroke(); }
+  g.fillStyle = '#2f4f45'; g.fillRect(0, y0 - 6, b, 8);
+});
+const linoTextur = malTextur(128, 128, (g, b, h) => {   // Schachbrett-Linoleum im Flur
+  for (let x = 0; x < 4; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#c4bca8' : '#857c69'; g.fillRect(x * 32, y * 32, 32, 32); }
+  for (let k = 0; k < 400; k++) { g.fillStyle = 'rgba(40,30,20,0.15)'; g.fillRect(Math.random() * b, Math.random() * h, 2, 2); }
+});
+const parkettTextur = malTextur(128, 128, (g, b, h) => {   // Holzboden in den Klassen
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 2; x++) { g.fillStyle = ['#8a6239', '#7a5530', '#946a3f'][(x + y * 2) % 3]; g.fillRect(x * 64 + (y % 2) * 32, y * 16, 64, 16); }
+  g.strokeStyle = 'rgba(30,20,10,0.5)'; for (let y = 0; y <= 8; y++) { g.beginPath(); g.moveTo(0, y * 16); g.lineTo(b, y * 16); g.stroke(); }
+});
+const deckenPlattenTextur = malTextur(128, 128, (g, b, h) => {   // Weiße Deckenplatten (mit Wasserflecken ...)
+  g.fillStyle = '#cfcbc0'; g.fillRect(0, 0, b, h);
+  g.strokeStyle = '#8f8b80'; g.lineWidth = 3; g.strokeRect(0, 0, b, h); g.beginPath(); g.moveTo(b / 2, 0); g.lineTo(b / 2, h); g.moveTo(0, h / 2); g.lineTo(b, h / 2); g.stroke();
+  for (let k = 0; k < 3; k++) { g.fillStyle = 'rgba(120,100,50,0.15)'; g.beginPath(); g.arc(Math.random() * b, Math.random() * h, 8 + Math.random() * 14, 0, 7); g.fill(); }
+});
+const ziegelTextur = malTextur(256, 128, (g, b, h) => {   // Rote Backsteine
+  g.fillStyle = '#5a3a30'; g.fillRect(0, 0, b, h);
+  for (let y = 0; y < 8; y++) for (let x = -1; x < 8; x++) { g.fillStyle = ['#8b4a3a', '#7d4033', '#95533f', '#6f3a2e'][(x * 3 + y) & 3]; g.fillRect(x * 32 + (y % 2) * 16 + 1, y * 16 + 1, 30, 14); }
+});
+const asphaltTextur = malTextur(128, 128, (g, b, h) => {
+  g.fillStyle = '#3a3b3e'; g.fillRect(0, 0, b, h);
+  for (let k = 0; k < 900; k++) { g.fillStyle = ['#47484c', '#2f3033', '#424347'][k % 3]; g.fillRect(Math.random() * b, Math.random() * h, 2, 2); }
+});
+const matCache = new Map();
+function wiederholMat(tex, rx, ry, extra = {}) {   // Ein Material, dessen Muster rx × ry mal wiederholt wird (wird gemerkt)
+  const k = `${tex.uuid}|${Math.round(rx * 2)}|${Math.round(ry * 2)}`;
+  if (!matCache.has(k)) {
+    const t = tex.clone(); t.needsUpdate = true; t.repeat.set(Math.max(0.5, Math.round(rx * 2) / 2), Math.max(0.5, Math.round(ry * 2) / 2));
+    matCache.set(k, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, ...extra }));
+  }
+  return matCache.get(k);
+}
+const schulWandMat = l => wiederholMat(schulWandTextur, l / 3, 1);
+const holzMoebelMat = new THREE.MeshStandardMaterial({ color: '#a8794a', roughness: 0.8 });
+const stuhlMat = new THREE.MeshStandardMaterial({ color: '#3d5a80', roughness: 0.7 });
+const tafelRahmenMat = new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 0.8 });
+const TAFEL_SPRUECHE = ['7 × 8 = ?', 'RUHE!!!', 'NIEMAND VERLÄSST DIE KLASSE', '12 − 5 = ?', 'HAUSAUFGABEN: ALLES', 'NACHSITZEN', 'ICH SEHE DICH', '9 + 6 = ?', 'LERNEN ODER SCHROTT', '3 × 3 × 3 = ?', 'WER SCHWÄTZT, BLEIBT HIER', '¿ 1 + 1 = 3 ?'];
+
+// ----- Bauen -----
+function baueSchulKarte() {   // Statt der Villa-Einrichtung: Schulhof, Schulhaus, Nachsitz-Zimmer ...
+  const Z = SCHULE.zelle, mz = (SCHULE.eingang + 0.5) * Z;
+  haus.parkplatz = []; haus.baeume = [];
+  baueSchule();
+  // Die Abgabe und der Bus (genau wie bei der Villa: Bus – Abgabe – Eingang)
+  haus.laster = { x1: SCHUL_ORT - 8.5, x2: SCHUL_ORT - 4.0, z1: mz - 2.3, z2: mz + 2.2 };
+  baueAbgabe();
+  baueBus(mz, SCHUL_ORT);
+  haus.schuppen = [haus.bus.schuppen];   // 🚌 Rein und raus nur durch die Bustür
+  // Gesperrte Felder (da steht der Bus oder die Abgabe – da laufen Monster und Helfer nicht durch)
+  const M = haus.schule, B = haus.bus, L = haus.laster;
+  for (let c = 0; c < M.nx * M.nz; c++) {
+    const p = schulMitte(c);
+    if (p.x > B.x1 - 0.5 && p.x < B.x2 + 0.5 && p.z > B.z1 && p.z < B.z2) M.gesperrt.add(c);
+    if (p.x > L.x1 - 0.5 && p.x < L.x2 + 0.5 && p.z > L.z1 - 0.8 && p.z < L.z2 + 0.8) M.gesperrt.add(c);
+  }
+  M.abstand = schulAbstaende(M.start);
+  baueNachsitzZimmer();
+  // Schätze
+  for (let k = 0; k < SCHULE.schaetze; k++) {
+    const pl = schulSchatzPlatz(rnd);
+    if (!pl) continue;
+    const typ = schulSchatzTyp();
+    neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z);
+  }
+  // Monster – der Lehrer im Lehrerzimmer, die anderen weit weg vom Eingang
+  const weit = [...M.abstand.entries()].filter(([c, d]) => d >= 8 && c % M.nx >= M.hof).map(([c]) => c);
+  const lz = M.raeume.find(R => R.art === 'lehrerzimmer');
+  for (const [art, anzahl] of Object.entries(SCHUL_MONSTER)) for (let k = 0; k < anzahl; k++) {
+    neuesMonster(art, haus.start);
+    const m = monster[monster.length - 1];
+    const c = art === 'lehrer' && lz && k === 0 ? lz.mitte : weit.length ? weit[Math.floor(rnd() * weit.length)] : M.start;
+    const p = schulMitte(c);
+    Object.assign(m, { x: p.x + zufall(-0.3, 0.3), y: 0, z: p.z + zufall(-0.3, 0.3) });
+    if (art === 'formwandler') { m.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; m.tarnTyp = tarnSchatzWaehlen(); }
+  }
+}
+const RAUM_INFOS = {
+  klasse: { name: 'Klassenzimmer', emoji: '✏️' }, bibliothek: { name: 'Bibliothek', emoji: '📚' }, lehrerzimmer: { name: 'Lehrerzimmer', emoji: '☕' },
+  toilette: { name: 'Toiletten', emoji: '🚽' }, musik: { name: 'Musikraum', emoji: '🎵' }, turnhalle: { name: 'Turnhalle', emoji: '🏀' },
+};
+function baueSchule() {
+  const Z = SCHULE.zelle, H = SCHULE.hoehe, D = 0.3, B = SCHULE.breit, hof = SCHULE.hof, nx = hof + B, nz = SCHULE.tief;
+  const x0 = SCHUL_ORT - hof * Z, z0 = 0;
+  const M = haus.schule = { zelle: Z, nx, nz, x0, z0, x1: x0 + nx * Z, z1: z0 + nz * Z, hof, offen: new Set(), gesperrt: new Set(),
+    raeume: [], raumVon: new Map(), flur: new Set(), flimmer: [] };
+  const zelle = (lx, z) => z * nx + hof + lx;   // lx: Spalte IM Schulhaus (0 = gleich hinter dem Eingang)
+  const imS = (x, z) => x >= hof && x < nx && z >= 0 && z < nz;   // (x = Spalte vom ganzen Plan)
+  const auf = (a, b) => M.offen.add(schulKante(a, b)), istAuf = (a, b) => M.offen.has(schulKante(a, b));
+  // 1) Der Schulhof: überall offen
+  for (let z = 0; z < nz; z++) for (let x = 0; x < hof; x++) {
+    if (x + 1 < hof) auf(z * nx + x, z * nx + x + 1);
+    if (z + 1 < nz) auf(z * nx + x, (z + 1) * nx + x);
+  }
+  // 2) Die Flure: drei lange Gänge quer, vier Gänge längs
+  const FLUR_REIHEN = [2, 8, 14], FLUR_SPALTEN = [0, 6, 13, 19];
+  for (const z of FLUR_REIHEN) for (let lx = 0; lx < B; lx++) M.flur.add(zelle(lx, z));
+  for (const lx of FLUR_SPALTEN) for (let z = 2; z <= 14; z++) M.flur.add(zelle(lx, z));
+  for (const c of M.flur) {
+    if (M.flur.has(c + 1) && (c % nx) + 1 < nx) auf(c, c + 1);
+    if (M.flur.has(c + nx)) auf(c, c + nx);
+  }
+  // 3) Die Räume (zwischen den Fluren). Jeder Raum hat eine Tür zum Flur – manche noch eine zweite.
+  const plan = [];
+  for (const lx of [0, 5, 10, 15]) { plan.push([lx, 0, 5, 2, 's']); plan.push([lx, 15, 5, 2, 'n']); }
+  for (const [lx, b] of [[1, 5], [7, 6], [14, 5]]) {
+    plan.push([lx, 3, b, 2, 'n']); plan.push([lx, 5, b, 3, 's']);
+    if (lx === 7) plan.push([lx, 9, b, 5, 'n', 'turnhalle']);
+    else { plan.push([lx, 9, b, 3, 'n']); plan.push([lx, 12, b, 2, 's']); }
+  }
+  const arten = mischen(['lehrerzimmer', 'bibliothek', 'bibliothek', 'toilette', 'toilette', 'musik', ...Array(12).fill('klasse')]);
+  let klassenNr = 0;
+  for (const [lx1, z1, b, t, haupt, fest] of plan) {
+    const art = fest || arten.pop() || 'klasse';
+    const R = { art, lx1, z1, b, t, zellen: [], tueren: [], haupt, ...RAUM_INFOS[art] };
+    if (art === 'klasse') { klassenNr++; R.name = `Klasse ${Math.ceil(klassenNr / 2)}${'ab'[klassenNr % 2]}`; }
+    for (let z = z1; z < z1 + t; z++) for (let lx = lx1; lx < lx1 + b; lx++) {
+      const c = zelle(lx, z); R.zellen.push(c); M.raumVon.set(c, R);
+      if (lx + 1 < lx1 + b) auf(c, zelle(lx + 1, z));
+      if (z + 1 < z1 + t) auf(c, zelle(lx, z + 1));
+    }
+    R.mitte = zelle(lx1 + Math.floor(b / 2), z1 + Math.floor(t / 2));
+    const seiten = [haupt]; if (art === 'turnhalle') seiten.push(haupt, 's');
+    for (const s of ['w', 'o']) if (rnd() < SCHULE.nebenTuer) seiten.push(s);
+    for (const seite of seiten) {
+      const kand = [];
+      if (seite === 'n' || seite === 's') {
+        const z = seite === 'n' ? z1 : z1 + t - 1, dz = seite === 'n' ? -1 : 1;
+        for (let lx = lx1; lx < lx1 + b; lx++) if (M.flur.has(zelle(lx, z + dz)) && !R.tueren.some(T => T.innen === zelle(lx, z))) kand.push([zelle(lx, z), zelle(lx, z + dz)]);
+      } else {
+        const lx = seite === 'w' ? lx1 : lx1 + b - 1, dx = seite === 'w' ? -1 : 1;
+        for (let z = z1; z < z1 + t; z++) if (lx + dx >= 0 && lx + dx < B && M.flur.has(zelle(lx + dx, z))) kand.push([zelle(lx, z), zelle(lx + dx, z)]);
+      }
+      if (!kand.length) continue;
+      const [a, c] = kand[Math.floor(rnd() * kand.length)];
+      auf(a, c); R.tueren.push({ innen: a, aussen: c, seite });
+    }
+    M.raeume.push(R);
+  }
+  // 4) Der Eingang: vom Schulhof in den Flur
+  M.start = zelle(0, SCHULE.eingang);
+  auf(zelle(-1, SCHULE.eingang), M.start);
+  M.tueren = [{ innen: M.start, aussen: zelle(-1, SCHULE.eingang), seite: 'w', eingang: true }, ...M.raeume.flatMap(R => R.tueren.map(T => ({ ...T, raum: R })))];
+
+  // ----- Jetzt bauen, was man sieht -----
+  const gx = (x0 + M.x1) / 2, gz = (z0 + M.z1) / 2, hausB = B * Z, hausT = nz * Z;
+  festerKoerper(gx, -0.25, gz, M.x1 - x0 + 4, 0.5, M.z1 - z0 + 4);   // Der Boden (fest)
+  const flaeche = (x1, z1, b, t, mat, y = 0.005) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(b, t), mat); m.rotation.x = -Math.PI / 2; m.position.set(x1 + b / 2, y, z1 + t / 2); m.receiveShadow = true; hausGruppe.add(m); return m; };
+  flaeche(x0, z0, hof * Z, hausT, wiederholMat(asphaltTextur, hof * Z / 3, hausT / 3));    // Schulhof
+  flaeche(SCHUL_ORT, z0, hausB, hausT, wiederholMat(linoTextur, hausB / 2.4, hausT / 2.4)); // Linoleum überall
+  // Die Decke (und darüber das Dach)
+  festerKoerper(SCHUL_ORT + hausB / 2, H + 0.5, gz, hausB, 1, hausT);
+  const decke = new THREE.Mesh(new THREE.PlaneGeometry(hausB, hausT), wiederholMat(deckenPlattenTextur, hausB / 1.5, hausT / 1.5));
+  decke.rotation.x = Math.PI / 2; decke.position.set(SCHUL_ORT + hausB / 2, H, gz); hausGruppe.add(decke);
+  const dach = new THREE.Mesh(new THREE.BoxGeometry(hausB + 1, 4, hausT + 1), wiederholMat(ziegelTextur, hausB / 4, 1.5));
+  dach.position.set(SCHUL_ORT + hausB / 2, H + 2, gz); hausGruppe.add(dach);
+  const dachRand = new THREE.Mesh(new THREE.BoxGeometry(hausB + 1.6, 0.4, hausT + 1.6), new THREE.MeshStandardMaterial({ color: '#2b2522', roughness: 1 }));
+  dachRand.position.set(SCHUL_ORT + hausB / 2, H + 4.1, gz); hausGruppe.add(dachRand);
+  // Die Wände (nebeneinanderliegende Stücke werden zu einer langen Wand zusammengefasst)
+  const wand = (xa, za, xb, zb) => {
+    const l = Math.hypot(xb - xa, zb - za), entlangX = za === zb;
+    festerKlotz((xa + xb) / 2, H / 2, (za + zb) / 2, entlangX ? l + D : D, H, entlangX ? D : l + D, schulWandMat(l), true);
+  };
+  for (let k = 0; k <= nz; k++) {   // Wände entlang x
+    let anfang = -1;
+    for (let x = 0; x <= nx; x++) {
+      const brauch = x < nx && (imS(x, k - 1) || imS(x, k)) && !(k > 0 && k < nz && istAuf((k - 1) * nx + x, k * nx + x));
+      if (brauch && anfang < 0) anfang = x;
+      if (!brauch && anfang >= 0) { wand(x0 + anfang * Z, z0 + k * Z, x0 + x * Z, z0 + k * Z); anfang = -1; }
+    }
+  }
+  for (let k = hof; k <= nx; k++) {   // Wände entlang z
+    let anfang = -1;
+    for (let z = 0; z <= nz; z++) {
+      const brauch = z < nz && (imS(k - 1, z) || imS(k, z)) && !(k > 0 && k < nx && istAuf(z * nx + k - 1, z * nx + k));
+      if (brauch && anfang < 0) anfang = z;
+      if (!brauch && anfang >= 0) { wand(x0 + k * Z, z0 + anfang * Z, x0 + k * Z, z0 + z * Z); anfang = -1; }
+    }
+  }
+  // Türrahmen: Die Öffnung zwischen zwei Feldern wird zu einer echten Tür (schmaler, mit Sturz und Schild)
+  for (const T of M.tueren) {
+    const a = schulMitte(T.innen), b = schulMitte(T.aussen), mx = (a.x + b.x) / 2, mzz = (a.z + b.z) / 2, entlangX = Math.abs(a.z - b.z) > 0.1;   // entlangX: Die Wand läuft entlang x
+    const seitlich = (Z - SCHULE.tuer) / 2, mat = schulWandMat(seitlich);
+    for (const s of [-1, 1]) {
+      const off = s * (SCHULE.tuer / 2 + seitlich / 2);
+      festerKlotz(mx + (entlangX ? off : 0), H / 2, mzz + (entlangX ? 0 : off), entlangX ? seitlich : D, H, entlangX ? D : seitlich, mat, true);
+    }
+    festerKlotz(mx, (2.4 + H) / 2, mzz, entlangX ? SCHULE.tuer : D, H - 2.4, entlangX ? D : SCHULE.tuer, schulWandMat(SCHULE.tuer), true);
+    const rahmen = new THREE.Mesh(new THREE.BoxGeometry(entlangX ? SCHULE.tuer + 0.16 : D + 0.06, 0.1, entlangX ? D + 0.06 : SCHULE.tuer + 0.16), tafelRahmenMat);
+    rahmen.position.set(mx, 2.42, mzz); hausGruppe.add(rahmen);
+    if (T.raum) {   // Ein Schild über der Tür (zum Flur hin)
+      const sch = schildMesh(`${T.raum.emoji} ${T.raum.name}`, 1.5, 0.32, '#f2e8c9');
+      const dx = Math.sign(b.x - a.x), dz = Math.sign(b.z - a.z);
+      sch.position.set(mx + dx * (D / 2 + 0.02), 2.75, mzz + dz * (D / 2 + 0.02)); sch.rotation.y = Math.atan2(dx, dz); hausGruppe.add(sch);
+    }
+  }
+  // Die Fassade (Backstein) vorne zum Schulhof, mit Eingang, Fenstern, Schild und einer stehengebliebenen Uhr
+  const ez = z0 + (SCHULE.eingang + 0.5) * Z, fx = SCHUL_ORT - D / 2 - 0.12, fH = H + 4;
+  const ziegel = (z1, z2, y1, y2) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.22, y2 - y1, z2 - z1), wiederholMat(ziegelTextur, (z2 - z1) / 4, (y2 - y1) / 2)); m.position.set(fx, (y1 + y2) / 2, (z1 + z2) / 2); hausGruppe.add(m); };
+  ziegel(z0 - 0.3, ez - SCHULE.tuer / 2, 0, fH); ziegel(ez + SCHULE.tuer / 2, M.z1 + 0.3, 0, fH); ziegel(ez - SCHULE.tuer / 2, ez + SCHULE.tuer / 2, 2.4, fH);
+  const fensterMat = new THREE.MeshBasicMaterial({ color: '#1a2a3a' }), fensterHell = new THREE.MeshBasicMaterial({ color: '#c8b46a' });
+  for (let z = z0 + 2.5; z < M.z1 - 1.5; z += 4) {
+    if (Math.abs(z - ez) < 3) continue;
+    for (const y of [1.7, 5.2]) {
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.3), rnd() < 0.12 ? fensterHell : fensterMat);   // Manchmal brennt in einem Fenster Licht ...
+      f.position.set(fx - 0.12, y, z); f.rotation.y = -Math.PI / 2; hausGruppe.add(f);
+    }
+  }
+  const schild = schildMesh('📚 SCHULE SCHATTENBERG', 4.2, 0.7, '#f2e8c9');
+  schild.position.set(fx - 0.14, 3.1, ez); schild.rotation.y = -Math.PI / 2; hausGruppe.add(schild);
+  const uhrTex = canvasTextur(128, 128, (g) => {   // Die Uhr ist um 13:13 stehen geblieben ...
+    g.fillStyle = '#f4efe0'; g.beginPath(); g.arc(64, 64, 60, 0, 7); g.fill(); g.strokeStyle = '#222'; g.lineWidth = 6; g.stroke();
+    g.lineWidth = 3; for (let k = 0; k < 12; k++) { const w = k / 12 * Math.PI * 2; g.beginPath(); g.moveTo(64 + Math.sin(w) * 48, 64 - Math.cos(w) * 48); g.lineTo(64 + Math.sin(w) * 56, 64 - Math.cos(w) * 56); g.stroke(); }
+    const zeiger = (w, l, d) => { g.lineWidth = d; g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.sin(w) * l, 64 - Math.cos(w) * l); g.stroke(); };
+    zeiger((1 + 13 / 60) / 12 * Math.PI * 2, 30, 6); zeiger(13 / 60 * Math.PI * 2, 46, 4);
+  }).tex;
+  const uhr = new THREE.Mesh(new THREE.CircleGeometry(0.8, 32), new THREE.MeshBasicMaterial({ map: uhrTex })); uhr.position.set(fx - 0.14, 5.4, ez); uhr.rotation.y = -Math.PI / 2; hausGruppe.add(uhr);
+  lampeHinzu(SCHUL_ORT - 1.5, 2.8, ez, '#ffe6a8', 2.0, 12, true);   // Die Lampe über dem Eingang (flackert)
+  // Der Schulhof: Mauer rundherum, Tor hinten (da kommt der Bus rein), Basketballkorb, Himmel-und-Hölle, Bänke
+  const mauer = (x, z, b, t) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(b, 3, t), wiederholMat(ziegelTextur, Math.max(b, t) / 4, 1)); m.position.set(x, 1.5, z); hausGruppe.add(m); sichtBlocker.push(m);
+    festerKoerper(x, 4.5, z, b, 9, t);   // (Unsichtbar höher – da kommt keiner drüber)
+  };
+  const zuX1 = x0 + 3.5, zuX2 = x0 + 10.5;   // Das Tor (da kommt der Bus rein)
+  mauer((x0 + SCHUL_ORT) / 2, z0 - 0.3, SCHUL_ORT - x0 + 0.6, 0.6);
+  mauer(x0 - 0.3, gz, 0.6, hausT + 0.6);
+  mauer((x0 + zuX1) / 2, M.z1 + 0.3, zuX1 - x0, 0.6);
+  mauer((zuX2 + SCHUL_ORT) / 2, M.z1 + 0.3, SCHUL_ORT - zuX2, 0.6);
+  festerKoerper((zuX1 + zuX2) / 2, 3, M.z1 + 0.3, zuX2 - zuX1, 6, 0.4);   // Unsichtbare Sperre im Tor
+  const gitter = new THREE.MeshStandardMaterial({ color: '#2a2c30', metalness: 0.7, roughness: 0.5 });
+  for (let x = zuX1; x <= zuX2 + 0.01; x += 0.25) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.2, 0.04), gitter); st.position.set(x, 1.1, M.z1 + 0.5); hausGruppe.add(st); }
+  for (const y of [0.2, 2.1]) { const q = new THREE.Mesh(new THREE.BoxGeometry(zuX2 - zuX1, 0.06, 0.06), gitter); q.position.set((zuX1 + zuX2) / 2, y, M.z1 + 0.5); hausGruppe.add(q); }
+  const strasse = new THREE.Mesh(new THREE.PlaneGeometry(zuX2 - zuX1 + 2, 70), new THREE.MeshStandardMaterial({ map: asphaltTextur, roughness: 1 }));
+  strasse.rotation.x = -Math.PI / 2; strasse.position.set((zuX1 + zuX2) / 2, 0.004, M.z1 + 35); hausGruppe.add(strasse);
+  const hupf = canvasTextur(128, 256, (g) => {   // Himmel und Hölle (mit Kreide auf den Boden gemalt)
+    g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 4; g.fillStyle = 'rgba(255,255,255,0.75)'; g.font = 'bold 20px Arial'; g.textAlign = 'center';
+    const kaestchen = [[44, 210, 1], [44, 170, 2], [24, 130, 3], [64, 130, 4], [44, 90, 5], [24, 50, 6], [64, 50, 7]];
+    for (const [x, y, n] of kaestchen) { g.strokeRect(x, y, 40, 40); g.fillText(n, x + 20, y + 27); }
+    g.beginPath(); g.arc(64, 30, 26, Math.PI, 0); g.stroke(); g.fillText('HIMMEL', 64, 24);
+  }).tex;
+  const hupfM = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3.2), new THREE.MeshBasicMaterial({ map: hupf, transparent: true, depthWrite: false }));
+  hupfM.rotation.x = -Math.PI / 2; hupfM.position.set(x0 + 3.5, 0.012, z0 + 5); hausGruppe.add(hupfM);
+  const korbStange = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.2, 10), gitter); korbStange.position.set(x0 + 1, 1.6, z0 + 1.2); hausGruppe.add(korbStange);
+  const brett = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.05), new THREE.MeshStandardMaterial({ color: '#e8e8e8' })); brett.position.set(x0 + 1, 3.1, z0 + 1.4); hausGruppe.add(brett);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.02, 6, 20), new THREE.MeshStandardMaterial({ color: '#e8590c' })); ring.rotation.x = Math.PI / 2; ring.position.set(x0 + 1, 2.85, z0 + 1.7); hausGruppe.add(ring);
+  for (const z of [z0 + 12, M.z1 - 6]) { festerKlotz(x0 + 0.9, 0.25, z, 0.6, 0.08, 2.2, holzMoebelMat, false); festerKlotz(x0 + 0.65, 0.55, z, 0.08, 0.5, 2.2, holzMoebelMat, false); festerKoerper(x0 + 0.9, 0.2, z, 0.6, 0.4, 2.2); }   // Bänke
+  lampeHinzu(x0 + hof * Z * 0.4, 4.5, z0 + 3, '#b9c8ff', 1.3, 18, false);   // Eine Laterne über dem Hof
+  // Flure: Neonröhren an der Decke (manche flackern!) und Spinde an den Wänden
+  const neon = new THREE.MeshBasicMaterial({ color: '#f2f6ff' }), neonA = new THREE.MeshBasicMaterial({ color: '#f2f6ff' }), neonB = new THREE.MeshBasicMaterial({ color: '#f2f6ff' });
+  M.flimmer = [neonA, neonB];
+  const spinde = [];
+  for (const c of M.flur) {
+    const p = schulMitte(c), lx = c % nx - hof, z = Math.floor(c / nx), quer = FLUR_SPALTEN.includes(lx) && !FLUR_REIHEN.includes(z);   // quer: Flur läuft entlang z
+    const r = rnd(), m = r < 0.1 ? neonA : r < 0.18 ? neonB : neon;
+    const roehre = new THREE.Mesh(new THREE.BoxGeometry(quer ? 0.25 : 1.3, 0.05, quer ? 1.3 : 0.25), m); roehre.position.set(p.x, H - 0.03, p.z); hausGruppe.add(roehre);
+    if (FLUR_SPALTEN.includes(lx) && FLUR_REIHEN.includes(z)) continue;   // Kreuzung: keine Spinde
+    if (rnd() < 0.25) continue;
+    for (const s of [-1, 1]) {   // An welchen Seiten ist eine Wand? Da kommen Spinde hin
+      const n = quer ? c + s : c + s * nx;
+      if (istAuf(c, n)) continue;
+      for (let k = -1.5; k <= 1.5; k++) spinde.push([quer ? p.x + s * (Z / 2 - D / 2 - 0.2) : p.x + k * 0.6, quer ? p.z + k * 0.6 : p.z + s * (Z / 2 - D / 2 - 0.2), quer ? (s > 0 ? -Math.PI / 2 : Math.PI / 2) : (s > 0 ? Math.PI : 0)]);
+    }
+  }
+  const spindTex = canvasTextur(64, 192, (g) => {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, 64, 192); g.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let k = 0; k < 5; k++) g.fillRect(14, 14 + k * 8, 36, 3);   // Lüftungsschlitze
+    g.fillRect(48, 96, 6, 18); g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 3; g.strokeRect(2, 2, 60, 188);
+  }).tex;
+  const spindM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.58, 1.9, 0.4), new THREE.MeshStandardMaterial({ map: spindTex, metalness: 0.4, roughness: 0.5 }), spinde.length);
+  const hilf = new THREE.Object3D(), farben = ['#3d6fb0', '#b03d3d', '#3d9a5b', '#c9a227', '#7a7f87'].map(f => new THREE.Color(f));
+  spinde.forEach(([x, z, w], k) => { hilf.position.set(x, 0.95, z); hilf.rotation.set(0, w, 0); hilf.updateMatrix(); spindM.setMatrixAt(k, hilf.matrix); spindM.setColorAt(k, farben[Math.floor(rnd() * farben.length)]); });
+  hausGruppe.add(spindM);
+  for (const [lx, z] of [[3, 8], [10, 8], [16, 8], [10, 2], [10, 14]]) { const p = schulMitte(zelle(lx, z)); lampeHinzu(p.x, H - 0.3, p.z, '#e6efff', 1.6, 12, true); }
+  // Die Räume einrichten
+  const tische = [];
+  for (const R of M.raeume) raumEinrichtenSchule(R, tische);
+  baueTische(tische);
+}
+function raumEinrichtenSchule(R, tische) {
+  const M = haus.schule, Z = M.zelle, H = SCHULE.hoehe, D = 0.3;
+  const X1 = M.x0 + (M.hof + R.lx1) * Z, Z1 = M.z0 + R.z1 * Z, X2 = X1 + R.b * Z, Z2 = Z1 + R.t * Z, cx = (X1 + X2) / 2, cz = (Z1 + Z2) / 2;
+  const boden = (mat) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(X2 - X1, Z2 - Z1), mat); m.rotation.x = -Math.PI / 2; m.position.set(cx, 0.01, cz); m.receiveShadow = true; hausGruppe.add(m); };
+  // Die Tafel kommt an die Wand gegenüber der Haupttür
+  const tafelN = R.haupt === 's';   // Tafel an der Nordwand (kleines z)?
+  const tz = tafelN ? Z1 + D / 2 + 0.03 : Z2 - D / 2 - 0.03, bz = tafelN ? 1 : -1;   // bz: von der Tafel aus ins Zimmer
+  const tafel = (breite, text) => {
+    const t = canvasTextur(512, 200, (g) => {
+      g.fillStyle = '#1f3b2d'; g.fillRect(0, 0, 512, 200);
+      for (let k = 0; k < 60; k++) { g.fillStyle = 'rgba(255,255,255,0.04)'; g.fillRect(Math.random() * 512, Math.random() * 200, 30, 6); }   // Verwischte Kreide
+      g.fillStyle = 'rgba(245,245,235,0.9)'; g.font = 'bold 44px "Comic Sans MS", Arial, sans-serif'; g.textAlign = 'center';
+      g.fillText(text, 256, 115, 490);
+    }).tex;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(breite, breite * 0.39), new THREE.MeshBasicMaterial({ map: t }));
+    m.position.set(cx, 1.65, tz + bz * 0.04); m.rotation.y = tafelN ? 0 : Math.PI; hausGruppe.add(m);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(breite + 0.12, breite * 0.39 + 0.12, 0.04), tafelRahmenMat); r.position.set(cx, 1.65, tz + bz * 0.02); hausGruppe.add(r);
+  };
+  if (R.art === 'klasse') {
+    boden(wiederholMat(parkettTextur, (X2 - X1) / 2, (Z2 - Z1) / 2));
+    tafel(Math.min(3.6, R.b * Z * 0.45), TAFEL_SPRUECHE[Math.floor(rnd() * TAFEL_SPRUECHE.length)]);
+    festerKlotz(cx + (R.b % 2 ? 1.4 : 0), 0.4, tz + bz * 0.8, 1.3, 0.8, 0.6, holzMoebelMat, false);   // Lehrerpult (nicht im Weg)
+    for (const c of R.zellen) {   // Schülertische (nicht in der Reihe direkt an der Tafel)
+      const p = schulMitte(c);
+      if (Math.abs(p.z - tz) < Z * 0.9) continue;
+      for (const s of [-1, 1]) tische.push([p.x + s * 0.8, p.z - bz * 0.72, bz]);
+    }
+  } else if (R.art === 'bibliothek') {
+    boden(new THREE.MeshStandardMaterial({ color: '#5a1f24', roughness: 1 }));
+    for (const c of R.zellen) {   // Bücherregale an allen Wänden ohne Tür
+      const p = schulMitte(c);
+      for (const [n, dx, dz] of [[c - 1, -1, 0], [c + 1, 1, 0], [c - M.nx, 0, -1], [c + M.nx, 0, 1]]) {
+        if (M.raumVon.get(n) === R || M.offen.has(schulKante(c, n))) continue;
+        const x = p.x + dx * (Z / 2 - D / 2 - 0.22), z = p.z + dz * (Z / 2 - D / 2 - 0.22);
+        festerKlotz(x, 1.1, z, dx ? 0.42 : 2.6, 2.2, dx ? 2.6 : 0.42, buecherMat, false);
+      }
+    }
+    lampeHinzu(cx, H - 0.4, cz, '#ffd9a0', 1.6, 10, false);
+  } else if (R.art === 'lehrerzimmer') {
+    boden(new THREE.MeshStandardMaterial({ color: '#3b4a5a', roughness: 1 }));
+    tafel(2.6, 'ZUTRITT NUR FÜR LEHRER!');
+    const mp0 = schulMitte(R.mitte);
+    festerKlotz(mp0.x + 0.85, 0.4, mp0.z + 0.85, 0.9, 0.8, 0.8, holzMoebelMat, false);   // Tisch mit Kaffeetasse (schräg neben der Mitte, nicht im Weg)
+    const tasse = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.1, 10), new THREE.MeshStandardMaterial({ color: '#ffffff' })); tasse.position.set(mp0.x + 0.7, 0.86, mp0.z + 0.8); hausGruppe.add(tasse);
+    lampeHinzu(cx, H - 0.4, cz, '#ffb36b', 1.4, 10, true);
+    M.kopfPlatz = { x: mp0.x - 0.3, z: mp0.z };   // Wer beim Test durchfällt, dessen Kopf landet HIER ...
+  } else if (R.art === 'toilette') {
+    boden(wiederholMat(malTextur(64, 64, (g) => { g.fillStyle = '#e8e8e8'; g.fillRect(0, 0, 64, 64); g.strokeStyle = '#9aa'; g.strokeRect(0, 0, 32, 32); g.strokeRect(32, 32, 32, 32); }), (X2 - X1) / 1, (Z2 - Z1) / 1));
+    const kabine = new THREE.MeshStandardMaterial({ color: '#6f8fa0', roughness: 0.6 });
+    for (let x = X1 + 0.9; x < X2 - 0.5; x += 1.2) {   // Kabinen an der Wand gegenüber der Tür
+      const w = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2, 1.1), kabine); w.position.set(x, 1.05, tz + bz * 0.6); hausGruppe.add(w);
+      const kl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.5), new THREE.MeshStandardMaterial({ color: '#f4f4f4' })); kl.position.set(x + 0.6, 0.2, tz + bz * 0.45); hausGruppe.add(kl);
+    }
+  } else if (R.art === 'musik') {
+    boden(wiederholMat(parkettTextur, (X2 - X1) / 2, (Z2 - Z1) / 2));
+    tafel(2.8, '♪ ♫ ♪   LA LA LAAA ♫');
+    festerKlotz(X1 + 1.0, 0.6, tz + bz * 0.55, 1.6, 1.2, 0.6, new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.3 }), false);   // Klavier
+    const tasten = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.2), new THREE.MeshStandardMaterial({ color: '#f4f4f4' })); tasten.position.set(X1 + 1.0, 0.82, tz + bz * 0.95); hausGruppe.add(tasten);
+    const trommel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.35, 16), new THREE.MeshStandardMaterial({ color: '#c92a2a' })); trommel.position.set(X2 - 0.8, 0.18, tz + bz * 0.8); hausGruppe.add(trommel);
+  } else if (R.art === 'turnhalle') {
+    const linien = canvasTextur(256, 192, (g) => {
+      g.fillStyle = '#b07a43'; g.fillRect(0, 0, 256, 192);
+      for (let y = 0; y < 192; y += 8) { g.fillStyle = y % 16 ? '#a87341' : '#b8824b'; g.fillRect(0, y, 256, 8); }
+      g.strokeStyle = '#f4f4f4'; g.lineWidth = 3; g.strokeRect(10, 10, 236, 172); g.beginPath(); g.moveTo(128, 10); g.lineTo(128, 182); g.stroke();
+      g.beginPath(); g.arc(128, 96, 26, 0, 7); g.stroke(); g.strokeStyle = '#e03131'; g.beginPath(); g.arc(10, 96, 40, -1.4, 1.4); g.stroke(); g.beginPath(); g.arc(246, 96, 40, Math.PI - 1.4, Math.PI + 1.4); g.stroke();
+    }).tex;
+    boden(new THREE.MeshStandardMaterial({ map: linien, roughness: 0.6 }));
+    for (const s of [-1, 1]) {   // Basketballkörbe an beiden Enden
+      const x = s < 0 ? X1 + D / 2 + 0.1 : X2 - D / 2 - 0.1;
+      const br = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.8, 1.2), new THREE.MeshStandardMaterial({ color: '#f4f4f4' })); br.position.set(x, 2.7, cz); hausGruppe.add(br);
+      const rg = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.02, 6, 20), new THREE.MeshStandardMaterial({ color: '#e8590c' })); rg.rotation.x = Math.PI / 2; rg.position.set(x - s * 0.3, 2.45, cz); hausGruppe.add(rg);
+    }
+    const sprosse = new THREE.MeshStandardMaterial({ color: '#c49a6c', roughness: 0.8 });   // Sprossenwand
+    for (let k = 0; k < 8; k++) { const st = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.4, 6), sprosse); st.rotation.z = Math.PI / 2; st.position.set(cx, 0.3 + k * 0.33, tz + bz * 0.2); hausGruppe.add(st); }
+    for (let k = 0; k < 5; k++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshStandardMaterial({ color: '#e8590c' })); b.position.set(X1 + 1 + rnd() * (X2 - X1 - 2), 0.12, Z1 + 1 + rnd() * (Z2 - Z1 - 2)); hausGruppe.add(b); }
+    lampeHinzu(cx, H - 0.4, cz, '#f0f4ff', 2.6, 18, false);
+  }
+}
+function baueTische(tische) {   // Alle Schülertische und Stühle auf einmal (spart Rechenzeit)
+  if (!tische.length) return;
+  const n = tische.length, hilf = new THREE.Object3D();
+  const platte = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.04, 0.5), holzMoebelMat, n);
+  const sitz = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.04, 0.4), stuhlMat, n), lehne = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.38, 0.04), stuhlMat, n);
+  const bein = new THREE.InstancedMesh(new THREE.BoxGeometry(0.04, 0.72, 0.04), new THREE.MeshStandardMaterial({ color: '#555b63', metalness: 0.6, roughness: 0.4 }), n * 4);
+  const setze = (im, k, x, y, z) => { hilf.position.set(x, y, z); hilf.rotation.set(0, 0, 0); hilf.updateMatrix(); im.setMatrixAt(k, hilf.matrix); };
+  tische.forEach(([x, z, bz], k) => {
+    setze(platte, k, x, 0.72, z);
+    let i = 0; for (const sx of [-0.3, 0.3]) for (const sz of [-0.2, 0.2]) setze(bein, k * 4 + i++, x + sx, 0.36, z + sz);
+    setze(sitz, k, x, 0.45, z - bz * 0.45); setze(lehne, k, x, 0.66, z - bz * 0.64);
+    festerKoerper(x, 0.37, z, 0.7, 0.74, 0.5);
+  });
+  hausGruppe.add(platte, sitz, lehne, bein);
+}
+function baueNachsitzZimmer() {   // 📝 Das Nachsitz-Zimmer: ganz weit weg, eingesperrt, nur du, ein Tisch und die Tafel
+  const M = haus.schule, x = SCHUL_ORT + 150, z = 25, H = SCHULE.hoehe, R = 2.2;
+  festerKoerper(x, -0.25, z, R * 2 + 2, 0.5, R * 2 + 2);
+  festerKoerper(x, H + 0.5, z, R * 2 + 2, 1, R * 2 + 2);
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2), wiederholMat(parkettTextur, R, R)); boden.rotation.x = -Math.PI / 2; boden.position.set(x, 0.01, z); hausGruppe.add(boden);
+  const decke = new THREE.Mesh(new THREE.PlaneGeometry(R * 2, R * 2), wiederholMat(deckenPlattenTextur, R, R)); decke.rotation.x = Math.PI / 2; decke.position.set(x, H, z); hausGruppe.add(decke);
+  for (const [wx, wz, b, t] of [[x, z - R, R * 2 + 0.3, 0.3], [x, z + R, R * 2 + 0.3, 0.3], [x - R, z, 0.3, R * 2], [x + R, z, 0.3, R * 2]]) festerKlotz(wx, H / 2, wz, b, H, t, schulWandMat(R * 2), true);
+  const t = canvasTextur(512, 200, (g) => {
+    g.fillStyle = '#1f3b2d'; g.fillRect(0, 0, 512, 200); g.fillStyle = 'rgba(245,245,235,0.92)'; g.textAlign = 'center';
+    g.font = 'bold 54px "Comic Sans MS", Arial'; g.fillText('NACHSITZEN', 256, 78);
+    g.font = '28px "Comic Sans MS", Arial'; g.fillText('3 Fragen. Eine falsch = SCHROTT.', 256, 135); g.fillText('Viel Glück ... 👨‍🏫', 256, 175);
+  }).tex;
+  const tafel = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.02), new THREE.MeshBasicMaterial({ map: t })); tafel.position.set(x, 1.65, z - R + 0.17); hausGruppe.add(tafel);
+  festerKlotz(x, 0.37, z - 0.2, 0.7, 0.74, 0.5, holzMoebelMat, false);
+  lampeHinzu(x, H - 0.3, z, '#fff1c9', 1.5, 8, true);
+  M.nachsitz = { x, z: z + 0.6 };
+}
+
+// ----- 📝 Nachsitzen: Herr Kreidemann gibt dir einen Test -----
+let nachsitzen = null;   // null = kein Test. Sonst: { fragen, nr, zeit }
+function neueFrage() {   // Eine Rechenaufgabe mit 4 Antworten (nur eine stimmt!)
+  const art = Math.floor(Math.random() * 3);
+  let a, b, text, loesung;
+  if (art === 0) { a = 3 + Math.floor(Math.random() * 40); b = 2 + Math.floor(Math.random() * 30); text = `${a} + ${b}`; loesung = a + b; }
+  else if (art === 1) { a = 10 + Math.floor(Math.random() * 50); b = 2 + Math.floor(Math.random() * (a - 2)); text = `${a} − ${b}`; loesung = a - b; }
+  else { a = 2 + Math.floor(Math.random() * 9); b = 2 + Math.floor(Math.random() * 9); text = `${a} × ${b}`; loesung = a * b; }
+  const antworten = new Set([loesung]);
+  for (const d of [1, -1, 2, -2, 10, -10, 3, 5]) { if (antworten.size >= 4) break; if (loesung + d >= 0 && Math.random() < 0.7) antworten.add(loesung + d); }
+  for (let d = 4; antworten.size < 4; d++) antworten.add(loesung + d);
+  return { text, loesung, antworten: [...antworten].sort(() => Math.random() - 0.5) };
+}
+const testStil = document.createElement('style');
+testStil.textContent = `
+#test { position: absolute; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92%, 30rem); display: none; flex-direction: column; gap: 0.6rem;
+  padding: 1rem 1.2rem; box-sizing: border-box; border-radius: 1rem; background: #1f3b2d; border: 6px solid #6b4a2b; color: #f5f5eb;
+  font: 1rem "Comic Sans MS", system-ui, sans-serif; box-shadow: 0 0 40px #000; text-align: center; }
+#test .kopf { display: flex; justify-content: space-between; color: #ffd166; font-weight: bold; }
+#test .frage { font-size: 2.4rem; font-weight: bold; margin: 0.3rem 0; }
+#test .antworten { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+#test .antworten button { padding: 0.7rem; font: bold 1.5rem "Comic Sans MS", system-ui, sans-serif; border-radius: 0.6rem; border: 3px solid #f5f5eb88; background: #2f5a45; color: #fff; cursor: pointer; }
+#test .antworten button:hover { background: #3d7559; }
+#test .zeit { height: 10px; border-radius: 5px; background: #0d1f16; overflow: hidden; }
+#test .zeit div { height: 100%; background: #ffd166; }
+#test .tipp { font-size: 0.8rem; color: #c9e6d5; }
+`;
+document.head.appendChild(testStil);
+const testBox = document.createElement('div');
+testBox.id = 'test';
+(document.getElementById('buehne') || document.body).appendChild(testBox);
+function testMalen() {   // Die aktuelle Frage anzeigen
+  const N = nachsitzen, F = N.fragen[N.nr];
+  testBox.innerHTML = '';
+  const neu = (tag, eltern, text, klasse) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (klasse) el.className = klasse; eltern.appendChild(el); return el; };
+  const kopf = neu('div', testBox, undefined, 'kopf'); neu('span', kopf, '📝 TEST'); neu('span', kopf, `Frage ${N.nr + 1} von ${N.fragen.length}`);
+  neu('div', testBox, `${F.text} = ?`, 'frage');
+  const A = neu('div', testBox, undefined, 'antworten');
+  F.antworten.forEach((x, k) => { const b = neu('button', A, `${k + 1})  ${x}`); b.addEventListener('click', () => testAntwort(k)); });
+  N.balken = neu('div', neu('div', testBox, undefined, 'zeit'));
+  neu('div', testBox, 'Klicken oder Taste 1–4 · Eine falsche Antwort = SCHROTT! 💀', 'tipp');
+}
+function nachsitzenStart() {   // 👨‍🏫 ERWISCHT! Ab ins Nachsitz-Zimmer!
+  const M = haus && haus.schule;
+  if (!M || nachsitzen || tot) return;
+  loslassen(); gepackt = null; if (geduckt) ducken(false);
+  for (const k in tasten) tasten[k] = false;
+  spielerKoerper.position.set(M.nachsitz.x, KOERPER_RADIUS + 0.05, M.nachsitz.z); spielerKoerper.velocity.set(0, 0, 0);
+  blick.links = 0; blick.hoch = 0;
+  nachsitzen = { fragen: Array.from({ length: TEST_FRAGEN }, neueFrage), nr: 0, zeit: TEST_ZEIT };
+  testMalen();
+  testBox.style.display = 'flex';
+  if (document.pointerLockElement) document.exitPointerLock();
+  monsterSound.lehrerGlocke(1);
+  zeigeNachricht('👨‍🏫 ERWISCHT! NACHSITZEN! Schreib den Test – eine Antwort falsch, und du bist SCHROTT!', 4, '#ff6b6b');
+}
+function testAntwort(k) {
+  const N = nachsitzen;
+  if (!N) return;
+  const F = N.fragen[N.nr];
+  if (F.antworten[k] !== F.loesung) { testEnde(false, `❌ FALSCH! ${F.text} = ${F.loesung}`); return; }
+  ton(660, 0, 0.1, 'sine', 0.08); ton(880, 0.1, 0.15, 'sine', 0.08);   // Richtig!
+  N.nr++; N.zeit = TEST_ZEIT;
+  if (N.nr >= N.fragen.length) { testEnde(true); return; }
+  testMalen();
+}
+function testEnde(bestanden, grund = '') {
+  nachsitzen = null;
+  testBox.style.display = 'none';
+  const M = haus && haus.schule;
+  if (bestanden) {   // ✅ Du darfst gehen – zurück zum Bus
+    spielerKoerper.position.set(haus.spawn.x, KOERPER_RADIUS + 0.05, haus.spawn.z); spielerKoerper.velocity.set(0, 0, 0);
+    blick.links = -Math.PI / 2;
+    zeigeNachricht('✅ BESTANDEN! Alle 3 richtig – du darfst gehen. Diesmal ...', 3.5, '#4ade80');
+    [523, 659, 784, 1047].forEach((f, i) => ton(f, i * 0.12, 0.25, 'square', 0.06));
+  } else {   // 💀 Durchgefallen: Schrott! Dein Kopf landet im Lehrerzimmer ...
+    zeigeNachricht(`${grund} – DURCHGEFALLEN! 💀`, 4, '#ff6b6b');
+    const K = M && M.kopfPlatz ? M.kopfPlatz : haus.spawn;
+    spielerKoerper.position.set(K.x, 0.6, K.z);
+    spielerStirbt('📝 Beim Test durchgefallen');
+  }
+  if (zustand === 'spiel') mausFangen();
+}
+function testUpdate(dt) {   // Die Zeit läuft ... (wird jedes Bild aufgerufen)
+  if (!nachsitzen) return;
+  if (zustand !== 'spiel' || !haus || !haus.schule) { nachsitzen = null; testBox.style.display = 'none'; return; }
+  nachsitzen.zeit -= dt;
+  if (nachsitzen.balken) { nachsitzen.balken.style.width = `${Math.max(0, nachsitzen.zeit / TEST_ZEIT * 100)}%`; nachsitzen.balken.style.background = nachsitzen.zeit < 5 ? '#ff6b6b' : '#ffd166'; }
+  if (Math.floor(nachsitzen.zeit + dt) !== Math.floor(nachsitzen.zeit) && nachsitzen.zeit < 5) ton(1200, 0, 0.05, 'square', 0.05);   // Tick ... tick ...
+  if (nachsitzen.zeit <= 0) { const F = nachsitzen.fragen[nachsitzen.nr]; testEnde(false, `⏰ ZEIT UM! ${F.text} = ${F.loesung}`); }
+}
+function lehrerFaengt(m) {   // 👨‍🏫 Hat er jemanden erwischt? Dann: Nachsitzen! (statt Energie abziehen)
+  if (m.angriffPause > 0 || m.lehrerRuhe > 0) return;
+  const p = spielerKoerper.position, fuss = p.y - (geduckt ? DUCK_RADIUS : KOERPER_RADIUS), nah = (x, z, y) => abstand2D(m.x, m.z, x, z) < 1.1 && Math.abs(y - m.y) < 1.2;
+  const zufrieden = () => { m.angriffPause = m.info.pause; m.lehrerRuhe = LEHRER_RUHE; m.modus = 'wandern'; m.ziel = null; };
+  if (!tot && !nachsitzen && nah(p.x, p.z, fuss)) { zufrieden(); nachsitzenStart(); return; }
+  for (const g of mpGaeste()) if (nah(g.x, g.z, g.y)) {
+    zufrieden(); mpSendeAn(g, { t: 'nachsitzen' });
+    const t = `📝 ${g.name} muss nachsitzen!`; zeigeNachricht(t, 3, '#ffd166'); mpAnAlle({ t: 'info', text: t, farbe: '#ffd166' });
+    return;
+  }
+  for (const h of helfer) {
+    const hp = h.body.position;
+    if (h.kaputt <= 0 && nah(hp.x, hp.z, hp.y - 0.35)) { zufrieden(); if (h.auftrag) helferLoslassen(h); helferAmStart(h); zeigeNachricht(`📝 ${h.name} musste nachsitzen – und ist jetzt wieder am Bus.`, 3, h.farbe); return; }
+  }
+}
+
+// ----- Karte wählen (in der Lobby) -----
+function karteSchildMalen() {
+  const F = haus && haus.fahrBus;
+  if (!F || !F.karteSchild) return;
+  const g = F.karteSchild.g, K = KARTEN[kartenWahl];
+  g.fillStyle = '#10202a'; g.fillRect(0, 0, 256, 96);
+  g.strokeStyle = K.farbe; g.lineWidth = 6; g.strokeRect(3, 3, 250, 90);
+  g.fillStyle = K.farbe; g.font = 'bold 24px Arial, sans-serif'; g.textAlign = 'center';
+  g.fillText(`${K.emoji} ${K.name.toUpperCase()}`, 128, 44, 240);
+  g.fillStyle = '#ffffff'; g.font = '20px Arial, sans-serif'; g.fillText('E = andere Karte', 128, 78);
+  F.karteSchild.tex.needsUpdate = true;
+  F.karteLampe.material.color.set(K.farbe);
+}
+function karteSetzen(k) {   // 🗺️ Andere Karte: Die ganze Welt wird neu gebaut (nur in der Lobby)
+  if (!lobby || !KARTEN[k] || k === kartenWahl) return;
+  kartenWahl = k;
+  try { localStorage.setItem('arag-karte', k); } catch (e) { /* egal */ }
+  starteLevel(mp.aktiv && mp.startzahl ? mp.startzahl : KARTE.startzahl);
+  ton(523, 0, 0.12, 'square', 0.06); ton(784, 0.12, 0.18, 'square', 0.06);
+  zeigeNachricht(`🗺️ Neues Ziel: ${KARTEN[k].emoji} ${KARTEN[k].name}! Der Bus biegt ab ...`, 3.5, KARTEN[k].farbe);
+}
+
 function zeichneAragLogo(g, x, y, s, schriftFarbe = '#10202a') {
   g.save();
   g.strokeStyle = '#7cf5c6'; g.lineWidth = s * 0.06;
@@ -1913,8 +2578,8 @@ function busSeite(laenge, logo) {   // Eine Seite vom Bus: oben Fenster, unten L
     }
   }).tex;
 }
-function baueBus(mz) {
-  const X1 = -15.4, X2 = -12.0, Z1 = mz - 7, Z2 = mz + 5, H = 3.0, D = 0.15, cx = (X1 + X2) / 2, W = X2 - X1;
+function baueBus(mz, ox = 0) {   // ox: so weit nach rechts verschoben (bei der Schule)
+  const X1 = -15.4 + ox, X2 = -12.0 + ox, Z1 = mz - 7, Z2 = mz + 5, H = 3.0, D = 0.15, cx = (X1 + X2) / 2, W = X2 - X1;
   const TZ1 = Z1 + 1.3, TZ2 = Z1 + 2.7, TZ = (TZ1 + TZ2) / 2;   // Die Tür (rechts vorne – zum Haus hin)
   const gruppe = new THREE.Group(); hausGruppe.add(gruppe);   // (Im Intro fährt die ganze Gruppe heran)
   const lack = new THREE.MeshStandardMaterial({ color: '#eef3f1', roughness: 0.5 });
@@ -1940,7 +2605,7 @@ function baueBus(mz) {
   teil(X2 - D / 2, H / 2, (TZ2 + Z2) / 2, D, H, Z2 - TZ2, mat6(0, new THREE.MeshStandardMaterial({ map: busSeite(Z2 - TZ2, true), roughness: 0.5 }), innen(Z2 - TZ2)));   // Rechts mit Logo
   const front = canvasTextur(384, 336, (g, b, h) => {   // Vorne: Leuchtschrift, Windschutzscheibe, Scheinwerfer
     g.fillStyle = '#eef3f1'; g.fillRect(0, 0, b, h);
-    g.fillStyle = '#111'; g.fillRect(30, 10, b - 60, 42); g.fillStyle = '#ffb02e'; g.font = 'bold 30px monospace'; g.textAlign = 'center'; g.fillText('SPUKVILLA', b / 2, 42);
+    g.fillStyle = '#111'; g.fillRect(30, 10, b - 60, 42); g.fillStyle = '#ffb02e'; g.font = 'bold 30px monospace'; g.textAlign = 'center'; g.fillText(kartenWahl === 'schule' ? 'SCHULE' : 'SPUKVILLA', b / 2, 42, b - 70);
     g.fillStyle = '#0e1a2b'; g.beginPath(); g.roundRect(14, 62, b - 28, 120, 14); g.fill();
     g.fillStyle = 'rgba(124,245,198,0.12)'; g.fillRect(30, 70, 60, 100);
     g.fillStyle = '#7cf5c6'; g.fillRect(0, 196, b, 12);
@@ -2082,7 +2747,15 @@ function baueFahrBus(ox, oz) {
   const botSchild = canvasTextur(256, 96, () => {});
   const botSchildM = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36), new THREE.MeshBasicMaterial({ map: botSchild.tex }));
   botSchildM.position.set(botKnopf.x + 0.12, 2.0, botKnopf.z); botSchildM.rotation.y = -Math.PI / 2; gruppe.add(botSchildM);
-  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, pc, pcBild, puppe, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
+  // 🗺️ Der Karten-Schalter: Wohin fährt der Bus? (Spukvilla oder Schule)
+  const karteKnopf = { x: X2 - 0.5, z: Z1 + 7.3 };
+  teil(karteKnopf.x, 0.5, karteKnopf.z, 0.35, 1.0, 0.35, metallGrauMat); festerKoerper(karteKnopf.x, 0.5, karteKnopf.z, 0.35, 1.0, 0.35);
+  const karteLampe = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshBasicMaterial({ color: '#7cc4ff' }));
+  karteLampe.position.set(karteKnopf.x, 1.08, karteKnopf.z); gruppe.add(karteLampe);
+  const karteSchild = canvasTextur(256, 96, () => {});
+  const karteSchildM = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.36), new THREE.MeshBasicMaterial({ map: karteSchild.tex }));
+  karteSchildM.position.set(karteKnopf.x + 0.12, 2.0, karteKnopf.z); karteSchildM.rotation.y = -Math.PI / 2; gruppe.add(karteSchildM);
+  return { gruppe, x1: X1, x2: X2, z1: Z1, z2: Z2, knopf, knopfOben, monitor, pc, pcBild, puppe, karteKnopf, karteLampe, karteSchild, botKnopf, botLampe, botSchild, lobby: { x: cx, z: Z2 - 2.2 }, licht: { x: cx, y: H - 0.35, z: mz }, landschaft: baueLandschaft(cx, mz) };
 }
 function baueLandschaft(cx, mz) {   // Die Straße durch den nächtlichen Wald (alles bewegt sich nach hinten = der Bus fährt nach vorne)
   const g = new THREE.Group(); hausGruppe.add(g);
@@ -2280,7 +2953,7 @@ function baueWald() {
   if (haus.bus) haus.schuppen.push(haus.bus.schuppen);   // 🚌 Der Bus funktioniert wie ein Gartenhäuschen: rein und raus nur durch die Tür
   if (haus.parkplatz) bauePlatzBoden();
   // 5) Schätze im Wald (im Laub versteckt ...)
-  for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
+  for (let k = 0; k < WALD_SCHAETZE; k++) { const pl = waldPlatz(zufall, rnd); if (pl) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); } }
   baueWiese(B, T, M);   // 🌱🌼 Gras und Wildblumen
   // 6) Der Mond
   const mond = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: '#e9e6cf', fog: false }));
@@ -2841,46 +3514,51 @@ function baueHaus() {
   }
   for (const t of haus.treppen) baueTreppe(t);
 
-  // 5. 🅿️ Draußen vor der Haustür vom Startraum: der Parkplatz mit dem ARAG-Bus und der Abgabe
-  const S = startR, mz = S.z0 + RAUM / 2;
-  haus.parkplatz = [{ x1: -21, x2: -0.6, z1: mz - 11, z2: mz + 10 }, { x1: -17.5, x2: -10, z1: mz + 9, z2: haus.tief * RAUM + WALD_RAND }];   // Parkplatz + Waldweg (da kommt der Bus her)
-  haus.laster = { x1: -8.5, x2: -4.0, z1: mz - 2.3, z2: mz + 2.2 };
-  baueAbgabe();
-  baueBus(mz);
-  haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby: der Bus auf der Fahrt
-  for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
+  if (kartenWahl === 'schule') {   // 📚 Die verfluchte Schule (das leere Villa-Gerüst steht weit weg – da kommt keiner hin)
+    baueSchulKarte();
+    haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby
+  } else {
+    // 5. 🅿️ Draußen vor der Haustür vom Startraum: der Parkplatz mit dem ARAG-Bus und der Abgabe
+    const S = startR, mz = S.z0 + RAUM / 2;
+    haus.parkplatz = [{ x1: -21, x2: -0.6, z1: mz - 11, z2: mz + 10 }, { x1: -17.5, x2: -10, z1: mz + 9, z2: haus.tief * RAUM + WALD_RAND }];   // Parkplatz + Waldweg (da kommt der Bus her)
+    haus.laster = { x1: -8.5, x2: -4.0, z1: mz - 2.3, z2: mz + 2.2 };
+    baueAbgabe();
+    baueBus(mz);
+    haus.fahrBus = LOBBY_AN ? baueFahrBus(LOBBY_ORT.x, LOBBY_ORT.z) : null;   // 🚌💨 Die Lobby: der Bus auf der Fahrt
+    for (const [x, z] of [[8.6, 6.2], [8.9, 7.1], [8.6, 8.7]]) festerKlotz(S.x0 + x, 0.35, S.z0 + z, 0.7, 0.7, 0.7, kistenMat);   // Kisten (Deko)
 
-  // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
-  if (haus.keller) baueKeller();
+    // 5b. 🧪 Der Keller mit dem Labor vom Chemiker
+    if (haus.keller) baueKeller();
 
-  // 6. Möbel, Deko und Schätze in allen anderen Räumen
-  for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
-  for (const R of haus.raeume) wandDeko(R);
-  for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
-  baueWald();   // 🌲 Draußen (nach den Lampen drinnen – die sind wichtiger)
+    // 6. Möbel, Deko und Schätze in allen anderen Räumen
+    for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
+    for (const R of haus.raeume) wandDeko(R);
+    for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
+    baueWald();   // 🌲 Draußen (nach den Lampen drinnen – die sind wichtiger)
 
-  // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
-  const weit = [];
-  for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= MONSTER_START_ABSTAND) weit.push(r);
-  if (!weit.length) for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
-  if (!weit.length) for (let r = 0; r < anzahl; r++) if (r !== haus.start) weit.push(r);
-  for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
-  for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
-  for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
-  for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
-  for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; f.tarnTyp = tarnSchatzWaehlen(); }
-  for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
-  for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
-  for (let k = 0; k < (ld.maulwurf || 0) && haus.baeume; k++) {   // 🐾 Der Maulwurf wohnt draußen im Wald
-    const pl = waldPlatz(); if (!pl) continue;
-    neuesMonster('maulwurf', haus.start);
-    Object.assign(monster[monster.length - 1], { x: pl.x, y: 0, z: pl.z, modus: 'graben' });
-  }
+    // 7. Monster in Räumen weit weg vom Start (auch in den oberen Stockwerken!)
+    const weit = [];
+    for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= MONSTER_START_ABSTAND) weit.push(r);
+    if (!weit.length) for (let r = 0; r < anzahl; r++) if (raumAbstand(haus.start, r) >= 2) weit.push(r);
+    if (!weit.length) for (let r = 0; r < anzahl; r++) if (r !== haus.start) weit.push(r);
+    for (let k = 0; k < ld.geister; k++) neuesMonster('geist', auswahl(weit));
+    for (let k = 0; k < ld.lauscher; k++) neuesMonster('lauscher', auswahl(weit));
+    for (let k = 0; k < ld.starrer; k++) neuesMonster('starrer', auswahl(weit));
+    for (let k = 0; k < ld.jaeger; k++) neuesMonster('jaeger', auswahl(weit));
+    for (let k = 0; k < (ld.formwandler || 0); k++) { neuesMonster('formwandler', auswahl(weit)); const f = monster[monster.length - 1]; f.modus = rnd() < 0.5 ? 'tarnBot' : 'tarnSchatz'; f.tarnTyp = tarnSchatzWaehlen(); }
+    for (let k = 0; k < (ld.schrank || 0); k++) { neuesMonster('schrank', auswahl(weit)); schrankNeuesVersteck(monster[monster.length - 1], true); }
+    for (let k = 0; k < (ld.oma || 0); k++) neuesMonster('oma', auswahl(weit));
+    for (let k = 0; k < (ld.maulwurf || 0) && haus.baeume; k++) {   // 🐾 Der Maulwurf wohnt draußen im Wald
+      const pl = waldPlatz(); if (!pl) continue;
+      neuesMonster('maulwurf', haus.start);
+      Object.assign(monster[monster.length - 1], { x: pl.x, y: 0, z: pl.z, modus: 'graben' });
+    }
 
-  for (let k = 0; k < (ld.chemiker || 0) && haus.keller; k++) {   // 🧪 Der Chemiker wohnt in seinem Labor im Keller
-    neuesMonster('chemiker', haus.start);
-    const L = haus.keller.labor;
-    Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
+    for (let k = 0; k < (ld.chemiker || 0) && haus.keller; k++) {   // 🧪 Der Chemiker wohnt in seinem Labor im Keller
+      neuesMonster('chemiker', haus.start);
+      const L = haus.keller.labor;
+      Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
+    }
   }
 
   // 8. Du startest im ARAG-Bus (Lobby). Deine Helfer stehen neben dir.
@@ -2949,7 +3627,7 @@ function raumEinrichten(R) {
   const anzahl = zufallGanz(1, 3);
   const frei = (x1, z1, x2, z2) => R.belegt.every(b => x2 < b[0] || x1 > b[2] || z2 < b[1] || z1 > b[3]);
   for (let k = 0; k < anzahl; k++) {
-    const typ = gewichtetWaehlen(SCHAETZE);
+    const typ = gewichtetWaehlen(VILLA_SCHAETZE);
     const [sb, sh, st] = typ.groesse;
     if (!typ.boden && R.ablagen.length && rnd() < 0.65) {
       const a = auswahl(R.ablagen);
@@ -3179,6 +3857,54 @@ function baueSchatzMesh(typ) {
     add(new THREE.BoxGeometry(0.05, 0.3, 0.05), goldMat, 0.12, 0.2, 0).rotation.z = -0.3;   // Arm hoch (mit Fackel)
     add(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd166' }), 0.17, 0.37, 0);
     for (let k = 0; k < 5; k++) { const w = k / 5 * Math.PI * 2; add(new THREE.ConeGeometry(0.02, 0.07, 4), goldMat, Math.cos(w) * 0.08, 0.3, Math.sin(w) * 0.08); }   // Strahlenkrone
+  } else if (typ.id === 'mikroskop') {   // 🔬 Fuß, Arm, Tisch und Rohr
+    const schwarz = new THREE.MeshStandardMaterial({ color: '#202226', metalness: 0.5, roughness: 0.4 }), weiss = new THREE.MeshStandardMaterial({ color: '#e8e8e8', roughness: 0.4 });
+    add(new THREE.BoxGeometry(0.2, 0.04, 0.26), schwarz, 0, -h / 2 + 0.02, 0);
+    add(new THREE.BoxGeometry(0.05, 0.3, 0.06), weiss, 0, -h / 2 + 0.18, -0.09).rotation.x = 0.15;
+    add(new THREE.BoxGeometry(0.14, 0.02, 0.12), schwarz, 0, -h / 2 + 0.14, 0.02);
+    add(new THREE.CylinderGeometry(0.03, 0.035, 0.2, 12), weiss, 0, h / 2 - 0.14, -0.02).rotation.x = -0.35;
+    add(new THREE.CylinderGeometry(0.02, 0.02, 0.06, 10), schwarz, 0, h / 2 - 0.03, -0.06).rotation.x = -0.35;
+  } else if (typ.id === 'skelett') {   // 💀 Ein Lern-Skelett auf einem Ständer
+    const knochen = new THREE.MeshStandardMaterial({ color: '#efe6cf', roughness: 0.7 }), staender = new THREE.MeshStandardMaterial({ color: '#555', metalness: 0.6 });
+    add(new THREE.CylinderGeometry(0.18, 0.2, 0.04, 14), staender, 0, -h / 2 + 0.02, 0);
+    add(new THREE.CylinderGeometry(0.015, 0.015, 0.75, 6), staender, 0, -h / 2 + 0.4, 0);
+    add(new THREE.SphereGeometry(0.1, 12, 10), knochen, 0, h / 2 - 0.1, 0).scale.set(0.9, 1.1, 1);
+    add(new THREE.CylinderGeometry(0.018, 0.018, 0.55, 6), knochen, 0, h / 2 - 0.5, 0);   // Wirbelsäule
+    for (let k = 0; k < 4; k++) add(new THREE.TorusGeometry(0.11 - k * 0.012, 0.012, 5, 14), knochen, 0, h / 2 - 0.32 - k * 0.07, 0).rotation.x = Math.PI / 2;   // Rippen
+    add(new THREE.BoxGeometry(0.22, 0.08, 0.1), knochen, 0, h / 2 - 0.8, 0);   // Becken
+    for (const s of [-1, 1]) {
+      add(new THREE.CylinderGeometry(0.014, 0.014, 0.55, 6), knochen, s * 0.17, h / 2 - 0.5, 0).rotation.z = s * 0.12;   // Arme
+      add(new THREE.CylinderGeometry(0.018, 0.018, 0.75, 6), knochen, s * 0.07, h / 2 - 1.2, 0);   // Beine
+    }
+  } else if (typ.id === 'schulglocke') {   // 🔔 Eine alte Messing-Glocke mit Holzgriff
+    add(new THREE.CylinderGeometry(0.05, 0.15, 0.2, 18, 1, true), goldMat, 0, -h / 2 + 0.1, 0).material.side = THREE.DoubleSide;
+    add(new THREE.SphereGeometry(0.05, 10, 8), goldMat, 0, -h / 2 + 0.2, 0);
+    add(new THREE.CylinderGeometry(0.025, 0.03, 0.12, 10), new THREE.MeshStandardMaterial({ color: '#6b4a2b' }), 0, h / 2 - 0.06, 0);
+  } else if (typ.id === 'medaille') {   // 🏅 Goldmedaille am rot-blauen Band
+    add(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 20), goldMat, 0, -h / 2 + 0.08, 0).rotation.x = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.05, 0.12, 0.01), new THREE.MeshStandardMaterial({ color: '#c92a2a' }), -0.03, h / 2 - 0.06, 0).rotation.z = 0.3;
+    add(new THREE.BoxGeometry(0.05, 0.12, 0.01), new THREE.MeshStandardMaterial({ color: '#1c4fa0' }), 0.03, h / 2 - 0.06, 0).rotation.z = -0.3;
+  } else if (typ.id === 'abakus') {   // 🧮 Ein goldener Rechenrahmen mit bunten Perlen
+    for (const s of [-1, 1]) { add(new THREE.BoxGeometry(0.03, h, 0.06), goldMat, s * (b / 2 - 0.015), 0, 0); add(new THREE.BoxGeometry(b, 0.03, 0.06), goldMat, 0, s * (h / 2 - 0.015), 0); }
+    const farben = ['#e03131', '#f08c00', '#2f9e44', '#1971c2', '#9c36b5'];
+    for (let r = 0; r < 5; r++) {
+      const y = -h / 2 + 0.06 + r * 0.055;
+      add(new THREE.CylinderGeometry(0.004, 0.004, b - 0.04, 4), goldMat, 0, y, 0).rotation.z = Math.PI / 2;
+      for (let k = 0; k < 5; k++) add(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshStandardMaterial({ color: farben[r] }), -0.15 + k * 0.045 + (k > 2 ? 0.12 : 0), y, 0);
+    }
+  } else if (typ.id === 'aquarium') {   // 🐠 Ein Glaskasten mit Wasser und Fischen
+    add(new THREE.BoxGeometry(b, h, t), new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: 0.25, roughness: 0.05 }));
+    add(new THREE.BoxGeometry(b - 0.03, h * 0.75, t - 0.03), new THREE.MeshStandardMaterial({ color: '#2a7fb8', transparent: true, opacity: 0.45, emissive: '#0b3a5a' }), 0, -h * 0.1, 0);
+    add(new THREE.BoxGeometry(b - 0.03, 0.04, t - 0.03), new THREE.MeshStandardMaterial({ color: '#c9a66b' }), 0, -h / 2 + 0.03, 0);
+    for (let k = 0; k < 4; k++) add(new THREE.ConeGeometry(0.025, 0.07, 6), new THREE.MeshStandardMaterial({ color: ['#ff922b', '#fcc419', '#ff6b6b', '#ff922b'][k], emissive: '#552200' }), -0.18 + k * 0.12, -0.05 + (k % 2) * 0.08, (k % 3 - 1) * 0.08).rotation.z = Math.PI / 2 * (k % 2 ? 1 : -1);
+  } else if (typ.id === 'schuluhr') {   // 🕐 Eine runde Wanduhr
+    const zf = new THREE.CanvasTexture((() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g2 = c.getContext('2d'); g2.fillStyle = '#f4efe0'; g2.fillRect(0, 0, 64, 64); g2.strokeStyle = '#222'; g2.lineWidth = 4; g2.beginPath(); g2.moveTo(32, 32); g2.lineTo(32, 12); g2.moveTo(32, 32); g2.lineTo(46, 36); g2.stroke(); return c; })());
+    add(new THREE.CylinderGeometry(b / 2, b / 2, t * 0.6, 24), new THREE.MeshStandardMaterial({ color: '#202226' })).rotation.x = Math.PI / 2;
+    add(new THREE.CircleGeometry(b / 2 - 0.02, 24), new THREE.MeshBasicMaterial({ map: zf }), 0, 0, t * 0.31);
+  } else if (typ.id === 'klassenbuch') {   // 📕 Das verfluchte Klassenbuch (es leuchtet unheimlich ...)
+    add(new THREE.BoxGeometry(b, h, t), new THREE.MeshStandardMaterial({ color: '#8b0000', emissive: '#3a0000', emissiveIntensity: 0.8, roughness: 0.6 }));
+    add(new THREE.BoxGeometry(b - 0.03, h * 0.7, t + 0.002), new THREE.MeshStandardMaterial({ color: '#f1e6cc' }), 0.012, 0, 0);
+    add(new THREE.BoxGeometry(0.1, 0.005, 0.1), new THREE.MeshStandardMaterial({ color: '#ffd166', emissive: '#aa7a00', emissiveIntensity: 1 }), 0, h / 2 + 0.003, 0).rotation.y = Math.PI / 4;
   } else if (typ.id === 'goldkiste') {   // 💰 Eine offene Holzkiste, randvoll mit Goldmünzen
     add(new THREE.BoxGeometry(0.7, 0.38, 0.45), new THREE.MeshStandardMaterial({ color: '#5a3a1f', roughness: 0.8 }), 0, -0.06, 0);
     for (const x of [-0.3, 0.3]) add(new THREE.BoxGeometry(0.05, 0.4, 0.47), goldMat, x, -0.06, 0);   // Goldbeschläge
@@ -3264,6 +3990,8 @@ function lasterWert() {
 // 👂 Lauscher: ist blind, hört aber alles! Lauter Krach lockt ihn an. Steh still oder duck dich, dann findet er dich nicht.
 // 🗿 Starrer: eine Steinstatue. Sie bewegt sich NUR, wenn du nicht hinschaust! Lass sie nicht aus den Augen ...
 const MONSTER_ARTEN = {
+  // 👨‍🏫 Herr Kreidemann (nur in der Schule): Erwischt er dich, musst du nachsitzen und einen Test schreiben (siehe TEST_FRAGEN)
+  lehrer:   { name: 'Herr Kreidemann', emoji: '👨‍🏫', tempo: 1.6, jagdTempo: 3.9, schaden: 0, sicht: 15, augen: 1.95, pause: 3, betaeubbar: true },
   geist:    { name: 'Staubgeist', emoji: '👻', tempo: 1.6, jagdTempo: 3.3, schaden: 30, sicht: 14, augen: 1.3, pause: 2, betaeubbar: true },
   lauscher: { name: 'Lauscher',   emoji: '👂', tempo: 1.0, jagdTempo: 4.6, schaden: 45, hoeren: 2.5, pause: 2, betaeubbar: true },
   starrer:  { name: 'Starrer',    emoji: '🗿', tempo: 1.2, jagdTempo: 4.8, schaden: 50, pause: 3, betaeubbar: false },
@@ -3466,6 +4194,27 @@ function baueMonsterMesh(art) {
     const mund = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.02), new THREE.MeshBasicMaterial({ color: '#000' }));
     mund.position.set(0, 1.9, 0.27); g.add(mund);
     g.userData.ohrMat = ohrMat;
+  } else if (art === 'lehrer') {   // 👨‍🏫 Herr Kreidemann: groß, dünn, kreideweiß, rote Brille, langer Mantel, Zeigestock und Handglocke
+    const mantel = new THREE.MeshStandardMaterial({ color: '#2b2f3a', roughness: 0.8 }), haut = new THREE.MeshStandardMaterial({ color: '#e8e6dc', roughness: 0.9 }), dunkel = new THREE.MeshStandardMaterial({ color: '#151518', roughness: 0.6 });
+    const teil = (geo, mat, x, y, z, eltern = g) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); eltern.add(m); return m; };
+    g.userData.beine = [-1, 1].map(s => { const b = new THREE.Group(); b.position.set(s * 0.12, 1.0, 0); g.add(b); teil(new THREE.BoxGeometry(0.12, 1.0, 0.14), dunkel, 0, -0.5, 0, b); teil(new THREE.BoxGeometry(0.14, 0.08, 0.32), dunkel, 0, -0.98, 0.07, b); return b; });
+    teil(new THREE.CylinderGeometry(0.24, 0.36, 1.05, 12), mantel, 0, 1.2, 0);                                      // Langer Mantel
+    teil(new THREE.BoxGeometry(0.5, 0.45, 0.28), mantel, 0, 1.75, 0);                                                // Schultern
+    teil(new THREE.BoxGeometry(0.16, 0.25, 0.02), new THREE.MeshStandardMaterial({ color: '#f4f4f4' }), 0, 1.82, 0.145);   // Hemd
+    teil(new THREE.BoxGeometry(0.14, 0.06, 0.04), new THREE.MeshStandardMaterial({ color: '#8b0000' }), 0, 1.92, 0.15);    // Fliege
+    teil(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 8), haut, 0, 2.03, 0);                                          // Langer Hals
+    const kopf = new THREE.Group(); kopf.position.set(0, 2.27, 0); g.add(kopf); g.userData.kopf = kopf;
+    teil(new THREE.BoxGeometry(0.26, 0.34, 0.26), haut, 0, 0, 0, kopf);          // Eckiger, kreideweißer Kopf
+    teil(new THREE.BoxGeometry(0.28, 0.08, 0.28), dunkel, 0, 0.18, -0.01, kopf); // Glatte schwarze Haare
+    const glas = new THREE.MeshBasicMaterial({ color: '#ff2a2a', fog: false }); g.userData.brille = glas;
+    for (const s of [-1, 1]) teil(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 14), glas, s * 0.065, 0.03, 0.135, kopf).rotation.x = Math.PI / 2;   // Runde, rot leuchtende Brille
+    teil(new THREE.BoxGeometry(0.05, 0.012, 0.012), dunkel, 0, 0.03, 0.14, kopf);
+    teil(new THREE.BoxGeometry(0.12, 0.015, 0.01), dunkel, 0, -0.09, 0.132, kopf);   // Schmaler, strenger Mund
+    g.userData.arme = [-1, 1].map(s => { const a = new THREE.Group(); a.position.set(s * 0.28, 1.92, 0); g.add(a); teil(new THREE.BoxGeometry(0.1, 0.75, 0.12), mantel, 0, -0.36, 0, a); teil(new THREE.SphereGeometry(0.055, 8, 6), haut, 0, -0.76, 0, a); return a; });
+    teil(new THREE.CylinderGeometry(0.012, 0.018, 1.1, 6), new THREE.MeshStandardMaterial({ color: '#8b5a2b' }), 0, -1.3, 0.03, g.userData.arme[1]);   // Rechts: der Zeigestock
+    const gl = new THREE.Group(); gl.position.set(0, -0.82, 0.04); g.userData.arme[0].add(gl);                                              // Links: die Handglocke
+    teil(new THREE.CylinderGeometry(0.025, 0.025, 0.12, 8), new THREE.MeshStandardMaterial({ color: '#4a2c17' }), 0, 0.04, 0, gl);
+    teil(new THREE.CylinderGeometry(0.04, 0.09, 0.12, 14), goldMat, 0, -0.08, 0, gl);
   } else if (art === 'jaeger') {
     // 🤠 Der verrückte Jäger: Stiefel, grüne Jacke, Hut, wilder Bart und eine Schrotflinte
     const mat = f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.9 });
@@ -3643,6 +4392,7 @@ function starrerGesehen(m) {
   return freieSicht(kamera.position.clone(), kopf);
 }
 function zufallsZiel(m) {   // Irgendwo hin wandern (meist in einen Nachbarraum, auch mal die Treppe hoch)
+  if (haus.schule) return schulZufallsZiel(m);   // 📚 In der Schule
   if (m.art === 'chemiker' && haus.keller) {   // 🧪 Der Chemiker bleibt in seinem Keller – meistens rührt er im Labor herum
     const K = haus.keller, L = Math.random() < 0.4 ? K.laborMitte : null;
     if (L) return { x: L.x + zufall(-1.5, 1.5), y: K.boden, z: L.z + zufall(-1.5, 1.5) };
@@ -3684,7 +4434,8 @@ function updateMonster(m, dt) {
     m.modus = 'jagen';
   } else {
     // Sehen (nicht jedes Bild, das spart Rechenzeit)
-    if (info.sicht) {
+    if (m.lehrerRuhe > 0) m.lehrerRuhe -= dt;   // (Der Lehrer ist gerade zufrieden und sieht niemanden)
+    if (info.sicht && !(m.lehrerRuhe > 0)) {
       m.sichtCheck -= dt;
       if (m.sichtCheck <= 0) {
         m.sichtCheck = 0.2;
@@ -3694,6 +4445,7 @@ function updateMonster(m, dt) {
           if (m.modus !== 'jagen') {
             if (opfer.spieler) {
               if (m.art === 'jaeger') { monsterSound.jaeger(1, true); zeigeNachricht('🤠 Der verrückte Jäger hat dich gesehen! IN DECKUNG!', 2, '#ff6b6b'); }
+              else if (m.art === 'lehrer') { monsterSound.lehrerGlocke(1); zeigeNachricht('👨‍🏫 HERR KREIDEMANN hat dich gesehen! Lauf – sonst musst du NACHSITZEN!', 2.5, '#ff6b6b'); }
               else if (m.art === 'chemiker') { monsterSound.chemikerLacht(1); zeigeNachricht('🐷 OINK-HAHAHA! Doktor Schorsch hat dich gesehen! Pass auf seine Tränke auf!', 2.5, '#ff9ab0'); }
               else { sound.geist(); zeigeNachricht(`${info.emoji} Der ${info.name} hat dich gesehen! LAUF!`, 2, '#ff6b6b'); }
             } else if (opfer.helfer) {
@@ -3758,9 +4510,13 @@ function updateMonster(m, dt) {
   } else if (m.modus === 'nachsehen' || (m.art === 'lauscher' && m.modus === 'jagen')) {
     m.zielZeit = Math.min(m.zielZeit, 1.5);   // Angekommen und nichts gefunden
   }
-  const zaun = MONSTER_DRAUSSEN ? WALD_RAND - 0.5 : -0.4;   // Nicht durch den Zaun (oder: nicht durch die Außenwand)
-  m.x = begrenzt(m.x, -zaun, haus.breit * RAUM + zaun); m.z = begrenzt(m.z, -zaun, haus.tief * RAUM + zaun);
+  if (haus.schule) { const M = haus.schule; m.x = begrenzt(m.x, M.x0 + 0.4, M.x1 - 0.4); m.z = begrenzt(m.z, M.z0 + 0.4, M.z1 - 0.4); }   // 📚 Nicht aus der Schule raus
+  else {
+    const zaun = MONSTER_DRAUSSEN ? WALD_RAND - 0.5 : -0.4;   // Nicht durch den Zaun (oder: nicht durch die Außenwand)
+    m.x = begrenzt(m.x, -zaun, haus.breit * RAUM + zaun); m.z = begrenzt(m.z, -zaun, haus.tief * RAUM + zaun);
+  }
   m.y = bodenHoeheBei(m.x, m.z, m.y);   // Auf dem Boden oder auf der Treppe bleiben
+  if (m.art === 'lehrer') { lehrerFaengt(m); m.angriffPause = Math.max(m.angriffPause, 0.1); }   // 👨‍🏫 Er haut nicht – er lässt nachsitzen!
   // Angriff! Auf dich ... (Die Oma schlägt nur zu, wenn sie wütend ist)
   const reichweite = m.art === 'oma' ? 1.3 : m.art === 'maulwurf' ? 1.8 : 1.0, schubs = info.schubs || 9;
   if (m.art === 'maulwurf' && m.modus !== 'oben') m.angriffPause = Math.max(m.angriffPause, 0.1);   // Unter der Erde kann er nicht hauen
@@ -4045,6 +4801,7 @@ function formwandlerUpdate(m, dt) {
     return info.jagdTempo;
   }
   // Abhauen: in einen anderen Raum (weit weg von allen), dort neu tarnen
+  if (!m.ziel && haus.schule) m.ziel = schulWeitWeg(m);   // 📚 In der Schule: in einen anderen Flügel
   if (!m.ziel) {
     const raeume = haus.raeume.filter(R => R.nr !== haus.start && raumAbstand(haus.start, R.nr) >= 2 && raumNrVon(m.x, m.y + 0.5, m.z) !== R.nr);
     const R = raeume.length ? auswahl(raeume) : haus.raeume[0];
@@ -4304,6 +5061,16 @@ function zeigeMonster(m) {
     g.position.set(m.x, m.y + Math.abs(schritt) * 0.08, m.z);
     g.rotation.set(m.betaeubt > 0 ? 0.3 : 0, m.winkel, schritt * 0.05);
     g.userData.ohrMat.emissive.set(m.modus === 'jagen' ? '#7a1f5a' : '#000000');   // Ohren glühen, wenn er was gehört hat
+  } else if (m.art === 'lehrer') {
+    const U = g.userData, jagt = m.modus === 'jagen', schritt = m.laeuft ? Math.sin(m.phase * (jagt ? 10 : 5)) : 0;
+    const ruck = Math.round(schritt * 3) / 3;   // Er geht steif und ruckartig – wie eine Aufziehpuppe ...
+    g.position.set(m.x, m.y + Math.abs(ruck) * 0.04, m.z);
+    g.rotation.set(m.betaeubt > 0 ? 0.25 : 0, m.winkel + (m.betaeubt > 0 ? Math.sin(zeit * 8) * 0.4 : 0), 0);
+    U.beine[0].rotation.x = ruck * 0.45; U.beine[1].rotation.x = -ruck * 0.45;
+    U.arme[1].rotation.x = jagt ? -1.4 + Math.sin(zeit * 6) * 0.15 : -0.1 - ruck * 0.2;   // Beim Jagen zeigt er mit dem Stock auf dich!
+    U.arme[0].rotation.x = jagt ? -0.5 + Math.sin(zeit * 18) * 0.35 : ruck * 0.3;        // ... und läutet die Glocke
+    U.kopf.rotation.z = jagt ? Math.sin(zeit * 3) * 0.08 : Math.sin(zeit * 0.7 + m.phase) > 0.95 ? 0.4 : 0;   // Manchmal legt er den Kopf schief ...
+    U.brille.color.set(m.lehrerRuhe > 0 ? '#7a2020' : jagt && Math.sin(zeit * 20) > 0 ? '#ffffff' : '#ff2a2a');
   } else if (m.art === 'jaeger') {
     const schritt = m.laeuft ? Math.sin(m.phase * (m.modus === 'jagen' ? 11 : 6)) : 0;
     g.position.set(m.x, m.y + Math.abs(schritt) * 0.05, m.z);
@@ -5511,13 +6278,18 @@ function abgeben(s) {
   schatzEntfernen(s);
 }
 function neuerSchatzIrgendwo() {   // Ein neuer Schatz in einem zufälligen Raum (nicht in der Garage) – oder draußen im Wald
+  if (haus.schule) {   // 📚 In der Schule: irgendwo in einem Klassenzimmer
+    const pl = schulSchatzPlatz(Math.random);
+    if (pl) { const typ = schulSchatzTyp(); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); }
+    return;
+  }
   if (haus.baeume && Math.random() < WALD_NEU_ANTEIL) {
     const pl = waldPlatz((a, b) => a + Math.random() * (b - a));
-    if (pl) { const typ = gewichtetWaehlen(SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); return; }
+    if (pl) { const typ = gewichtetWaehlen(VILLA_SCHAETZE); neuerSchatz(typ, pl.x, typ.groesse[1] / 2 + 0.05, pl.z); return; }
   }
   const raeume = haus.raeume.filter(R => R.nr !== haus.start);
   const R = raeume[Math.floor(Math.random() * raeume.length)];
-  const typ = gewichtetWaehlen(SCHAETZE), sh = typ.groesse[1];
+  const typ = gewichtetWaehlen(VILLA_SCHAETZE), sh = typ.groesse[1];
   if (!typ.boden && R.ablagen.length && Math.random() < 0.6) {
     const a = R.ablagen[Math.floor(Math.random() * R.ablagen.length)];
     neuerSchatz(typ, a.x + zufall(-a.b / 2, a.b / 2) * 0.7, a.y + sh / 2 + 0.03, a.z + zufall(-a.t / 2, a.t / 2) * 0.7);
@@ -5583,6 +6355,11 @@ function lautBei(p) {
 // ===== 🎬 Intro und 🚌 Lobby =====
 // =====================================================================
 // Das Intro: Die Kamera fliegt durch den Wald, der Bus kommt angefahren, am Ende das Logo
+const INTRO_TEXTE_SCHULE = [
+  [0.8, 4.3, '🌙 Mitten in der Nacht, am Rand einer kleinen Stadt ...'],
+  [4.5, 8.2, '📚 ... steht eine verlassene Schule. Und der Lehrer ist IMMER NOCH DA.'],
+  [8.4, 10.3, '🚌 Zum Glück gibt es ...'],
+];
 const INTRO_TEXTE = [
   [0.8, 4.3, '🌲 Irgendwo, tief in einem dunklen Wald ...'],
   [4.5, 8.2, '🏚️ ... steht eine alte Spukvilla. Voller Schätze – und voller Monster.'],
@@ -5591,7 +6368,8 @@ const INTRO_TEXTE = [
 const busVersatz = t => { const u = begrenzt((t - 1.5) / 7.5, 0, 1); return 40 * Math.pow(1 - u, 2.2); };   // Wie weit der Bus noch weg ist (er bremst am Ende sanft)
 function introStarten() {
   introZeit = 0;
-  const B = haus.bus, cx = (B.x1 + B.x2) / 2, mz = (B.z1 + B.z2) / 2, hx = haus.breit * RAUM / 2, hz = haus.tief * RAUM / 2;
+  const B = haus.bus, cx = (B.x1 + B.x2) / 2, mz = (B.z1 + B.z2) / 2;
+  const hx = haus.schule ? SCHUL_ORT + 12 : haus.breit * RAUM / 2, hz = haus.schule ? (haus.schule.z0 + haus.schule.z1) / 2 : haus.tief * RAUM / 2;   // Dahin schaut die Kamera am Anfang
   const v = (x, y, z) => new THREE.Vector3(x, y, z);
   B.introWeg = new THREE.CatmullRomCurve3([v(cx - 32, 30, B.z2 + 50), v(cx - 20, 12, B.z2 + 30), v(cx - 12, 4, mz + 10), v(B.x2 + 5.5, 1.9, mz + 1.5), v(B.x2 + 4, 1.7, B.tuerZ)]);
   B.introBlick = new THREE.CatmullRomCurve3([v(hx, 4, hz), v(cx, 1.5, B.z2 + 22), v(cx, 1.5, mz), v(B.x2, 1.6, mz + 1.5), v(B.x2, 1.3, B.tuerZ)]);
@@ -5621,7 +6399,7 @@ function introKamera() {
 function zeichneIntro() {
   const t = introZeit, sicht = (a, b) => t >= a && t < b ? Math.min(1, (t - a) / 0.6, (b - t) / 0.6) : 0;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H * 0.1); ctx.fillRect(0, H * 0.9, W, H * 0.1);   // Kino-Balken
-  for (const [a, b, txt] of INTRO_TEXTE) { const s = sicht(a, b); if (s > 0) { ctx.globalAlpha = s; text(txt, W / 2, H * 0.84, 26, '#fff'); ctx.globalAlpha = 1; } }
+  for (const [a, b, txt] of kartenWahl === 'schule' ? INTRO_TEXTE_SCHULE : INTRO_TEXTE) { const s = sicht(a, b); if (s > 0) { ctx.globalAlpha = s; text(txt, W / 2, H * 0.84, 26, '#fff'); ctx.globalAlpha = 1; } }
   const s = sicht(10.4, INTRO_DAUER - 0.3);
   if (s > 0) {   // Das Logo!
     ctx.globalAlpha = s;
@@ -5638,12 +6416,15 @@ function zeichneIntro() {
 function lobbyWillkommen() {
   zeigeNachricht(mp.aktiv ? '🚌 Willkommen im ARAG-Bus! Wenn alle da sind: roter Knopf 🔴 + E – dann sind wir da!' : '🚌 Willkommen im ARAG-Bus! Drück am roten Knopf 🔴 E – dann sind wir da!', 5);
 }
-function startNachricht() { zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); }
+function startNachricht() {
+  if (kartenWahl === 'schule') { zeigeNachricht(`📚 Die verfluchte Schule! Holt ${gewinnZiel()} Schätze raus in die Abgabe 🚚 – und lasst euch NICHT von Herrn Kreidemann erwischen! 📝`, 6); return; }
+  zeigeNachricht(`🏚️ Die große Spukvilla! Verkauft ${gewinnZiel()} Schätze in der Abgabe 🚚 – und bleibt alle am Leben!`, 5); 
+}
 function lobbyKnopf() {   // Vor welchem Knopf im Bus stehst du? ('los', 'bots', 'pc' oder null)
   const B = haus && haus.fahrBus, p = spielerKoerper.position;
   if (!B || tot) return null;
   let best = null, bestD = 1.4;
-  for (const [was, q] of [['los', B.knopf], ['bots', B.botKnopf], ['pc', B.pc], ['pc', B.puppe]]) {
+  for (const [was, q] of [['los', B.knopf], ['bots', B.botKnopf], ['karte', B.karteKnopf], ['pc', B.pc], ['pc', B.puppe]]) {
     const d = abstand2D(p.x, p.z, q.x, q.z);
     if (d < bestD) { bestD = d; best = was; }
   }
@@ -5736,6 +6517,11 @@ function busUpdate(dt) {
   const B = haus && haus.bus;
   if (!B) return;
   heilUpdate(B, dt);
+  if (haus.schule) {   // 📚 Flackernde Neonröhren
+    const [a, b] = haus.schule.flimmer;
+    a.color.set(Math.random() < 0.08 ? '#2a2c30' : '#f2f6ff');
+    b.color.set(Math.sin(zeit * 0.9) > 0.6 && Math.random() < 0.5 ? '#2a2c30' : '#e8eeff');
+  }
   B.gruppe.position.z = introZeit >= 0 ? busVersatz(introZeit) : 0;   // Im Intro kommt der Bus angefahren
   const F = haus.fahrBus;
   if (B.licht) {   // Das Licht: in der Lobby im fahrenden Bus, danach im echten Bus (im Intro erst, wenn er angekommen ist)
@@ -5763,7 +6549,7 @@ function maleMonitor() {
   zeichneAragLogo(g, 22, 30, 42, '#ffffff');
   g.textAlign = 'left'; g.fillStyle = '#7cf5c6'; g.font = 'bold 20px Arial, sans-serif'; g.fillText('EINSATZ-BUS · LOBBY', 245, 52);
   g.fillStyle = '#ffffff'; g.font = '19px Arial, sans-serif';
-  g.fillText('🏚️ Auftrag: Die große Spukvilla (wir sind unterwegs!)', 22, 115);
+  g.fillText(kartenWahl === 'schule' ? '📚 Auftrag: Die verfluchte Schule (wir sind unterwegs!)' : '🏚️ Auftrag: Die große Spukvilla (wir sind unterwegs!)', 22, 115);
   g.fillText(`🏆 Ziel: ${gewinnZiel()} Schätze verkaufen`, 22, 145);
   g.fillText(`💰 Rekord: ${euro(rekord)}`, 22, 175);
   const team = [meinName(), ...[...mp.andere.values()].map(o => o.name), ...helfer.map(x => x.name)];
@@ -5914,6 +6700,7 @@ function zeichneLobbyHUD() {   // Oben in der Mitte: Was muss ich in der Lobby t
   text(mp.aktiv ? `${mp.andere.size + 1} Spieler im Bus · Alle bereit? Einer drückt den roten Knopf 🔴` : 'Bereit? Lauf zum roten Knopf 🔴 an der Tür!', W / 2, 62, 13, '#c9c3ff', 'center', false);
   if (amKnopf()) text('🔴 E: LOS GEHT\'S!', W / 2, H / 2 + 150, 22, '#ff6b6b');
   else if (lobbyKnopf() === 'bots') text(`🤖 E: ${mitBots ? 'OHNE' : 'MIT'} Bots spielen`, W / 2, H / 2 + 150, 20, mitBots ? '#c9c3ff' : '#4ade80');
+  else if (lobbyKnopf() === 'karte') { const K = KARTEN[kartenWahl === 'schule' ? 'villa' : 'schule']; text(`🗺️ E: Lieber zur ${K.emoji} ${K.name} fahren`, W / 2, H / 2 + 150, 20, K.farbe); }
   else if (lobbyKnopf() === 'pc' && !werkstattOffen) text('🎨 E: Roboter-Werkstatt (Farbe, Hüte & mehr!)', W / 2, H / 2 + 150, 20, '#ff6b9d');
 }
 // ===== 💀 Alle Roboter Schrott = Spiel aus → zurück in den Bus (Lobby) =====
@@ -5953,14 +6740,14 @@ function neuesSpiel() {
 }
 function starteLevel(startzahl = KARTE.startzahl) {
   mitStartzahl(startzahl, baueHaus);   // Gleiche Startzahl = gleiches Haus
-  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto, bots: mitBots }); }
+  if (mp.rolle === 'host') { mp.startzahl = startzahl; mpAnAlle({ t: 'start', level, seed: startzahl, konto, bots: mitBots, karte: kartenWahl }); }
   if (mp.rolle === 'gast') mpGastVorbereiten();
   energie = 100; ausdauer = AUSDAUER_MAX;
   spielZeit = 0; pause = false; zielGemeldet = false; blitzLadung = 1;
   tot = false; meinKopfId = null; neuerSchatzZeit = NEUER_SCHATZ_ALLE; schatzStartAnzahl = schaetze.length; verkauft = 0; gewinnHinweisZeit = -99;
   zustand = 'spiel';
   lobby = LOBBY_AN; introZeit = -1; einblenden = 1; schrottZeit = -1;
-  if (lobby) { lobbyWillkommen(); botSchildMalen(); }   // Erst fährt der Bus (Lobby) ...
+  if (lobby) { lobbyWillkommen(); botSchildMalen(); karteSchildMalen(); }   // Erst fährt der Bus (Lobby) ...
   else if (INTRO_AN) introStarten();     // ... ohne Lobby gleich das Intro
   else ausTuer();
   mausFangen();
@@ -6089,7 +6876,8 @@ function zeichneHUD() {
   text(`🔧 Wiederbeleben: ${euro(WIEDERBELEBEN_PREIS)}`, 280, 30, 12, genug ? '#4ade80' : '#c9c3ff', 'right', false);
   balken(24, 50, 256, 14, konto / WIEDERBELEBEN_PREIS, genug ? '#4ade80' : '#ffd166');
   const raum = haus.raeume[begrenzt(raumNrVon(p.x, p.y, p.z), 0, haus.raeume.length - 1)] || haus.raeume[haus.start];
-  text(lobby ? '📍 🚌💨 Im ARAG-Bus – unterwegs' : imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
+  const sr = haus.schule ? schulRaumBei(p.x, p.z) : null;
+  text(lobby ? '📍 🚌💨 Im ARAG-Bus – unterwegs' : nachsitzen ? '📍 📝 NACHSITZEN' : sr ? `📍 ${sr.emoji} ${sr.name}` : haus.schule && imSchulhaus(p.x, p.z) ? '📍 🚶 Im Flur' : haus.schule && !schuppenBei(p.x, p.z) ? '📍 🏫 Auf dem Schulhof' : imKeller(p) ? '📍 🧪 Im Keller' : imHaus(p.x, p.z) ? `📍 ${raum.art.emoji} ${raum.art.name} · ${ETAGEN_NAMEN[raum.e]}` : schuppenBei(p.x, p.z) ? (schuppenBei(p.x, p.z).bus ? '📍 🚌 Im ARAG-Bus' : '📍 🛖 Im Gartenhäuschen') : imParkplatz(p.x, p.z) ? '📍 🅿️ Auf dem Parkplatz' : '📍 🌲 Draußen im Wald', 24, 86, 13, '#c9c3ff', 'left', false);
   if (!tot) { const tu = tuerBeiMir(); if (tu) text(`🚪 E: Tür ${tu.auf ? 'zumachen' : 'aufmachen'}`, W / 2, H / 2 + 150, 15, '#ffd166'); }
   if (lobby) zeichneLobbyHUD();
   else if (haus.bus && !tot && aufHeilplatte(p.x, p.z, p.y)) text(energie < 100 ? `🔧 Reparatur ... ${Math.floor(energie)} %` : '✅ Voll repariert!', W / 2, H / 2 + 150, 18, '#4ade80');
@@ -6191,7 +6979,7 @@ function zeichneHUD() {
     text(nachricht.text, W / 2, H / 2 - 90, 20, nachricht.farbe);
     ctx.globalAlpha = 1;
   }
-  if (pause && !werkstattOffen) {
+  if (pause && !werkstattOffen && !nachsitzen) {
     ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, 0, W, H);
     text('⏸️ PAUSE', W / 2, H / 2 - 20, 48, '#7cf5c6');
     text('Klicken: Weiterspielen', W / 2, H / 2 + 30, 18, '#fff');
@@ -6420,7 +7208,8 @@ document.addEventListener('pointerlockchange', () => {
 addEventListener('keydown', e => {
   tonStart();
   const k = e.key.toLowerCase();
-  if (werkstattOffen) { if ((k === 'e' || k === 'escape') && !e.repeat) werkstattZu(); return; }   // 🎨 In der Werkstatt läufst du nicht herum
+  if (werkstattOffen) { if ((k === 'e' || k === 'escape') && !e.repeat) werkstattZu(); return; }
+  if (nachsitzen) { if (!e.repeat && ['1', '2', '3', '4'].includes(k)) testAntwort(Number(k) - 1); return; }   // 📝 Im Test: nur antworten!   // 🎨 In der Werkstatt läufst du nicht herum
   tasten[k] = true;
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
@@ -6430,6 +7219,7 @@ addEventListener('keydown', e => {
   if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
   if (k === 'e' && zustand === 'spiel' && lobby && lobbyKnopf()) {   // 🔴 LOS! oder 🤖 Bots an/aus oder 🎨 Werkstatt
     if (lobbyKnopf() === 'pc') werkstattAuf();
+    else if (lobbyKnopf() === 'karte') { if (mp.rolle === 'gast') mpSende({ t: 'karteBitte' }); else karteSetzen(kartenWahl === 'schule' ? 'villa' : 'schule'); }
     else if (lobbyKnopf() === 'los') { if (mp.rolle === 'gast') mpSende({ t: 'losBitte' }); else losGehts(); }
     else if (mp.rolle === 'gast') mpSende({ t: 'botsBitte' }); else botsSetzen(!mitBots);
     return;
@@ -6441,6 +7231,7 @@ addEventListener('keydown', e => { if (e.key.toLowerCase() === VOICE_TASTE && !e
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
 canvas.addEventListener('pointerdown', e => {
   tonStart();
+  if (nachsitzen || werkstattOffen) return;   // (Da wird im Menü geklickt)
   if (zustand === 'titel') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
   if (zustand === 'geschafft') { if (mp.rolle !== 'gast') neuesSpiel(); return; }
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
@@ -6597,7 +7388,7 @@ function mpNeuerGast(conn) {
     lookAnwenden(g, lookSauber(conn.metadata && conn.metadata.look));   // 🎨🎩 ... und sein Aussehen
     mp.andere.set(g.id, g);
     conn.send({ t: 'hallo', nr, code: mp.code });
-    conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0 });
+    conn.send({ t: 'start', level, seed: mp.startzahl, konto, bots: helfer.length > 0, karte: kartenWahl });
     zeigeNachricht(`🤖 ${g.name} ist dem Raum beigetreten!`, 3);
     sound.abgabe();
   });
@@ -6629,7 +7420,8 @@ function mpVomGast(g, d) {
     const s = schatzMitId(d.id);
     if (s) { s.body.velocity.set(d.v[0], d.v[1], d.v[2]); s.geworfen = 1.5; s.body.wakeUp(); }
     g.hg = -1;
-  } else if (d.t === 'losBitte') losGehts();   // 🔴 Ein Gast hat im Bus den Knopf gedrückt
+  } else if (d.t === 'losBitte') losGehts();
+  else if (d.t === 'karteBitte') karteSetzen(kartenWahl === 'schule' ? 'villa' : 'schule');   // 🗺️ Ein Gast will die andere Karte   // 🔴 Ein Gast hat im Bus den Knopf gedrückt
   else if (d.t === 'botsBitte') botsSetzen(!mitBots);   // 🤖 Ein Gast hat den Bot-Schalter gedrückt
   else if (d.t === 'blitz') {   // Ein Gast blitzt: Monster blenden, und alle sehen seine Lampe aufblitzen
     blitzVon(new THREE.Vector3(...d.p), new THREE.Vector3(...d.r).normalize(), false);
@@ -6722,10 +7514,12 @@ function mpSchatzWeg(s) {
 function mpVomHost(d) {
   if (!d || !d.t) return;
   if (d.t === 'hallo') { mp.nr = d.nr; return; }
+  if (d.t === 'nachsitzen') { nachsitzenStart(); return; }   // 👨‍🏫 Der Lehrer hat MICH erwischt!
   if (d.t === 'voll') { mpVerbindungWeg('Der Raum ist voll (höchstens 4 Spieler).'); return; }
   if (d.t === 'start') {
     level = d.level; konto = d.konto;
     if (typeof d.bots === 'boolean') mitBots = d.bots;   // (Der Gastgeber bestimmt, ob Bots mitspielen)
+    if (KARTEN[d.karte]) kartenWahl = d.karte;            // ... und wohin die Fahrt geht
     starteLevel(d.seed);
     zeigeNachricht(`🌐 Du bist ${meinName()}! Raum ${mp.code} – Level ${level}`, 4, MP_ROBOTER[mp.nr].farbe);
     return;
@@ -6978,11 +7772,12 @@ function geworfenWerden(v, von) {
 // 🚧 Niemand kommt über den Zaun – egal ob hochgehoben, geworfen oder gesprungen (der Zaun reicht unsichtbar bis zum Himmel)
 const ZAUN_INNEN = 0.5;   // So weit bleibst du mindestens vom Zaun weg
 function imZaun(x, z) {   // Den Punkt (x, z) zurück hinter den Zaun schieben
+  if (haus.schule) { const M = haus.schule; return { x: begrenzt(x, M.x0 + 0.5, M.x1 - 0.5), z: begrenzt(z, M.z0 + 0.5, M.z1 - 0.5) }; }   // 📚 Die Schule
   const M = WALD_RAND - ZAUN_INNEN, B = haus.breit * RAUM, T = haus.tief * RAUM;
   return { x: begrenzt(x, -M, B + M), z: begrenzt(z, -M, T + M) };
 }
 function zaunHalten() {
-  if (lobby || introZeit >= 0 || !haus || tot) return;   // (Die Lobby ist weit weg, und im Intro fährt der Bus erst rein – da gilt der Zaun nicht)
+  if (lobby || introZeit >= 0 || !haus || tot || nachsitzen) return;   // (Beim Nachsitzen bist du im Nachsitz-Zimmer – weit weg)   // (Die Lobby ist weit weg, und im Intro fährt der Bus erst rein – da gilt der Zaun nicht)
   const p = spielerKoerper.position, v = spielerKoerper.velocity, q = imZaun(p.x, p.z);
   if (q.x !== p.x) { p.x = q.x; v.x = 0; }
   if (q.z !== p.z) { p.z = q.z; v.z = 0; }
@@ -7152,7 +7947,7 @@ function schleife(jetzt) {
       schwebendSpieler = gegriffen || gepackt || schwebend ? null : schauAufSpieler();
     }
   } catch (e) { console.error('Fehler in update:', e); }
-  try { puppeUpdate(dt); } catch (e) { console.error('Fehler bei der Puppe:', e); }
+  try { puppeUpdate(dt); testUpdate(dt); } catch (e) { console.error('Fehler bei der Puppe/beim Test:', e); }
   try { zeichne(); } catch (e) { console.error('Fehler beim Zeichnen:', e); }
   requestAnimationFrame(schleife);
 }
