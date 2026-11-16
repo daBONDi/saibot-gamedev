@@ -5099,7 +5099,7 @@ function zeigeMonster(m) {
     U.arme[1].rotation.set(-1.1, 0, -0.1);
     const klopf = (U.stehT || 0) * LEHRER_KLOPFEN;   // (Klopfer pro Sekunde, nur wenn er steht)
     const steht = !m.laeuft;
-    U.arme[0].rotation.x = steht ? -1.25 - 0.52 * Math.pow(Math.sin(klopf * Math.PI), 2) : -1.75;   // -1.75 = Stock hoch · -1.25 = Stock liegt auf der Hand
+    U.arme[0].rotation.x = steht ? -1.12 - 0.6 * Math.pow(Math.sin(klopf * Math.PI), 2) : -1.75;   // -1.75 = Stock hoch · -1.12 = Stock liegt auf der Hand
     if (steht && Math.floor(klopf) !== Math.floor(klopf - LEHRER_KLOPFEN / 60) && klopf > 0.5) monsterSound.lehrerKlatsch(monsterLautstaerke(m));
     U.kopf.rotation.z = jagt ? Math.sin(zeit * 3) * 0.08 : Math.sin(zeit * 0.7 + m.phase) > 0.95 ? 0.4 : 0;   // Manchmal legt er den Kopf schief ...
     U.brille.color.set(m.lehrerRuhe > 0 ? '#7a2020' : jagt && Math.sin(zeit * 20) > 0 ? '#ffffff' : '#ff2a2a');
