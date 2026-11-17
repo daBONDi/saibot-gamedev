@@ -41,7 +41,12 @@ const JAGD_TEMPO_BOT_WERWOLF = 175; // So schnell ist ein Computer-Werwolf
 const JAGD_TEMPO_FLUCHT = 150;      // So schnell rennen Computer-Schafe weg
 const JAGD_GRUBE_MAX = 8;           // So lange darf ein Schaf höchstens in den Gruben bleiben
 const JAGD_GRUBE_SPERRE = 4;        // So lange muss man warten, bis man wieder in eine Grube darf
-const JAGD_FANG_ABSTAND = 38;       // So nah muss der Werwolf ran, um ein Schaf zu fangen               // So viele Sekunden hat die Herde, um das Gatter zu schließen
+const JAGD_FANG_ABSTAND = 38;       // So nah muss der Werwolf ran, um ein Schaf zu fangen
+const JAGD_GRUBEN_SPRUENGE = 3;     // So oft darf jedes Schaf pro Runde in eine Grube springen
+const JAGD_LAMPE_WEITE = 330;       // 🔦 So weit leuchtet die Taschenlampe
+const JAGD_LAMPE_WINKEL = 0.5;      // 🔦 So breit ist der Lichtkegel (0.5 = nach links und rechts je ein kleines Stück)
+const JAGD_NAH = 75;                // So viel siehst du direkt um dich herum (auch ohne Lampe)
+const DETEKTOR_WEITE = 650;         // 📡 Ab hier schlägt der Wolf-Detektor aus               // So viele Sekunden hat die Herde, um das Gatter zu schließen
 
 // Die Karten (Orte, Farben ...) stehen in karten.js
 let KARTE, ORTE, GLOCKE;
@@ -582,7 +587,7 @@ function neuesSpiel() {
 function jagdVorbereiten(test) {
   // Keine Aufgaben, keine Rollen, keine Sabotage – nur Wegrennen!
   for (const s of schafe) {
-    s.istWolf = false; s.rolle = 'normal'; s.cooldown = 0;
+    s.istWolf = false; s.rolle = 'normal'; s.cooldown = 0; s.grubenUebrig = JAGD_GRUBEN_SPRUENGE;
     s.aufgaben = []; s.alleAufgaben = []; s.gesamt = 0; s.erledigt = 0;
   }
   // Wer ist der Werwolf? Am liebsten ein echter Spieler (du oder ein Mitspieler)
@@ -675,7 +680,7 @@ function fluchtBot(s, dt) {   // Ein Computer-Schaf bei der Werwolf-Jagd
   if (gefahr) {
     s.warte = 0; s.ziel = null;
     // Eine Grube in der Nähe? Rein da! (Aber nur, wenn der Werwolf nicht näher dran ist)
-    const gi = zeit - (s.rausZeit ?? -99) > JAGD_GRUBE_SPERRE ? naechsteGrube(s, 170) : null;
+    const gi = zeit - (s.rausZeit ?? -99) > JAGD_GRUBE_SPERRE && s.grubenUebrig > 0 ? naechsteGrube(s, 170) : null;
     if (gi !== null && dist(G[gi], ww) > dist(G[gi], s) + 20) {
       if (laufeZu(s, G[gi], JAGD_TEMPO_FLUCHT, dt) || dist(s, G[gi]) < 25) { springeInGrube(s, gi); s.grubeWarte = 1.5 + Math.random() * 4; }
       return;
@@ -691,15 +696,88 @@ function fluchtBot(s, dt) {   // Ein Computer-Schaf bei der Werwolf-Jagd
 function werwolfBot(w, dt) {   // Ein Computer-Werwolf jagt das nächste Schaf, das er sieht
   if (jagdZ.phase === 'zaehlen') { w.laeuft = false; return; }
   let z = w.jagt;
-  if (z && (!z.lebt || z.inGrube != null || dist(w, z) > SICHT_WOLF)) z = null;
+  if (z && (!z.lebt || z.inGrube != null || dist(w, z) > JAGD_LAMPE_WEITE)) z = null;
   if (!z || Math.random() < dt * 0.5) {
-    const sichtbar = schafe.filter(s => s.lebt && !s.istWolf && s.inGrube == null && dist(s, w) < SICHT_WOLF);
+    const sichtbar = schafe.filter(s => s.lebt && !s.istWolf && s.inGrube == null && imLicht(s, w));   // 🔦 Nur was im Lichtkegel ist!
     sichtbar.sort((a, b) => dist(a, w) - dist(b, w));
     z = sichtbar[0] || null;
   }
   w.jagt = z;
   if (z) { laufeZu(w, z, JAGD_TEMPO_BOT_WERWOLF, dt); w.ziel = null; return; }
   if (!w.ziel || laufeZu(w, w.ziel, TEMPO_SCHAF * 1.2, dt)) w.ziel = { x: 100 + Math.random() * (WELT_B - 200), y: 110 + Math.random() * (WELT_H - 220) };   // Herumschnüffeln
+}
+
+// 🔦 Ist p im Licht der Taschenlampe von s? (oder ganz nah dran)
+function imLicht(p, s = spieler) {
+  const dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy);
+  if (d < JAGD_NAH) return true;
+  if (d > JAGD_LAMPE_WEITE) return false;
+  let w = Math.atan2(dy, dx) - (s.blick || 0);
+  while (w > Math.PI) w -= Math.PI * 2;
+  while (w < -Math.PI) w += Math.PI * 2;
+  return Math.abs(w) < JAGD_LAMPE_WINKEL + 0.08;
+}
+// Wohin schaut (und leuchtet) jedes Tier? Dahin, wohin es zuletzt gelaufen ist
+function blickeAktualisieren() {
+  for (const s of schafe) {
+    if (s.bx === undefined) { s.bx = s.x; s.by = s.y; s.blick = Math.random() * Math.PI * 2; }
+    const dx = s.x - s.bx, dy = s.y - s.by;
+    if (Math.hypot(dx, dy) > 0.6) {
+      let w = Math.atan2(dy, dx) - s.blick;
+      while (w > Math.PI) w -= Math.PI * 2;
+      while (w < -Math.PI) w += Math.PI * 2;
+      s.blick += w * 0.35;   // Die Lampe dreht sich weich mit
+    }
+    s.bx = s.x; s.by = s.y;
+  }
+  if (D3.an && d3Aktiv() && spieler) spieler.blick = Math.atan2(-Math.cos(D3.yaw), -Math.sin(D3.yaw));   // In 3D: dahin, wohin du schaust
+}
+// 📡 Wolf-Detektor (wie bei Among Us): 0 = Werwolf weit weg, 1 = ganz nah!
+function wolfNaehe() {
+  if (!jagdZ || jagdZ.phase !== 'jagd' || !wolf || spielerIstWolf || !spieler.lebt) return 0;
+  return begrenzt((DETEKTOR_WEITE - dist(spieler, wolf)) / (DETEKTOR_WEITE - 90), 0, 1);
+}
+let herzT = 0;
+function detektorUpdate(dt) {   // Bumm-bumm ... je näher, desto schneller!
+  const n = zustand === 'spiel' ? wolfNaehe() : 0;
+  if (n < 0.1) { herzT = 0; return; }
+  herzT -= dt;
+  if (herzT <= 0) {
+    herzT = 1.3 - n * 0.95;
+    ton(58, 0, 0.13, 'sine', 0.12 + n * 0.3); ton(52, 0.17, 0.13, 'sine', 0.08 + n * 0.22);
+  }
+}
+// 🎵 Musik: Der Werwolf hört gruselige Jagd-Musik, die Schafe leise Schleich-Musik
+let musikNaechste = 0, musikTakt = 0;
+function musikUpdate() {
+  if (!audio || !tonAn || !jagdZ || zustand !== 'spiel') { musikNaechste = 0; return; }
+  const jetzt = audio.currentTime;
+  if (musikNaechste < jetzt) musikNaechste = jetzt + 0.05;
+  if (musikNaechste - jetzt > 0.25) return;   // Immer nur einen Takt im Voraus planen
+  const t = musikNaechste - jetzt, k = musikTakt++;
+  const schnell = jagdZ.phase === 'jagd' && jagdZ.rest < 30 ? 0.8 : 1;   // Am Ende wird's schneller!
+  const leise = spieler.lebt ? 1 : 0.5;
+  let dauer;
+  if (spielerIstWolf && jagdZ.phase === 'zaehlen') {   // Tick ... tack ... (die Uhr beim Zählen)
+    for (let i = 0; i < 4; i++) ton(i % 2 ? 900 : 1200, t + i * 0.5, 0.05, 'square', 0.025);
+    ton(55, t, 1.9, 'sine', 0.05);
+    dauer = 2;
+  } else if (spielerIstWolf) {   // 🌕 Jagd-Musik: dunkler Bass und unheimliche hohe Töne
+    const schlag = 0.2 * schnell;
+    spieleNoten(k % 2 ? 'A2 A2 C3 A2 D#3 A2 C3 B2' : 'A2 A2 C3 A2 E3 A2 D#3 C3', t, schlag, 'sawtooth', 0.035, 0.6);
+    if (k % 4 === 0) spieleNoten('E5:4 D#5:4', t, schlag, 'triangle', 0.025);
+    if (k % 4 === 2) spieleNoten('C5:4 B4:4', t, schlag, 'triangle', 0.025);
+    for (const b of [0, 4]) ton(70, t + b * schlag, 0.18, 'sine', 0.18, 40);   // Bumm!
+    for (const b of [2, 6]) ton(1800, t + b * schlag, 0.03, 'square', 0.012);   // Tsss
+    dauer = 8 * schlag;
+  } else {   // 🐑 Schleich-Musik: auf Zehenspitzen ...
+    const schlag = 0.24 * schnell;
+    spieleNoten('E2 - B1 - E2 - B1 -', t, schlag, 'sine', 0.07 * leise, 0.8);
+    spieleNoten(k % 2 ? 'E4 G4 B4 A4 G4 - E4 -' : 'E4 G4 A4 G4 E4 - D4 -', t, schlag, 'triangle', 0.035 * leise, 0.25);
+    if (k % 4 === 3) spieleNoten('- - - - B5 - A5 -', t, schlag, 'sine', 0.02 * leise, 0.4);
+    dauer = 8 * schlag;
+  }
+  musikNaechste += dauer;
 }
 
 function introFertig() {
@@ -1037,6 +1115,7 @@ function updateSabotage(dt) {
   // Sicht wird langsam kleiner oder größer
   let zielSicht = SICHT;
   if (!spieler.lebt) zielSicht = 2500;                             // Geister sehen alles 👻
+  else if (jagdZ) zielSicht = JAGD_LAMPE_WEITE;                    // 🔦 Bei der Werwolf-Jagd: nur so weit die Lampe leuchtet
   else if (spielerIstWolf) zielSicht = SICHT_WOLF;                      // Wölfe sehen weiter
   else if (sabotage && sabotage.art === 'nebel') zielSicht = 130;  // Im Nebel sieht man fast nichts
   sicht += (zielSicht - sicht) * Math.min(1, dt * 2);
@@ -1103,6 +1182,7 @@ function grubenZeugen(p, w) {
 
 function springeInGrube(w, i) {
   const g = KARTE.gruben[i];
+  if (jagdZ && !w.istWolf) w.grubenUebrig = Math.max(0, (w.grubenUebrig ?? JAGD_GRUBEN_SPRUENGE) - 1);   // Ein Sprung weniger!
   w.inGrube = i; w.x = g.x; w.y = g.y;
   w.jagt = null; w.ziel = null; w.grubeStart = zeit;
   if (w === spieler) { klickZiel = null; w.grubeSeit = zeit; }
@@ -1175,6 +1255,7 @@ function jagdAktion(rein) {   // 🌕 Werwolf-Jagd: Schafe können in die Gruben
   if (spielerIstWolf) return null;
   const g = naechsteGrube(spieler, 50);
   if (g === null) return null;
+  if (!(spieler.grubenUebrig > 0)) return { text: 'Keine Sprünge mehr', tun: () => sound.fehler() };
   const warte = JAGD_GRUBE_SPERRE - (zeit - (spieler.rausZeit ?? -99));
   if (warte > 0) return { text: `Grube in ${Math.ceil(warte)}`, tun: () => sound.fehler() };
   return { text: 'In die Grube', tun: () => rein(spieler, g) };
@@ -2424,7 +2505,7 @@ function update(dt) {
   if (zustand === 'cutscene') { updateCutscene(dt); if (!simLaeuft()) return; }   // (Im Multiplayer läuft das Spiel beim Gastgeber weiter)
   else if (zustand !== 'spiel') return;
   if (mp.rolle === 'gast') { mpGastUpdate(dt); return; }   // Multiplayer-Gast: Das Spiel rechnet der Gastgeber
-  if (jagdZ) { jagdUpdate(dt); return; }   // 🌕 Werwolf-Jagd
+  if (jagdZ) { jagdUpdate(dt); blickeAktualisieren(); return; }   // 🌕 Werwolf-Jagd
 
   updateFaehigkeiten(dt);
   if (!simLaeuft()) return;   // z. B. Schäfer-Cutscene hat angefangen
@@ -2988,7 +3069,46 @@ function zeichneWelt() {
   }
 }
 
+// 🔦 Werwolf-Jagd: Alles ist stockdunkel – nur deine Taschenlampe leuchtet!
+let dunkelC = null;
+function lichtKegel(c, s, r, farbe, staerke) {   // Ein Lichtkegel in Blickrichtung (plus ein kleiner Schein drumherum)
+  const x = s.x - kamera.x, y = s.y - kamera.y;
+  let g = c.createRadialGradient(x, y, 10, x, y, JAGD_NAH);
+  g.addColorStop(0, `rgba(${farbe},${staerke})`); g.addColorStop(1, `rgba(${farbe},0)`);
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, JAGD_NAH, 0, Math.PI * 2); c.fill();
+  g = c.createRadialGradient(x, y, 15, x, y, r);
+  g.addColorStop(0, `rgba(${farbe},${staerke})`); g.addColorStop(0.7, `rgba(${farbe},${staerke * 0.75})`); g.addColorStop(1, `rgba(${farbe},0)`);
+  c.fillStyle = g; c.beginPath(); c.moveTo(x, y); c.arc(x, y, r, (s.blick || 0) - JAGD_LAMPE_WINKEL, (s.blick || 0) + JAGD_LAMPE_WINKEL); c.closePath(); c.fill();
+}
+function zeichneLampenDunkel() {
+  if (!dunkelC) { dunkelC = document.createElement('canvas'); dunkelC.width = W; dunkelC.height = H; }
+  const d = dunkelC.getContext('2d');
+  d.globalCompositeOperation = 'source-over';
+  d.clearRect(0, 0, W, H);
+  d.fillStyle = 'rgba(4,6,18,0.95)'; d.fillRect(0, 0, W, H);
+  d.globalCompositeOperation = 'destination-out';   // Das Licht "radiert" die Dunkelheit weg
+  if (spieler.inGrube == null) lichtKegel(d, spieler, JAGD_LAMPE_WEITE, '0,0,0', 1);
+  else { const g = d.createRadialGradient(spieler.x - kamera.x, spieler.y - kamera.y, 5, spieler.x - kamera.x, spieler.y - kamera.y, 60); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = g; d.fillRect(0, 0, W, H); }
+  d.globalCompositeOperation = 'source-over';
+  ctx.drawImage(dunkelC, 0, 0);
+  // Die Lampen der anderen: Du siehst ihr Licht, aber nicht die Tiere selbst! (Der Werwolf leuchtet rot)
+  for (const s of schafe) {
+    if (s === spieler || !s.lebt || s.inGrube != null || dist(s, spieler) > 900) continue;
+    lichtKegel(ctx, s, JAGD_LAMPE_WEITE * 0.9, s.istWolf && jagdZ.phase === 'jagd' ? '255,70,50' : '255,240,170', 0.2);
+  }
+  // 👀 Rote Werwolf-Augen im Dunkeln ...
+  if (wolf && wolf !== spieler && jagdZ.phase === 'jagd' && wolf.lebt && !imLicht(wolf) && dist(wolf, spieler) < 520) {
+    const x = wolf.x - kamera.x + wolf.richtung * 30, y = wolf.y - kamera.y - 20, blinzeln = Math.sin(zeit * 1.7) > 0.95;
+    if (!blinzeln) {
+      ctx.save(); ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 12; ctx.fillStyle = '#ff3a3a';
+      ellipse(x - 5, y, 3.5, 2.5); ctx.fill(); ellipse(x + 5, y, 3.5, 2.5); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
 function zeichneDunkel() {
+  if (jagdZ && spieler.lebt && zustand === 'spiel') { zeichneLampenDunkel(); return; }
   const sx = spieler.x - kamera.x, sy = spieler.y - kamera.y;
   const nebel = sabotage && sabotage.art === 'nebel';
   const farbe = nebel ? '90,95,110' : '10,15,40';
@@ -3078,11 +3198,23 @@ function zeichneJagdHUD() {   // 🌕 Werwolf-Jagd: Zeit und was du tun sollst
   let z1, z3;
   if (!spieler.lebt) { z1 = '👻 Du bist ein Geist!'; z3 = 'Schau zu, ob die Schafe es schaffen!'; }
   else if (spielerIstWolf) { z1 = zaehlt ? '🙈 Augen zu! Du zählst ...' : '🌕 Du bist der WERWOLF!'; z3 = 'Fang alle Schafe! In Gruben kommst du nicht.'; }
-  else { z1 = zaehlt ? '🏃 Lauf weg! Der Werwolf zählt ...' : '🐑 Lauf vor dem Werwolf weg!'; z3 = `🕳️ Gruben retten dich (E)! Werwolf: ${wolf ? wolf.name : '?'}`; }
+  else { z1 = zaehlt ? '🏃 Lauf weg! Der Werwolf zählt ...' : '🐑 Lauf vor dem Werwolf weg!'; z3 = `🕳️ Noch ${spieler.grubenUebrig ?? 0} Grubensprünge · Werwolf: ${wolf ? wolf.name : '?'}`; }
   text(z1, 26, 32, 16, spielerIstWolf ? '#ff6b6b' : '#ffd166', 'left', false);
   const sek = Math.max(0, Math.ceil(zaehlt ? J.t : J.rest));
   text(zaehlt ? `⏳ Noch ${sek} Sekunden zählen` : `☀️ Sonnenaufgang in ${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, '0')}`, 26, 60, 16, '#fff', 'left', false);
   text(z3, 26, 88, 12, '#c9c3ff', 'left', false);
+  // 📡 Wolf-Detektor (wie bei Among Us)
+  if (!zaehlt && !spielerIstWolf && spieler.lebt) {
+    const n = wolfNaehe(), x = W / 2 - 150, y = 12, teile = 10, an = Math.ceil(n * teile - 0.01);
+    ctx.fillStyle = 'rgba(20,20,50,0.85)'; rundesRechteck(x, y, 300, 54, 10); ctx.fill();
+    if (n > 0.7) { ctx.strokeStyle = `rgba(255,60,60,${0.5 + Math.sin(zeit * 12) * 0.5})`; ctx.lineWidth = 4; rundesRechteck(x - 2, y - 2, 304, 58, 12); ctx.stroke(); }
+    text(n > 0.7 ? '📡 WERWOLF GANZ NAH!' : n > 0.35 ? '📡 Werwolf in der Nähe ...' : '📡 Wolf-Detektor', W / 2, y + 14, 13, n > 0.7 ? '#ff6b6b' : '#fff', 'center', false);
+    for (let i = 0; i < teile; i++) {
+      const f = i / (teile - 1);
+      ctx.fillStyle = i < an ? `rgb(${Math.round(80 + 175 * f)},${Math.round(220 - 170 * f)},60)` : 'rgba(255,255,255,0.15)';
+      rundesRechteck(x + 12 + i * 28, y + 28, 24, 18, 4); ctx.fill();
+    }
+  }
   if (zaehlt && zustand === 'spiel') {   // Der große Countdown
     if (spielerIstWolf) {
       ctx.fillStyle = 'rgba(0,0,0,0.88)'; ctx.fillRect(0, 0, W, H);
@@ -3664,7 +3796,7 @@ function zeichne() {
 
   kamera.x = begrenzt(spieler.x - W / 2, 0, WELT_B - W);
   kamera.y = begrenzt(spieler.y - H / 2, 0, WELT_H - H);
-  const sichtbar = p => dist(p, spieler) < sicht + 20;
+  const sichtbar = jagdZ && spieler.lebt && zustand === 'spiel' ? p => imLicht(p) : p => dist(p, spieler) < sicht + 20;   // 🔦 Bei der Jagd: nur was im Licht ist
 
   ctx.save();
   ctx.translate(-kamera.x, -kamera.y);
@@ -3817,9 +3949,10 @@ function d3WeltBauen() {
   D3.dekoRef = deko;
   const B = WELT_B * METER, Hh = WELT_H * METER;
   // Licht und Himmel
-  G.add(new T.HemisphereLight(KARTE.himmel[1], '#2a2a3a', 1.1));
+  D3.hemi = new T.HemisphereLight(KARTE.himmel[1], '#2a2a3a', 1.1); G.add(D3.hemi);
   const mond = new T.DirectionalLight('#c8d4ff', 0.9); mond.position.set(B * 0.3, 30, Hh * 0.2); mond.target.position.set(B / 2, 0, Hh / 2); G.add(mond, mond.target);
-  G.add(new T.AmbientLight('#ffffff', 0.25));
+  D3.mond = mond;
+  D3.amb = new T.AmbientLight('#ffffff', 0.25); G.add(D3.amb);
   S.fog = new T.Fog('#141a3a', 3, 12); S.background = new T.Color('#141a3a');
   const sterne = [];
   for (let k = 0; k < 400; k++) { const w = Math.random() * Math.PI * 2, h = 0.15 + Math.random() * 0.8, r = 90; sterne.push(B / 2 + Math.cos(w) * r * Math.cos(h), Math.sin(h) * r, Hh / 2 + Math.sin(w) * r * Math.cos(h)); }
@@ -4106,6 +4239,18 @@ function d3Zeichnen() {
   const nebel = sabotage && sabotage.art === 'nebel', weit = sicht * METER;
   D3.szene.fog.color.set(nebel ? '#5a5f6e' : '#141a3a'); D3.szene.background.copy(D3.szene.fog.color);
   D3.szene.fog.near = weit * 0.45; D3.szene.fog.far = weit * 1.35;
+  // 🔦 Werwolf-Jagd: Die Welt wird dunkel, du hast eine Taschenlampe
+  const lampe = !!(jagdZ && spieler.lebt && zustand === 'spiel');
+  if (lampe && !D3.lampe) {
+    D3.lampe = new T.SpotLight('#fff1c8', 9, 15, 0.5, 0.5, 1);
+    const ziel = new T.Object3D(); ziel.position.set(0, -0.25, -1);
+    D3.lampe.position.set(0.15, -0.1, 0); D3.lampe.target = ziel;
+    D3.kam.add(D3.lampe, ziel);
+    if (!D3.kam.parent) D3.szene.add(D3.kam);
+  }
+  if (D3.lampe) D3.lampe.visible = lampe;
+  const hell = lampe ? 0.22 : 1;
+  if (D3.hemi) { D3.hemi.intensity = 1.1 * hell; D3.mond.intensity = 0.9 * hell; D3.amb.intensity = 0.25 * hell; }
   // Welt-Dinge, die sich ändern
   D3.glockeMat.color.set(glockeGenutzt ? '#999999' : '#f1c40f');
   D3.laterneMat.color.set(nebel ? '#555555' : '#ffe680'); D3.laterneLicht.intensity = nebel ? 0 : 6;
@@ -4508,7 +4653,7 @@ function mpVomGast(g, d) {
       if (zustand === 'spiel' && s.lebt && s.rolle === 'schaefer' && s.faehigkeit <= 0.5 && z && z.lebt && z !== s && z.inGrube == null && dist(s, z) < SCHAEFER_REICHWEITE + 40) hirtenstab(s, z);
       break;
     }
-    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && (jagdZ ? !s.istWolf : s.istWolf) && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
+    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && (jagdZ ? !s.istWolf && s.grubenUebrig > 0 : s.istWolf) && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
     case 'grubeWechsel': { const g = KARTE.gruben[d.i]; if (s.inGrube != null && g) { s.inGrube = d.i; s.x = g.x; s.y = g.y; } break; }
     case 'raus': if (s.inGrube != null && KARTE.gruben[d.i]) kletterRaus(s, d.i); break;
     case 'stimme': if (treffen && treffen.phase === 'waehlen' && s.lebt && !mp.stimmen.has(s)) { mp.stimmen.set(s, d.z >= 0 ? schafe[d.z] : null); mpAbstimmungPruefen(); } break;
@@ -4578,6 +4723,7 @@ function mpGastStart(d) {
   spielerIstWolf = d.istWolf;
   for (const i of d.woelfe) { schafe[i].istWolf = true; schafe[i].rolle = E.jagd ? 'werwolf' : 'wolf'; }   // Nur Wölfe kennen die anderen Wölfe!
   jagdZ = E.jagd ? { phase: 'zaehlen', t: JAGD_ZAEHLEN, rest: JAGD_ZEIT } : null;
+  for (const x of schafe) x.grubenUebrig = JAGD_GRUBEN_SPRUENGE;
   spieler.istWolf = d.istWolf;
   spieler.rolle = ROLLEN[d.rolle] ? d.rolle : d.istWolf ? 'wolf' : 'normal';   // 🎭 Deine Spezial-Rolle!
   spieler.faehigkeit = 0; spieler.sprint = 0; spieler.inGrube = null;
@@ -4715,7 +4861,7 @@ function moeglicheAktionGast() {
 }
 function mpGastUpdate(dt) {
   if (miniSpiel) miniUpdate(dt);
-  if (jagdZ) { if (jagdZ.phase === 'zaehlen') jagdZ.t -= dt; else jagdZ.rest -= dt; }   // (Der Gastgeber schickt die genaue Zeit)
+  if (jagdZ) { if (jagdZ.phase === 'zaehlen') jagdZ.t -= dt; else jagdZ.rest -= dt; blickeAktualisieren(); }   // (Der Gastgeber schickt die genaue Zeit)
   if (jagdZ && spielerIstWolf && jagdZ.phase === 'zaehlen') spieler.laeuft = false;   // 🙈 Augen zu!
   else bewegeSpieler(dt);
   spieler.cooldown -= dt;
@@ -4723,6 +4869,7 @@ function mpGastUpdate(dt) {
   // Sicht (wie beim Gastgeber)
   let zielSicht = SICHT;
   if (!spieler.lebt) zielSicht = 2500;
+  else if (jagdZ) zielSicht = JAGD_LAMPE_WEITE;
   else if (spielerIstWolf) zielSicht = SICHT_WOLF;
   else if (sabotage && sabotage.art === 'nebel') zielSicht = 130;
   sicht += (zielSicht - sicht) * Math.min(1, dt * 2);
@@ -4834,6 +4981,7 @@ function schleife(jetzt) {
   letzte = jetzt;
   zeit += dt;
   update(dt);
+  musikUpdate(); detektorUpdate(dt);
   mpTick(dt);
   zeichne();
   requestAnimationFrame(schleife);
