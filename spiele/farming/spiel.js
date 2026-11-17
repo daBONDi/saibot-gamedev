@@ -83,10 +83,10 @@ const TIERE = {
 };
 // Zum Metzger bringen: So viel Fleisch (kg) gibt jedes Tier. preis = so viel ist 1 kg wert (roh kann man es nicht verkaufen – erst verarbeiten!)
 const FLEISCH = {
-  kuh: { k: 'rind', name: 'Rindfleisch', emoji: '🥩', kg: 60, preis: 8, grill: 'Steak vom Grill', poekel: 'Corned Beef' },
-  schwein: { k: 'schwein', name: 'Schweinefleisch', emoji: '🥓', kg: 40, preis: 5, grill: 'Kotelett vom Grill', poekel: 'Kasseler' },
-  schaf: { k: 'lamm', name: 'Lammfleisch', emoji: '🍖', kg: 20, preis: 9, grill: 'Lammspieß', poekel: 'Pökel-Lamm' },
-  huhn: { k: 'huhn', name: 'Hähnchenfleisch', emoji: '🍗', kg: 2, preis: 4, grill: 'Grillhähnchen', poekel: 'Pökel-Hähnchen' },
+  kuh: { k: 'rind', kurz: 'Rind', name: 'Rindfleisch', emoji: '🥩', kg: 60, preis: 8, grill: 'Steak vom Grill', poekel: 'Corned Beef' },
+  schwein: { k: 'schwein', kurz: 'Schwein', name: 'Schweinefleisch', emoji: '🥓', kg: 40, preis: 5, grill: 'Kotelett vom Grill', poekel: 'Kasseler' },
+  schaf: { k: 'lamm', kurz: 'Lamm', name: 'Lammfleisch', emoji: '🍖', kg: 20, preis: 9, grill: 'Lammspieß', poekel: 'Pökel-Lamm' },
+  huhn: { k: 'huhn', kurz: 'Hähnchen', name: 'Hähnchenfleisch', emoji: '🍗', kg: 2, preis: 4, grill: 'Grillhähnchen', poekel: 'Pökel-Hähnchen' },
 };
 // Holzsorten zum Räuchern und Grillen (Fichte nimmt man nicht: Das Harz macht das Essen bitter!)
 // stamm/krone = Farben der Bäume, form = so sieht die Krone aus
@@ -2113,7 +2113,7 @@ function zutatInfo(k) {   // Name und Bild einer Zutat
   if (k === 'salz') return { name: 'Salz', emoji: '🧂', kurz: 'Salz' };
   const P = PRODUKTE[k];
   if (k.startsWith('holz_')) return { name: P.name, emoji: '🪵', kurz: HOLZARTEN[k.slice(5)].kurz };
-  if (k.startsWith('fleisch_')) return { name: P.name, emoji: P.emoji, kurz: P.name.replace('fleisch', '') };
+  if (k.startsWith('fleisch_')) return { name: P.name, emoji: P.emoji, kurz: Object.values(FLEISCH).find(F => F.k === k.slice(8)).kurz };
   return { name: P.name, emoji: P.emoji, kurz: P.name };
 }
 const zutatHabe = k => k === 'salz' ? salzsteine : Math.floor(vorrat[k] || 0);   // So viel hast du davon
@@ -2201,7 +2201,7 @@ function werkbankMalen() {
   if (!inv.children.length) inv.innerHTML = '<span class="klein">Du hast keine Zutaten! 🔪 Tiere zum Metzger bringen (P im Gehege), 🎣 Fische angeln, 🪓 Holz in deinen Wäldern hacken (X), ⛏️ Salz in der Salzmine.</span>';
   // Rezeptbuch
   const liste = [];
-  for (const W of WURST) liste.push(['wurst_' + W.id, W.fleisch ? `${W.fleisch.map(f => f === 'fisch' ? 'Fisch' : FLEISCH[Object.keys(FLEISCH).find(t => FLEISCH[t].k === f)].name.replace('fleisch', '')).join(' + ')} · ${W.holz.map(h => HOLZARTEN[h].kurz).join(' + ')} · Salz` : 'andere Mischungen']);
+  for (const W of WURST) liste.push(['wurst_' + W.id, W.fleisch ? `${W.fleisch.map(f => f === 'fisch' ? 'Fisch' : Object.values(FLEISCH).find(F => F.k === f).kurz).join(' + ')} · ${W.holz.map(h => HOLZARTEN[h].kurz).join(' + ')} · Salz` : 'andere Mischungen']);
   const bekannt = liste.filter(([k]) => entdeckt[k]).length;
   $('wbBuch').innerHTML = `<b>📜 Wurst-Rezeptbuch: ${bekannt} von ${liste.length} entdeckt</b><br>` + liste.map(([k, z]) => entdeckt[k]
     ? `<div>${PRODUKTE[k].emoji} <b>${PRODUKTE[k].name}</b> <span class="klein">= ${z} · ${euro(PRODUKTE[k].preis)}</span></div>`
