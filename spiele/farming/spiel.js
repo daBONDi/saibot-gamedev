@@ -1491,7 +1491,7 @@ function farmerWerkzeug(t, saege, saegt, holz, angelt = 0) {
   t.saege.visible = saege;
   t.angel.visible = angelt > 0;
   if (angelt > 0) {   // Angel halten (angelt = 2: ein Fisch zappelt dran, die Rute wackelt!)
-    t.armR.rotation.x = 0.9; t.armL.rotation.x = 0.6;
+    t.armR.rotation.x = angelt === 3 ? 1.75 : 0.9; t.armL.rotation.x = angelt === 3 ? 1.2 : 0.6;   // 3 = Einholen: Angel hochreißen!
     t.angel.rotation.x = angelt === 2 ? -0.3 + Math.sin(spielZeit * 25) * 0.08 : -0.43;
     t.angel.rotation.z = angelt === 2 ? Math.sin(spielZeit * 11) * 0.12 : 0;
     return;
@@ -1552,20 +1552,27 @@ const angelSchnur = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new
 angelSchnur.visible = false; angelSchnur.frustumCulled = false; scene.add(angelSchnur);
 const schnurA = new THREE.Vector3();
 function egoAngelUpdate(dt) {
-  const zeigen = !!angel && !aktiv && ansicht === 'ego';
+  if (einholen && aktiv) einholenEnde();   // Ins Fahrzeug gestiegen: sofort fertig
+  const zieht = !!einholen;
+  const mitAngel = (!!angel || zieht) && !aktiv;
+  const zeigen = mitAngel && ansicht === 'ego';
   egoAngel.visible = zeigen;
   const kampf = angel && angel.phase === 'kampf';
   if (zeigen) {
     const rute = egoAngel.userData.rute;
-    rute.rotation.x = kampf ? 0.75 + Math.sin(spielZeit * 25) * 0.06 : 0.55;   // Fisch dran: Rute biegt sich hoch und wackelt
+    const ziel = zieht ? 1.15 : kampf ? 0.75 + Math.sin(spielZeit * 25) * 0.06 : 0.55;   // Einholen: Rute hoch! · Fisch dran: Rute wackelt
+    rute.rotation.x += (ziel - rute.rotation.x) * Math.min(1, dt * (zieht ? 10 : 30));
     rute.rotation.z = kampf ? Math.sin(spielZeit * 11) * 0.1 : 0;
   }
-  angelSchnur.visible = !!angel && !aktiv;
-  if (!angelSchnur.visible) return;
+  angelSchnur.visible = mitAngel;
+  if (!mitAngel) return;
   (zeigen ? egoAngelSpitze : farmer.angelSpitze).getWorldPosition(schnurA);
+  if (zieht) einholenUpdate(dt, schnurA);
+  if (!angel && !einholen) { angelSchnur.visible = false; return; }
+  const sw = (angel || einholen).schwimmer.position;
   const pos = angelSchnur.geometry.attributes.position;
   pos.setXYZ(0, schnurA.x, schnurA.y, schnurA.z);
-  pos.setXYZ(1, angel.schwimmer.position.x, angel.schwimmer.position.y, angel.schwimmer.position.z);
+  pos.setXYZ(1, sw.x, sw.y, sw.z);
   pos.needsUpdate = true;
 }
 const KETTE_LANG = 0.72;
@@ -1855,6 +1862,7 @@ let angel = null;   // Gerade am Angeln? { b, phase: 'warten' | 'kampf', ... }
 const schwimmerMat = mat(0xd8221e);
 function angeln(b) {
   if (angel) return;
+  if (einholen) einholenEnde();
   if (aktiv) { meldung('🎣 Steig erst aus (E), dann kannst du angeln!'); sound.nein(); return; }
   if (Math.floor(b.teich.fische) < 1) { meldung('🎣 Im Teich sind gerade keine Fische. Alle 30 Sekunden kommt einer dazu!'); sound.nein(); return; }
   if (saegeAn) { saegeAn = false; }
@@ -1869,9 +1877,11 @@ function angeln(b) {
 }
 function angelEnde(gefangen) {
   const a = angel;
-  scene.remove(a.schwimmer);
   $('angeln').style.display = 'none';
   angel = null;
+  // Angel einholen: Schwimmer (und vielleicht der Fisch) fliegt zurück zur Angel. Bei null (abgebrochen) einfach weg.
+  if (gefangen === null || aktiv) scene.remove(a.schwimmer);
+  else einholenStarten(a.schwimmer, gefangen ? a.fisch : null);
   if (gefangen) {
     const F = FISCHE[a.fisch], k = 'fisch_' + a.fisch;
     vorrat[k] = (vorrat[k] || 0) + 1;
@@ -1880,6 +1890,60 @@ function angelEnde(gefangen) {
     meldung(`🎣🎉 Du hast ${a.fisch === 'goldfisch' ? 'den' : 'einen'} ${F.emoji} ${F.name} gefangen! (${euro(F.preis)} im Dorfladen)`, 4);
     sound.kaufen(); speichern();
   } else if (gefangen === false) { meldung('💨 Oh nein, der Fisch ist entwischt!', 2.5); sound.nein(); }
+}
+// ===== Angel einholen: mit Fisch dran (geschafft!) oder ohne (entwischt) =====
+const EINHOLEN_DAUER = 0.9;      // So lange fliegt der Schwimmer zurück (Sekunden)
+const FISCH_ZEIGEN_DAUER = 1.8;  // So lange zappelt der gefangene Fisch an der Angel, bevor du ihn einpackst
+let einholen = null;
+function angelZustand() { return angel ? (angel.phase === 'kampf' ? 2 : 1) : einholen ? 3 : 0; }   // 0 = keine Angel · 1 = warten · 2 = Fisch dran · 3 = einholen   // { schwimmer, fisch, sprite, t, start }
+const fischBilder = {};   // Für jeden Fisch ein Bild mit seinem Emoji (wird nur einmal gemalt)
+function fischBild(fisch) {
+  if (!fischBilder[fisch]) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d'); g.font = '100px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(FISCHE[fisch].emoji, 64, 70);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    fischBilder[fisch] = new THREE.SpriteMaterial({ map: t, depthTest: true });
+  }
+  return fischBilder[fisch];
+}
+function einholenStarten(schwimmer, fisch) {
+  if (einholen) einholenEnde();
+  einholen = { schwimmer, fisch, t: 0, start: schwimmer.position.clone(), sprite: null };
+  if (fisch) {
+    const groesse = 0.5 + FISCHE[fisch].schwer * 0.2;   // Schwere Fische sind größer!
+    einholen.sprite = new THREE.Sprite(fischBild(fisch));
+    einholen.sprite.scale.set(groesse, groesse, 1);
+    einholen.sprite.position.copy(schwimmer.position);
+    scene.add(einholen.sprite);
+    tonGleiten(400, 1300, 0, 0.7, 'square', 0.03);   // Rrrrrr – die Rolle dreht sich schnell
+  } else tonGleiten(700, 250, 0, 0.6, 'sine', 0.05);   // Wuuusch – leer zurück
+}
+function einholenEnde() {
+  if (!einholen) return;
+  scene.remove(einholen.schwimmer);
+  if (einholen.sprite) scene.remove(einholen.sprite);
+  einholen = null;
+}
+const einholenZiel = new THREE.Vector3();
+function einholenUpdate(dt, spitze) {
+  const e = einholen;
+  e.t += dt;
+  const sw = e.schwimmer.position;
+  einholenZiel.set(spitze.x, spitze.y - (e.fisch ? 0.7 : 0.4), spitze.z);   // Unter der Spitze baumeln
+  if (e.t < EINHOLEN_DAUER) {   // Im Bogen aus dem Wasser zur Angel fliegen
+    const k = e.t / EINHOLEN_DAUER;
+    sw.lerpVectors(e.start, einholenZiel, k);
+    sw.y += Math.sin(Math.PI * k) * 1.0;
+  } else {   // An der Angel hin und her baumeln
+    sw.copy(einholenZiel);
+    sw.x += Math.sin(e.t * 5) * 0.12;
+  }
+  if (e.sprite) {   // Der Fisch hängt am Haken und zappelt
+    e.sprite.position.set(sw.x, sw.y - 0.1 - e.sprite.scale.y * 0.45, sw.z);
+    e.sprite.material.rotation = Math.sin(e.t * 18) * 0.35;
+  }
+  if (e.t > EINHOLEN_DAUER + (e.fisch ? FISCH_ZEIGEN_DAUER : 0.15)) einholenEnde();
 }
 // Ein E-Druck (oder Klick auf das Angel-Fenster) beim Drillen: Der Fisch kommt ein Stück näher!
 function angelKurbeln() {
@@ -3552,7 +3616,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: angel && !aktiv ? (angel.phase === 'kampf' ? 2 : 1) : 0, v: SPIEL_VERSION });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
@@ -3811,7 +3875,7 @@ function animate() {
   salzUpdate(dt);
   gebUpdate(dt);
   panelUpdate();
-  if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen, angel ? (angel.phase === 'kampf' ? 2 : 1) : 0);
+  if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen, angelZustand());
   if (hackt) { farmer.armR.rotation.x = 1.6 + Math.sin(spielZeit * 12) * 1.0; farmer.armL.rotation.x = 1.2 + Math.sin(spielZeit * 12) * 0.6; }   // Hacken!
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
