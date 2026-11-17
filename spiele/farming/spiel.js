@@ -113,6 +113,8 @@ const ANGEL_DRUECKEN = 0.06;     // So viel füllt sich der Balken bei jedem E-D
 const ANGEL_ZIEHEN = 0.12;       // So stark zieht jeder Fisch den Balken wieder runter (pro Sekunde)
 const ANGEL_ZIEHEN_SCHWER = 0.12; // ... und so viel stärker ziehen schwere Fische (mal "schwer")
 const ANGEL_START = 0.35;        // So voll ist der Balken am Anfang
+const ANGEL_GRUEN = 0.66;        // Ab hier ist der Balken im grünen Bereich (0.66 = das rechte Drittel)
+const ANGEL_ZEIT = 5;            // So viele Sekunden musst du im grünen Bereich sein, dann hast du den Fisch
 // Salzmine: Salzsteine machen die Tiere glücklich – sie geben dann doppelt so viel!
 const SALZMINE = { x: 122, z: 12, eingangX: 109.5, eingangZ: 12 };
 const SALZ_MAX = 10;             // So viele Salzsteine kannst du tragen
@@ -1831,7 +1833,6 @@ function angelKurbeln() {
   angel.fort = Math.min(1, angel.fort + ANGEL_DRUECKEN);
   angel.wackeln = 1;
   ton(1600 + angel.fort * 900, 0, 0.04, 'square', 0.03);   // Klick-klick, die Rolle dreht sich
-  if (angel.fort >= 1) { $('angelBalken').style.width = '100%'; angelEnde(true); }   // Balken voll = Fisch gefangen!
 }
 document.getElementById('angeln').addEventListener('pointerdown', e => { angelKurbeln(); e.preventDefault(); });
 function angelUpdate(dt) {
@@ -1845,7 +1846,7 @@ function angelUpdate(dt) {
       let summe = 0; for (const F of Object.values(FISCHE)) summe += F.chance;
       let z = Math.random() * summe;
       a.fisch = Object.keys(FISCHE).find(k => (z -= FISCHE[k].chance) < 0) || 'rotauge';
-      Object.assign(a, { phase: 'kampf', fort: ANGEL_START, wackeln: 0 });
+      Object.assign(a, { phase: 'kampf', fort: ANGEL_START, wackeln: 0, gruenZeit: 0 });
       const F = FISCHE[a.fisch];
       $('angelFisch').textContent = F.emoji;
       $('angelName').textContent = `${F.name} · ${'⭐'.repeat(Math.max(1, Math.round(F.schwer * 2)))}`;   // Mehr Sterne = schwerer
@@ -1864,9 +1865,14 @@ function angelUpdate(dt) {
   const zappeln = Math.sin(spielZeit * (8 + F.schwer * 6)) * (8 + F.schwer * 4);   // Der Fisch zappelt hin und her
   $('angelFisch').style.transform = `rotate(${zappeln}deg) scale(${1 + a.wackeln * 0.3})`;
   $('angelBalken').style.width = `${Math.max(0, a.fort) * 100}%`;
-  $('angelBalken').style.background = a.fort > 0.66 ? '#7cf5a0' : a.fort > 0.33 ? '#ffd166' : '#ff7a6b';
+  const gruen = a.fort >= ANGEL_GRUEN;
+  if (gruen) a.gruenZeit += dt;   // Im grünen Bereich läuft die Uhr
+  $('angelBalken').style.background = gruen ? '#3ddc6e' : a.fort > 0.33 ? '#ffd166' : '#ff7a6b';
+  $('angelUhr').textContent = `⏱️ ${Math.min(ANGEL_ZEIT, a.gruenZeit).toFixed(1)} / ${ANGEL_ZEIT} Sekunden im Grünen`;
+  $('angelUhr').style.color = gruen ? '#7cf5a0' : '#fff';
   $('angelTaste').style.transform = `scale(${1 + a.wackeln * 0.25})`;
-  if (a.fort <= 0) angelEnde(false);
+  if (a.gruenZeit >= ANGEL_ZEIT) angelEnde(true);   // 5 Sekunden im Grünen = gefangen!
+  else if (a.fort <= 0) angelEnde(false);
 }
 // ===== Salzmine: Salzsteine abbauen =====
 let salzsteine = 0, hackt = false, hackFort = 0, hackTon = 0;

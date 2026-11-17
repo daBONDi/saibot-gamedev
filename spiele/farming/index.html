@@ -131,6 +131,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 #angelName { font-weight: bold; margin-bottom: 6px; }
 #angelFortschritt { position: relative; height: 22px; background: #ffffff22; border-radius: 11px; overflow: hidden; margin: 8px 0; }
 #angelBalken { position: absolute; left: 0; top: 0; bottom: 0; width: 35%; background: #ffd166; }
+#angelGruen { position: absolute; left: 66%; right: 0; top: 0; bottom: 0; border: 3px solid #3ddc6e; border-radius: 0 11px 11px 0; background: #3ddc6e33; box-sizing: border-box; }
+#angelUhr { font-weight: bold; margin-bottom: 8px; }
 #angelTaste { display: inline-block; font-size: 30px; font-weight: bold; background: #fff; color: #222; border-radius: 10px; padding: 4px 18px; box-shadow: 0 4px 0 #999; cursor: pointer; user-select: none; }
 #schlaf {
     position: fixed;
@@ -233,8 +235,9 @@ B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an
 <b>🎣 Fisch an der Angel!</b>
 <div id="angelFisch">🐟</div>
 <div id="angelName">Fisch</div>
-<div class="klein">Drück ganz schnell <b>E</b> (oder klick hier)!<br>Ist der Balken voll, hast du ihn!</div>
-<div id="angelFortschritt"><div id="angelBalken"></div></div>
+<div class="klein">Drück ganz schnell <b>E</b> (oder klick hier)!<br>Bleib 5 Sekunden im grünen Bereich, dann hast du ihn!</div>
+<div id="angelFortschritt"><div id="angelBalken"></div><div id="angelGruen"></div></div>
+<div id="angelUhr">⏱️ 0.0 / 5 Sekunden im Grünen</div>
 <div id="angelTaste">E</div>
 </div>
 
@@ -263,6 +266,6 @@ B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=23"></script>
+<script type="module" src="spiel.js?v=24"></script>
 </body>
 </html>
