@@ -1831,6 +1831,7 @@ function angelKurbeln() {
   angel.fort = Math.min(1, angel.fort + ANGEL_DRUECKEN);
   angel.wackeln = 1;
   ton(1600 + angel.fort * 900, 0, 0.04, 'square', 0.03);   // Klick-klick, die Rolle dreht sich
+  if (angel.fort >= 1) { $('angelBalken').style.width = '100%'; angelEnde(true); }   // Balken voll = Fisch gefangen!
 }
 document.getElementById('angeln').addEventListener('pointerdown', e => { angelKurbeln(); e.preventDefault(); });
 function angelUpdate(dt) {
@@ -1865,8 +1866,7 @@ function angelUpdate(dt) {
   $('angelBalken').style.width = `${Math.max(0, a.fort) * 100}%`;
   $('angelBalken').style.background = a.fort > 0.66 ? '#7cf5a0' : a.fort > 0.33 ? '#ffd166' : '#ff7a6b';
   $('angelTaste').style.transform = `scale(${1 + a.wackeln * 0.25})`;
-  if (a.fort >= 1) angelEnde(true);
-  else if (a.fort <= 0) angelEnde(false);
+  if (a.fort <= 0) angelEnde(false);
 }
 // ===== Salzmine: Salzsteine abbauen =====
 let salzsteine = 0, hackt = false, hackFort = 0, hackTon = 0;
