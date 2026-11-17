@@ -57,6 +57,12 @@ const GEBAEUDE_ARTEN = {
   birnbaum: { name: 'Birnbaum', emoji: '🍐', preis: 2500, r: 1.6 },
   kirschbaum: { name: 'Kirschbaum', emoji: '🍒', preis: 3000, r: 1.6 },
   teich: { name: 'Fischteich', emoji: '🎣', preis: 5000, r: 6 },   // (keine Zahl mehr frei: im Baumodus mit , und . auswählen oder Knopf)
+  schweinestall: { name: 'Schweinestall', emoji: '🐖', preis: 7000, r: 8, tier: 'schwein' },
+  buchenwald: { name: 'Buchenwald', emoji: '🌳', preis: 3000, r: 6, holz: 'buche' },
+  eichenwald: { name: 'Eichenwald', emoji: '🌳', preis: 4000, r: 6, holz: 'eiche' },
+  erlenwald: { name: 'Erlenwald', emoji: '🌲', preis: 3000, r: 6, holz: 'erle' },
+  ahornwald: { name: 'Ahornwald', emoji: '🍁', preis: 4000, r: 6, holz: 'ahorn' },
+  werkbank: { name: 'Werkbank', emoji: '🛠️', preis: 2500, r: 2.2 },
 };
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
 // (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
@@ -73,12 +79,53 @@ const TIERE = {
   kuh: { name: 'Kühe', einzeln: 'Kuh', emoji: '🐄', preis: 1500, max: 6, produkt: 'milch', proMin: 30, frisst: 15, tempo: 0.7 },
   schaf: { name: 'Schafe', einzeln: 'Schaf', emoji: '🐑', preis: 600, max: 8, produkt: 'wolle', proMin: 2, frisst: 6, tempo: 0.9 },
   huhn: { name: 'Hühner', einzeln: 'Huhn', emoji: '🐔', preis: 50, max: 12, produkt: 'eier', proMin: 3, frisst: 1, tempo: 1.3 },
+  schwein: { name: 'Schweine', einzeln: 'Schwein', emoji: '🐖', preis: 800, max: 8, produkt: 'trueffel', proMin: 0.5, frisst: 8, tempo: 0.8 },   // Schweine finden Trüffel!
 };
+// Zum Metzger bringen: So viel Fleisch (kg) gibt jedes Tier. preis = so viel ist 1 kg wert (roh kann man es nicht verkaufen – erst verarbeiten!)
+const FLEISCH = {
+  kuh: { k: 'rind', name: 'Rindfleisch', emoji: '🥩', kg: 60, preis: 8, grill: 'Steak vom Grill', poekel: 'Corned Beef' },
+  schwein: { k: 'schwein', name: 'Schweinefleisch', emoji: '🥓', kg: 40, preis: 5, grill: 'Kotelett vom Grill', poekel: 'Kasseler' },
+  schaf: { k: 'lamm', name: 'Lammfleisch', emoji: '🍖', kg: 20, preis: 9, grill: 'Lammspieß', poekel: 'Pökel-Lamm' },
+  huhn: { k: 'huhn', name: 'Hähnchenfleisch', emoji: '🍗', kg: 2, preis: 4, grill: 'Grillhähnchen', poekel: 'Pökel-Hähnchen' },
+};
+// Holzsorten zum Räuchern und Grillen (Fichte nimmt man nicht: Das Harz macht das Essen bitter!)
+// stamm/krone = Farben der Bäume, form = so sieht die Krone aus
+const HOLZARTEN = {
+  buche: { name: 'Buchenholz', kurz: 'Buche', stamm: 0x9a9a8a, krone: 0x4f9a3a, form: 'rund' },     // Der Klassiker zum Räuchern
+  eiche: { name: 'Eichenholz', kurz: 'Eiche', stamm: 0x4a3420, krone: 0x3f7a2a, form: 'breit' },    // Kräftiger Rauch
+  erle: { name: 'Erlenholz', kurz: 'Erle', stamm: 0x3a3a35, krone: 0x2f6a2a, form: 'schmal' },      // Perfekt für Fisch
+  ahorn: { name: 'Ahornholz', kurz: 'Ahorn', stamm: 0x7a6a5a, krone: 0xd8641e, form: 'rund' },      // Mild und süßlich
+};
+const WALD_BAEUME_PLOT = 5;      // So viele Bäume stehen in einem eigenen Wald
+const WALD_NACHWACHSEN = 120;    // So viele Sekunden braucht ein Baum zum Nachwachsen
+const WALD_HACK_ZEIT = 2;        // So lange musst du X halten, um einen Baum zu fällen
+const WALD_SCHEITE = 3;          // So viele Holzscheite gibt ein Baum
+// Würste: Welche Fleischsorten + welche Holzsorten ergeben welche Wurst? (fisch = irgendein Fisch). preis = pro Wurst
+const WURST = [
+  { id: 'bratwurst', name: 'Bratwurst', fleisch: ['schwein'], holz: ['buche'], preis: 12 },
+  { id: 'mettwurst', name: 'Mettwurst', fleisch: ['schwein'], holz: ['erle'], preis: 14 },
+  { id: 'schinkenwurst', name: 'Schinkenwurst', fleisch: ['schwein'], holz: ['eiche'], preis: 15 },
+  { id: 'ahornwurst', name: 'Süße Ahorn-Würstchen', fleisch: ['schwein'], holz: ['ahorn'], preis: 16 },
+  { id: 'salami', name: 'Salami', fleisch: ['schwein'], holz: ['buche', 'eiche'], preis: 22 },
+  { id: 'wiener', name: 'Wiener Würstchen', fleisch: ['rind', 'schwein'], holz: ['buche'], preis: 18 },
+  { id: 'landjaeger', name: 'Landjäger', fleisch: ['rind', 'schwein'], holz: ['eiche'], preis: 24 },
+  { id: 'frankfurter', name: 'Frankfurter Würstchen', fleisch: ['rind', 'schwein'], holz: ['buche', 'erle'], preis: 26 },
+  { id: 'rindswurst', name: 'Rindswurst', fleisch: ['rind'], holz: ['buche'], preis: 18 },
+  { id: 'cabanossi', name: 'Cabanossi', fleisch: ['rind'], holz: ['eiche'], preis: 20 },
+  { id: 'lammwurst', name: 'Lammwurst', fleisch: ['lamm'], holz: ['buche'], preis: 18 },
+  { id: 'merguez', name: 'Merguez', fleisch: ['lamm'], holz: ['eiche'], preis: 22 },
+  { id: 'gefluegelwurst', name: 'Geflügelwurst', fleisch: ['huhn'], holz: ['buche'], preis: 12 },
+  { id: 'ahornhaehnchen', name: 'Ahorn-Hähnchenwurst', fleisch: ['huhn'], holz: ['ahorn'], preis: 15 },
+  { id: 'fischwurst', name: 'Räucher-Fischwurst', fleisch: ['fisch'], holz: ['erle'], preis: 20 },
+  { id: 'koenigswurst', name: 'Königswurst', fleisch: ['huhn', 'lamm', 'rind', 'schwein'], holz: ['ahorn', 'buche', 'eiche', 'erle'], preis: 150, emoji: '👑' },   // Geheim-Rezept!
+  { id: 'hauswurst', name: 'Hauswurst', fleisch: null, holz: null, preis: 10 },   // Alles andere wird Hauswurst
+];
 // Alles, was du im Dorfladen verkaufen kannst (Preis pro Stück/kg/Liter)
 const PRODUKTE = {
   milch: { name: 'Milch', emoji: '🥛', einheit: 'L', preis: 2 },
   wolle: { name: 'Wolle', emoji: '🧶', einheit: 'kg', preis: 15 },
   eier: { name: 'Eier', emoji: '🥚', einheit: 'Stück', preis: 2 },
+  trueffel: { name: 'Trüffel', emoji: '🍄', einheit: 'Stück', preis: 60 },
 };
 for (const [k, G] of Object.entries(GEMUESE)) PRODUKTE[k] = { name: G.name, emoji: G.emoji, einheit: G.einheit, preis: G.preis };
 // Obstbäume: zeit = Sekunden bis die Früchte reif sind, menge = so viel pflückst du, preis = so viel bringt 1 kg im Dorfladen
@@ -108,6 +155,18 @@ const FISCHE = {
   goldfisch: { name: 'Goldener Fisch', emoji: '✨', preis: 250, chance: 3, schwer: 2.4, kg: [0.5, 5], cm: [20, 50] },
 };
 for (const [k, F] of Object.entries(FISCHE)) PRODUKTE['fisch_' + k] = { name: F.name, emoji: F.emoji, einheit: 'Stück', preis: F.preis };
+// Zutaten für die Werkbank (roh = kann man im Dorfladen nicht verkaufen) und alles, was man daraus machen kann
+for (const F of Object.values(FLEISCH)) {
+  PRODUKTE['fleisch_' + F.k] = { name: F.name, emoji: F.emoji, einheit: 'kg', preis: F.preis, roh: true };
+  PRODUKTE['grill_' + F.k] = { name: F.grill, emoji: '🍢', einheit: 'Stück', preis: F.preis * 3 };
+  PRODUKTE['poekel_' + F.k] = { name: F.poekel, emoji: '🥫', einheit: 'Stück', preis: Math.round(F.preis * 2.5) };
+}
+for (const [k, F] of Object.entries(FISCHE)) {
+  PRODUKTE['grill_fisch_' + k] = { name: F.name + ' vom Grill', emoji: '🍢', einheit: 'Stück', preis: F.preis * 2 };
+  PRODUKTE['poekel_fisch_' + k] = { name: 'Gepökelt: ' + F.name, emoji: '🥫', einheit: 'Stück', preis: Math.round(F.preis * 1.8) };
+}
+for (const [k, H] of Object.entries(HOLZARTEN)) PRODUKTE['holz_' + k] = { name: H.name, emoji: '🪵', einheit: 'Scheite', preis: 0, roh: true };
+for (const W of WURST) PRODUKTE['wurst_' + W.id] = { name: W.name, emoji: W.emoji || '🌭', einheit: 'Stück', preis: W.preis };
 const TEICH_FISCHE_MAX = 8;
 // So schwer ist das Angel-Minispiel: Ganz schnell E drücken! (Zahlen ändern = leichter/schwerer)
 const ANGEL_DRUECKEN = 0.06;     // So viel füllt sich der Balken bei jedem E-Druck
