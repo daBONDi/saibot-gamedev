@@ -32,7 +32,7 @@ function entwicklerTod() {
 }
 const SPIELER_WOLF_PAUSE = 12;        // Sekunden zwischen zwei Angriffen, wenn du der Wolf bist
 const SABOTAGE_PAUSE = 5;             // Sekunden zwischen zwei Sabotagen
-const GATTER_ZEIT = 45;
+const GATTER_ZEIT = 45;               // So viele Sekunden hat die Herde, um das Gatter zu schließen
 // 🌕 Werwolf-Jagd: Ein Schaf ist ein Werwolf und fängt die anderen! Die Schafe flüchten durch die Gruben.
 const JAGD_ZAEHLEN = 15;            // So lange zählt der Werwolf mit geschlossenen Augen (Sekunden)
 const JAGD_ZEIT = 150;              // So lange dauert die Jagd – dann geht die Sonne auf und die Schafe gewinnen
@@ -46,7 +46,9 @@ const JAGD_GRUBEN_SPRUENGE = 3;     // So oft darf jedes Schaf pro Runde in eine
 const JAGD_LAMPE_WEITE = 330;       // 🔦 So weit leuchtet die Taschenlampe
 const JAGD_LAMPE_WINKEL = 0.5;      // 🔦 So breit ist der Lichtkegel (0.5 = nach links und rechts je ein kleines Stück)
 const JAGD_NAH = 75;                // So viel siehst du direkt um dich herum (auch ohne Lampe)
-const DETEKTOR_WEITE = 650;         // 📡 Ab hier schlägt der Wolf-Detektor aus               // So viele Sekunden hat die Herde, um das Gatter zu schließen
+const DETEKTOR_WEITE = 650;         // 📡 Ab hier schlägt der Wolf-Detektor aus
+const JAGD_AUFGABEN = 4;            // So viele Aufgaben hat jedes Schaf bei der Werwolf-Jagd
+const JAGD_AUFGABE_ZEIT = 3;        // ⏩ So viele Sekunden früher geht die Sonne auf, wenn ein Schaf eine Aufgabe schafft
 
 // Die Karten (Orte, Farben ...) stehen in karten.js
 let KARTE, ORTE, GLOCKE;
@@ -588,7 +590,7 @@ function jagdVorbereiten(test) {
   // Keine Aufgaben, keine Rollen, keine Sabotage – nur Wegrennen!
   for (const s of schafe) {
     s.istWolf = false; s.rolle = 'normal'; s.cooldown = 0; s.grubenUebrig = JAGD_GRUBEN_SPRUENGE;
-    s.aufgaben = []; s.alleAufgaben = []; s.gesamt = 0; s.erledigt = 0;
+    s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, JAGD_AUFGABEN); s.alleAufgaben = [...s.aufgaben]; s.gesamt = JAGD_AUFGABEN; s.erledigt = 0;
   }
   // Wer ist der Werwolf? Am liebsten ein echter Spieler (du oder ein Mitspieler)
   const menschen = [0, ...[...mp.andere.values()].map(g => g.nr).filter(n => n > 0 && n < schafe.length)];
@@ -597,6 +599,7 @@ function jagdVorbereiten(test) {
   else if (test) w = zufall(schafe.filter(s => !s.istSpieler));
   else w = Math.random() < (mp.aktiv ? 0.7 : WOLF_CHANCE) ? schafe[zufall(menschen)] : zufall(schafe.filter(s => !s.istSpieler));
   w.istWolf = true; w.rolle = 'werwolf';
+  w.aufgaben = []; w.alleAufgaben = []; w.gesamt = 0;   // Der Werwolf hat keine Aufgaben – er jagt!
   woelfe = [w]; wolf = w;
   spielerIstWolf = spieler.istWolf;
   sabotage = null; sabotagePause = 1e9;
@@ -608,7 +611,15 @@ function werwolfVerwandeln() {   // Die Zeit ist um: Das Schaf wird zum Werwolf!
   if (wolf) { funken(wolf.x, wolf.y, 40, ['#4b4453', '#ff2a2a', '#ffd166'], 200, 6, 1, -30); effektAn(wolf, 'icon', 2, { text: '🌕' }); }
   zeigeNachricht(spielerIstWolf ? '🌕 AUUUH! Du bist jetzt ein WERWOLF! Fang sie alle!' : '🌕 AUUUH! Der Werwolf ist erwacht! LAUF!', 3.5);
 }
+function jagdAufgabeGeschafft(s) {   // ⏩ Eine Aufgabe geschafft: Die Sonne geht früher auf!
+  if (!jagdZ) return;
+  jagdZ.rest = Math.max(1, jagdZ.rest - JAGD_AUFGABE_ZEIT);
+  const t = `⏩ ${s === spieler ? 'Du hast' : s.name + ' hat'} eine Aufgabe geschafft: Sonnenaufgang ${JAGD_AUFGABE_ZEIT} s früher! ☀️`;
+  if (s !== spieler) zeigeNachricht(t, 2.5);
+  if (mp.rolle === 'host') for (const g of mp.andere.values()) if (g.schaf) mpSendeAn(g, { t: 'nachricht', text: g.schaf === s ? `✅ Geschafft! Sonnenaufgang ${JAGD_AUFGABE_ZEIT} s früher! ☀️` : t });
+}
 function gefangen(s, w) {   // Der Werwolf hat ein Schaf erwischt → es ist ein Geist
+  if (s === spieler) miniSpiel = null;   // (Mitten in der Aufgabe erwischt!)
   s.lebt = false; s.inGrube = null; s.laeuft = false;
   funken(s.x, s.y, 30, ['#ffffff', '#c9c3ff', '#8fd3ff'], 140, 5, 0.9, -40);
   effekte.push({ x: s.x, y: s.y, t: 1.5, max: 1.5, art: 'geist' });
@@ -628,6 +639,7 @@ function jagdUpdate(dt) {
     if (Math.ceil(J.t) !== vorher && J.t > 0 && J.t <= 5) sound.piep();   // 5, 4, 3, 2, 1 ...
     if (J.t <= 0) werwolfVerwandeln();
   } else J.rest -= dt;
+  if (miniSpiel) miniUpdate(dt);
   if (spielerIstWolf && J.phase === 'zaehlen') spieler.laeuft = false;   // Augen zu und stillstehen!
   else bewegeSpieler(dt);
   for (const s of schafe) {
@@ -678,7 +690,7 @@ function fluchtBot(s, dt) {   // Ein Computer-Schaf bei der Werwolf-Jagd
   }
   const gefahr = jagdZ.phase === 'jagd' && ww && ww.lebt && dist(s, ww) < 280;
   if (gefahr) {
-    s.warte = 0; s.ziel = null;
+    s.warte = 0; s.ziel = null; s.amOrt = null;   // Aufgabe abbrechen und weg hier!
     // Eine Grube in der Nähe? Rein da! (Aber nur, wenn der Werwolf nicht näher dran ist)
     const gi = zeit - (s.rausZeit ?? -99) > JAGD_GRUBE_SPERRE && s.grubenUebrig > 0 ? naechsteGrube(s, 170) : null;
     if (gi !== null && dist(G[gi], ww) > dist(G[gi], s) + 20) {
@@ -688,10 +700,24 @@ function fluchtBot(s, dt) {   // Ein Computer-Schaf bei der Werwolf-Jagd
     laufeZu(s, fluchtZiel(s, ww), JAGD_TEMPO_FLUCHT, dt);
     return;
   }
-  // Keine Gefahr: herumlaufen (beim Zählen schnell weit weg!)
-  if (s.warte > 0) { s.warte -= dt; s.laeuft = false; return; }
-  if (!s.ziel) s.ziel = { x: 100 + Math.random() * (WELT_B - 200), y: 110 + Math.random() * (WELT_H - 220) };
-  if (laufeZu(s, s.ziel, TEMPO_SCHAF * (jagdZ.phase === 'zaehlen' ? 1.4 : 1), dt)) { s.ziel = null; s.warte = jagdZ.phase === 'zaehlen' ? 0 : 1 + Math.random() * 3; }
+  // Keine Gefahr: Aufgaben machen oder herumlaufen (beim Zählen schnell weit weg!)
+  if (s.warte > 0) {
+    s.warte -= dt; s.laeuft = false;
+    if (s.warte <= 0 && s.amOrt != null) {   // Aufgabe fertig!
+      if (s.aufgaben.includes(s.amOrt)) { s.aufgaben = s.aufgaben.filter(i => i !== s.amOrt); s.erledigt++; jagdAufgabeGeschafft(s); }
+      s.amOrt = null;
+    }
+    return;
+  }
+  if (!s.ziel) {
+    if (jagdZ.phase === 'jagd' && s.aufgaben.length && Math.random() < 0.6) { const nr = zufall(s.aufgaben), o = ORTE[nr]; s.ziel = { x: o.x + (Math.random() - 0.5) * 40, y: o.y + (Math.random() - 0.5) * 30, ort: nr }; }
+    else s.ziel = { x: 100 + Math.random() * (WELT_B - 200), y: 110 + Math.random() * (WELT_H - 220) };
+  }
+  if (laufeZu(s, s.ziel, TEMPO_SCHAF * (jagdZ.phase === 'zaehlen' ? 1.4 : 1), dt)) {
+    if (s.ziel.ort != null) { s.amOrt = s.ziel.ort; s.warte = 4 + Math.random() * 3; }   // Bei der Aufgabe: ein paar Sekunden arbeiten
+    else s.warte = jagdZ.phase === 'zaehlen' ? 0 : 1 + Math.random() * 3;
+    s.ziel = null;
+  }
 }
 function werwolfBot(w, dt) {   // Ein Computer-Werwolf jagt das nächste Schaf, das er sieht
   if (jagdZ.phase === 'zaehlen') { w.laeuft = false; return; }
@@ -1264,8 +1290,11 @@ function moeglicheAktion() {
   return null;
 }
 
-function jagdAktion(rein) {   // 🌕 Werwolf-Jagd: Schafe können in die Gruben springen (der Werwolf nicht!)
+function jagdAktion(rein) {   // 🌕 Werwolf-Jagd: Schafe können in die Gruben springen (der Werwolf nicht!) und Aufgaben machen
   if (spielerIstWolf) return null;
+  for (const i of spieler.aufgaben) {
+    if (dist(spieler, ORTE[i]) < 55) return { text: ORTE[i].aufgabe, tun: () => { miniSpiel = neuesMiniSpiel(i); klickZiel = null; } };
+  }
   const g = naechsteGrube(spieler, 50);
   if (g === null) return null;
   if (!(spieler.grubenUebrig > 0)) return { text: 'Keine Sprünge mehr', tun: () => sound.fehler() };
@@ -2248,7 +2277,8 @@ function aufgabeErledigt(nr) {
   spieler.aufgaben = spieler.aufgaben.filter(i => i !== nr);
   spieler.erledigt++;
   if (mp.rolle === 'gast') mpSende({ t: 'aufgabe', nr });
-  zeigeNachricht('✅ ' + ORTE[nr].aufgabe + ' geschafft!', 2);
+  zeigeNachricht('✅ ' + ORTE[nr].aufgabe + ' geschafft!' + (jagdZ ? ` Sonnenaufgang ${JAGD_AUFGABE_ZEIT} s früher! ☀️` : ''), 2.5);
+  if (jagdZ && mp.rolle !== 'gast') jagdAufgabeGeschafft(spieler);
   miniSpiel = null;
 }
 
@@ -3104,11 +3134,6 @@ function zeichneLampenDunkel() {
   else { const g = d.createRadialGradient(spieler.x - kamera.x, spieler.y - kamera.y, 5, spieler.x - kamera.x, spieler.y - kamera.y, 60); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = g; d.fillRect(0, 0, W, H); }
   d.globalCompositeOperation = 'source-over';
   ctx.drawImage(dunkelC, 0, 0);
-  // Die Lampen der anderen: Du siehst ihr Licht, aber nicht die Tiere selbst! (Der Werwolf leuchtet rot)
-  for (const s of schafe) {
-    if (s === spieler || !s.lebt || s.inGrube != null || dist(s, spieler) > 900) continue;
-    lichtKegel(ctx, s, JAGD_LAMPE_WEITE * 0.9, s.istWolf && jagdZ.phase === 'jagd' ? '255,70,50' : '255,240,170', 0.2);
-  }
   // 👀 Rote Werwolf-Augen im Dunkeln ...
   if (wolf && wolf !== spieler && jagdZ.phase === 'jagd' && wolf.lebt && !imLicht(wolf) && dist(wolf, spieler) < 520) {
     const x = wolf.x - kamera.x + wolf.richtung * 30, y = wolf.y - kamera.y - 20, blinzeln = Math.sin(zeit * 1.7) > 0.95;
@@ -3216,6 +3241,16 @@ function zeichneJagdHUD() {   // 🌕 Werwolf-Jagd: Zeit und was du tun sollst
   const sek = Math.max(0, Math.ceil(zaehlt ? J.t : J.rest));
   text(zaehlt ? `⏳ Noch ${sek} Sekunden zählen` : `☀️ Sonnenaufgang in ${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, '0')}`, 26, 60, 16, '#fff', 'left', false);
   text(z3, 26, 88, 12, '#c9c3ff', 'left', false);
+  // Deine Aufgaben (jede bringt die Sonne früher!)
+  if (!spielerIstWolf && spieler.lebt && spieler.alleAufgaben.length) {
+    ctx.fillStyle = 'rgba(20,20,50,0.8)';
+    rundesRechteck(14, 118, 260, 30 + spieler.alleAufgaben.length * 22, 10); ctx.fill();
+    text(`Aufgaben (je ⏩ ${JAGD_AUFGABE_ZEIT} s früher Sonne):`, 26, 134, 13, '#ffd166', 'left', false);
+    spieler.alleAufgaben.forEach((i, n) => {
+      const fertig = !spieler.aufgaben.includes(i);
+      text(`${fertig ? '✅' : '⬜'} ${ORTE[i].aufgabe}`, 26, 158 + n * 22, 13, fertig ? '#8f8' : '#fff', 'left', false);
+    });
+  }
   // 📡 Wolf-Detektor (wie bei Among Us)
   if (!zaehlt && !spielerIstWolf && spieler.lebt) {
     const n = wolfNaehe(), x = W / 2 - 150, y = 12, teile = 10, an = Math.ceil(n * teile - 0.01);
@@ -4650,7 +4685,7 @@ function mpVomGast(g, d) {
     case 'pos': if (s.inGrube != null) break;   // (In der Grube bestimmt der Gastgeber, wo du bist)
       if (jagdZ && s.istWolf && jagdZ.phase === 'zaehlen') break;   // 🙈 Der Werwolf zählt noch!
       s.x = begrenzt(d.x, 50, WELT_B - 50); s.y = begrenzt(d.y, 60, WELT_H - 50); s.richtung = d.r; s.laeuft = !!d.l; if (s.laeuft) s.phase += 0.8; break;
-    case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; } break;
+    case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; if (jagdZ) jagdAufgabeGeschafft(s); } break;
     case 'melden': { const w = wolle[d.w]; if (zustand === 'spiel' && s.lebt && w && dist(s, w) < 130) starteTreffen(s, w); break; }
     case 'glocke': if (zustand === 'spiel' && s.lebt && !glockeGenutzt && dist(s, GLOCKE) < 120) { glockeGenutzt = true; starteTreffen(s, null); } break;
     case 'fressen': { const o = schafe[d.z]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.cooldown <= 0 && o && o.lebt && !o.istWolf && dist(s, o) < 80) fressen(o, s); break; }
@@ -4826,6 +4861,7 @@ function mpSchnappschuss(d) {
     if (!s) return;
     if (s !== spieler) { s.zx = a[0]; s.zy = a[1]; s.richtung = a[2]; s.laeuft = !!a[3]; }
     if (jagdZ && s.lebt && !a[4]) {   // 🌕 Gerade gefangen!
+      if (s === spieler) miniSpiel = null;
       funken(s.x, s.y, 30, ['#ffffff', '#c9c3ff', '#8fd3ff'], 140, 5, 0.9, -40);
       effekte.push({ x: s.x, y: s.y, t: 1.5, max: 1.5, art: 'geist' });
       if (s === spieler || dist(s, spieler) < sicht + 50) sound.haps();
