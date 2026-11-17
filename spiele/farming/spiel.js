@@ -93,18 +93,19 @@ for (const O of Object.values(OBST)) PRODUKTE[O.frucht] = { name: O.name, emoji:
 const TAG_DAUER = 720;           // So viele Sekunden dauert ein ganzer Tag (24 Stunden) im Spiel = 12 Minuten
 const AUFSTEH_ZEIT = 7;          // Um diese Uhrzeit wachst du nach dem Schlafen auf
 // Fischteich: Welche Fische gibt es? chance = wie oft (größer = öfter), schwer = wie wild der Fisch zappelt
+// kg = so leicht/schwer kann er sein (von, bis) · cm = so kurz/lang kann er sein (von, bis)
 const FISCHE = {
-  rotauge: { name: 'Rotauge', emoji: '🐟', preis: 8, chance: 40, schwer: 0.6 },
-  barsch: { name: 'Barsch', emoji: '🐡', preis: 12, chance: 34, schwer: 0.8 },
-  schleie: { name: 'Schleie', emoji: '🐟', preis: 16, chance: 28, schwer: 0.9 },
-  karpfen: { name: 'Karpfen', emoji: '🐟', preis: 20, chance: 30, schwer: 1.0 },
-  forelle: { name: 'Forelle', emoji: '🐠', preis: 30, chance: 18, schwer: 1.3 },
-  aal: { name: 'Aal', emoji: '🐍', preis: 45, chance: 12, schwer: 1.5 },
-  zander: { name: 'Zander', emoji: '🐟', preis: 50, chance: 10, schwer: 1.6 },
-  hecht: { name: 'Hecht', emoji: '🦈', preis: 60, chance: 9, schwer: 1.8 },
-  wels: { name: 'Riesen-Wels', emoji: '🐋', preis: 120, chance: 5, schwer: 2.1 },
-  stoer: { name: 'Stör', emoji: '🐊', preis: 160, chance: 4, schwer: 2.2 },
-  goldfisch: { name: 'Goldener Fisch', emoji: '✨', preis: 250, chance: 3, schwer: 2.4 },
+  rotauge: { name: 'Rotauge', emoji: '🐟', preis: 8, chance: 40, schwer: 0.6, kg: [0.1, 0.8], cm: [15, 35] },
+  barsch: { name: 'Barsch', emoji: '🐡', preis: 12, chance: 34, schwer: 0.8, kg: [0.2, 2], cm: [15, 45] },
+  schleie: { name: 'Schleie', emoji: '🐟', preis: 16, chance: 28, schwer: 0.9, kg: [0.5, 3], cm: [25, 55] },
+  karpfen: { name: 'Karpfen', emoji: '🐟', preis: 20, chance: 30, schwer: 1.0, kg: [1, 20], cm: [30, 90] },
+  forelle: { name: 'Forelle', emoji: '🐠', preis: 30, chance: 18, schwer: 1.3, kg: [0.3, 4], cm: [25, 65] },
+  aal: { name: 'Aal', emoji: '🐍', preis: 45, chance: 12, schwer: 1.5, kg: [0.3, 4], cm: [40, 120] },
+  zander: { name: 'Zander', emoji: '🐟', preis: 50, chance: 10, schwer: 1.6, kg: [1, 12], cm: [40, 100] },
+  hecht: { name: 'Hecht', emoji: '🦈', preis: 60, chance: 9, schwer: 1.8, kg: [1, 18], cm: [50, 130] },
+  wels: { name: 'Riesen-Wels', emoji: '🐋', preis: 120, chance: 5, schwer: 2.1, kg: [5, 80], cm: [80, 250] },
+  stoer: { name: 'Stör', emoji: '🐊', preis: 160, chance: 4, schwer: 2.2, kg: [5, 60], cm: [80, 200] },
+  goldfisch: { name: 'Goldener Fisch', emoji: '✨', preis: 250, chance: 3, schwer: 2.4, kg: [0.5, 5], cm: [20, 50] },
 };
 for (const [k, F] of Object.entries(FISCHE)) PRODUKTE['fisch_' + k] = { name: F.name, emoji: F.emoji, einheit: 'Stück', preis: F.preis };
 const TEICH_FISCHE_MAX = 8;
@@ -1887,10 +1888,81 @@ function angelEnde(gefangen) {
     vorrat[k] = (vorrat[k] || 0) + 1;
     a.b.teich.fische = Math.max(0, a.b.teich.fische - 1);
     teichSchild(a.b); gebSenden(a.b);
-    meldung(`🎣🎉 Du hast ${a.fisch === 'goldfisch' ? 'den' : 'einen'} ${F.emoji} ${F.name} gefangen! (${euro(F.preis)} im Dorfladen)`, 4);
+    fangAuswerten(a.fisch);
     sound.kaufen(); speichern();
   } else if (gefangen === false) { meldung('💨 Oh nein, der Fisch ist entwischt!', 2.5); sound.nein(); }
 }
+// ===== Fisch-Album und Rekorde =====
+// fischAlbum = deine eigenen Fänge (bleibt immer bei dir) · fischRekorde = die Rekorde von ALLEN Bauern auf dem Hof (Server)
+const ALBUM_SPEICHER = 'farming-fischalbum';
+let fischAlbum = {};      // { karpfen: { n: 3, kg: 12.4, cm: 71 }, ... }
+let fischRekorde = {};    // { karpfen: { kg: 15.2, cm: 80, wer: 'Bauer Blau' }, ... }
+try { fischAlbum = JSON.parse(localStorage.getItem(ALBUM_SPEICHER)) || {}; } catch (e) { fischAlbum = {}; }
+function albumSpeichern() { try { localStorage.setItem(ALBUM_SPEICHER, JSON.stringify(fischAlbum)); } catch (e) { /* egal */ } }
+const kgText = kg => kg < 1 ? `${Math.round(kg * 1000)} g` : `${kg.toFixed(2).replace('.', ',')} kg`;
+function meinBauerName() { return mp.aktiv ? (MP_BAUERN[mp.nr] || MP_BAUERN[0]).name : 'Du'; }
+function fangAuswerten(fisch) {
+  const F = FISCHE[fisch];
+  // Wie groß ist er? Kleine Fische gibt es oft, riesige ganz selten!
+  const k = Math.pow(Math.random(), 2.2);
+  const kg = Math.round((F.kg[0] + (F.kg[1] - F.kg[0]) * k) * 100) / 100;
+  const cm = Math.round(F.cm[0] + (F.cm[1] - F.cm[0]) * begrenzt(Math.cbrt(k) * 0.9 + Math.random() * 0.1, 0, 1));
+  // Ins Album eintragen (dein eigener bester Fang)
+  const A = fischAlbum[fisch] || (fischAlbum[fisch] = { n: 0, kg: 0, cm: 0 });
+  A.n++;
+  const persoenlich = kg > A.kg;
+  if (persoenlich) { A.kg = kg; A.cm = cm; }
+  albumSpeichern();
+  // Rekord? Nur wenn er schwerer ist als der beste Fisch von ALLEN Bauern auf dem Hof
+  const alt = fischRekorde[fisch];
+  const rekord = !alt || kg > alt.kg;
+  if (rekord) {
+    fischRekorde[fisch] = { kg, cm, wer: meinBauerName() };
+    mpEvent({ t: 'rekord', f: fisch, kg, cm, wer: meinBauerName() });
+    speichern();
+  }
+  fangFenster(fisch, kg, cm, rekord, persoenlich && !rekord, alt);
+}
+let fangZu = 0;
+function fangFenster(fisch, kg, cm, rekord, persoenlich, alt) {
+  const F = FISCHE[fisch];
+  $('fangFisch').textContent = F.emoji;
+  $('fangName').textContent = `${F.name} gefangen!`;
+  $('fangGroesse').innerHTML = `⚖️ <b>${kgText(kg)}</b> &nbsp; 📏 <b>${cm} cm</b><br><span class="klein">${euro(F.preis)} im Dorfladen</span>`;
+  const r = $('fangRekord');
+  if (rekord) {
+    r.innerHTML = alt ? `🏆 NEUER REKORD! 🏆<br><span class="klein">Der alte Rekord war ${kgText(alt.kg)} von ${alt.wer}</span>` : '🏆 NEUER REKORD! 🏆<br><span class="klein">Der erste ' + F.name + ' auf dem Hof!</span>';
+    r.className = 'rekord';
+    tonGleiten(500, 1000, 0.2, 0.3, 'square', 0.04); ton(1000, 0.55, 0.15, 'square', 0.05); ton(1300, 0.7, 0.35, 'square', 0.05);   // Tatää!
+  } else {
+    r.innerHTML = (persoenlich ? '⭐ Dein schwerster ' + F.name + ' bisher!<br>' : '') + `<span class="klein">🏆 Rekord: ${kgText(alt.kg)} (${alt.cm} cm) von ${alt.wer}</span>`;
+    r.className = '';
+  }
+  $('fang').style.display = 'block';
+  fangZu = rekord ? 7 : 4.5;   // So viele Sekunden bleibt das Fenster offen
+}
+function fangUpdate(dt) {
+  if (fangZu <= 0) return;
+  fangZu -= dt;
+  if (fangZu <= 0) $('fang').style.display = 'none';
+}
+document.getElementById('fang').addEventListener('pointerdown', () => { fangZu = 0; $('fang').style.display = 'none'; });
+function albumZeigen(an) {
+  $('album').style.display = an ? 'block' : 'none';
+  if (!an) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  const arten = Object.keys(FISCHE), gefangen = arten.filter(k => fischAlbum[k]).length;
+  $('albumZahl').textContent = `${gefangen} von ${arten.length} Fischarten gefangen`;
+  $('albumListe').innerHTML = arten.map(k => {
+    const F = FISCHE[k], A = fischAlbum[k], R = fischRekorde[k];
+    const rekordZeile = R ? `🏆 Hof-Rekord: ${kgText(R.kg)} · ${R.cm} cm · ${R.wer}` : '🏆 Noch kein Rekord';
+    if (!A) return `<div class="albumKarte unbekannt"><div class="albumEmoji">❓</div><div><b>???</b><br><span class="klein">Noch nicht gefangen · ${rekordZeile}</span></div></div>`;
+    return `<div class="albumKarte"><div class="albumEmoji">${F.emoji}</div><div><b>${F.name}</b> <span class="klein">× ${A.n}</span><br>`
+      + `⭐ Dein Bester: ${kgText(A.kg)} · ${A.cm} cm<br><span class="klein">${rekordZeile}</span></div></div>`;
+  }).join('');
+}
+document.getElementById('album-zu').addEventListener('click', () => albumZeigen(false));
+document.getElementById('btn-album').addEventListener('click', e => { albumZeigen($('album').style.display !== 'block'); e.currentTarget.blur(); });
 // ===== Angel einholen: mit Fisch dran (geschafft!) oder ohne (entwischt) =====
 const EINHOLEN_DAUER = 0.9;      // So lange fliegt der Schwimmer zurück (Sekunden)
 const FISCH_ZEIGEN_DAUER = 1.8;  // So lange zappelt der gefangene Fisch an der Angel, bevor du ihn einpackst
@@ -3043,7 +3115,7 @@ function speichern() {
       anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
-      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat, tageszeit, salzsteine,
+      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat, tageszeit, salzsteine, fischRekorde,
       wald: waldDaten(), holz: holzDaten(), saege: { sprit: saegeSprit, getragen },
     }));
   } catch (e) { /* egal – dann eben nicht gespeichert */ }
@@ -3063,6 +3135,7 @@ function laden() {
   if (d.vorrat) vorrat = d.vorrat;
   if (typeof d.tageszeit === 'number') tageszeit = d.tageszeit;
   salzsteine = d.salzsteine || 0;
+  fischRekorde = d.fischRekorde || {};
   if (d.v === 1) {   // Alter Spielstand (nur ein Traktor)
     neuesFahrzeug('fendt', d.traktor.x, d.traktor.z, d.traktor.r, { saat: d.saat, tank: d.tank, diesel: d.diesel, werkzeug: d.werkzeug });
     einsteigen(fahrzeuge[0]);
@@ -3211,7 +3284,8 @@ document.addEventListener('keydown', e => {
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
   if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
-  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
+  if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
+  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); albumZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
   if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; updateHUD(); }
   else if (['1', '2', '3'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
@@ -3403,7 +3477,7 @@ function mpSpielerWeg(id, verbreiten) {
 }
 function weltSchnappschuss() {
   return {
-    t: 'welt', money, spielZeit, tageszeit, hofSilo: hofSilo.inhalt,
+    t: 'welt', money, spielZeit, tageszeit, hofSilo: hofSilo.inhalt, fischRekorde,
     felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
     gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })),
     fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel,
@@ -3487,6 +3561,7 @@ function mpVerbindungWeg(text) {
   mp.rolle = null;
 }
 function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
+  fischRekorde = d.fischRekorde || {};
   if (aktiv) aussteigen();
   for (const fz of fahrzeuge) scene.remove(fz.g);
   fahrzeuge.length = 0; letztes = null;
@@ -3587,6 +3662,16 @@ function mpEmpfangen(d, vonGast) {
     }
     case 'faellt': { const b = baeume[d.nr]; if (b && (b.zustand === 'steht' || b.zustand === 'waechst')) baumFaellen(b, d.w, d.id, false); break; }
     case 'holzWeg': holzWeg(d.id); break;
+    case 'rekord': {   // Ein anderer Bauer hat einen neuen Fisch-Rekord!
+      const alt = fischRekorde[d.f];
+      if (FISCHE[d.f] && (!alt || d.kg > alt.kg)) {
+        fischRekorde[d.f] = { kg: d.kg, cm: d.cm, wer: d.wer };
+        meldung(`🏆 ${d.wer} hat einen neuen Rekord: ${FISCHE[d.f].emoji} ${FISCHE[d.f].name} mit ${kgText(d.kg)}!`, 5);
+        if (host) speichern();
+        if ($('album').style.display === 'block') albumZeigen(true);
+      }
+      break;
+    }
     case 'zeit': if (Math.abs(tageszeit - d.z) > 0.1) tageszeit = d.z; return;
     case 'schlaf': zeitVorspulen(d.s); tageszeit = d.z; meldung(`💤 Jemand hat geschlafen – es ist jetzt ${d.z}:00 Uhr morgens! ☀️`, 4); break;
     case 'geb': { const b = gebaute.find(x => gebSchluessel(x) === d.k); if (b) gebDatenSetzen(b, d.d); break; }
@@ -3871,6 +3956,7 @@ function animate() {
   waldUpdate(dt);
   dorfUpdate(dt);
   angelUpdate(dt);
+  fangUpdate(dt);
   musikUpdate();
   salzUpdate(dt);
   gebUpdate(dt);
