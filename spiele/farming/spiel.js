@@ -95,18 +95,24 @@ const AUFSTEH_ZEIT = 7;          // Um diese Uhrzeit wachst du nach dem Schlafen
 // Fischteich: Welche Fische gibt es? chance = wie oft (größer = öfter), schwer = wie wild der Fisch zappelt
 const FISCHE = {
   rotauge: { name: 'Rotauge', emoji: '🐟', preis: 8, chance: 40, schwer: 0.6 },
+  barsch: { name: 'Barsch', emoji: '🐡', preis: 12, chance: 34, schwer: 0.8 },
+  schleie: { name: 'Schleie', emoji: '🐟', preis: 16, chance: 28, schwer: 0.9 },
   karpfen: { name: 'Karpfen', emoji: '🐟', preis: 20, chance: 30, schwer: 1.0 },
   forelle: { name: 'Forelle', emoji: '🐠', preis: 30, chance: 18, schwer: 1.3 },
+  aal: { name: 'Aal', emoji: '🐍', preis: 45, chance: 12, schwer: 1.5 },
+  zander: { name: 'Zander', emoji: '🐟', preis: 50, chance: 10, schwer: 1.6 },
   hecht: { name: 'Hecht', emoji: '🦈', preis: 60, chance: 9, schwer: 1.8 },
+  wels: { name: 'Riesen-Wels', emoji: '🐋', preis: 120, chance: 5, schwer: 2.1 },
+  stoer: { name: 'Stör', emoji: '🐊', preis: 160, chance: 4, schwer: 2.2 },
   goldfisch: { name: 'Goldener Fisch', emoji: '✨', preis: 250, chance: 3, schwer: 2.4 },
 };
 for (const [k, F] of Object.entries(FISCHE)) PRODUKTE['fisch_' + k] = { name: F.name, emoji: F.emoji, einheit: 'Stück', preis: F.preis };
 const TEICH_FISCHE_MAX = 8;
-// So schwer ist das Angel-Minispiel (größere/kleinere Zahlen = leichter/schwerer ausprobieren!)
-const ANGEL_FELD = 0.42;         // So groß ist das grüne Feld (0.42 = fast die Hälfte der Bahn)
-const ANGEL_FISCH_TEMPO = 0.55;  // So wild zappelt der Fisch (1 = wie vorher, kleiner = ruhiger)
-const ANGEL_FUELLEN = 0.42;      // So schnell füllt sich der Balken, wenn der Fisch im grünen Feld ist
-const ANGEL_LEEREN = 0.1;        // So schnell wird der Balken leer, wenn der Fisch draußen ist      // So viele Fische schwimmen höchstens in einem Teich (alle 30 Sekunden kommt einer dazu)
+// So schwer ist das Angel-Minispiel: Ganz schnell E drücken! (Zahlen ändern = leichter/schwerer)
+const ANGEL_DRUECKEN = 0.06;     // So viel füllt sich der Balken bei jedem E-Druck
+const ANGEL_ZIEHEN = 0.12;       // So stark zieht jeder Fisch den Balken wieder runter (pro Sekunde)
+const ANGEL_ZIEHEN_SCHWER = 0.12; // ... und so viel stärker ziehen schwere Fische (mal "schwer")
+const ANGEL_START = 0.35;        // So voll ist der Balken am Anfang
 // Salzmine: Salzsteine machen die Tiere glücklich – sie geben dann doppelt so viel!
 const SALZMINE = { x: 122, z: 12, eingangX: 109.5, eingangZ: 12 };
 const SALZ_MAX = 10;             // So viele Salzsteine kannst du tragen
@@ -1819,9 +1825,14 @@ function angelEnde(gefangen) {
     sound.kaufen(); speichern();
   } else if (gefangen === false) { meldung('💨 Oh nein, der Fisch ist entwischt!', 2.5); sound.nein(); }
 }
-let angelDruck = false;   // Maus auf dem Angel-Spiel gedrückt?
-document.getElementById('angeln').addEventListener('pointerdown', e => { angelDruck = true; e.preventDefault(); });
-document.addEventListener('pointerup', () => { angelDruck = false; });
+// Ein E-Druck (oder Klick auf das Angel-Fenster) beim Drillen: Der Fisch kommt ein Stück näher!
+function angelKurbeln() {
+  if (!angel || angel.phase !== 'kampf') return;
+  angel.fort = Math.min(1, angel.fort + ANGEL_DRUECKEN);
+  angel.wackeln = 1;
+  ton(1600 + angel.fort * 900, 0, 0.04, 'square', 0.03);   // Klick-klick, die Rolle dreht sich
+}
+document.getElementById('angeln').addEventListener('pointerdown', e => { angelKurbeln(); e.preventDefault(); });
 function angelUpdate(dt) {
   if (!angel) return;
   const a = angel;
@@ -1833,38 +1844,27 @@ function angelUpdate(dt) {
       let summe = 0; for (const F of Object.values(FISCHE)) summe += F.chance;
       let z = Math.random() * summe;
       a.fisch = Object.keys(FISCHE).find(k => (z -= FISCHE[k].chance) < 0) || 'rotauge';
-      Object.assign(a, { phase: 'kampf', fischPos: 0.4, ziel: 0.5, zielT: 0.8, zone: 0.25, zoneV: 0, fort: 0.45 });   // Der Fisch startet im grünen Feld
-      a.groesse = ANGEL_FELD - FISCHE[a.fisch].schwer * 0.025;
-      $('angelFisch').textContent = FISCHE[a.fisch].emoji;
-      $('angelZone').style.height = `${a.groesse * 100}%`;
+      Object.assign(a, { phase: 'kampf', fort: ANGEL_START, wackeln: 0 });
+      const F = FISCHE[a.fisch];
+      $('angelFisch').textContent = F.emoji;
+      $('angelName').textContent = `${F.name} · ${'⭐'.repeat(Math.max(1, Math.round(F.schwer * 2)))}`;   // Mehr Sterne = schwerer
       $('angeln').style.display = 'block';
       if (document.pointerLockElement) document.exitPointerLock();
       ton(1200, 0, 0.08, 'square', 0.06); ton(1500, 0.1, 0.08, 'square', 0.06);
-      meldung('❗ Biss! Halt den Fisch im grünen Feld!', 2);
+      meldung('❗ Biss! Drück ganz schnell E!', 2);
     }
     return;
   }
-  // Das Minispiel: Der Fisch zappelt hoch und runter, du hältst das grüne Feld mit Leertaste/Maus nach oben
+  // Das Minispiel: Der Fisch zieht den Balken runter, jedes E zieht ihn wieder hoch
   const F = FISCHE[a.fisch];
   a.schwimmer.position.y = 0.05 + Math.sin(spielZeit * 20) * 0.04;
-  a.zielT -= dt;
-  const wild = F.schwer * ANGEL_FISCH_TEMPO;
-  if (a.zielT <= 0) { a.zielT = (0.8 + Math.random() * 1.2) / wild; a.ziel = a.fischPos + (Math.random() - 0.5) * 0.7; a.ziel = begrenzt(a.ziel, 0, 1); }   // Kleinere Sprünge, seltener
-  a.fischPos += (a.ziel - a.fischPos) * Math.min(1, dt * (0.8 + wild * 1.2));
-  const druck = keys[' '] || angelDruck || mouseDown;
-  a.zoneV = begrenzt(a.zoneV + (druck ? 2.4 : -1.8) * dt, -0.9, 0.9);   // Ruhiger: steigt und fällt langsamer
-  if (druck !== a.druckVorher) a.zoneV *= 0.5;   // Beim Loslassen/Drücken nicht so stark nachschwingen
-  a.druckVorher = druck;
-  a.zone += a.zoneV * dt;
-  if (a.zone < 0) { a.zone = 0; a.zoneV = 0; }
-  if (a.zone > 1 - a.groesse) { a.zone = 1 - a.groesse; a.zoneV = 0; }
-  const fischMitte = a.fischPos * 0.9 + 0.05, drin = fischMitte > a.zone && fischMitte < a.zone + a.groesse;
-  a.fort = begrenzt(a.fort + (drin ? ANGEL_FUELLEN : -ANGEL_LEEREN) * dt, 0, 1);
-  $('angelZone').style.bottom = `${a.zone * 100}%`;
-  $('angelFisch').style.bottom = `${a.fischPos * 90}%`;
-  $('angelBalken').style.height = `${a.fort * 100}%`;
-  $('angelBalken').style.background = drin ? '#7cf5a0' : '#ffd166';
-  if (drin && Math.random() < dt * 8) ton(2200, 0, 0.02, 'square', 0.015);   // Die Rolle surrt
+  a.fort -= (ANGEL_ZIEHEN + F.schwer * ANGEL_ZIEHEN_SCHWER) * dt;
+  a.wackeln = Math.max(0, a.wackeln - dt * 6);
+  const zappeln = Math.sin(spielZeit * (8 + F.schwer * 6)) * (8 + F.schwer * 4);   // Der Fisch zappelt hin und her
+  $('angelFisch').style.transform = `rotate(${zappeln}deg) scale(${1 + a.wackeln * 0.3})`;
+  $('angelBalken').style.width = `${Math.max(0, a.fort) * 100}%`;
+  $('angelBalken').style.background = a.fort > 0.66 ? '#7cf5a0' : a.fort > 0.33 ? '#ffd166' : '#ff7a6b';
+  $('angelTaste').style.transform = `scale(${1 + a.wackeln * 0.25})`;
   if (a.fort >= 1) angelEnde(true);
   else if (a.fort <= 0) angelEnde(false);
 }
@@ -3059,6 +3059,7 @@ document.addEventListener('keydown', e => {
   if ([' ', 'arrowup', 'arrowdown'].includes(k)) e.preventDefault();
   if (e.repeat) return;   // Gedrückt halten soll nicht ständig ein- und aussteigen
 
+  if (k === 'e' && angel && angel.phase === 'kampf') { angelKurbeln(); return; }   // Beim Angeln: E = kurbeln!
   if (k === 'e') {
     if (aktiv) aussteigen();
     else {
