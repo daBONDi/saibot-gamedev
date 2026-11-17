@@ -49,6 +49,9 @@ const JAGD_NAH = 75;                // So viel siehst du direkt um dich herum (a
 const DETEKTOR_WEITE = 650;         // 📡 Ab hier schlägt der Wolf-Detektor aus
 const JAGD_AUFGABEN = 4;            // So viele Aufgaben hat jedes Schaf bei der Werwolf-Jagd
 const JAGD_AUFGABE_ZEIT = 3;        // ⏩ So viele Sekunden früher geht die Sonne auf, wenn ein Schaf eine Aufgabe schafft
+const JAGD_FINALE = 30;             // 🔥 Die letzten 30 Sekunden: FINALE JAGD!
+const JAGD_FINALE_TEMPO = 1.15;     // 🔥 So viel schneller ist der Werwolf im Finale
+const JAGD_WITTERUNG = 4;           // 🔥 So viele Sekunden wittert der Werwolf am Anfang vom Finale alle Schafe
 
 // Die Karten (Orte, Farben ...) stehen in karten.js
 let KARTE, ORTE, GLOCKE;
@@ -611,6 +614,48 @@ function werwolfVerwandeln() {   // Die Zeit ist um: Das Schaf wird zum Werwolf!
   if (wolf) { funken(wolf.x, wolf.y, 40, ['#4b4453', '#ff2a2a', '#ffd166'], 200, 6, 1, -30); effektAn(wolf, 'icon', 2, { text: '🌕' }); }
   zeigeNachricht(spielerIstWolf ? '🌕 AUUUH! Du bist jetzt ein WERWOLF! Fang sie alle!' : '🌕 AUUUH! Der Werwolf ist erwacht! LAUF!', 3.5);
 }
+// 🔥 FINALE JAGD: Die letzten 30 Sekunden!
+let jagdBlitz = 0;
+function finaleStart() {
+  jagdZ.finale = true; jagdZ.witterung = JAGD_WITTERUNG;
+  jagdBlitz = 1;
+  musikNaechste = 0;   // Sofort die Finale-Musik!
+  sound.wolf(); sound.alarm();
+  if (wolf) funken(wolf.x, wolf.y, 50, ['#ff2a2a', '#ff9f43', '#ffd166'], 240, 6, 1.2, -40);
+  zeigeNachricht(spielerIstWolf ? '🔥 FINALE JAGD! Du wirst schneller und wittert alle Schafe! 👃' : '🔥 FINALE JAGD! Der Werwolf wittert euch – LAUF!', 4);
+}
+function finaleUpdate(dt) {   // (Läuft beim Gastgeber UND bei den Gästen)
+  if (jagdBlitz > 0) jagdBlitz = Math.max(0, jagdBlitz - dt * 0.8);
+  if (!jagdZ || zustand !== 'spiel') return;
+  if (jagdZ.witterung > 0) jagdZ.witterung -= dt;
+  if (jagdZ.phase === 'jagd' && !jagdZ.finale && jagdZ.rest <= JAGD_FINALE) finaleStart();
+}
+const wittert = () => !!(jagdZ && jagdZ.finale && jagdZ.witterung > 0);
+function zeichneWitterung() {   // 👃 Der Werwolf riecht alle Schafe: rote Ringe (oder Pfeile am Rand)
+  if (!wittert() || !spielerIstWolf || zustand !== 'spiel') return;
+  const puls = 0.6 + Math.sin(zeit * 10) * 0.4;
+  for (const s of schafe) {
+    if (!s.lebt || s.istWolf || s.inGrube != null) continue;
+    if (d3Aktiv()) continue;
+    const x = s.x - kamera.x, y = s.y - kamera.y;
+    if (x > 20 && x < W - 20 && y > 20 && y < H - 20) {
+      ctx.strokeStyle = `rgba(255,50,50,${puls})`; ctx.lineWidth = 4;
+      ellipse(x, y, 34, 28); ctx.stroke();
+      text('👃', x, y - 44, 18, '#fff', 'center', false);
+    } else {   // Außerhalb vom Bild: Pfeil am Rand
+      const a = Math.atan2(y - H / 2, x - W / 2);
+      const px = begrenzt(W / 2 + Math.cos(a) * 1000, 30, W - 30), py = begrenzt(H / 2 + Math.sin(a) * 1000, 30, H - 30);
+      ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+      ctx.fillStyle = `rgba(255,50,50,${puls})`; dreieck(16, 0, -10, -11, -10, 11);
+      ctx.restore();
+    }
+  }
+  if (d3Aktiv()) {   // In 3D: Pfeil zum nächsten Schaf
+    const z = schafe.filter(s => s.lebt && !s.istWolf && s.inGrube == null).sort((a, b) => dist(a, spieler) - dist(b, spieler))[0];
+    if (z) d3Pfeil(z, '#ff4d4d', `👃 ${z.name} ist da lang!`);
+  }
+}
+
 function jagdAufgabeGeschafft(s) {   // ⏩ Eine Aufgabe geschafft: Die Sonne geht früher auf!
   if (!jagdZ) return;
   jagdZ.rest = Math.max(1, jagdZ.rest - JAGD_AUFGABE_ZEIT);
@@ -722,14 +767,14 @@ function fluchtBot(s, dt) {   // Ein Computer-Schaf bei der Werwolf-Jagd
 function werwolfBot(w, dt) {   // Ein Computer-Werwolf jagt das nächste Schaf, das er sieht
   if (jagdZ.phase === 'zaehlen') { w.laeuft = false; return; }
   let z = w.jagt;
-  if (z && (!z.lebt || z.inGrube != null || dist(w, z) > JAGD_LAMPE_WEITE)) z = null;
+  if (z && (!z.lebt || z.inGrube != null || (dist(w, z) > JAGD_LAMPE_WEITE && !wittert()))) z = null;
   if (!z || Math.random() < dt * 0.5) {
-    const sichtbar = schafe.filter(s => s.lebt && !s.istWolf && s.inGrube == null && imLicht(s, w));   // 🔦 Nur was im Lichtkegel ist!
+    const sichtbar = schafe.filter(s => s.lebt && !s.istWolf && s.inGrube == null && (wittert() || imLicht(s, w)));   // 🔦 Nur was im Lichtkegel ist! (👃 Im Finale: alle)
     sichtbar.sort((a, b) => dist(a, w) - dist(b, w));
     z = sichtbar[0] || null;
   }
   w.jagt = z;
-  if (z) { laufeZu(w, z, JAGD_TEMPO_BOT_WERWOLF, dt); w.ziel = null; return; }
+  if (z) { laufeZu(w, z, JAGD_TEMPO_BOT_WERWOLF * (jagdZ.finale ? JAGD_FINALE_TEMPO : 1), dt); w.ziel = null; return; }
   if (!w.ziel || laufeZu(w, w.ziel, TEMPO_SCHAF * 1.2, dt)) w.ziel = { x: 100 + Math.random() * (WELT_B - 200), y: 110 + Math.random() * (WELT_H - 220) };   // Herumschnüffeln
 }
 
@@ -784,7 +829,18 @@ function musikUpdate() {
   const schnell = jagdZ.phase === 'jagd' && jagdZ.rest < 30 ? 0.8 : 1;   // Am Ende wird's schneller!
   const leise = spieler.lebt ? 1 : 0.5;
   let dauer;
-  if (spielerIstWolf && jagdZ.phase === 'zaehlen') {   // Tick ... tack ... (die Uhr beim Zählen)
+  if (jagdZ.finale && jagdZ.phase === 'jagd') {   // 🔥 FINALE-MUSIK: schnell, laut, gefährlich! (für alle)
+    const schlag = 0.16, n = wolfNaehe();
+    spieleNoten(k % 2 ? 'A1 A2 A1 A2 G1 G2 G1 G2' : 'A1 A2 A1 A2 F1 F2 E1 E2', t, schlag, 'sawtooth', 0.06 * leise, 0.8);   // Treibender Bass
+    spieleNoten(['A4 C5 E5 A5 G5 E5 C5 E5', 'A4 C5 F5 A5 G#5 F5 D5 B4', 'A4 E5 A5 C6 B5 A5 G#5 E5', 'F5 E5 D5 C5 B4 C5 D5 E5'][k % 4], t, schlag, 'square', 0.028 * leise, 0.6);   // Melodie
+    for (let b = 0; b < 8; b += 2) ton(75, t + b * schlag, 0.18, 'sine', 0.22 * leise, 38);                  // Bumm
+    for (let b = 1; b < 8; b += 2) ton(220, t + b * schlag, 0.08, 'square', 0.06 * leise, 120);              // Tschak
+    for (let b = 0; b < 8; b++) ton(3000, t + b * schlag + schlag / 2, 0.02, 'square', 0.01 * leise);          // Tsst
+    if (k % 2 === 0) { ton(600, t, 4 * schlag, 'sawtooth', 0.018 * leise, 1300); ton(1300, t + 4 * schlag, 4 * schlag, 'sawtooth', 0.018 * leise, 600); }   // Sirene
+    if (spielerIstWolf && k % 4 === 0) wackelTon([[0, 500], [0.5, 900], [1.2, 600]], t, 1.2, 'sawtooth', 0.05, 6, 30);   // Werwolf-Heulen
+    if (!spielerIstWolf && n > 0.75) for (let b = 0; b < 8; b += 2) ton(1400 + Math.random() * 300, t + b * schlag, schlag * 1.5, 'sawtooth', 0.02 * leise, 2300);   // Ganz nah: Kreischen!
+    dauer = 8 * schlag;
+  } else if (spielerIstWolf && jagdZ.phase === 'zaehlen') {   // Tick ... tack ... (die Uhr beim Zählen)
     for (let i = 0; i < 4; i++) ton(i % 2 ? 900 : 1200, t + i * 0.5, 0.05, 'square', 0.025);
     ton(55, t, 1.9, 'sine', 0.05);
     dauer = 2;
@@ -907,7 +963,7 @@ function bewegeSpieler(dt) {
   const laenge = Math.hypot(dx, dy);
   spieler.laeuft = laenge > 0;
   if (laenge > 0) {
-    const tempo = (jagdZ && spielerIstWolf ? JAGD_TEMPO_WERWOLF : TEMPO_SPIELER) * (spieler.sprint > 0 ? 1.8 : 1);
+    const tempo = (jagdZ && spielerIstWolf ? JAGD_TEMPO_WERWOLF * (jagdZ.finale ? JAGD_FINALE_TEMPO : 1) : TEMPO_SPIELER) * (spieler.sprint > 0 ? 1.8 : 1);
     spieler.x += dx / laenge * tempo * dt;
     spieler.y += dy / laenge * tempo * dt;
     if (dx) spieler.richtung = Math.sign(dx);
@@ -1219,14 +1275,24 @@ function grubenZeugen(p, w) {
   }
 }
 
+// 🕳️ Animation: Das Schaf dreht sich und plumpst ins Loch (rein) – oder hüpft im Bogen raus (raus)
+function grubenAnimation(w, g, rein) {
+  const farbe = w.verkleidet ? w.verkleidet.als.farbe : w.farbe;
+  effekte.push({ x: g.x, y: g.y, t: 0.7, max: 0.7, art: rein ? 'grubeRein' : 'grubeRaus', farbe, richtung: w.richtung || 1 });
+  funken(g.x, g.y + 10, 18, ['#8a6a44', '#a88a5c', '#5e4630'], 110, 5, 0.7, 120);   // Staub und Erde fliegen
+  const hoerbar = w.istSpieler || dist(g, spieler) < sicht + 20;
+  if (!hoerbar) return;
+  if (rein) { ton(900, 0, 0.35, 'sine', 0.13, 180); setTimeout(() => sound.plumps(), 330); }   // Fiiiuuu – PLUMPS!
+  else { ton(250, 0, 0.18, 'sine', 0.2, 900); ton(700, 0.12, 0.1, 'triangle', 0.1, 1200); }   // Boing!
+}
+
 function springeInGrube(w, i) {
   const g = KARTE.gruben[i];
   if (jagdZ && !w.istWolf) w.grubenUebrig = Math.max(0, (w.grubenUebrig ?? JAGD_GRUBEN_SPRUENGE) - 1);   // Ein Sprung weniger!
   w.inGrube = i; w.x = g.x; w.y = g.y;
   w.jagt = null; w.ziel = null; w.grubeStart = zeit;
   if (w === spieler) { klickZiel = null; w.grubeSeit = zeit; }
-  effekte.push({ x: g.x, y: g.y, t: 0.8, art: 'plumps' });
-  if (w.istSpieler || dist(g, spieler) < sicht + 20) sound.plumps();
+  grubenAnimation(w, g, true);
   if (mp.rolle === 'gast' && w === spieler) { mpSende({ t: 'grube', i }); return; }   // 🌐 Wer dich sieht, rechnet der Gastgeber
   if (!jagdZ) grubenZeugen(g, w);
 }
@@ -1234,8 +1300,7 @@ function springeInGrube(w, i) {
 function kletterRaus(w, i) {
   const g = KARTE.gruben[i];
   w.inGrube = null; w.x = g.x; w.y = g.y + 28; w.rausZeit = zeit;
-  effekte.push({ x: g.x, y: g.y, t: 0.8, art: 'plumps' });
-  if (w.istSpieler || dist(g, spieler) < sicht + 20) sound.plumps();
+  grubenAnimation(w, g, false);
   if (mp.rolle === 'gast' && w === spieler) { mpSende({ t: 'raus', i }); return; }
   if (!jagdZ) grubenZeugen(g, w);
 }
@@ -2725,6 +2790,26 @@ function zeichneEffekt(e, pos) {
   const k = e.max ? 1 - e.t / e.max : 0;   // Fortschritt: 0 = Anfang, 1 = Ende
   const { x, y } = pos;
   switch (e.art) {
+    case 'grubeRein': {   // Dreht sich im Kreis und wird immer kleiner ... weg!
+      ctx.fillStyle = 'rgba(20,12,6,0.85)'; ellipse(x, y + 12, 30 * (1 - k * 0.3), 10); ctx.fill();   // Das Loch
+      if (k < 0.85) {
+        ctx.save(); ctx.translate(x, y - 6 + k * 18); ctx.rotate(k * Math.PI * 2.5 * e.richtung);
+        zeichneSchafKoerper(0, 0, e.farbe, e.richtung, 0, false, Math.max(0.05, 1 - k * 1.15));
+        ctx.restore();
+      }
+      const pop = Math.min(1, k * 4);
+      ctx.globalAlpha = 1 - k;
+      text('PLUMPS!', x, y - 40 - k * 25, 16 + pop * 8, '#ffd166');
+      break;
+    }
+    case 'grubeRaus': {   // Hüpft im hohen Bogen aus dem Loch
+      ctx.fillStyle = `rgba(20,12,6,${0.85 * (1 - k)})`; ellipse(x, y + 12, 30, 10); ctx.fill();
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 14, y - 5 - k * 30); ctx.lineTo(x + sx * 22, y - 20 - k * 40); ctx.stroke(); }   // Sprung-Striche
+      text('HOPP!', x, y - 50 - k * 20, 18, '#9be89b');
+      break;
+    }
     case 'plumps':
       ctx.globalAlpha = Math.min(1, e.t);
       text('💨', x, y - 10 - (0.8 - e.t) * 30, 34, '#fff', 'center', false);
@@ -3239,7 +3324,14 @@ function zeichneJagdHUD() {   // 🌕 Werwolf-Jagd: Zeit und was du tun sollst
   else { z1 = zaehlt ? '🏃 Lauf weg! Der Werwolf zählt ...' : '🐑 Lauf vor dem Werwolf weg!'; z3 = `🕳️ Noch ${spieler.grubenUebrig ?? 0} Grubensprünge · Werwolf: ${wolf ? wolf.name : '?'}`; }
   text(z1, 26, 32, 16, spielerIstWolf ? '#ff6b6b' : '#ffd166', 'left', false);
   const sek = Math.max(0, Math.ceil(zaehlt ? J.t : J.rest));
-  text(zaehlt ? `⏳ Noch ${sek} Sekunden zählen` : `☀️ Sonnenaufgang in ${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, '0')}`, 26, 60, 16, '#fff', 'left', false);
+  const finale = J.finale && !zaehlt;
+  text(zaehlt ? `⏳ Noch ${sek} Sekunden zählen` : `${finale ? '🔥' : '☀️'} Sonnenaufgang in ${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, '0')}`, 26, 60, finale ? 17 + Math.sin(zeit * 8) * 1.5 : 16, finale ? '#ff6b6b' : '#fff', 'left', false);
+  if (jagdBlitz > 0) { ctx.fillStyle = `rgba(255,30,20,${jagdBlitz * 0.45})`; ctx.fillRect(0, 0, W, H); }   // 🔥 Roter Blitz
+  if (finale && zustand === 'spiel') {
+    const gross = 1 + Math.max(0, (jagdBlitz - 0.5)) * 1.2;
+    text('🔥 FINALE JAGD 🔥', W / 2, spielerIstWolf ? 40 : 88, 22 * gross, '#ff4d4d');
+    zeichneWitterung();
+  }
   text(z3, 26, 88, 12, '#c9c3ff', 'left', false);
   // Deine Aufgaben (jede bringt die Sonne früher!)
   if (!spielerIstWolf && spieler.lebt && spieler.alleAufgaben.length) {
@@ -4222,7 +4314,8 @@ function d3SchafBauen() {
 function d3SchafZeigen(s) {
   let m = D3.schafe.get(s);
   if (!m) { m = d3SchafBauen(); D3.schafe.set(s, m); }
-  const zeigen = s !== spieler && s.lebt && s.inGrube == null && !(s.unsichtbar > 0);
+  const sinkt = s.inGrube != null && zeit - (s.grubeStart ?? -9) < 0.6;   // 🕳️ Gerade reingesprungen: man sieht es noch versinken
+  const zeigen = s !== spieler && s.lebt && (s.inGrube == null || sinkt) && !(s.unsichtbar > 0);
   m.g.visible = zeigen;
   if (m.lx === null) { m.lx = s.x; m.ly = s.y; }
   const dx = s.x - m.lx, dy = s.y - m.ly;
@@ -4231,7 +4324,9 @@ function d3SchafZeigen(s) {
   if (!zeigen) return;
   const [x, , z] = d3Pos(s.x, s.y);
   const huepf = s.laeuft ? Math.abs(Math.sin(s.phase * 0.5)) * 0.06 : 0;
-  m.g.position.set(x, huepf, z);
+  const tief = sinkt ? -(zeit - s.grubeStart) * 2.2 : 0;
+  m.g.position.set(x, huepf + tief, z);
+  if (sinkt) m.g.rotation.y += 0.35;   // Dreht sich beim Reinplumpsen
   let diff = m.winkel - m.g.rotation.y; while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
   m.g.rotation.y += diff * 0.2;
   m.beine.forEach((b, k) => { b.rotation.x = s.laeuft ? Math.sin(s.phase * 0.5 + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI : 0)) * 0.5 : 0; });
@@ -4279,7 +4374,9 @@ function d3Zeichnen() {
   if (w !== D3.w || h !== D3.h) { D3.w = w; D3.h = h; R.setSize(w, h, false); D3.kam.aspect = w / h; D3.kam.updateProjectionMatrix(); }
   if (d3Gefangen() && (zustand !== 'spiel' || miniSpiel)) document.exitPointerLock();   // Für Mini-Spiele und Treffen brauchst du die Maus
   // Kamera = deine Augen
-  const augen = !spieler.lebt ? D3_AUGEN_GEIST + Math.sin(zeit * 2) * 0.1 : spieler.inGrube != null ? D3_AUGEN_GRUBE : D3_AUGEN;
+  const augenZiel = !spieler.lebt ? D3_AUGEN_GEIST + Math.sin(zeit * 2) * 0.1 : spieler.inGrube != null ? D3_AUGEN_GRUBE : D3_AUGEN;
+  D3.augen = D3.augen == null ? augenZiel : D3.augen + (augenZiel - D3.augen) * 0.15;   // 🕳️ Weich runter in die Grube (und wieder rauf)
+  const augen = D3.augen;
   const wippen = spieler.laeuft && spieler.lebt ? Math.abs(Math.sin(spieler.phase * 0.5)) * 0.05 : 0;
   D3.kam.position.set(spieler.x * METER, augen + wippen, spieler.y * METER);
   D3.kam.rotation.set(D3.pitch, D3.yaw, 0);
@@ -4867,8 +4964,12 @@ function mpSchnappschuss(d) {
       if (s === spieler || dist(s, spieler) < sicht + 50) sound.haps();
     }
     s.lebt = !!a[4];
+    if (s !== spieler && (s.inGrube != null) !== !!a[5]) {   // Rein oder raus? Animation zeigen!
+      grubenAnimation(s, { x: a[0], y: a[5] ? a[1] : a[1] - 28 }, !!a[5]);
+      if (a[5]) s.grubeStart = zeit;
+    }
     if (s !== spieler) s.inGrube = a[5] ? 0 : null;
-    else if (!a[5] && s.inGrube != null && zeit - (s.grubeSeit || 0) > 1.5) { s.inGrube = null; s.rausZeit = zeit; }   // Der Gastgeber sagt: Du bist nicht (mehr) in der Grube
+    else if (!a[5] && s.inGrube != null && zeit - (s.grubeSeit || 0) > 1.5) { s.inGrube = null; s.rausZeit = zeit; grubenAnimation(s, { x: s.x, y: s.y }, false); }   // Der Gastgeber sagt: Du bist nicht (mehr) in der Grube
     const geradeBenutzt = s === spieler && zeit - (spieler.faehigkeitZeit || -9) < 1;   // (Deine Fähigkeit ist noch unterwegs zum Gastgeber – nicht gleich wieder wegnehmen!)
     if (!(geradeBenutzt && s.unsichtbar > 0 && !a[6])) s.unsichtbar = a[6] ? Math.max(1, s.unsichtbar) : 0;
     if (!(geradeBenutzt && s.verkleidet && a[7] < 0)) s.verkleidet = a[7] >= 0 && schafe[a[7]] ? { als: schafe[a[7]], t: 1 } : null;
@@ -5030,7 +5131,7 @@ function schleife(jetzt) {
   letzte = jetzt;
   zeit += dt;
   update(dt);
-  musikUpdate(); detektorUpdate(dt);
+  finaleUpdate(dt); musikUpdate(); detektorUpdate(dt);
   mpTick(dt);
   zeichne();
   requestAnimationFrame(schleife);
