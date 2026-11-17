@@ -3345,6 +3345,7 @@ function baueZwischendecke(R, boden) {
 }
 
 function hausAufraeumen() {
+  troll = null;   // (😈 Neues Spiel: Du bist wieder ein Roboter)
   while (hausGruppe.children.length) {
     const o = hausGruppe.children[0];
     hausGruppe.remove(o);
@@ -4429,7 +4430,9 @@ function updateMonster(m, dt) {
   m.angriffPause -= dt;
   if (m.betaeubt > 0) { m.betaeubt -= dt; m.laeuft = false; m.zielen = 0; return; }
   let tempo;
-  if (m.art === 'schrank') {
+  if (m.besessen) {   // 😈 Ein Mensch steuert dieses Monster!
+    tempo = trollSteuern(m, dt);
+  } else if (m.art === 'schrank') {
     tempo = schrankUpdate(m, dt);
   } else if (m.art === 'formwandler') {
     tempo = formwandlerUpdate(m, dt);
@@ -6168,6 +6171,126 @@ function updateSpieler(dt) {
 }
 
 // =====================================================================
+// ===== 😈 Geheimer Monster-Modus: Tippe "troll" – und DU bist ein Monster! =====
+// =====================================================================
+// Niemand merkt es: Dein Roboter steht derweil auf der Reparatur-Platte im Bus (sieht aus, als würdest du dich reparieren).
+// WASD = laufen · Shift = schnell · Maus = umschauen · Q = anderes Monster · nochmal "troll" tippen = wieder Roboter
+// Im Multiplayer steuert der Gastgeber das Monster für dich (du schickst ihm nur, wohin du willst).
+const TROLL_CODE = 'troll';                       // Das Geheimwort (einfach tippen, während du spielst)
+const TROLL_KAMERA = { weg: 3.4, hoch: 0.35 };    // So weit hinter dem Monster ist die Kamera
+let troll = null;   // { nr } = welches Monster du gerade bist (null = du bist ein ganz normaler Roboter)
+let trollTipp = '';
+function trollPlatz() { const H = haus.bus.heil; return { x: H.x, y: 0.02, z: H.z }; }   // Da "steht" dein Roboter derweil
+function trollTaste(k) {
+  if (k.length !== 1) return;
+  trollTipp = (trollTipp + k).slice(-TROLL_CODE.length);
+  if (trollTipp !== TROLL_CODE) return;
+  trollTipp = '';
+  if (troll) trollEnde();
+  else if (zustand === 'spiel' && !lobby && introZeit < 0 && !tot && !nachsitzen && monster.length) trollStart();
+}
+function trollStart() {
+  const p = spielerKoerper.position;
+  let nr = -1, best = Infinity;
+  monster.forEach((m, i) => { const d = abstand3D(m, p); if (!m.besessen && d < best) { best = d; nr = i; } });   // Das nächste Monster
+  if (nr < 0) return;
+  if (gegriffen) loslassen();
+  troll = { nr };
+  trollSetzen(nr);
+  zeigeNachricht(`😈 PSST! Du bist jetzt ${monster[nr].info.emoji} ${monster[nr].info.name}! Q = anderes Monster · "troll" tippen = zurück`, 5, '#ff6bd5');
+}
+function trollSetzen(nr) {   // Ein Monster übernehmen (Gastgeber sofort – ein Gast sagt es mit jedem 'p' dem Gastgeber)
+  troll.nr = nr;
+  if (mp.rolle === 'gast') return;
+  for (const m of monster) if (m.besessen === 'ich' && m !== monster[nr]) { m.besessen = null; trollFreigeben(m); }
+  monster[nr].besessen = 'ich';
+}
+function trollEnde() {
+  if (!troll) return;
+  if (mp.rolle !== 'gast') for (const m of monster) if (m.besessen === 'ich') { m.besessen = null; trollFreigeben(m); }
+  troll = null;
+  const P = trollPlatz();
+  spielerKoerper.position.set(P.x, P.y + KOERPER_RADIUS + 0.05, P.z); spielerKoerper.velocity.set(0, 0, 0);   // Du stehst auf der Reparatur-Platte
+  zeigeNachricht('🤖 Du bist wieder ein Roboter. Psst – keiner hat was gemerkt! 🤫', 3, '#7cf5c6');
+}
+function trollNaechstes() {   // Q: in ein anderes Monster schlüpfen
+  if (!troll || !monster.length) return;
+  for (let k = 1; k <= monster.length; k++) {
+    const i = (troll.nr + k) % monster.length, m = monster[i];
+    if (!m.besessen || m.besessen === 'ich') { trollSetzen(i); zeigeNachricht(`😈 Jetzt bist du ${m.info.emoji} ${m.info.name}!`, 2.5, '#ff6bd5'); return; }
+  }
+}
+function trollFreigeben(m) {   // Das Monster denkt wieder selbst
+  m.steuer = null; m.ziel = null; m.zielZeit = 0;
+  if (m.art === 'schrank') { m.modus = 'heimweg'; schrankNeuesVersteck(m); }
+  else if (m.art === 'maulwurf') { m.modus = 'oben'; m.obenZeit = 0.5; }
+  else if (m.art === 'formwandler') m.modus = 'abhauen';
+  else if (m.art === 'oma') { m.modus = 'wandern'; m.aerger = 0; m.ruhe = m.info.ruhe; }
+  else m.modus = 'wandern';
+}
+function trollSteuerJetzt() {   // Aus deinen Tasten: Wohin soll das Monster laufen? (wie beim Roboter: dahin, wohin du schaust)
+  const vor = (tasten['w'] || tasten['arrowup'] ? 1 : 0) - (tasten['s'] || tasten['arrowdown'] ? 1 : 0);
+  const seite = (tasten['d'] || tasten['arrowright'] ? 1 : 0) - (tasten['a'] || tasten['arrowleft'] ? 1 : 0);
+  const sinY = Math.sin(blick.links), cosY = Math.cos(blick.links);
+  let dx = -sinY * vor + cosY * seite, dz = -cosY * vor - sinY * seite;
+  const l = Math.hypot(dx, dz);
+  if (l > 0) { dx /= l; dz /= l; }
+  return { dx: r2(dx), dz: r2(dz), renn: !!tasten['shift'] };
+}
+function trollSteuern(m, dt) {   // (Läuft beim Gastgeber in updateMonster) Ein Mensch steuert dieses Monster!
+  const s = m.steuer || { dx: 0, dz: 0, renn: false };
+  m.trollSicht = (m.trollSicht || 0) - dt;
+  if (m.trollSicht <= 0) { m.trollSicht = 0.3; m.trollSieht = !!sichtbaresOpfer(m); }
+  // So tun, als wäre alles ganz normal (damit Angriffe klappen und die Jagd-Musik echt wirkt)
+  if (m.art === 'maulwurf') m.modus = 'oben';
+  else if (m.art === 'oma' || m.art === 'schrank' || m.art === 'formwandler') { m.modus = 'jagen'; m.jagdZeit = 5; }
+  else m.modus = m.trollSieht ? 'jagen' : 'wandern';
+  if (m.art === 'lehrer') m.lehrerRuhe = Math.min(m.lehrerRuhe || 0, 3);
+  if (!s.dx && !s.dz) { m.ziel = null; m.zielZeit = 1; return 0; }
+  m.ziel = { x: m.x + s.dx * 1.5, y: m.y, z: m.z + s.dz * 1.5 }; m.zielZeit = 1;
+  const langsam = m.art === 'maulwurf' ? (m.info.krabbelTempo || m.info.tempo) : m.info.tempo;
+  return s.renn ? Math.max(m.info.jagdTempo, langsam) : Math.max(langsam, 1.6);
+}
+function trollParken() {   // Dein echter Körper wartet weit weg (da sieht ihn kein Monster)
+  if (!troll) return;
+  spielerKoerper.position.set(TOT_PLATZ.x, TOT_PLATZ.y, TOT_PLATZ.z); spielerKoerper.velocity.set(0, 0, 0);
+}
+const trollKamZiel = new THREE.Vector3(), trollKamRueck = new THREE.Vector3();
+function trollKamera(m) {   // Die Kamera schwebt hinter deinem Monster (und nicht durch Wände)
+  const yaw = blick.links, hoch = begrenzt(blick.hoch, -0.9, 0.7);
+  trollKamZiel.set(m.x, m.y + (m.info.augen || 1.6), m.z);
+  trollKamRueck.set(Math.sin(yaw) * Math.cos(hoch), -Math.sin(hoch) + TROLL_KAMERA.hoch, Math.cos(yaw) * Math.cos(hoch)).normalize();
+  let weg = TROLL_KAMERA.weg;
+  sichtStrahl.set(trollKamZiel, trollKamRueck); sichtStrahl.far = weg;
+  const treffer = sichtStrahl.intersectObjects(sichtBlocker, false)[0];
+  if (treffer) weg = Math.max(0.3, treffer.distance - 0.25);
+  kamera.position.copy(trollKamZiel).addScaledVector(trollKamRueck, weg);
+  kamera.lookAt(trollKamZiel);
+}
+function trollHUD() {   // Nur DU siehst das!
+  const m = monster[troll.nr];
+  if (!m) return;
+  const t = `😈 GEHEIM: Du bist ${m.info.emoji} ${m.info.name}  ·  WASD laufen · Shift schnell · Q anderes Monster · "troll" tippen = zurück`;
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  const b = ctx.measureText(t).width + 30;
+  ctx.fillStyle = 'rgba(70,0,60,0.8)'; ctx.fillRect(W / 2 - b / 2, H - 46, b, 32);
+  ctx.fillStyle = '#ff9be9'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, W / 2, H - 30);
+}
+function trollVomGast(g, tm) {   // (Gastgeber) Ein Gast steuert heimlich ein Monster – oder hört damit auf
+  if (tm) {
+    const m = monster[tm[0]];
+    if (m && (!m.besessen || m.besessen === g.id)) {
+      for (const x of monster) if (x !== m && x.besessen === g.id) { x.besessen = null; trollFreigeben(x); }
+      m.besessen = g.id; m.steuer = { dx: tm[1], dz: tm[2], renn: !!tm[3] };
+    }
+    g.troll = true;
+  } else if (g.troll) {
+    g.troll = false;
+    for (const x of monster) if (x.besessen === g.id) { x.besessen = null; trollFreigeben(x); }
+  }
+}
+
+// =====================================================================
 // ===== Update =====
 // =====================================================================
 function update(dt) {
@@ -6193,14 +6316,16 @@ function update(dt) {
   }
   if (spielZeit > 1.5 && spielZeit - dt <= 1.5 && helfer.length) sagen(auswahl(helfer), 'start', {}, 2);
 
-  updateSpieler(dt);
-  gehaltenWerden(dt);
+  if (troll && !monster[troll.nr]) troll = null;
+  if (!troll) { updateSpieler(dt); gehaltenWerden(dt); }
+  else monster[troll.nr].steuer = trollSteuerJetzt();   // 😈 Deine Tasten steuern das Monster
   packenPruefen();
   for (const h of helfer) updateHelfer(h, dt);
   haltenPhysik();
   mpGastSchaetzeHalten();
   welt.step(1 / 60, dt, 3);
   totParken();
+  trollParken();
   pruefeBoden();
   for (const s of [...schaetze]) {
     if (s.zerbrechen && !s.kaputt) zerbrechen(s);
@@ -6809,6 +6934,7 @@ function zeichne3D() {
     else kamera.position.set((L.x1 + L.x2) / 2 + 3, 2, (L.z1 + L.z2) / 2);
   }
   kamera.rotation.set(blick.hoch, blick.links, 0);
+  if (troll && monster[troll.nr] && !tot) trollKamera(monster[troll.nr]);   // 😈 Hinter deinem Monster
   kamera.updateMatrixWorld();
   if (introZeit >= 0) introKamera();   // 🎬 Im Intro fliegt die Kamera durch den Wald
   else if (lobby) {   // 🚌💨 Im fahrenden Bus ruckelt es ein bisschen
@@ -6867,6 +6993,7 @@ function aufBildschirm(v) {
 }
 
 function zeichneHUD() {
+  if (troll) trollHUD();
   // 🔵 Nebeltrank: blauer Schleier vor den Augen · 🟣 Klebeschleim: lila Rand
   if (nebelZeit > 0) {
     const n = begrenzt(nebelZeit / 1.5, 0, 1);
@@ -7245,8 +7372,10 @@ addEventListener('keydown', e => {
   tasten[k] = true;
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
+  trollTaste(k);   // 😈 Psst ...
+  if (k === 'q' && troll) { trollNaechstes(); return; }
   if (k === 'm') tonAn = !tonAn;
-  if (k === 'f') blitzen();
+  if (k === 'f' && !troll) blitzen();
   if (k === 'n' && mp.aktiv && VOICE_AN) { voice.aus = !voice.aus; zeigeNachricht(voice.aus ? '🔇 Voice-Chat AUS (du hörst niemanden, und keiner hört dich)' : '🎙️ Voice-Chat AN – halte V gedrückt zum Sprechen', 3); }
   if (introZeit >= 0 && [' ', 'enter', 'escape', 'e'].includes(k)) { introEnde(); return; }   // 🎬 Intro überspringen
   if (k === 'e' && zustand === 'spiel' && lobby && lobbyKnopf()) {   // 🔴 LOS! oder 🤖 Bots an/aus oder 🎨 Werkstatt
@@ -7256,7 +7385,7 @@ addEventListener('keydown', e => {
     else if (mp.rolle === 'gast') mpSende({ t: 'botsBitte' }); else botsSetzen(!mitBots);
     return;
   }
-  if (k === 'e' && zustand === 'spiel' && !tot && !pause) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
+  if (k === 'e' && zustand === 'spiel' && !tot && !pause && !troll) { const d = tuerBeiMir(); if (d) tuerSetzen(d, !d.auf, 'spieler'); }   // 🚪 Tür auf/zu
 });
 addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
 addEventListener('keydown', e => { if (e.key.toLowerCase() === VOICE_TASTE && !e.repeat) voiceMikroHolen(); });   // (Beim ersten Mal fragt der Browser nach dem Mikro)
@@ -7269,6 +7398,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'kaputt') { zustand = 'titel'; return; }
   if (introZeit >= 0) { introEnde(); mausFangen(); return; }   // 🎬 Klick = Intro überspringen
   if (pause || !mausGefangen) { pause = false; mausFangen(); return; }
+  if (troll) return;   // 😈 Monster haben keinen Greifstrahl
   if (tot) {
     if (!mp.aktiv && e.button === 2) { zustand = 'kaputt'; if (document.pointerLockElement) document.exitPointerLock(); }   // Allein: Rechtsklick = aufgeben
     else if (e.button === 0 && zeit - totSeit > VERBINDUNG_WEG_ZEIT) { zuschauNr++; stoerBalken = 0.3; rauschen(0, 0.3, 0.12, 'highpass', 1500); }   // Klick: anderer Kamera zuschauen
@@ -7343,7 +7473,7 @@ const schatzMitId = id => schaetze.find(s => s.id === id) || null;
 function mpGaeste() {   // Nur beim Gastgeber: alle Gäste, die schon im Haus sind
   if (mp.rolle !== 'host') return [];
   const liste = [];
-  for (const g of mp.andere.values()) if (g.y > -10) liste.push(g);
+  for (const g of mp.andere.values()) if (g.y > -10 && !g.troll) liste.push(g);   // (😈 Wer gerade heimlich ein Monster ist, wird nicht gejagt)
   return liste;
 }
 function mpVonAnderemGehalten(s) {
@@ -7432,6 +7562,7 @@ function mpGastWeg(id) {
   const g = mp.andere.get(id);
   if (!g) return;
   mpMeshWeg(g);
+  trollVomGast(g, null);   // (😈 Sein Monster denkt wieder selbst)
   mp.andere.delete(id);
   zeigeNachricht(`👋 ${g.name} hat den Raum verlassen`, 3, '#c9c3ff');
 }
@@ -7439,7 +7570,7 @@ function mpVomGast(g, d) {
   if (!d || !d.t) return;
   if (d.t === 'name') { const n = nameSauber(d.name); if (n) g.name = n; return; }
   if (d.t === 'look') { lookAnwenden(g, lookAusArray(d.lk)); return; }
-  if (d.t === 'p') Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, vo: d.vo || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r });
+  if (d.t === 'p') { Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, vo: d.vo || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r }); trollVomGast(g, d.tm); }
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
   else if (d.t === 'tuerE') tuerSetzen(tuerListe[d.id], !!d.auf, 'spieler');   // Ein Gast hat E gedrückt
@@ -7487,7 +7618,8 @@ function mpHostSendet() {
   mp.zaehler++;
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const hz = gepackt ? halteZiel() : null;
-  const sp = [{ id: mp.peer.id, nr: 0, na: meinName(), lk: lookArray(aussehen), x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
+  const tp = troll ? trollPlatz() : null;   // 😈 Psst: Alle sehen dich auf der Reparatur-Platte im Bus
+  const sp = [{ id: mp.peer.id, nr: 0, na: meinName(), lk: lookArray(aussehen), x: tp ? r2(tp.x) : r2(p.x), y: tot ? -50 : tp ? tp.y : r2(p.y - rad), z: tp ? r2(tp.z) : r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1,
     pg: gepackt, hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null }];
   for (const g of mp.andere.values()) if (g.y > -10) sp.push({ id: g.id, nr: g.nr, na: g.name, lk: lookArray(g.look || {}), x: g.x, y: g.y, z: g.z, w: g.w, n: g.n || 0, vo: g.vo || 0, dk: g.dk, hg: g.hg, pg: g.pg || null, hz: g.pg ? g.hz : null });
   const mo = monster.map(m => [r2(m.x), r2(m.y), r2(m.z), r2(m.winkel), m.modus, m.betaeubt > 0 ? 1 : 0, r2(m.zielen), m.laeuft ? 1 : 0,
@@ -7646,8 +7778,8 @@ function updateAlsGast(dt) {
   if (schrottZeit >= 0) schrottZeit = Math.min(SCHROTT_ZEIT, schrottZeit + dt);   // (Nur fürs Anzeigen – neu starten tut der Gastgeber)
   busUpdate(dt);
   if (introZeit >= 0) introUpdate(dt);
-  if (!pause && introZeit < 0) updateSpieler(dt);
-  gehaltenWerden(dt);
+  if (troll && !monster[troll.nr]) troll = null;
+  if (!troll) { if (!pause && introZeit < 0) updateSpieler(dt); gehaltenWerden(dt); }   // (😈 Als Monster: Dein Körper wartet weit weg)
   packenPruefen();
   const f = Math.min(1, dt * 12);
   // Alles weich dorthin schieben, wo der Gastgeber es hat
@@ -7678,6 +7810,7 @@ function updateAlsGast(dt) {
   updatePfuetzen(dt);
   welt.step(1 / 60, dt, 3);
   totParken();
+  trollParken();
   pruefeBoden();
   if (spielerKoerper.position.y < -ETAGE_HOEHE - 1.5) { spielerKoerper.position.set(haus.spawn.x, 0.6, haus.spawn.z); spielerKoerper.velocity.set(0, 0, 0); }
   updateSchussSpuren(dt);
@@ -7692,8 +7825,10 @@ function mpGastSendet() {
   const p = spielerKoerper.position, rad = geduckt ? DUCK_RADIUS : KOERPER_RADIUS;
   const r = new THREE.Vector3(); kamera.getWorldDirection(r);
   const k = kamera.position, hz = gegriffen || gepackt ? halteZiel() : null;
-  mpSende({ t: 'p', x: r2(p.x), y: tot ? -50 : r2(p.y - rad), z: r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
-    hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)] });
+  const tp = troll ? trollPlatz() : null, st = troll ? trollSteuerJetzt() : null;   // 😈 Psst: Alle sehen dich im Bus – und der Gastgeber steuert dein Monster
+  mpSende({ t: 'p', x: tp ? r2(tp.x) : r2(p.x), y: tot ? -50 : tp ? tp.y : r2(p.y - rad), z: tp ? r2(tp.z) : r2(p.z), w: r2(blick.links), n: r2(blick.hoch), vo: voice.spricht ? 1 : 0, dk: troll ? false : geduckt, hg: gegriffen ? gegriffen.id : -1, pg: gepackt,
+    hz: hz ? [r2(hz.x), r2(hz.y), r2(hz.z)] : null, k: [r2(k.x), r2(k.y), r2(k.z)], r: [r2(r.x), r2(r.y), r2(r.z)],
+    tm: troll ? [troll.nr, st.dx, st.dz, st.renn ? 1 : 0] : null });
 }
 
 // ----- Für beide -----
