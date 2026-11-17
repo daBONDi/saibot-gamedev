@@ -114,7 +114,7 @@ const ANGEL_ZIEHEN = 0.12;       // So stark zieht jeder Fisch den Balken wieder
 const ANGEL_ZIEHEN_SCHWER = 0.12; // ... und so viel stärker ziehen schwere Fische (mal "schwer")
 const ANGEL_START = 0.35;        // So voll ist der Balken am Anfang
 const ANGEL_GRUEN = 0.66;        // Ab hier ist der Balken im grünen Bereich (0.66 = das rechte Drittel)
-const ANGEL_ZEIT = 5;            // So viele Sekunden musst du im grünen Bereich sein, dann hast du den Fisch
+const ANGEL_ZEIT = 3;            // So viele Sekunden musst du im grünen Bereich sein, dann hast du den Fisch
 // Salzmine: Salzsteine machen die Tiere glücklich – sie geben dann doppelt so viel!
 const SALZMINE = { x: 122, z: 12, eingangX: 109.5, eingangZ: 12 };
 const SALZ_MAX = 10;             // So viele Salzsteine kannst du tragen
