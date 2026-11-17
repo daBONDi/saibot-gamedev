@@ -3209,7 +3209,7 @@ function zeichneHUD() {
   // Handy: Joystick und runder Fähigkeits-Knopf
   const handyKnoepfe = touchModus && zustand === 'spiel' && !miniSpiel;
   if (handyKnoepfe && spieler.inGrube == null) zeichneJoystick();
-  if (handyKnoepfe) zeichneFaehigkeitRund();
+  if (handyKnoepfe && !jagdZ) zeichneFaehigkeitRund();
 
   // Aktions-Knopf
   const a = zustand === 'spiel' && !miniSpiel ? moeglicheAktion() : null;
@@ -4009,16 +4009,23 @@ function d3Ort(o) {
 // ----- Schafe -----
 function d3SchafBauen() {
   const T = D3.T, g = new T.Group();
-  const woll = new T.MeshLambertMaterial({ color: '#ffffff' }), dunkel = d3Mat('#2b2b2b');
+  const woll = new T.MeshLambertMaterial({ color: '#ffffff' }), dunkel = d3Mat('#2b2b2b'), auge = d3Mat('#ffffff');
   for (const [x, y, z, r] of [[0, 0.62, 0, 0.4], [0.24, 0.66, 0.18, 0.3], [-0.24, 0.66, 0.18, 0.3], [0.22, 0.64, -0.22, 0.3], [-0.22, 0.64, -0.22, 0.3], [0, 0.86, 0.02, 0.3]]) d3Teil(g, new T.SphereGeometry(r, 12, 9), woll, x, y, z);
   const kopf = new T.Group(); kopf.position.set(0, 0.8, 0.46); g.add(kopf);
   d3Teil(kopf, new T.SphereGeometry(0.19, 12, 9), dunkel, 0, 0, 0.05).scale.set(0.9, 1, 1.2);
   for (const s of [-1, 1]) {
     d3Teil(kopf, new T.SphereGeometry(0.07, 8, 6), dunkel, s * 0.18, 0.08, -0.02).scale.set(1.8, 0.6, 1);   // Ohren
-    d3Teil(kopf, new T.SphereGeometry(0.04, 8, 6), d3Mat('#ffffff'), s * 0.08, 0.06, 0.24);                 // Augen
+    d3Teil(kopf, new T.SphereGeometry(0.04, 8, 6), auge, s * 0.08, 0.06, 0.24);                             // Augen
     d3Teil(kopf, new T.SphereGeometry(0.02, 6, 5), d3Mat('#000000'), s * 0.08, 0.06, 0.275);
   }
   d3Teil(kopf, new T.SphereGeometry(0.12, 10, 8), woll, 0, 0.17, -0.02);   // Wuschel auf dem Kopf
+  // 🌕 Nur für den Werwolf: spitze Ohren, lange Schnauze und ein buschiger Schwanz (erst mal versteckt)
+  const wolfTeile = new T.Group(); wolfTeile.visible = false; g.add(wolfTeile);
+  const wolfFell = d3Mat('#3a3440');
+  for (const s of [-1, 1]) { const o = d3Teil(wolfTeile, new T.ConeGeometry(0.07, 0.22, 6), wolfFell, s * 0.11, 1.05, 0.44); o.rotation.z = -s * 0.25; }
+  d3Teil(wolfTeile, new T.BoxGeometry(0.16, 0.13, 0.24), wolfFell, 0, 0.74, 0.7);   // Schnauze
+  d3Teil(wolfTeile, new T.SphereGeometry(0.04, 6, 5), d3Mat('#000000'), 0, 0.77, 0.83);   // Nase
+  const schwanz = d3Teil(wolfTeile, new T.SphereGeometry(0.14, 8, 6), wolfFell, 0, 0.75, -0.55); schwanz.scale.set(0.8, 0.8, 2.2); schwanz.rotation.x = 0.5;
   const beine = [];
   for (const [x, z] of [[0.18, 0.22], [-0.18, 0.22], [0.18, -0.22], [-0.18, -0.22]]) {
     const b = new T.Group(); b.position.set(x, 0.42, z); g.add(b);
@@ -4029,7 +4036,7 @@ function d3SchafBauen() {
   const blase = d3Teil(g, new T.SphereGeometry(0.8, 16, 12), new T.MeshBasicMaterial({ color: '#8fd3ff', transparent: true, opacity: 0.18, depthWrite: false }), 0, 0.6, 0);
   const ring = d3Teil(g, new T.TorusGeometry(0.6, 0.05, 6, 24), new T.MeshBasicMaterial({ color: '#ffd166' }), 0, 0.05, 0); ring.rotation.x = Math.PI / 2;
   D3.szene.add(g);
-  return { g, woll, kopf, beine, label, blase, ring, key: '', winkel: 0, lx: null, ly: null };
+  return { g, woll, kopf, beine, label, blase, ring, auge, wolfTeile, key: '', winkel: 0, lx: null, ly: null };
 }
 function d3SchafZeigen(s) {
   let m = D3.schafe.get(s);
@@ -4049,10 +4056,15 @@ function d3SchafZeigen(s) {
   m.beine.forEach((b, k) => { b.rotation.x = s.laeuft ? Math.sin(s.phase * 0.5 + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI : 0)) * 0.5 : 0; });
   // Wie sieht es aus? (Verkleidet? Dann wie das andere Schaf!)
   const als = s.verkleidet ? s.verkleidet.als : s;
-  m.woll.color.set(als.farbe);
-  const freund = spielerIstWolf && s.istWolf;   // Wölfe erkennen sich!
+  const werwolf = !!(jagdZ && s.istWolf && jagdZ.phase === 'jagd');   // 🌕 Verwandelt?
+  m.woll.color.set(werwolf ? '#4b4453' : als.farbe);
+  m.auge.color.set(werwolf ? '#ff2a2a' : '#ffffff'); m.auge.emissive.set(werwolf ? '#ff0000' : '#000000');
+  m.wolfTeile.visible = werwolf;
+  m.g.scale.setScalar(werwolf ? 1.4 : 1);
+  const freund = (spielerIstWolf || jagdZ) && s.istWolf;   // Wölfe erkennen sich! (Den Werwolf kennen alle)
   let symbol = '';
-  if (freund) symbol += ' 🐺';
+  if (jagdZ && s.istWolf) symbol += werwolf ? ' 🌕' : ' 🙈';
+  if (freund && !jagdZ) symbol += ' 🐺';
   if (spieler.rolle === 'spuernase' && s.geruch) symbol += s.geruch === 'wolf' ? ' 🐺' : ' ✅';
   if (s.beschuetztVonDir && s.geschuetzt) symbol += ' 🛡️';
   const key = als.name + symbol + freund;
@@ -4405,7 +4417,7 @@ function mpSpielStart() {
     s.ziel = null; s.jagt = null; s.grubenPlan = null;
     s.faehigkeit = 0; s.geschuetzt = false; s.verdacht = null; s.meldet = false;
     if (s.istWolf) s.cooldown = 12;
-    else if (!s.gesamt && s.rolle !== 'ziege' && s.rolle !== 'schaefer') { s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 4); s.gesamt = 4; s.erledigt = 0; }
+    else if (!jagdZ && !s.gesamt && s.rolle !== 'ziege' && s.rolle !== 'schaefer') { s.aufgaben = mischen([0, 1, 2, 3, 4, 5]).slice(0, 4); s.gesamt = 4; s.erledigt = 0; }
     s.alleAufgaben = [...s.aufgaben];
   }
   const namen = schafe.map(s => [s.istSpieler ? MP_HOST_NAME : s.name, s.farbe]);
@@ -4414,7 +4426,7 @@ function mpSpielStart() {
     const s = g.schaf;
     mpSendeAn(g, {
       t: 'start', karte: kartenNr, E, nr: schafe.indexOf(s), namen,
-      istWolf: s.istWolf, woelfe: s.istWolf ? woelfe.map(w => schafe.indexOf(w)) : [], rolle: s.rolle,
+      istWolf: s.istWolf, woelfe: s.istWolf || jagdZ ? woelfe.map(w => schafe.indexOf(w)) : [], rolle: s.rolle,   // (Bei der Werwolf-Jagd wissen alle, wer der Werwolf ist)
       aufgaben: s.istWolf ? [] : s.aufgaben,
       pos: schafe.map(x => [Math.round(x.x), Math.round(x.y)]),
     });
@@ -4478,6 +4490,7 @@ function mpVomGast(g, d) {
   if (!s) return;
   switch (d.t) {
     case 'pos': if (s.inGrube != null) break;   // (In der Grube bestimmt der Gastgeber, wo du bist)
+      if (jagdZ && s.istWolf && jagdZ.phase === 'zaehlen') break;   // 🙈 Der Werwolf zählt noch!
       s.x = begrenzt(d.x, 50, WELT_B - 50); s.y = begrenzt(d.y, 60, WELT_H - 50); s.richtung = d.r; s.laeuft = !!d.l; if (s.laeuft) s.phase += 0.8; break;
     case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; } break;
     case 'melden': { const w = wolle[d.w]; if (zustand === 'spiel' && s.lebt && w && dist(s, w) < 130) starteTreffen(s, w); break; }
@@ -4495,7 +4508,7 @@ function mpVomGast(g, d) {
       if (zustand === 'spiel' && s.lebt && s.rolle === 'schaefer' && s.faehigkeit <= 0.5 && z && z.lebt && z !== s && z.inGrube == null && dist(s, z) < SCHAEFER_REICHWEITE + 40) hirtenstab(s, z);
       break;
     }
-    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
+    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && (jagdZ ? !s.istWolf : s.istWolf) && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
     case 'grubeWechsel': { const g = KARTE.gruben[d.i]; if (s.inGrube != null && g) { s.inGrube = d.i; s.x = g.x; s.y = g.y; } break; }
     case 'raus': if (s.inGrube != null && KARTE.gruben[d.i]) kletterRaus(s, d.i); break;
     case 'stimme': if (treffen && treffen.phase === 'waehlen' && s.lebt && !mp.stimmen.has(s)) { mp.stimmen.set(s, d.z >= 0 ? schafe[d.z] : null); mpAbstimmungPruefen(); } break;
@@ -4518,6 +4531,7 @@ function mpHostTick() {
     wo: wolle.map(w => [Math.round(w.x), Math.round(w.y), schafe.indexOf(w.opfer), w.angst ? 1 : 0, w.aufloesen != null ? r1(w.aufloesen) : -1]),
     sab: sabotage ? [sabotage.art, Math.ceil(sabotage.t)] : null,
     fo: fortschritt(), gl: glockeGenutzt ? 1 : 0,
+    jg: jagdZ ? [jagdZ.phase === 'jagd' ? 1 : 0, r1(jagdZ.phase === 'jagd' ? jagdZ.rest : jagdZ.t)] : null,
   };
   for (const g of mp.andere.values()) if (g.schaf) mpSendeAn(g, { ...basis, cd: r1(g.schaf.cooldown), le: g.schaf.lebt ? 1 : 0 });
 }
@@ -4562,7 +4576,8 @@ function mpGastStart(d) {
   schafe.forEach((s, i) => { s.x = s.zx = d.pos[i][0]; s.y = s.zy = d.pos[i][1]; });
   spieler = schafe[d.nr];
   spielerIstWolf = d.istWolf;
-  for (const i of d.woelfe) { schafe[i].istWolf = true; schafe[i].rolle = 'wolf'; }   // Nur Wölfe kennen die anderen Wölfe!
+  for (const i of d.woelfe) { schafe[i].istWolf = true; schafe[i].rolle = E.jagd ? 'werwolf' : 'wolf'; }   // Nur Wölfe kennen die anderen Wölfe!
+  jagdZ = E.jagd ? { phase: 'zaehlen', t: JAGD_ZAEHLEN, rest: JAGD_ZEIT } : null;
   spieler.istWolf = d.istWolf;
   spieler.rolle = ROLLEN[d.rolle] ? d.rolle : d.istWolf ? 'wolf' : 'normal';   // 🎭 Deine Spezial-Rolle!
   spieler.faehigkeit = 0; spieler.sprint = 0; spieler.inGrube = null;
@@ -4639,7 +4654,7 @@ function mpVomHost(d) {
       break;
     }
     case 'ende': {
-      const grund = d.sieger === 'wolf' ? 'Die Wölfe haben gewonnen! 🐺' : d.sieger === 'ziege' ? 'Die Ziege hat gewonnen! 🐐' : 'Die Schafe haben gewonnen! 🐑';
+      const grund = jagdZ ? (d.sieger === 'wolf' ? 'Der Werwolf hat alle Schafe gefangen! 🌕' : 'Die Sonne geht auf – die Schafe haben überlebt! ☀️') : d.sieger === 'wolf' ? 'Die Wölfe haben gewonnen! 🐺' : d.sieger === 'ziege' ? 'Die Ziege hat gewonnen! 🐐' : 'Die Schafe haben gewonnen! 🐑';
       beende(d.sieger, grund);
       break;
     }
@@ -4651,9 +4666,14 @@ function mpSchnappschuss(d) {
     const s = schafe[i];
     if (!s) return;
     if (s !== spieler) { s.zx = a[0]; s.zy = a[1]; s.richtung = a[2]; s.laeuft = !!a[3]; }
+    if (jagdZ && s.lebt && !a[4]) {   // 🌕 Gerade gefangen!
+      funken(s.x, s.y, 30, ['#ffffff', '#c9c3ff', '#8fd3ff'], 140, 5, 0.9, -40);
+      effekte.push({ x: s.x, y: s.y, t: 1.5, max: 1.5, art: 'geist' });
+      if (s === spieler || dist(s, spieler) < sicht + 50) sound.haps();
+    }
     s.lebt = !!a[4];
     if (s !== spieler) s.inGrube = a[5] ? 0 : null;
-    else if (!a[5] && s.inGrube != null && zeit - (s.grubeSeit || 0) > 1.5) s.inGrube = null;   // Der Gastgeber sagt: Du bist nicht (mehr) in der Grube
+    else if (!a[5] && s.inGrube != null && zeit - (s.grubeSeit || 0) > 1.5) { s.inGrube = null; s.rausZeit = zeit; }   // Der Gastgeber sagt: Du bist nicht (mehr) in der Grube
     const geradeBenutzt = s === spieler && zeit - (spieler.faehigkeitZeit || -9) < 1;   // (Deine Fähigkeit ist noch unterwegs zum Gastgeber – nicht gleich wieder wegnehmen!)
     if (!(geradeBenutzt && s.unsichtbar > 0 && !a[6])) s.unsichtbar = a[6] ? Math.max(1, s.unsichtbar) : 0;
     if (!(geradeBenutzt && s.verkleidet && a[7] < 0)) s.verkleidet = a[7] >= 0 && schafe[a[7]] ? { als: schafe[a[7]], t: 1 } : null;
@@ -4662,6 +4682,10 @@ function mpSchnappschuss(d) {
   sabotage = d.sab ? { art: d.sab[0], t: d.sab[1] } : null;
   mp.fortschritt = d.fo;
   glockeGenutzt = !!d.gl;
+  if (d.jg && jagdZ) {   // 🌕 Werwolf-Jagd: Zählen oder jagen?
+    if (d.jg[0] && jagdZ.phase !== 'jagd') werwolfVerwandeln();
+    if (d.jg[0]) jagdZ.rest = d.jg[1]; else jagdZ.t = d.jg[1];
+  }
   spieler.cooldown = d.cd;
   spieler.lebt = !!d.le;
   // Das Treffen ist beim Gastgeber vorbei? Dann weiterspielen
@@ -4670,6 +4694,7 @@ function mpSchnappschuss(d) {
 }
 function moeglicheAktionGast() {
   if (!spieler.lebt || spieler.inGrube != null) return null;
+  if (jagdZ) return jagdAktion(springeInGrube);
   if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
     return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => mpSende({ t: 'reparieren' }) };
   }
@@ -4690,7 +4715,9 @@ function moeglicheAktionGast() {
 }
 function mpGastUpdate(dt) {
   if (miniSpiel) miniUpdate(dt);
-  bewegeSpieler(dt);
+  if (jagdZ) { if (jagdZ.phase === 'zaehlen') jagdZ.t -= dt; else jagdZ.rest -= dt; }   // (Der Gastgeber schickt die genaue Zeit)
+  if (jagdZ && spielerIstWolf && jagdZ.phase === 'zaehlen') spieler.laeuft = false;   // 🙈 Augen zu!
+  else bewegeSpieler(dt);
   spieler.cooldown -= dt;
   spieler.faehigkeit -= dt; spieler.sprint -= dt;   // 🎭 Deine Fähigkeit lädt wieder auf
   // Sicht (wie beim Gastgeber)
