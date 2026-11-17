@@ -6240,7 +6240,7 @@ function trollSteuerJetzt() {   // Aus deinen Tasten: Wohin soll das Monster lau
 function trollSteuern(m, dt) {   // (Läuft beim Gastgeber in updateMonster) Ein Mensch steuert dieses Monster!
   const s = m.steuer || { dx: 0, dz: 0, renn: false };
   m.trollSicht = (m.trollSicht || 0) - dt;
-  if (m.trollSicht <= 0) { m.trollSicht = 0.3; m.trollSieht = !!sichtbaresOpfer(m); }
+  if (m.trollSicht <= 0) { m.trollSicht = 0.3; m.trollSieht = trollSiehtJemanden(m); }
   // So tun, als wäre alles ganz normal (damit Angriffe klappen und die Jagd-Musik echt wirkt)
   if (m.art === 'maulwurf') m.modus = 'oben';
   else if (m.art === 'oma' || m.art === 'schrank' || m.art === 'formwandler') { m.modus = 'jagen'; m.jagdZeit = 5; }
@@ -6250,6 +6250,15 @@ function trollSteuern(m, dt) {   // (Läuft beim Gastgeber in updateMonster) Ein
   m.ziel = { x: m.x + s.dx * 1.5, y: m.y, z: m.z + s.dz * 1.5 }; m.zielZeit = 1;
   const langsam = m.art === 'maulwurf' ? (m.info.krabbelTempo || m.info.tempo) : m.info.tempo;
   return s.renn ? Math.max(m.info.jagdTempo, langsam) : Math.max(langsam, 1.6);
+}
+function trollSiehtJemanden(m) {   // Ist jemand nah (12 m) und nicht hinter einer Wand? (Auch für Monster ohne Augen, z. B. den Lauscher)
+  const von = new THREE.Vector3(m.x, m.y + (m.info.augen || 1.4), m.z);
+  const da = (x, y, z) => abstand3D(m, { x, y, z }) < 12 && freieSicht(von, new THREE.Vector3(x, y + 0.4, z));
+  const p = spielerKoerper.position;
+  if (!tot && !troll && da(p.x, p.y, p.z)) return true;   // (Du selbst – wenn nicht DU das Monster bist)
+  for (const g of mpGaeste()) if (da(g.x, g.y, g.z)) return true;
+  for (const h of helfer) if (h.kaputt <= 0 && da(h.body.position.x, h.body.position.y, h.body.position.z)) return true;
+  return false;
 }
 function trollParken() {   // Dein echter Körper wartet weit weg (da sieht ihn kein Monster)
   if (!troll) return;
@@ -6266,6 +6275,16 @@ function trollKamera(m) {   // Die Kamera schwebt hinter deinem Monster (und nic
   if (treffer) weg = Math.max(0.3, treffer.distance - 0.25);
   kamera.position.copy(trollKamZiel).addScaledVector(trollKamRueck, weg);
   kamera.lookAt(trollKamZiel);
+}
+function trollMusik() {   // 😈 Jagst du als Monster gerade jemanden? Dann läuft die Jagd-Musik von deinem Monster!
+  const m = monster[troll.nr];
+  if (!m || m.betaeubt > 0) return null;
+  const jagt = m.art === 'maulwurf' ? m.modus === 'oben' : m.modus === 'jagen';
+  if (!jagt) return null;
+  const nah = (x, y, z) => abstand3D(m, { x, y, z }) < 12;
+  for (const o of mp.andere.values()) if (o.y > -10 && nah(o.x, o.y, o.z)) return m.art;   // Ein Mitspieler in der Nähe
+  for (const h of helfer) if (h.kaputt <= 0 && nah(h.body.position.x, h.body.position.y, h.body.position.z)) return m.art;   // ... oder ein Helfer-Bot
+  return null;
 }
 function trollHUD() {   // Nur DU siehst das!
   const m = monster[troll.nr];
@@ -6300,7 +6319,7 @@ function update(dt) {
   wackeln = Math.max(0, wackeln - dt);
   for (const f of funk) f.t -= dt;
   funk = funk.filter(f => f.t > 0);
-  musikUpdate(zustand === 'spiel' && !pause ? jaeger()?.art ?? null : null);
+  musikUpdate(zustand === 'spiel' && !pause ? (troll ? trollMusik() : jaeger()?.art ?? null) : null);   // (😈 Als Monster hörst du DEINE Jagd-Musik)
   mpUpdate(dt);
   try { voiceUpdate(); } catch (e) { /* Voice-Chat darf nie das Spiel kaputt machen */ }
   if (mp.rolle === 'gast') { if (zustand === 'spiel') updateAlsGast(dt); return; }
