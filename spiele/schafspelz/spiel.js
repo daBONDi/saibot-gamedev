@@ -770,11 +770,24 @@ function musikUpdate() {
     for (const b of [0, 4]) ton(70, t + b * schlag, 0.18, 'sine', 0.18, 40);   // Bumm!
     for (const b of [2, 6]) ton(1800, t + b * schlag, 0.03, 'square', 0.012);   // Tsss
     dauer = 8 * schlag;
-  } else {   // 🐑 Schleich-Musik: auf Zehenspitzen ...
-    const schlag = 0.24 * schnell;
-    spieleNoten('E2 - B1 - E2 - B1 -', t, schlag, 'sine', 0.07 * leise, 0.8);
-    spieleNoten(k % 2 ? 'E4 G4 B4 A4 G4 - E4 -' : 'E4 G4 A4 G4 E4 - D4 -', t, schlag, 'triangle', 0.035 * leise, 0.25);
-    if (k % 4 === 3) spieleNoten('- - - - B5 - A5 -', t, schlag, 'sine', 0.02 * leise, 0.4);
+  } else {   // 🐑 Schleich-Musik – je näher der Werwolf, desto WILDER! (n = Wolf-Detektor: 0 = weit weg, 1 = ganz nah)
+    const n = wolfNaehe();
+    const schlag = 0.24 * schnell * (1 - 0.45 * n);   // Näher = schneller
+    if (n < 0.5) {   // Stufe 1 und 2: auf Zehenspitzen ...
+      spieleNoten('E2 - B1 - E2 - B1 -', t, schlag, 'sine', 0.07 * leise, 0.8);
+      spieleNoten(k % 2 ? 'E4 G4 B4 A4 G4 - E4 -' : 'E4 G4 A4 G4 E4 - D4 -', t, schlag, 'triangle', 0.035 * leise, 0.25);
+      if (k % 4 === 3) spieleNoten('- - - - B5 - A5 -', t, schlag, 'sine', 0.02 * leise, 0.4);
+    } else {         // Stufe 3: Jetzt wird's gefährlich! Harter Bass und schiefe Töne
+      spieleNoten('E2 E2 B1 E2 E2 B1 F2 E2', t, schlag, 'sawtooth', 0.055 * leise, 0.7);
+      spieleNoten(k % 2 ? 'E4 F4 E4 F4 G4 F4 E4 D#4' : 'E4 F4 G#4 F4 E4 F4 E4 D#4', t, schlag, 'square', 0.03 * leise, 0.5);
+    }
+    if (n > 0.25) for (const b of n > 0.5 ? [0, 2, 4, 6] : [0, 4]) ton(80, t + b * schlag, 0.2, 'sine', 0.2 * leise, 40);       // Bumm! (Trommeln)
+    if (n > 0.5) for (let b = 0; b < 8; b++) ton(2400, t + b * schlag, 0.03, 'square', 0.012 * leise);                    // Tsss-tsss
+    if (n > 0.75) {   // Stufe 4: BRUTAL! Kreischen, Grollen und Alarm
+      ton(40, t, 8 * schlag, 'sawtooth', 0.07 * leise, 32);                                                               // Grollen
+      for (let b = 0; b < 8; b += 2) ton(1300 + Math.random() * 300, t + b * schlag, schlag * 1.6, 'sawtooth', 0.022 * leise, 2300);   // Kreisch!
+      for (let b = 1; b < 8; b += 2) ton(110, t + b * schlag, 0.12, 'square', 0.12 * leise, 55);                       // Extra-Wumms
+    }
     dauer = 8 * schlag;
   }
   musikNaechste += dauer;
