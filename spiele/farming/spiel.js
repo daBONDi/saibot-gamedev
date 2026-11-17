@@ -1754,6 +1754,39 @@ function baueGebaeudeMesh(art) {
   } else if (OBST[art]) {   // Obstbaum: Stamm + Krone (die Früchte kommen später dazu)
     const stamm = new THREE.Mesh(stammGeo, mat(0x6b4423)); stamm.castShadow = true; g.add(stamm);
     const krone = new THREE.Mesh(kroneGeo, windMaterial(mat(OBST[art].krone, { flatShading: true }), 0.15)); krone.castShadow = true; g.add(krone);
+  } else if (GEBAEUDE_ARTEN[art].holz) {   // Eigener kleiner Wald: 5 Bäume einer Holzsorte
+    const H = HOLZARTEN[GEBAEUDE_ARTEN[art].holz], R = GEBAEUDE_ARTEN[art].r - 0.5;
+    const boden = new THREE.Mesh(new THREE.CircleGeometry(R, 24), mat(0x4a5a2a));
+    boden.rotation.x = -Math.PI / 2; boden.position.y = 0.03; boden.receiveShadow = true; g.add(boden);
+    const stammMat = mat(H.stamm), kroneMat = windMaterial(mat(H.krone, { flatShading: true }), 0.15);
+    g.userData.baeume = [];
+    for (let k = 0; k < WALD_BAEUME_PLOT; k++) {
+      const w = k / (WALD_BAEUME_PLOT - 1) * Math.PI * 2, rr = k === 0 ? 0 : R * 0.62;
+      const x = Math.cos(w) * rr, z = Math.sin(w) * rr;
+      const baum = new THREE.Group(); baum.position.set(x, 0, z); baum.rotation.y = k * 1.7; g.add(baum);
+      const stamm = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 4, 8), stammMat); stamm.position.y = 2; stamm.castShadow = true; baum.add(stamm);
+      const krone = new THREE.Mesh(new THREE.IcosahedronGeometry(H.form === 'schmal' ? 1.4 : H.form === 'breit' ? 2.3 : 1.9, 1), kroneMat);
+      krone.castShadow = true; krone.position.y = H.form === 'schmal' ? 5.4 : 4.9;
+      if (H.form === 'schmal') krone.scale.set(1, 1.8, 1); else if (H.form === 'breit') krone.scale.set(1.25, 0.8, 1.25);
+      baum.add(krone);
+      const stumpf = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 0.45, 8), stammMat); stumpf.position.set(x, 0.22, z); g.add(stumpf);
+      g.userData.baeume.push(baum);
+    }
+  } else if (art === 'werkbank') {   // Werkbank mit Grill, Schneidebrett und Würsten zum Räuchern
+    const brett = new THREE.MeshStandardMaterial({ map: bretterTextur('#9a6a3a'), roughness: 0.9 });
+    kasten(g, 0, 0.95, 0, 2.6, 0.12, 1.1, brett);                                                      // Tischplatte
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kasten(g, sx * 1.15, 0.45, sz * 0.45, 0.12, 0.9, 0.12, 0x6b4423);   // Beine
+    kasten(g, 0, 0.3, 0, 2.3, 0.06, 0.9, 0x6b4423);                                                    // Ablage unten
+    kasten(g, -0.65, 1.16, 0, 0.95, 0.3, 0.75, 0x222222);                                              // Grill
+    kasten(g, -0.65, 1.21, 0, 0.85, 0.04, 0.65, mat(0xff5a1e, { emissive: 0xff3300, emissiveIntensity: 0.9 }), false);   // Glut
+    for (let k = 0; k < 6; k++) kasten(g, -0.65, 1.32, -0.3 + k * 0.12, 0.9, 0.02, 0.02, 0x999999, false);   // Grillrost
+    kasten(g, 0.35, 1.03, 0.1, 0.55, 0.04, 0.38, 0xd8b07a);                                            // Schneidebrett
+    const schale = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.1, 12), mat(0xeeeeee)); schale.position.set(0.35, 1.06, -0.32); g.add(schale);   // Salzschale
+    for (const sz of [-0.42, 0.42]) kasten(g, 1.0, 1.55, sz, 0.06, 1.1, 0.06, 0x6b4423);              // Räucher-Gestell
+    kasten(g, 1.0, 2.08, 0, 0.06, 0.06, 0.9, 0x6b4423);
+    for (let k = 0; k < 4; k++) {   // Würste hängen zum Räuchern
+      const w = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.35, 4, 8), mat(0x9a3a24)); w.position.set(1.0, 1.82, -0.3 + k * 0.2); w.castShadow = true; g.add(w);
+    }
   } else if (GEBAEUDE_ARTEN[art].tier) {   // Ein rundes Gehege mit Holzzaun, Unterstand und Futtertrog
     const R = GEBAEUDE_ARTEN[art].r - 0.3, huhn = art === 'huehnerhof';
     const boden = new THREE.Mesh(new THREE.CircleGeometry(R, 32), mat(huhn ? 0x9b7b4a : 0x5f8f3a));
@@ -1808,11 +1841,57 @@ function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   if (GEBAEUDE_ARTEN[art].tier) gehegeEinrichten(b);
   if (OBST[art]) obstEinrichten(b);
   if (art === 'teich') teichEinrichten(b);
+  if (GEBAEUDE_ARTEN[art].holz) waldPlotEinrichten(b);
+  if (art === 'werkbank') { b.werkbank = true; b.schild = schild('🛠️ Werkbank · P', '#ffd166', 5); b.schild.position.set(x, 2.9, z); scene.add(b.schild); b.extra.push(b.schild); }
   if (art === 'teich' || art === 'gewaechshaus') grasWeg(x, z, GEBAEUDE_ARTEN[art].r + 0.3);
   if (daten) gebDatenSetzen(b, daten);
   gebaute.push(b);
 }
 
+// ===== Eigene Wälder: Holz hacken (X halten) – die Bäume wachsen nach =====
+function waldPlotEinrichten(b) {
+  b.wald = { holz: GEBAEUDE_ARTEN[b.art].holz, w: new Array(WALD_BAEUME_PLOT).fill(1), takt: 0 };
+  b.schild = schild('', '#fff', 7); b.schild.position.set(b.x, 8.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  waldPlotMalen(b);
+}
+function waldPlotMalen(b) {
+  const W = b.wald, H = HOLZARTEN[W.holz];
+  b.mesh.userData.baeume.forEach((baum, k) => {
+    const w = W.w[k];
+    baum.visible = w > 0.03;
+    baum.scale.setScalar(w >= 1 ? 1 : 0.15 + w * 0.75);   // Junge Bäume sind klein
+  });
+  const n = W.w.filter(w => w >= 1).length;
+  b.schild.userData.malen(n ? `🪵 ${H.kurz}: ${n} Bäume · X halten = Holz` : `🌱 ${H.kurz}: wächst nach ...`, n ? '#ffd166' : '#b9f5a0');
+}
+let waldHackFort = 0, waldHackTon = 0;
+function naherWaldPlot() {
+  if (aktiv) return null;
+  for (const b of gebaute) if (b.wald && Math.hypot(player.position.x - b.x, player.position.z - b.z) < GEBAEUDE_ARTEN[b.art].r + 2.5) return b;
+  return null;
+}
+function waldPlotHacken(dt) {
+  const b = naherWaldPlot();
+  if (!b || building || angel || !(mouseDown || keys.x)) return;
+  const W = b.wald, H = HOLZARTEN[W.holz], nr = W.w.findIndex(w => w >= 1);
+  if (nr < 0) { meldungSelten(`🌱 Alle ${H.kurz}n sind gefällt! Warte, bis sie nachwachsen.`); return; }
+  hackt = true;
+  yaw = Math.atan2(player.position.x - b.x, player.position.z - b.z);   // Zum Wald schauen
+  waldHackFort += dt / WALD_HACK_ZEIT;
+  waldHackTon -= dt;
+  if (waldHackTon <= 0) {   // Tock! Tock!
+    waldHackTon = 0.4;
+    ton(220 + Math.random() * 60, 0, 0.08, 'triangle', 0.12); ton(120, 0, 0.06, 'square', 0.04);
+    staub(player.position.x - Math.sin(yaw) * 1.2, player.position.z - Math.cos(yaw) * 1.2, 0xc8a060, 1, 0.6, 0.4);
+  }
+  if (waldHackFort >= 1) {
+    waldHackFort = 0;
+    W.w[nr] = 0;
+    vorrat['holz_' + W.holz] = (vorrat['holz_' + W.holz] || 0) + WALD_SCHEITE;
+    meldung(`🪵 ${WALD_SCHEITE} Scheite ${H.name}! (du hast ${Math.floor(vorrat['holz_' + W.holz])}) Ab zur Werkbank 🛠️`, 2.5);
+    sound.knarren(0.4); waldPlotMalen(b); gebSenden(b); speichern();
+  }
+}
 // ===== Gewächshaus: Gemüse anbauen =====
 // 16 Pflanzen (2 Beete × 8), alle Blätter in einem InstancedMesh und alle Früchte in einem zweiten (schnell!)
 const GH_PLAETZE = [];
@@ -2022,6 +2101,138 @@ function albumZeigen(an) {
 }
 document.getElementById('album-zu').addEventListener('click', () => albumZeigen(false));
 document.getElementById('btn-album').addEventListener('click', e => { albumZeigen($('album').style.display !== 'block'); e.currentTarget.blur(); });
+// ===== Werkbank: 4×4 Fächer wie beim Craften =====
+// 🔥 Grillen = 1 Fleisch- oder Fischsorte + Holz · 🧂 Pökeln = 1 Fleisch- oder Fischsorte + Salz
+// 🌭 Wurst = mindestens 2 Fleisch + Salz + Holz – andere Fleisch- und Holzsorten ergeben andere Würste!
+const REZEPT_SPEICHER = 'farming-rezepte';
+let wbFaecher = new Array(16).fill(null);   // Was liegt in welchem Fach? z. B. 'fleisch_schwein', 'holz_buche', 'salz', 'fisch_karpfen'
+let werkbankOffen = false;
+let entdeckt = {};   // Welche Rezepte hast du schon entdeckt?
+try { entdeckt = JSON.parse(localStorage.getItem(REZEPT_SPEICHER)) || {}; } catch (e) { entdeckt = {}; }
+function zutatInfo(k) {   // Name und Bild einer Zutat
+  if (k === 'salz') return { name: 'Salz', emoji: '🧂', kurz: 'Salz' };
+  const P = PRODUKTE[k];
+  if (k.startsWith('holz_')) return { name: P.name, emoji: '🪵', kurz: HOLZARTEN[k.slice(5)].kurz };
+  if (k.startsWith('fleisch_')) return { name: P.name, emoji: P.emoji, kurz: P.name.replace('fleisch', '') };
+  return { name: P.name, emoji: P.emoji, kurz: P.name };
+}
+const zutatHabe = k => k === 'salz' ? salzsteine : Math.floor(vorrat[k] || 0);   // So viel hast du davon
+function zutatNehmen(k, n) { if (k === 'salz') salzsteine -= n; else { vorrat[k] -= n; if (vorrat[k] <= 0) delete vorrat[k]; } }
+function zutatenListe() {   // Alles, was man in die Werkbank legen kann
+  const l = [];
+  for (const F of Object.values(FLEISCH)) l.push('fleisch_' + F.k);
+  for (const k of Object.keys(FISCHE)) l.push('fisch_' + k);
+  for (const k of Object.keys(HOLZARTEN)) l.push('holz_' + k);
+  l.push('salz');
+  return l;
+}
+const imGitter = k => wbFaecher.filter(f => f === k).length;
+function rezeptFinden() {   // Was kommt aus den Fächern raus? (Die Reihenfolge ist egal)
+  const z = {};
+  for (const f of wbFaecher) if (f) z[f] = (z[f] || 0) + 1;
+  const essen = Object.keys(z).filter(k => k.startsWith('fleisch_') || k.startsWith('fisch_'));
+  const hoelzer = Object.keys(z).filter(k => k.startsWith('holz_')).map(k => k.slice(5)).sort();
+  const salz = z.salz || 0, essenN = essen.reduce((s, k) => s + z[k], 0);
+  if (!essenN) return null;
+  if (salz && hoelzer.length && essenN >= 2) {   // 🌭 Wurst!
+    const sorten = [...new Set(essen.map(k => k.startsWith('fisch_') ? 'fisch' : k.slice(8)))].sort();
+    const gleich = (a, b) => a.length === b.length && a.every((x, k) => x === b[k]);
+    const W = WURST.find(w => w.fleisch && gleich(w.fleisch, sorten) && gleich(w.holz, hoelzer)) || WURST.find(w => !w.fleisch);
+    return { art: 'wurst', produkt: 'wurst_' + W.id, menge: essenN * 2, z };
+  }
+  if (essen.length !== 1) return null;   // Grillen und Pökeln geht nur mit EINER Sorte
+  const roh = essen[0].startsWith('fisch_') ? essen[0] : essen[0].slice(8);
+  if (salz && !hoelzer.length) return { art: 'poekel', produkt: 'poekel_' + roh, menge: essenN, z };
+  if (hoelzer.length && !salz) return { art: 'grill', produkt: 'grill_' + roh, menge: essenN, z };
+  return null;
+}
+function wieOft(r) {   // So oft kannst du das Rezept mit deinen Zutaten machen
+  let n = Infinity;
+  for (const [k, m] of Object.entries(r.z)) n = Math.min(n, Math.floor(zutatHabe(k) / m));
+  return n === Infinity ? 0 : n;
+}
+function werkbankZeigen(an) {
+  werkbankOffen = an;
+  $('werkbank').style.display = an ? 'block' : 'none';
+  if (!an) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  werkbankMalen();
+}
+function werkbankMalen() {
+  // Fächer, die du nicht mehr hast (z. B. Holz verbraucht), werden leer
+  for (let k = 0; k < 16; k++) { const f = wbFaecher[k]; if (f && imGitter(f) > zutatHabe(f)) wbFaecher[k] = null; }
+  const gitter = $('wbGitter');
+  gitter.innerHTML = '';
+  wbFaecher.forEach((f, k) => {
+    const d = document.createElement('div'); d.className = 'wbFach' + (f ? ' voll' : '');
+    if (f) { const I = zutatInfo(f); d.innerHTML = `<span class="wbEmoji">${I.emoji}</span><span class="wbKurz">${I.kurz}</span>`; d.title = `${I.name} – klick zum Rausnehmen`; }
+    d.addEventListener('click', () => { if (wbFaecher[k]) { wbFaecher[k] = null; sound.klick(); werkbankMalen(); } });
+    gitter.appendChild(d);
+  });
+  // Ergebnis
+  const r = rezeptFinden(), erg = $('wbErgebnis'), n = r ? wieOft(r) : 0;
+  if (r) {
+    const P = PRODUKTE[r.produkt], neu = !entdeckt[r.produkt];
+    erg.innerHTML = `<span class="wbEmoji">${P.emoji}</span><span class="wbKurz">${r.menge}× ${neu ? '???' : P.name}</span>`;
+    erg.title = neu ? 'Ein neues Rezept! Stell es her, um es zu entdecken.' : P.name;
+    erg.className = 'wbFach voll ergebnis';
+  } else { erg.innerHTML = '<span class="wbEmoji">❔</span>'; erg.className = 'wbFach ergebnis'; erg.title = ''; }
+  $('wbMachen').disabled = !r || n < 1;
+  $('wbAlles').disabled = !r || n < 2;
+  $('wbAlles').textContent = r && n >= 2 ? `🔥 Alles machen (${n}×)` : '🔥 Alles machen';
+  $('wbInfo').textContent = !wbFaecher.some(Boolean) ? 'Klick unten auf Zutaten, um sie in die Fächer zu legen!'
+    : !r ? '❌ Daraus wird nichts. Tipp: 🔥 Grillen = 1 Sorte + Holz · 🧂 Pökeln = 1 Sorte + Salz · 🌭 Wurst = 2+ Fleisch + Salz + Holz'
+    : r.art === 'wurst' ? '🌭 Wurst! Andere Fleisch- und Holzsorten geben andere Würste.' : r.art === 'grill' ? '🔥 Ab auf den Grill!' : '🧂 Einpökeln mit Salz!';
+  // Zutaten (unten)
+  const inv = $('wbInventar');
+  inv.innerHTML = '';
+  for (const k of zutatenListe()) {
+    const frei = zutatHabe(k) - imGitter(k);
+    if (zutatHabe(k) < 1) continue;
+    const I = zutatInfo(k), d = document.createElement('button'); d.className = 'wbZutat';
+    d.innerHTML = `${I.emoji} ${I.kurz} <b>${frei}</b>`; d.disabled = frei < 1;
+    d.addEventListener('click', () => {   // In das nächste freie Fach legen
+      const leer = wbFaecher.indexOf(null);
+      if (leer < 0 || zutatHabe(k) - imGitter(k) < 1) { sound.nein(); return; }
+      wbFaecher[leer] = k; sound.klick(); werkbankMalen();
+    });
+    inv.appendChild(d);
+  }
+  if (!inv.children.length) inv.innerHTML = '<span class="klein">Du hast keine Zutaten! 🔪 Tiere zum Metzger bringen (P im Gehege), 🎣 Fische angeln, 🪓 Holz in deinen Wäldern hacken (X), ⛏️ Salz in der Salzmine.</span>';
+  // Rezeptbuch
+  const liste = [];
+  for (const W of WURST) liste.push(['wurst_' + W.id, W.fleisch ? `${W.fleisch.map(f => f === 'fisch' ? 'Fisch' : FLEISCH[Object.keys(FLEISCH).find(t => FLEISCH[t].k === f)].name.replace('fleisch', '')).join(' + ')} · ${W.holz.map(h => HOLZARTEN[h].kurz).join(' + ')} · Salz` : 'andere Mischungen']);
+  const bekannt = liste.filter(([k]) => entdeckt[k]).length;
+  $('wbBuch').innerHTML = `<b>📜 Wurst-Rezeptbuch: ${bekannt} von ${liste.length} entdeckt</b><br>` + liste.map(([k, z]) => entdeckt[k]
+    ? `<div>${PRODUKTE[k].emoji} <b>${PRODUKTE[k].name}</b> <span class="klein">= ${z} · ${euro(PRODUKTE[k].preis)}</span></div>`
+    : '<div class="klein">❓ ??? (noch geheim)</div>').join('');
+}
+function herstellen(alle) {
+  const r = rezeptFinden();
+  if (!r) return;
+  const n = alle ? wieOft(r) : Math.min(1, wieOft(r));
+  if (n < 1) { sound.nein(); return; }
+  for (const [k, m] of Object.entries(r.z)) zutatNehmen(k, m * n);
+  vorrat[r.produkt] = (vorrat[r.produkt] || 0) + r.menge * n;
+  const P = PRODUKTE[r.produkt], neu = !entdeckt[r.produkt];
+  entdeckt[r.produkt] = true;
+  try { localStorage.setItem(REZEPT_SPEICHER, JSON.stringify(entdeckt)); } catch (e) { /* egal */ }
+  meldung(`${neu ? '✨ NEUES REZEPT! ' : ''}${P.emoji} ${r.menge * n}× ${P.name} hergestellt! (${euro(P.preis)} pro Stück im Dorfladen)`, 4);
+  if (neu) { [523, 659, 784, 1047, 1319].forEach((f, k) => ton(f, k * 0.09, 0.2, 'triangle', 0.06)); } else sound.kaufen();
+  if (r.art !== 'poekel') tonGleiten(2000, 300, 0, 0.6, 'sawtooth', 0.02);   // Zischhh auf dem Grill
+  const wb = gebaute.find(b => b.werkbank && Math.hypot(wo().x - b.x, wo().z - b.z) < 7);
+  if (wb) for (let k = 0; k < 8; k++) staub(wb.x + zufall(-0.5, 0.5), wb.z + zufall(-0.5, 0.5), 0xbbbbbb, 1.5, 1.5, 0.7);
+  speichern(); werkbankMalen();
+}
+document.getElementById('wbMachen').addEventListener('click', () => { tonStart(); herstellen(false); });
+document.getElementById('wbAlles').addEventListener('click', () => { tonStart(); herstellen(true); });
+document.getElementById('wbLeeren').addEventListener('click', () => { wbFaecher.fill(null); sound.klick(); werkbankMalen(); });
+document.getElementById('werkbank-zu').addEventListener('click', () => werkbankZeigen(false));
+function werkbankUpdate() {   // Weggegangen? Werkbank zu
+  if (!werkbankOffen) return;
+  const wb = gebaute.find(b => b.werkbank && Math.hypot(wo().x - b.x, wo().z - b.z) < GEBAEUDE_ARTEN.werkbank.r + 5);
+  if (!wb || aktiv) werkbankZeigen(false);
+}
 // ===== Angel einholen: mit Fisch dran (geschafft!) oder ohne (entwischt) =====
 const EINHOLEN_DAUER = 0.9;      // So lange fliegt der Schwimmer zurück (Sekunden)
 const FISCH_ZEIGEN_DAUER = 1.8;  // So lange zappelt der gefangene Fisch an der Angel, bevor du ihn einpackst
@@ -2194,6 +2405,18 @@ function baueTier(art) {
     teil(new THREE.IcosahedronGeometry(0.17, 1), wolle, 0, 1.2, -0.66);   // Wolle auf dem Kopf
     for (const sx of [-1, 1]) teil(B(0.2, 0.06, 0.1), schwarz, sx * 0.2, 1.08, -0.68);   // Ohren
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) bein(sx * 0.22, sz * 0.4, 0.5, 0.1, schwarz);
+  } else if (art === 'schwein') {
+    const rosa = mat(0xf2a6ae), dunkel = mat(0xd07080), schwarz = mat(0x1e1e1e);
+    teil(B(0.6, 0.55, 1.1), rosa, 0, 0.62, 0);                 // Körper
+    teil(B(0.44, 0.42, 0.36), rosa, 0, 0.72, -0.68);           // Kopf
+    teil(B(0.24, 0.17, 0.08), dunkel, 0, 0.66, -0.9);          // Rüssel
+    for (const sx of [-1, 1]) {
+      teil(B(0.04, 0.05, 0.02), schwarz, sx * 0.05, 0.66, -0.945);   // Nasenlöcher
+      teil(B(0.05, 0.05, 0.02), schwarz, sx * 0.12, 0.8, -0.865);    // Augen
+      teil(B(0.13, 0.15, 0.04), rosa, sx * 0.16, 0.97, -0.62).rotation.x = 0.5;   // Ohren
+    }
+    teil(B(0.05, 0.05, 0.2), dunkel, 0, 0.78, 0.62).rotation.x = -0.8;   // Ringelschwanz
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) bein(sx * 0.2, sz * 0.38, 0.36, 0.14, rosa);
   } else {
     const feder = mat(Math.random() < 0.5 ? 0xf6f2ea : 0xa0602a), rot = mat(0xd8221e), gelb = mat(0xf2b81e);
     teil(B(0.32, 0.32, 0.42), feder, 0, 0.38, 0);              // Körper
@@ -2232,9 +2455,20 @@ const tierLaute = {
   kuh: l => tonGleiten(150, 105, 0, 1.3, 'sawtooth', 0.05 * l),
   schaf: l => { for (let k = 0; k < 4; k++) ton(470 - k * 10, k * 0.08, 0.1, 'square', 0.025 * l); },
   huhn: l => { for (let k = 0; k < 4; k++) ton(850 + Math.random() * 400, k * 0.13, 0.07, 'square', 0.025 * l); },
+  schwein: l => { tonGleiten(330, 210, 0, 0.16, 'sawtooth', 0.045 * l); tonGleiten(310, 190, 0.22, 0.18, 'sawtooth', 0.045 * l); },   // Oink oink!
 };
+const rauchPos = new THREE.Vector3();
 function gebUpdate(dt) {
   for (const b of gebaute) {
+    if (b.wald && b.wald.w.some(w => w < 1)) {   // Gefällte Bäume wachsen nach
+      for (let k = 0; k < b.wald.w.length; k++) if (b.wald.w[k] < 1) b.wald.w[k] = Math.min(1, b.wald.w[k] + dt / WALD_NACHWACHSEN);
+      b.wald.takt -= dt;
+      if (b.wald.takt <= 0) { b.wald.takt = 1; waldPlotMalen(b); }
+    }
+    if (b.werkbank && Math.random() < dt * 2.5) {   // Der Grill qualmt ein bisschen
+      b.mesh.localToWorld(rauchPos.set(-0.65, 1.4, 0));
+      staub(rauchPos.x, rauchPos.z, 0x9a9a9a, rauchPos.y, 1.2, 0.5);
+    }
     if (b.teich) {
       b.teich.fischG.rotation.y += dt * 0.25;
       if (b.teich.fische < TEICH_FISCHE_MAX) {
@@ -2299,6 +2533,7 @@ function gebDaten(b) {
   if (b.gh) return { a: b.gh.art, w: Math.round(b.gh.w * 1000) / 1000 };
   if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10, s: Math.round(b.geh.salz) };
   if (b.teich) return { t: Math.round(b.teich.fische * 100) / 100 };
+  if (b.wald) return { wa: b.wald.w.map(w => Math.round(w * 100) / 100) };
   return null;
 }
 function gebDatenSetzen(b, d) {
@@ -2307,6 +2542,7 @@ function gebDatenSetzen(b, d) {
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
   if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0; gehegeSchild(b); }
   if (b.teich) { b.teich.fische = d.t ?? TEICH_FISCHE_MAX; teichSchild(b); }
+  if (b.wald && Array.isArray(d.wa)) { d.wa.forEach((w, k) => { if (k < b.wald.w.length) b.wald.w[k] = w; }); waldPlotMalen(b); }
 }
 const gebSchluessel = b => `${b.x.toFixed(1)},${b.z.toFixed(1)}`;
 function gebSenden(b) { mpEvent({ t: 'geb', k: gebSchluessel(b), d: gebDaten(b) }); }
@@ -2314,22 +2550,23 @@ function gebSenden(b) { mpEvent({ t: 'geb', k: gebSchluessel(b), d: gebDaten(b) 
 let vorrat = {};
 const DORFLADEN = { x: 20, z: 78 };   // Vor der Tür vom Dorfladen
 const beimDorfladen = () => Math.hypot(wo().x - DORFLADEN.x, wo().z - DORFLADEN.z) < 7;
-const vorratWert = () => Object.entries(vorrat).reduce((s, [k, m]) => s + (PRODUKTE[k] ? m * PRODUKTE[k].preis : 0), 0);
+const verkaufbar = k => PRODUKTE[k] && !PRODUKTE[k].roh;   // Rohes Fleisch und Holz kauft der Dorfladen nicht
+const vorratWert = () => Object.entries(vorrat).reduce((s, [k, m]) => s + (verkaufbar(k) ? m * PRODUKTE[k].preis : 0), 0);
 function vorratVerkaufen() {
   const wert = Math.round(vorratWert());
   if (wert <= 0) { meldung('🛒 Du hast nichts zum Verkaufen! Ernte Gemüse im Gewächshaus 🪴 oder sammel Milch, Eier und Wolle bei den Tieren 🐄 (P).', 4); sound.nein(); return; }
   money += wert;
-  meldung(`🛒💶 Im Dorfladen verkauft: ${vorratText()} für ${euro(wert)}!`, 4);
-  vorrat = {};
+  meldung(`🛒💶 Im Dorfladen verkauft: ${vorratText(true)} für ${euro(wert)}!`, 4);
+  for (const k of Object.keys(vorrat)) if (verkaufbar(k)) delete vorrat[k];   // Fleisch und Holz bleiben für die Werkbank
   sound.kasse();
   speichern();
 }
-const vorratText = () => Object.entries(vorrat).filter(([, m]) => m >= 1).map(([k, m]) => `${PRODUKTE[k].emoji} ${Math.floor(m)}`).join(' ') || 'leer';
+const vorratText = (nurVerkaufbar = false) => Object.entries(vorrat).filter(([k, m]) => m >= 1 && PRODUKTE[k] && (!nurVerkaufbar || verkaufbar(k))).map(([k, m]) => `${PRODUKTE[k].emoji} ${Math.floor(m)}`).join(' ') || 'leer';
 function nahesHofGebaeude() {
   const p = wo();
   let bestes = null, bestD = Infinity;
   for (const b of gebaute) {
-    if (!b.gh && !b.geh && !b.obst && !b.teich) continue;
+    if (!b.gh && !b.geh && !b.obst && !b.teich && !b.werkbank) continue;
     const d = Math.hypot(p.x - b.x, p.z - b.z) - GEBAEUDE_ARTEN[b.art].r;
     if (d < 3.5 && d < bestD) { bestD = d; bestes = b; }
   }
@@ -2377,6 +2614,8 @@ function panelMalen() {
     const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length;
     knopf(box, n >= T.max ? `${T.emoji} Gehege ist voll` : `➕ 1 ${T.einzeln} kaufen (${euro(T.preis)})`, n < T.max && money >= T.preis, () => tierKaufen(b));
     knopf(box, `🧺 Einsammeln: ${Math.floor(geh.lager)} ${P.einheit} ${P.name}`, geh.lager >= 1, () => einsammeln(b));
+    const FL = FLEISCH[geh.tier];
+    if (FL) knopf(box, `🔪 1 ${T.einzeln} zum Metzger bringen → ${FL.kg} kg ${FL.emoji} ${FL.name}`, n > 0, () => zumMetzger(b));
     knopf(box, `🧂 Salzstein hinlegen → ×2 für 10 Min. (du hast ${salzsteine})`, salzsteine > 0, () => salzHinlegen(b));
     knopf(box, `🌾 1.000 kg Futter kaufen (${euro(1000 * FUTTER_PREIS)})`, geh.futter < FUTTER_MAX - 1 && money >= 1000 * FUTTER_PREIS, () => futterKaufen(b));
     const tipp = document.createElement('div'); tipp.className = 'klein'; tipp.style.marginTop = '6px';
@@ -2423,6 +2662,15 @@ function einsammeln(b) {
   meldung(`🧺 ${m} ${P.einheit} ${P.name} eingesammelt! Verkaufen im Dorfladen 🛒 (V).`, 3.5);
   sound.holz(); speichern(); panelMalen();
 }
+function zumMetzger(b) {   // Ein Tier zum Metzger bringen: Du bekommst Fleisch für die Werkbank
+  const T = TIERE[b.geh.tier], FL = FLEISCH[b.geh.tier], n = b.geh.tiere.length;
+  if (!FL || n < 1) return;
+  tierZahl(b, n - 1);
+  vorrat['fleisch_' + FL.k] = (vorrat['fleisch_' + FL.k] || 0) + FL.kg;
+  gebSenden(b); gehegeSchild(b);
+  meldung(`🔪 Der Metzger hat ${FL.kg} kg ${FL.emoji} ${FL.name} für dich! Mach daraus an der Werkbank 🛠️ Wurst, Grillsachen oder Gepökeltes.`, 4.5);
+  sound.holz(); speichern(); panelMalen();
+}
 function futterKaufen(b) {
   const menge = Math.min(1000, FUTTER_MAX - b.geh.futter), kosten = Math.round(menge * FUTTER_PREIS);
   if (menge <= 0 || money < kosten) return;
@@ -2443,9 +2691,12 @@ function futterAbladen(b) {   // Korn vom Fahrzeug als Futter in den Trog
 function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächshaus und Gehege
   if (inHaus(wo().x, wo().z) && !aktiv && Math.hypot(player.position.x - HAUS.bett.x, player.position.z - HAUS.bett.z) < 2.6) return `🛏️ Z = Schlafen (bis morgen ${AUFSTEH_ZEIT}:00 Uhr)`;
   if (beiDerMine()) return saegeAn ? '⛏️ Pack erst die Motorsäge weg (Q)!' : `⛏️ Salzmine: X oder Maus halten = Salzstein abbauen (${salzsteine} von ${SALZ_MAX}${hackt ? ` · ${Math.round(hackFort * 100)} %` : ''})`;
-  if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText()} = ${euro(vorratWert())})`;
+  if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText(true)} = ${euro(vorratWert())})`;
+  const wp = naherWaldPlot();
+  if (wp) { const H = HOLZARTEN[wp.wald.holz]; return `🪓 ${GEBAEUDE_ARTEN[wp.art].name}: X oder Maus halten = Holz hacken (${Math.floor(vorrat['holz_' + wp.wald.holz] || 0)} Scheite ${H.name}${hackt ? ` · ${Math.round(waldHackFort * 100)} %` : ''})`; }
   const b = nahesHofGebaeude();
   if (!b) return '';
+  if (b.werkbank) return werkbankOffen ? '' : aktiv ? '🛠️ Steig aus (E), dann P = Werkbank' : '🛠️ P = Werkbank öffnen (Wurst machen, Grillen, Pökeln)';
   if (b.teich) return angel ? (angel.phase === 'warten' ? '🎣 Warte auf einen Biss ...' : '') : aktiv ? '🎣 Zum Angeln aussteigen (E)' : `🎣 P = Angeln (${Math.floor(b.teich.fische)} Fische im Teich)`;
   if (b.obst) { const O = OBST[b.art]; return b.obst.w >= 1 ? `${O.emoji} P = ${O.menge} kg ${O.name} pflücken` : `${O.emoji} ${GEBAEUDE_ARTEN[b.art].name}: ${b.obst.w < 0.25 ? 'blüht' : 'Früchte wachsen'} (${Math.floor(b.obst.w * 100)} %)`; }
   if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `🌾 L = Korn als Futter abladen (${kg(kornDrin(aktiv))})` : '';
@@ -3341,10 +3592,11 @@ document.addEventListener('keydown', e => {
   if (k === 'z') schlafen();
   if (building && (k === '.' || k === ',')) { const arten = Object.keys(GEBAEUDE_ARTEN), n = arten.length; bauArt = arten[(arten.indexOf(bauArt) + (k === '.' ? 1 : n - 1)) % n]; updateHUD(); }
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
-  if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus oder Tiergehege! (Bauen im Baumodus: B)'); sound.nein(); } } }
+  if (k === 'p' && werkbankOffen) werkbankZeigen(false);
+  else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
-  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); albumZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
+  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
   if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; updateHUD(); }
   else if (['1', '2', '3'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
@@ -4018,6 +4270,8 @@ function animate() {
   fangUpdate(dt);
   musikUpdate();
   salzUpdate(dt);
+  waldPlotHacken(dt);
+  werkbankUpdate();
   gebUpdate(dt);
   panelUpdate();
   if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen, angelZustand());

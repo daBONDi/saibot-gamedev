@@ -120,6 +120,23 @@ button:disabled { opacity: 0.5; cursor: default; }
 .albumEmoji { font-size: 34px; width: 44px; text-align: center; }
 #fang { top: 12%; left: 50%; transform: translateX(-50%); padding: 12px 22px; text-align: center; display: none; z-index: 7; min-width: 240px; cursor: pointer; line-height: 1.5; }
 #fangFisch { font-size: 56px; line-height: 64px; }
+#werkbank { top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 14px 18px; width: min(520px, 94vw); max-height: 88vh; overflow-y: auto; display: none; z-index: 5; }
+#werkbank h3 { margin: 0 0 8px; }
+#wbOben { display: flex; align-items: center; gap: 10px; justify-content: center; }
+#wbGitter { display: grid; grid-template-columns: repeat(4, 58px); grid-template-rows: repeat(4, 58px); gap: 4px; background: #00000040; padding: 6px; border-radius: 8px; }
+.wbFach { width: 58px; height: 58px; background: #8b8b8b55; border: 2px solid #ffffff30; border-radius: 6px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; overflow: hidden; }
+.wbFach.voll { background: #c8a46a55; border-color: #ffd16688; }
+.wbFach:hover { border-color: #fff; }
+.wbEmoji { font-size: 26px; line-height: 30px; }
+.wbKurz { font-size: 10px; line-height: 12px; text-align: center; max-width: 54px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#wbPfeil { font-size: 28px; }
+#wbRechts { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+#wbErgebnis { width: 76px; height: 76px; cursor: default; }
+#wbErgebnis.voll { background: #7cf5a040; border-color: #7cf5a0; }
+#wbInfo { margin: 8px 0; min-height: 1.2em; }
+#wbInventar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.wbZutat { font-size: 13px; padding: 3px 6px; }
+#wbBuch { background: #ffffff10; border-radius: 8px; padding: 6px 8px; margin-bottom: 8px; line-height: 1.5; max-height: 160px; overflow-y: auto; }
 #fangName { font-size: 1.3em; font-weight: bold; }
 #fangRekord { margin-top: 6px; }
 #fangRekord.rekord { font-size: 1.4em; font-weight: bold; color: #ffd84a; text-shadow: 0 0 10px #ffb000; animation: rekordBlinken 0.6s ease-in-out infinite alternate; }
@@ -208,6 +225,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   <button id="bau-birnbaum">🍐 Birnbaum 2.500 €</button>
   <button id="bau-kirschbaum">🍒 Kirschbaum 3.000 €</button>
   <button id="bau-teich">🎣 Fischteich 5.000 €</button>
+  <button id="bau-schweinestall">🐖 Schweinestall 7.000 €</button>
+  <button id="bau-buchenwald">🌳 Buchenwald 3.000 €</button>
+  <button id="bau-eichenwald">🌳 Eichenwald 4.000 €</button>
+  <button id="bau-erlenwald">🌲 Erlenwald 3.000 €</button>
+  <button id="bau-ahornwald">🍁 Ahornwald 4.000 €</button>
+  <button id="bau-werkbank">🛠️ Werkbank 2.500 €</button>
 </div>
 </div>
 
@@ -225,7 +248,7 @@ Beim Landhandel: V = Verkaufen · G = Saat · T = Tanken · N = Händler<br>
 Beim Sägewerk: V = Holz verkaufen · Zu Fuß beim Landhandel/Tankstelle: T = Säge tanken<br>
 🦾 Harvester: X / Maus halten = Baum fällen · 🪵 Holzanhänger: L = Kran lädt Holz auf (zu Fuß: Holz drauflegen) · V beim Sägewerk<br>
 🪴🐄🍎 Beim Gewächshaus/Gehege: P = Menü · Beim Obstbaum: P = pflücken · Mit Korn beim Gehege: L = Futter · Beim Dorfladen 🛒: V = Gemüse, Milch, Eier, Wolle verkaufen<br>
-🎣 Beim Fischteich: P = Angeln, beim Biss ganz schnell E drücken! C = Fisch-Album · ⛏️ Salzmine (hinter dem Landhandel): X halten = Salz abbauen · 🏠 Mein Haus: am Bett Z = Schlafen<br>
+🎣 Beim Fischteich: P = Angeln, beim Biss ganz schnell E drücken! C = Fisch-Album · 🛠️ Werkbank: P = öffnen · 🪓 Eigener Wald: X halten = Holz · ⛏️ Salzmine (hinter dem Landhandel): X halten = Salz abbauen · 🏠 Mein Haus: am Bett Z = Schlafen<br>
 B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an/aus · J = Musik an/aus · I = Anleitung ein/aus
 </div>
 </div>
@@ -266,6 +289,24 @@ B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an
 <button id="album-zu">✖ Schließen (C)</button>
 </div>
 
+<div id="werkbank" class="box">
+<h3>🛠️ Werkbank</h3>
+<div id="wbOben">
+  <div id="wbGitter"></div>
+  <div id="wbPfeil">➡️</div>
+  <div id="wbRechts">
+    <div id="wbErgebnis" class="wbFach ergebnis"></div>
+    <button id="wbMachen">✅ Machen</button>
+    <button id="wbAlles">🔥 Alles machen</button>
+    <button id="wbLeeren">🧹 Leeren</button>
+  </div>
+</div>
+<div id="wbInfo" class="klein"></div>
+<div id="wbInventar"></div>
+<div id="wbBuch" class="klein"></div>
+<button id="werkbank-zu">✖ Schließen (P)</button>
+</div>
+
 <div id="schlaf">💤 Zzz ... Gute Nacht!</div>
 
 <div id="fadenkreuz"></div>
@@ -291,6 +332,6 @@ B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=29"></script>
+<script type="module" src="spiel.js?v=30"></script>
 </body>
 </html>
