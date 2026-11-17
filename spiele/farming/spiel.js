@@ -1471,10 +1471,10 @@ function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die 
   // Angel: hängt an der rechten Hand und zeigt schräg nach vorne-oben (erst mal versteckt)
   const angelG = new THREE.Group(); angelG.position.set(0, -0.6, 0); angelG.rotation.x = -0.43; angelG.visible = false;
   farmer.armR.add(angelG);
-  const holzBraun = mat(0x7a4a22);
-  teil(angelG, new THREE.CylinderGeometry(0.045, 0.045, 0.3, 8), mat(0x222222), 0, 0, -0.05).rotation.x = Math.PI / 2;   // Griff
-  teil(angelG, new THREE.CylinderGeometry(0.06, 0.06, 0.08, 12), mat(0xc0c4c8, { metalness: 0.6, roughness: 0.4 }), 0.08, -0.04, 0.02).rotation.z = Math.PI / 2;   // Rolle
-  teil(angelG, new THREE.CylinderGeometry(0.012, 0.03, 2.2, 6), holzBraun, 0, 0, -1.2).rotation.x = Math.PI / 2;   // Rute
+  const rutenFarbe = mat(0xffb020);   // Leuchtend gelb-orange, damit man sie gut sieht
+  teil(angelG, new THREE.CylinderGeometry(0.07, 0.07, 0.35, 8), mat(0x222222), 0, 0, -0.05).rotation.x = Math.PI / 2;   // Griff
+  teil(angelG, new THREE.CylinderGeometry(0.1, 0.1, 0.1, 12), mat(0xc0c4c8, { metalness: 0.6, roughness: 0.4 }), 0.12, -0.06, 0.02).rotation.z = Math.PI / 2;   // Rolle
+  teil(angelG, new THREE.CylinderGeometry(0.035, 0.06, 2.2, 8), rutenFarbe, 0, 0, -1.2).rotation.x = Math.PI / 2;   // Rute
   const angelSpitze = new THREE.Object3D(); angelSpitze.position.set(0, 0, -2.3); angelG.add(angelSpitze);
   farmer.angel = angelG; farmer.angelSpitze = angelSpitze;
   // Holzstämme auf dem Rücken (erst mal versteckt)
@@ -1543,7 +1543,7 @@ const egoAngelSpitze = new THREE.Object3D();
   teil(new THREE.CylinderGeometry(0.022, 0.022, 0.22, 8), mat(0x222222), 0, 0, 0).rotation.x = Math.PI / 2;  // Griff
   teil(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 12), mat(0xc0c4c8, { metalness: 0.6, roughness: 0.4 }), 0.05, -0.04, 0.05).rotation.z = Math.PI / 2;   // Rolle
   const rute = new THREE.Group(); rute.rotation.x = 0.55; E.add(rute);   // Rute zeigt schräg nach oben
-  const r = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.016, 1.6, 6), mat(0x7a4a22)); r.rotation.x = Math.PI / 2; r.position.z = -0.85; rute.add(r);
+  const r = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.025, 1.6, 8), mat(0xffb020)); r.rotation.x = Math.PI / 2; r.position.z = -0.85; rute.add(r);
   egoAngelSpitze.position.set(0, 0, -1.65); rute.add(egoAngelSpitze);
   egoAngel.userData.rute = rute;
 }
@@ -3269,6 +3269,7 @@ const MP_VORSILBE = 'farming-hof-';   // Damit sich die Codes nicht mit ARAG mis
 const MP_MAX = 4, MP_RATE = 15;
 // Die Spiel-Version kommt automatisch aus der index.html (spiel.js?v=...). Alle Spieler brauchen die gleiche!
 const SPIEL_VERSION = new URL(import.meta.url).searchParams.get('v') || '?';
+if (document.getElementById('version')) document.getElementById('version').textContent = `Version ${SPIEL_VERSION}`;
 const ALTE_VERSION = '⚠️ Ihr habt verschiedene Spiel-Versionen! Wer das alte Spiel hat: Strg + F5 drücken (am Handy/Tablet: Seite neu laden).';
 const MP_BAUERN = [
   { name: 'Bauer Rot', farbe: '#b3261e' },
