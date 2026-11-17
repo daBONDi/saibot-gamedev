@@ -1468,6 +1468,15 @@ function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die 
   teil(saege, new THREE.BoxGeometry(0.045, 0.02, 0.82), schwarz, 0, -0.07, -0.58);                  // Kette unten
   teil(saege, new THREE.BoxGeometry(0.045, 0.02, 0.82), schwarz, 0, 0.03, -0.58);                   // Kette oben
   farmer.saege = saege;
+  // Angel: hängt an der rechten Hand und zeigt schräg nach vorne-oben (erst mal versteckt)
+  const angelG = new THREE.Group(); angelG.position.set(0, -0.6, 0); angelG.rotation.x = -0.43; angelG.visible = false;
+  farmer.armR.add(angelG);
+  const holzBraun = mat(0x7a4a22);
+  teil(angelG, new THREE.CylinderGeometry(0.045, 0.045, 0.3, 8), mat(0x222222), 0, 0, -0.05).rotation.x = Math.PI / 2;   // Griff
+  teil(angelG, new THREE.CylinderGeometry(0.06, 0.06, 0.08, 12), mat(0xc0c4c8, { metalness: 0.6, roughness: 0.4 }), 0.08, -0.04, 0.02).rotation.z = Math.PI / 2;   // Rolle
+  teil(angelG, new THREE.CylinderGeometry(0.012, 0.03, 2.2, 6), holzBraun, 0, 0, -1.2).rotation.x = Math.PI / 2;   // Rute
+  const angelSpitze = new THREE.Object3D(); angelSpitze.position.set(0, 0, -2.3); angelG.add(angelSpitze);
+  farmer.angel = angelG; farmer.angelSpitze = angelSpitze;
   // Holzstämme auf dem Rücken (erst mal versteckt)
   farmer.holz = [];
   for (let k = 0; k < HOLZ_TRAGEN_MAX; k++) {
@@ -1478,8 +1487,15 @@ function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die 
   return { g: player, t: farmer };
 }
 // Motorsäge und Holz zeigen (und die Arme richtig halten)
-function farmerWerkzeug(t, saege, saegt, holz) {
+function farmerWerkzeug(t, saege, saegt, holz, angelt = 0) {
   t.saege.visible = saege;
+  t.angel.visible = angelt > 0;
+  if (angelt > 0) {   // Angel halten (angelt = 2: ein Fisch zappelt dran, die Rute wackelt!)
+    t.armR.rotation.x = 0.9; t.armL.rotation.x = 0.6;
+    t.angel.rotation.x = angelt === 2 ? -0.3 + Math.sin(spielZeit * 25) * 0.08 : -0.43;
+    t.angel.rotation.z = angelt === 2 ? Math.sin(spielZeit * 11) * 0.12 : 0;
+    return;
+  }
   t.holz.forEach((h, k) => { h.visible = k < holz; });
   if (saege) {   // Beide Hände an der Säge
     const r = saegt ? Math.sin(spielZeit * 60) * 0.02 : 0;   // Beim Sägen rüttelt alles!
@@ -1513,6 +1529,44 @@ const egoKette = [];   // Die Zähne der Kette (die laufen beim Sägen rundherum
   teil(new THREE.BoxGeometry(0.1, 0.1, 0.26), farmer.hemd, -0.15, 0.03, 0.0).rotation.x = 0.9;    // Linker Arm (kurz, damit er nicht vor der Kamera hängt)
   // Kette: kleine Zähne oben und unten am Schwert
   for (let k = 0; k < 28; k++) egoKette.push(teil(new THREE.BoxGeometry(0.042, 0.025, 0.022), schwarz, 0, 0, 0));
+}
+// ===== First-Person-Angel: Hand mit Angel unten rechts im Bild =====
+const egoAngel = new THREE.Group();
+egoAngel.visible = false; egoAngel.position.set(0.32, -0.36, -0.55);
+camera.add(egoAngel);
+const egoAngelSpitze = new THREE.Object3D();
+{
+  const E = egoAngel;
+  const teil = (geo, m, x, y, z) => { const t = new THREE.Mesh(geo, m); t.position.set(x, y, z); E.add(t); return t; };
+  teil(new THREE.BoxGeometry(0.09, 0.09, 0.12), mat(0xe8b896), 0, 0, 0.02);                                  // Hand
+  teil(new THREE.BoxGeometry(0.1, 0.1, 0.26), farmer.hemd, 0.02, -0.08, 0.18).rotation.x = 0.9;              // Arm (kurz)
+  teil(new THREE.CylinderGeometry(0.022, 0.022, 0.22, 8), mat(0x222222), 0, 0, 0).rotation.x = Math.PI / 2;  // Griff
+  teil(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 12), mat(0xc0c4c8, { metalness: 0.6, roughness: 0.4 }), 0.05, -0.04, 0.05).rotation.z = Math.PI / 2;   // Rolle
+  const rute = new THREE.Group(); rute.rotation.x = 0.55; E.add(rute);   // Rute zeigt schräg nach oben
+  const r = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.016, 1.6, 6), mat(0x7a4a22)); r.rotation.x = Math.PI / 2; r.position.z = -0.85; rute.add(r);
+  egoAngelSpitze.position.set(0, 0, -1.65); rute.add(egoAngelSpitze);
+  egoAngel.userData.rute = rute;
+}
+// Die Angelschnur: eine dünne Linie von der Spitze der Rute bis zum Schwimmer
+const angelSchnur = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+angelSchnur.visible = false; angelSchnur.frustumCulled = false; scene.add(angelSchnur);
+const schnurA = new THREE.Vector3();
+function egoAngelUpdate(dt) {
+  const zeigen = !!angel && !aktiv && ansicht === 'ego';
+  egoAngel.visible = zeigen;
+  const kampf = angel && angel.phase === 'kampf';
+  if (zeigen) {
+    const rute = egoAngel.userData.rute;
+    rute.rotation.x = kampf ? 0.75 + Math.sin(spielZeit * 25) * 0.06 : 0.55;   // Fisch dran: Rute biegt sich hoch und wackelt
+    rute.rotation.z = kampf ? Math.sin(spielZeit * 11) * 0.1 : 0;
+  }
+  angelSchnur.visible = !!angel && !aktiv;
+  if (!angelSchnur.visible) return;
+  (zeigen ? egoAngelSpitze : farmer.angelSpitze).getWorldPosition(schnurA);
+  const pos = angelSchnur.geometry.attributes.position;
+  pos.setXYZ(0, schnurA.x, schnurA.y, schnurA.z);
+  pos.setXYZ(1, angel.schwimmer.position.x, angel.schwimmer.position.y, angel.schwimmer.position.z);
+  pos.needsUpdate = true;
 }
 const KETTE_LANG = 0.72;
 function egoSaegeUpdate(dt) {
@@ -3439,7 +3493,7 @@ function mpEmpfangen(d, vonGast) {
         vonGast.versionOk = true;
         if (d.v !== SPIEL_VERSION) meldung(`${ALTE_VERSION} (${vonGast.name})`, 12);
       }
-      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho }); } break;
+      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag }); } break;
     case 'fz': {
       const fz = fahrzeuge.find(f => f.id === d.id);
       if (fz && fz !== aktiv) {
@@ -3497,7 +3551,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, v: SPIEL_VERSION });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: angel && !aktiv ? (angel.phase === 'kampf' ? 2 : 1) : 0, v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
@@ -3532,7 +3586,7 @@ function mpAndereZeigen(dt) {
     G.position.set(o.ax, o.ay, o.az);
     G.rotation.set(0, o.ayaw, 0);
     farmerPose(o.farmer.t, false, o.lf, dt, o.y > 0.05);
-    farmerWerkzeug(o.farmer.t, !!o.sa, !!o.sg, o.ho || 0);
+    farmerWerkzeug(o.farmer.t, !!o.sa, !!o.sg, o.ho || 0, o.ag || 0);
     if (o.sg && Math.random() < 0.4) staub(o.ax - Math.sin(o.ayaw) * 1.3, o.az - Math.cos(o.ayaw) * 1.3, 0xe8cf94, 0.8, 0.6, 0.35);   // Sägespäne
   }
 }
@@ -3756,9 +3810,8 @@ function animate() {
   salzUpdate(dt);
   gebUpdate(dt);
   panelUpdate();
-  if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen);
+  if (!aktiv) farmerWerkzeug(farmer, saegeAn, saegt, getragen, angel ? (angel.phase === 'kampf' ? 2 : 1) : 0);
   if (hackt) { farmer.armR.rotation.x = 1.6 + Math.sin(spielZeit * 12) * 1.0; farmer.armL.rotation.x = 1.2 + Math.sin(spielZeit * 12) * 0.6; }   // Hacken!
-  if (angel && !aktiv) farmer.armR.rotation.x = farmer.armL.rotation.x = 0.9;   // Angel halten
   // Andere Fahrzeuge stehen still
   for (const fz of fahrzeuge) {
     const fremd = fremdGefahren(fz);
@@ -3893,6 +3946,7 @@ function animate() {
   // Die Sonne (und ihr Schatten) wandert mit dir mit
   tagNachtUpdate(dt, target);
   egoSaegeUpdate(dt);
+  egoAngelUpdate(dt);
   himmel.position.copy(camera.position);   // Der Himmel ist immer gleich weit weg
 
   renderer.render(scene, camera);
