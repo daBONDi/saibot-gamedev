@@ -209,7 +209,7 @@ const SAELE = [
 const OFFEN = RAUM;   // "Tür" so breit wie die ganze Wand = keine Wand
 const saalVon = (i, j, e) => SAELE.find(S => S.etage === e && i >= S.i && i < S.i + S.breit && j >= S.j && j < S.j + S.tief) || null;
 // Jedes Monster gibt es genau EINMAL im Haus
-const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1, maulwurf: 1, chemiker: 1 };   // Starrer: 0 = gibt es nicht mehr
+const MONSTER_ANZAHL = { geister: 1, lauscher: 1, starrer: 0, jaeger: 1, schrank: 1, formwandler: 1, oma: 1, maulwurf: 1, chemiker: 1, kriecher: 1 };   // Starrer: 0 = gibt es nicht mehr
 const WIEDERBELEBEN_PREIS = 1500;   // So viel kostet es, einen kaputten Roboter wiederzubeleben (Kopf zur Abgabe bringen!)
 const GEWINN_PROZENT = 62;           // 🏆 Gewonnen, wenn so viel Prozent aller Schätze im Haus verkauft sind – und ALLE Spieler leben!
 const NEUER_SCHATZ_ALLE = 30;       // Alle so viele Sekunden taucht irgendwo im Haus ein neuer Schatz auf
@@ -507,6 +507,21 @@ const monsterSound = {
     rauschen(0, 0.08, 0.5, 'bandpass', 1500);
     for (let k = 0; k < 3; k++) ton(1800 + k * 400, 0.15 + k * 0.08, 0.1, 'sine', 0.06);   // Sternchen sehen ...
   },
+  kriecher(laut, jagt, oben, laeuft) {   // 🕸️ Im Schacht: KLONK ... KLONK ... (Blech über dir!) · Unten: Klick-klick-klick und Fauchen
+    if (oben && laeuft) {
+      for (let k = 0; k < 2; k++) { const t = k * zufall(0.12, 0.2); ton(zufall(220, 300), t, 0.06, 'triangle', 0.12 * laut, 150); ton(zufall(1500, 1900), t, 0.18, 'sine', 0.025 * laut, 1400); }
+      rauschen(0.05, 0.18, 0.05 * laut, 'highpass', 3000);   // Kratzende Krallen auf Blech
+    } else if (oben) {   // Er wartet ... und atmet (hallt im Rohr)
+      rauschen(0, 0.9, 0.05 * laut, 'bandpass', 500, null, 300); rauschen(0.5, 0.9, 0.035 * laut, 'bandpass', 450, null, 250);
+    } else {
+      for (let k = 0; k < (jagt ? 5 : 3); k++) ton(zufall(1000, 1400), k * 0.07, 0.03, 'square', 0.035 * laut, 700);   // Klick-klick (Krallen)
+      if (jagt) rauschen(0.1, 0.5, 0.12 * laut, 'highpass', 3500, null, 6000);   // Hhhhhhh!
+    }
+  },
+  kriecherKlapper(laut) {   // KLAPPER-KLAPPER-KLAPPER – das Gitter über dir wackelt!
+    for (let k = 0; k < 10; k++) { ton(zufall(900, 1400), k * 0.08, 0.04, 'square', 0.05 * laut, 600); ton(zufall(200, 260), k * 0.08, 0.05, 'triangle', 0.08 * laut, 140); }
+    gruselTon(1300, 0.3, 0.7, 'sawtooth', 0.05 * laut, 600, 20);
+  },
   starrer(laut) {   // 🗿 Stein schabt über den Boden
     rauschen(0, 0.45, 0.12 * laut, 'lowpass', 400, null, 150);
     ton(48, 0, 0.4, 'sawtooth', 0.04 * laut, 40);
@@ -538,6 +553,11 @@ function monsterGeraeusche(m, dt) {
     }
     if (m.modus !== 'grummeln') m.warnTon = false;
   }
+  if (m.art === 'kriecher') {   // 🕸️ Warnung: Das Gitter klappert (hört man immer)
+    if (m.modus === 'raus' && !m.warnTon) { m.warnTon = true; monsterSound.kriecherKlapper(Math.max(0.5, monsterLautstaerke(m))); }
+    if (m.modus === 'raus' && !m.warnText && !tot && !troll && monsterLautstaerke(m) > 0.7) { m.warnText = true; zeigeNachricht('🕸️ Über dir KLAPPERT das Lüftungsgitter! LAUF!', 2.5, '#ff6b6b'); }   // (Auch bei Gästen)
+    if (m.modus !== 'raus') { m.warnTon = false; m.warnText = false; }
+  }
   if (m.art === 'schrank') {   // Warnung: Das hört man immer (auch etwas weiter weg), damit du eine Chance hast
     if (m.modus === 'warnen' && !m.warnTon) { m.warnTon = true; monsterSound.schrankWach(Math.max(0.5, monsterLautstaerke(m))); }
     if (m.modus !== 'warnen') m.warnTon = false;
@@ -545,6 +565,12 @@ function monsterGeraeusche(m, dt) {
   m.geraeuschZeit = (m.geraeuschZeit ?? zufall(0, 2)) - dt;
   if (m.geraeuschZeit > 0 || m.betaeubt > 0) return;
   const laut = monsterLautstaerke(m), jagt = m.modus === 'jagen';
+  if (m.art === 'kriecher') {
+    const oben = KRIECHER_OBEN.includes(m.modus);
+    m.geraeuschZeit = oben ? (m.laeuft ? zufall(0.35, 0.6) : zufall(2.5, 4)) : jagt ? zufall(0.45, 0.7) : zufall(0.9, 1.6);
+    if (laut > 0) monsterSound.kriecher(laut, jagt, oben, m.laeuft);
+    return;
+  }
   if (m.art === 'starrer') {
     // Der Starrer ist nur zu hören, wenn er sich bewegt (also wenn du NICHT hinschaust ...)
     m.geraeuschZeit = 0.5;
@@ -730,6 +756,16 @@ const MUSIK_LIEDER = {
       Eb5 D5 C5 G4 | Ab4 - G4 . | Eb5 D5 C5 Bb4 | C5 - - . |
       . . . .      | . . . .    | G5 F5 Eb5 D5  | C5 - - - |`),
   },
+  // 🕸️ Schachtkriecher: „Im Lüftungsschacht“ – ein EIGENES Lied: hektisches, blechernes Metal mit Teufelston und kreischender Melodie
+  kriecher: {
+    tempo: 172, grund: 77.8, verzerrung: 80, gitarre: 0.45, melodieKlang: 'kreischen', becken: 'tick',
+    riff: riffNoten(`
+      0 . 0 1  . 0 . 6  . 0 0 .  5 . 3 .  |  0 . 0 1  . 0 . 6  . 0 0 .  8 7 6 .  |
+      0 . 0 1  . 0 . 6  . 0 0 .  5 . 3 .  |  12 . 11 .  10 . 9 .  8 . 7 .  6 . 1 .  |`),
+    kick: [1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0],
+    snare: [4, 12],
+    melodie: [13, 12, null, 18, 13, 12, 7, null],
+  },
   // 🗿 Starrer: Langsamer, tonnenschwerer Stein-Doom – und eine Uhr tickt ... tick ... tack ...
   starrer: {
     tempo: 100, grund: 55, verzerrung: 95, gitarre: 0.6, melodieKlang: 'gong', becken: 'tick',
@@ -873,6 +909,10 @@ function musikStart(art) {   // Die Jagd beginnt! Ein dramatischer Schlag – f�
     rauschen(0, 0.4, 0.8, 'lowpass', 2500, null, 100);
     ton(80, 0, 0.5, 'sine', 0.7, 40);
     gruselTon(500, 0.25, 1.0, 'sawtooth', 0.12, 150, 20);
+  } else if (art === 'kriecher') { // 🕸️ Blech kracht runter + Kreischen
+    rauschen(0, 0.6, 0.5, 'highpass', 1500, null, 400);
+    ton(180, 0, 0.4, 'square', 0.25, 90); ton(2200, 0, 0.6, 'sine', 0.08, 1800);
+    gruselTon(1600, 0.15, 0.9, 'sawtooth', 0.12, 400, 30);
   } else if (art === 'maulwurf') { // 🐾 Erde bricht auf + Quieken
     rauschen(0, 1.2, 0.8, 'lowpass', 1200, null, 100);
     ton(50, 0, 1.2, 'sine', 0.9, 25);
@@ -3550,6 +3590,7 @@ function baueHaus() {
     // 6. Möbel, Deko und Schätze in allen anderen Räumen
     for (const R of haus.raeume) if (R.nr !== haus.start) raumEinrichten(R);
     for (const R of haus.raeume) wandDeko(R);
+    baueLueftung();   // 🕸️ Lüftungsgitter an den Decken
     for (const S of SAELE) lampeHinzu((S.i + S.breit / 2) * RAUM, S.etage * ETAGE_HOEHE + WAND_HOEHE - 0.4, (S.j + S.tief / 2) * RAUM, '#ffd9a0', 2.4, 9 + 5 * Math.max(S.breit, S.tief), false);   // Eine helle Lampe mitten im Saal
     baueWald();   // 🌲 Draußen (nach den Lampen drinnen – die sind wichtiger)
 
@@ -3575,6 +3616,11 @@ function baueHaus() {
       neuesMonster('chemiker', haus.start);
       const L = haus.keller.labor;
       Object.assign(monster[monster.length - 1], { x: L.x, y: haus.keller.boden, z: L.z, winkel: L.winkel });
+    }
+    for (let k = 0; k < (ld.kriecher || 0) && haus.gitter && haus.gitter.length; k++) {   // 🕸️ Der Schachtkriecher startet oben in einem Lüftungsschacht
+      const weitG = haus.gitter.filter(G => weit.includes(G.raum)), G = auswahl(weitG.length ? weitG : haus.gitter);
+      neuesMonster('kriecher', haus.start);
+      Object.assign(monster[monster.length - 1], { x: G.x, y: G.basis, z: G.z, modus: 'schacht' });
     }
   }
 
@@ -4037,6 +4083,12 @@ const MONSTER_ARTEN = {
               fuehlWeite: 15, auftauchWeite: 1.8, auftauchen: 0.8, obenZeit: 8, abtauchen: 0.6, schubs: 11, krabbelTempo: 5.2, krabbelWeite: 14 },
   // 🐷🧪 Doktor Schorsch, das verrückte Chemiker-Schwein, wohnt im Keller-Labyrinth und wirft mit Tränken (siehe TRAENKE oben)! Er verlässt seinen Keller nie.
   // wurfWeite: so weit wirft er · ausholen: so lange holt er aus, bevor er wirft (deine Chance auszuweichen!) · nachladen: so lange bis zum nächsten Trank
+  // 🕸️ Der Schachtkriecher krabbelt oben in den Lüftungsschächten herum (da passt DU nicht rein!). Er hört deine Schritte durch die Decke.
+  // Ducken (C) = er hört dich nicht. hoerWeite: so weit hört er Schritte · lauerWeite: so nah unter seinem Gitter, dann springt er raus
+  // lauerZeit: so lange wartet er am Gitter · warnen: so lange klappert das Gitter, bevor er rausfällt (deine Chance!)
+  // jagdDauer: so lange jagt er dich unten · klettern: so lange braucht er wieder hoch · ruhe: so lange lässt er dich danach in Ruhe
+  kriecher: { name: 'Schachtkriecher', emoji: '🕸️', tempo: 2.2, jagdTempo: 5.2, schaden: 30, sicht: 13, augen: 0.6, pause: 1.4, betaeubbar: true,
+              schachtTempo: 3, schachtJagdTempo: 5, hoerWeite: 14, lauerWeite: 2.6, lauerZeit: 8, warnen: 0.9, jagdDauer: 7, klettern: 0.8, ruhe: 5, schubs: 8 },
   chemiker: { name: 'Doktor Schorsch', emoji: '🐷', tempo: 1.2, jagdTempo: 2.6, schaden: 15, sicht: 15, augen: 1.6, pause: 2, betaeubbar: true,
               wurfWeite: 13, ausholen: 0.7, nachladen: 2.4 },
 };
@@ -4115,6 +4167,34 @@ function baueMonsterMesh(art) {
       g.userData.beineG.push(b);
     }
     g.userData.beine = 0; g.userData.spalt = spalt;
+  } else if (art === 'kriecher') {   // 🕸️ Lang, dünn und blass – krabbelt auf allen Vieren, mit riesigen gelben Augen
+    const haut = new THREE.MeshStandardMaterial({ color: '#9aa596', roughness: 0.75 }), dunkel = new THREE.MeshStandardMaterial({ color: '#2a2e2a', roughness: 0.9 });
+    const augenMat = new THREE.MeshBasicMaterial({ color: '#ffe14d', fog: false }), schwarz = new THREE.MeshBasicMaterial({ color: '#000' });
+    const K = new THREE.Group(); g.add(K);
+    const teil = (geo, mat, x, y, z, eltern = K) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; eltern.add(m); return m; };
+    teil(new THREE.CylinderGeometry(0.15, 0.2, 1.0, 10), haut, 0, 0.55, -0.05).rotation.x = Math.PI / 2;   // Langer Körper
+    teil(new THREE.SphereGeometry(0.2, 10, 8), haut, 0, 0.55, -0.55);                                          // Hüfte
+    for (let k = 0; k < 6; k++) teil(new THREE.SphereGeometry(0.045, 6, 5), dunkel, 0, 0.72, -0.45 + k * 0.17);   // Knubbelige Wirbelsäule
+    teil(new THREE.CylinderGeometry(0.07, 0.09, 0.3, 8), haut, 0, 0.6, 0.55).rotation.x = Math.PI / 2 - 0.3;   // Hals
+    const kopf = new THREE.Group(); kopf.position.set(0, 0.66, 0.78); K.add(kopf);
+    teil(new THREE.SphereGeometry(0.2, 12, 10), haut, 0, 0, 0, kopf).scale.set(1, 0.8, 1.25);
+    for (const x of [-0.09, 0.09]) { teil(new THREE.SphereGeometry(0.065, 10, 8), augenMat, x, 0.05, 0.19, kopf); teil(new THREE.BoxGeometry(0.015, 0.07, 0.01), schwarz, x, 0.05, 0.255, kopf); }
+    const maul = teil(new THREE.BoxGeometry(0.2, 0.03, 0.04), schwarz, 0, -0.08, 0.2, kopf);
+    const beine = [];
+    for (const [side, z, phase] of [[1, 0.35, 0], [-1, 0.35, Math.PI], [1, -0.45, Math.PI], [-1, -0.45, 0]]) {
+      const L = new THREE.Group(); L.position.set(side * 0.16, 0.55, z); L.rotation.z = -side * 1.0; K.add(L);
+      teil(new THREE.CylinderGeometry(0.045, 0.055, 0.5, 6), haut, 0, 0.25, 0, L);   // Oberarm (geht hoch – wie bei einer Spinne)
+      const unter = new THREE.Group(); unter.position.set(0, 0.5, 0); unter.rotation.z = side * 1.36; L.add(unter);
+      teil(new THREE.SphereGeometry(0.055, 6, 5), dunkel, 0, 0, 0, unter);          // Knubbel-Knie
+      teil(new THREE.CylinderGeometry(0.035, 0.045, 0.85, 6), haut, 0, -0.425, 0, unter);
+      for (const w of [-0.4, 0, 0.4]) teil(new THREE.ConeGeometry(0.018, 0.14, 5), dunkel, Math.sin(w) * 0.05, -0.88, Math.cos(w) * 0.05, unter).rotation.x = Math.PI;   // Krallen
+      L.userData = { side, unter, phase };
+      beine.push(L);
+    }
+    // Wenn er oben im Schacht lauert, siehst du nur seine Augen durchs Gitter leuchten ...
+    const spaeher = new THREE.Group(); g.add(spaeher);
+    for (const x of [-0.09, 0.09]) teil(new THREE.SphereGeometry(0.05, 10, 8), augenMat, x, 0, 0, spaeher);
+    Object.assign(g.userData, { koerper: K, kopf, maul, beine, augenMat, spaeher, alt: '' });
   } else if (art === 'maulwurf') {   // 🐾 Samtfell, rosa Sternnase, rote Äuglein – und ACHT Arme mit Grabkrallen
     const fell = new THREE.MeshStandardMaterial({ color: '#2b2320', roughness: 1 }), rosa = new THREE.MeshStandardMaterial({ color: '#e88aa0', roughness: 0.6 });
     const kralle = new THREE.MeshStandardMaterial({ color: '#d9cfb8', roughness: 0.4 }), erde = new THREE.MeshStandardMaterial({ color: '#3a2a1c', roughness: 1 });
@@ -4356,6 +4436,12 @@ function laerm(x, y, z, staerke) {
   const quelle = { x, y, z };
   for (const m of monster) {
     if (m.betaeubt > 0 || m.art === 'starrer') continue;
+    if (m.art === 'kriecher') {   // 🕸️ Krach im Haus? Er krabbelt durch die Rohre hin!
+      if ((m.modus === 'schacht' || m.modus === 'lauern') && !(m.ruhe > 0) && imHaus(x, z) && abstand3D(m, quelle) < staerke * 1.5) {
+        const G = naechstesGitter(x, z, etageVon(y)); if (G) { m.modus = 'schacht'; m.schachtZiel = G; m.jagt = true; }
+      }
+      continue;
+    }
     if (m.art === 'maulwurf') {   // Krach draußen? Da wühlt er hin!
       if (m.modus === 'graben' && !imHaus(x, z) && abstand2D(m.x, m.z, x, z) < staerke * 2) { m.modus = 'jagen'; m.ziel = { x, y: 0, z }; m.jagdZeit = 6; }
       continue;
@@ -4439,6 +4525,9 @@ function updateMonster(m, dt) {
     tempo = formwandlerUpdate(m, dt);
   } else if (m.art === 'oma') {
     tempo = omaUpdate(m, dt);
+  } else if (m.art === 'kriecher') {
+    tempo = kriecherUpdate(m, dt);
+    if (kriecherImSchacht(m)) { m.angriffPause = Math.max(m.angriffPause, 0.1); return; }   // 🕸️ Oben im Schacht: Er bewegt sich selbst (durch die Rohre) und kann nicht hauen
   } else if (m.art === 'maulwurf') {
     tempo = maulwurfUpdate(m, dt);
   } else if (m.art === 'starrer') {
@@ -4729,6 +4818,225 @@ function maulwurfUpdate(m, dt) {
   m.modus = 'graben';
   return 0;
 }
+// =====================================================================
+// 🕸️ Der Schachtkriecher: Er krabbelt oben in den Lüftungsschächten herum – da passt du nicht rein!
+// schacht (krabbelt durch die Rohre, hört Schritte) → lauern (Augen leuchten durchs Gitter) → raus (Gitter KLAPPERT!) → jagen (unten)
+// → rauf (zurück zu einem Gitter) → klettern → schacht. Tipp: Ducken = leise! Und blitz ihm in die Augen, wenn er im Gitter lauert!
+// =====================================================================
+const LUEFTUNG = { breit: 1.0, tief: 0.6 };   // So groß ist ein Lüftungsgitter
+const KRIECHER_OBEN = ['schacht', 'lauern', 'raus'];   // In diesen Modi ist er oben im Schacht
+const kriecherImSchacht = m => m.art === 'kriecher' && KRIECHER_OBEN.includes(m.modus);
+function gitterTextur() {   // Ein Blechgitter mit Schlitzen (durch die Schlitze sieht man ins dunkle Rohr)
+  const c = document.createElement('canvas'); c.width = 128; c.height = 80;
+  const g = c.getContext('2d');
+  g.fillStyle = '#8b9196'; g.fillRect(0, 0, 128, 80);
+  g.clearRect(10, 10, 108, 60);
+  for (let k = 0; k < 7; k++) { g.fillStyle = '#9aa1a6'; g.fillRect(10, 10 + k * 9, 108, 5); g.fillStyle = '#5d6367'; g.fillRect(10, 14 + k * 9, 108, 1); }
+  g.fillStyle = '#4a4f52'; for (const [x, y] of [[5, 5], [123, 5], [5, 75], [123, 75]]) g.fillRect(x - 2, y - 2, 4, 4);   // Schrauben
+  return new THREE.CanvasTexture(c);
+}
+function baueLueftung() {   // In fast jedem Raum ein Gitter an der Decke (nicht über Treppen, Löchern, Möbeln oder der Lampe)
+  haus.gitter = [];
+  const VORSCHLAEGE = [[0.72, 0.72], [0.28, 0.72], [0.72, 0.42], [0.28, 0.42], [0.5, 0.75], [0.75, 0.55], [0.25, 0.55]];
+  const imRechteck = (L, x, z, rand) => L && x > L.x1 - rand && x < L.x2 + rand && z > L.z1 - rand && z < L.z2 + rand;
+  for (const R of haus.raeume) {
+    if (R.nr === haus.start) continue;   // Im Startraum ist es sicher
+    const oben = R.e + 1 < haus.etagen ? haus.raeume[raumNr(R.i, R.j, R.e + 1)] : null;
+    const treppe = R.treppeHoch || R.treppeRunter;
+    for (const [fx, fz] of VORSCHLAEGE) {
+      const x = R.x0 + fx * RAUM, z = R.z0 + fz * RAUM;
+      if (treppe && z < R.z0 + 3.8) continue;
+      if (imRechteck(R.bodenloch, x, z, 1.2) || imRechteck(oben && oben.bodenloch, x, z, 1.2)) continue;
+      if (R.belegt.some(([a, b, c, d]) => x > a - 0.5 && x < c + 0.5 && z > b - 0.5 && z < d + 0.5)) continue;
+      haus.gitter.push({ x, z, e: R.e, basis: R.basis, raum: R.nr, auf: 0, aufBis: 0, wackel: 0, zielWackel: 0 });
+      break;
+    }
+  }
+  const n = haus.gitter.length;
+  if (!n) return;
+  const tex = gitterTextur();
+  const gitterMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(LUEFTUNG.breit, LUEFTUNG.tief),
+    new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, metalness: 0.5, roughness: 0.5 }), n);
+  const lochMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(LUEFTUNG.breit - 0.04, LUEFTUNG.tief - 0.04), new THREE.MeshBasicMaterial({ color: '#030303' }), n);
+  const d = new THREE.Object3D();
+  haus.gitter.forEach((G, k) => {
+    d.position.set(G.x, G.basis + WAND_HOEHE - 0.004, G.z); d.rotation.set(Math.PI / 2, 0, 0); d.updateMatrix();
+    lochMesh.setMatrixAt(k, d.matrix);   // Das dunkle Rohr dahinter
+  });
+  hausGruppe.add(gitterMesh, lochMesh);
+  haus.gitterMesh = gitterMesh;
+  gitterZeigen(true);
+}
+const gitterDummy = new THREE.Object3D();
+function gitterZeigen(immer = false) {   // Gitter klappern, wenn er drüber krabbelt – und hängen offen runter, wenn er rausgefallen ist
+  const G = haus && haus.gitter, M = haus && haus.gitterMesh;
+  if (!G || !M) return;
+  for (const g of G) g.zielWackel = 0;
+  for (const m of monster) {
+    if (m.art !== 'kriecher') continue;
+    const n = naechstesGitter(m.x, m.z, etageVon(m.y));
+    if (!n || abstand2D(m.x, m.z, n.x, n.z) > 1.5) continue;
+    const U = m.mesh.userData;
+    if (m.modus === 'raus') n.zielWackel = 1;
+    else if (m.modus === 'schacht' && m.laeuft) n.zielWackel = 0.3;
+    if (U.fall > 0 || m.modus === 'klettern') n.aufBis = zeit + (m.modus === 'klettern' ? 0.6 : 2.5);
+  }
+  let neu = immer;
+  G.forEach((g, k) => {
+    const auf = g.auf, wackel = g.wackel;
+    g.auf += ((zeit < g.aufBis ? 1 : 0) - g.auf) * (zeit < g.aufBis ? 0.35 : 0.06);
+    g.wackel = Math.max(g.zielWackel, g.wackel * 0.9);
+    if (g.wackel < 0.01) g.wackel = 0;
+    if (g.auf < 0.003) g.auf = 0;
+    if (!immer && auf === g.auf && wackel === 0 && g.wackel === 0) return;   // Nichts los? Dann nichts tun (spart Rechenzeit)
+    neu = true;
+    const a = g.auf * 1.45 + (g.wackel ? Math.sin(zeit * 70 + k) * 0.07 * g.wackel : 0), T = LUEFTUNG.tief / 2;
+    // Das Gitter hängt an einer Kante (Scharnier) und klappt nach unten auf
+    gitterDummy.position.set(g.x, g.basis + WAND_HOEHE - 0.012 - Math.sin(a) * T + (g.wackel ? Math.random() * 0.01 * g.wackel : 0), g.z - T + Math.cos(a) * T);
+    gitterDummy.rotation.set(Math.PI / 2 + a, 0, 0); gitterDummy.updateMatrix();
+    M.setMatrixAt(k, gitterDummy.matrix);
+  });
+  if (neu) M.instanceMatrix.needsUpdate = true;
+}
+function naechstesGitter(x, z, e) {   // Das Gitter, das am nächsten ist (am liebsten im gleichen Stockwerk)
+  let bestes = null, bestD = Infinity;
+  for (const G of haus.gitter || []) {
+    const d = abstand2D(x, z, G.x, G.z) + (G.e === e ? 0 : 1000);
+    if (d < bestD) { bestD = d; bestes = G; }
+  }
+  return bestes;
+}
+function zufallsGitter(m) {   // Wohin krabbelt er als Nächstes? (meistens im gleichen Stockwerk, nicht zu weit)
+  const e = etageVon(m.y), G = haus.gitter;
+  const nah = G.filter(g => g.e === e && abstand2D(m.x, m.z, g.x, g.z) > 3 && abstand2D(m.x, m.z, g.x, g.z) < 25);
+  return Math.random() < 0.75 && nah.length ? auswahlZufall(nah) : auswahlZufall(G);
+}
+function kriecherOpfer(m, weite, auchStill = false, gleicheEtage = false) {   // Wen hört er? (Ducken = leise! Draußen und im Keller hört er nichts)
+  let bestes = null, bestD = weite;
+  const e = etageVon(m.y);
+  const pruef = (x, y, z, bewegt, duckt, o) => {
+    if (!imHaus(x, z) || y < -0.5 || duckt || !(auchStill || bewegt)) return;
+    if (gleicheEtage && etageVon(y) !== e) return;
+    const d = gleicheEtage ? abstand2D(m.x, m.z, x, z) : abstand3D(m, { x, y: y - 0.4, z });
+    if (d < bestD) { bestD = d; bestes = { x, y, z, ...o }; }
+  };
+  const p = spielerKoerper.position, v = spielerKoerper.velocity;
+  if (!tot && !troll) pruef(p.x, p.y, p.z, Math.hypot(v.x, v.z) > 0.6, geduckt, { spieler: true });
+  for (const g of mpGaeste()) {
+    if (zeit - (g.kwT || 0) > 0.3) { g.kwBewegt = Math.hypot(g.x - (g.kwX ?? g.x), g.z - (g.kwZ ?? g.z)) > 0.15; g.kwX = g.x; g.kwZ = g.z; g.kwT = zeit; }
+    pruef(g.x, g.y + 0.5, g.z, g.kwBewegt, g.dk, { gast: g });
+  }
+  for (const h of helfer) {
+    if (h.kaputt > 0) continue;
+    const hp = h.body.position;
+    pruef(hp.x, hp.y, hp.z, Math.hypot(h.body.velocity.x, h.body.velocity.z) > 0.5, false, { helfer: h });
+  }
+  return bestes;
+}
+function kriecherVerscheucht(m) {   // 📸 Geblitzt, während er im Gitter lauert: Aua! Er haut ab, weit weg
+  m.modus = 'schacht'; m.jagt = false; m.ruhe = 8; m.laeuft = true;
+  const e = etageVon(m.y), weit = haus.gitter.filter(g => g.e === e && abstand2D(m.x, m.z, g.x, g.z) > 15);
+  m.schachtZiel = weit.length ? auswahlZufall(weit) : zufallsGitter(m);
+  monsterSound.kriecherKlapper(0.6);
+}
+function kriecherRunter(m) {   // (Troll-Modus) Sofort runter aus dem Schacht – unter das nächste Gitter
+  const G = naechstesGitter(m.x, m.z, etageVon(m.y));
+  if (G) { m.x = G.x; m.z = G.z; m.y = G.basis; }
+  m.modus = 'jagen'; m.jagdZeit = 5; m.ziel = null;
+}
+function kriecherUpdate(m, dt) {
+  const info = m.info;
+  m.ruhe = Math.max(0, (m.ruhe || 0) - dt);
+  if (!haus.gitter || !haus.gitter.length) {   // (Ohne Gitter ist er ein ganz normales Monster, das immer jagt)
+    if (m.modus !== 'jagen') { m.modus = 'jagen'; m.jagdZeit = 99; m.siehtNicht = 0; }
+    m.jagdZeit = 99; m.siehtNicht = 0;
+  }
+  if (m.modus === 'wandern' || m.modus === 'nachsehen') { m.modus = 'rauf'; m.rauf = null; }   // (Nach dem Blitz: zurück in den Schacht)
+  if (m.modus === 'schacht') {   // Er krabbelt durch die Rohre (mitten durch alle Wände – da oben sind keine!)
+    m.hoerZeit = (m.hoerZeit || 0) - dt;
+    if (m.hoerZeit <= 0) {
+      m.hoerZeit = 0.3;
+      const o = m.ruhe > 0 ? null : kriecherOpfer(m, info.hoerWeite);
+      if (o) { const G = naechstesGitter(o.x, o.z, etageVon(o.y)); if (G) { m.schachtZiel = G; m.jagt = true; } }
+    }
+    if (!m.schachtZiel) { m.schachtZiel = zufallsGitter(m); m.jagt = false; }
+    const G = m.schachtZiel, d = abstand2D(m.x, m.z, G.x, G.z);
+    m.laeuft = true;
+    if (d > 0.05) {
+      m.winkel = Math.atan2(G.x - m.x, G.z - m.z);
+      const s = Math.min(d, (m.jagt ? info.schachtJagdTempo : info.schachtTempo) * dt);
+      m.x += (G.x - m.x) / d * s; m.z += (G.z - m.z) / d * s;
+    } else if (Math.abs(m.y - G.basis) > 0.05) m.y += begrenzt(G.basis - m.y, -2 * dt, 2 * dt);   // Senkrechtes Rohr: ein Stockwerk rauf oder runter
+    else {   // Am Gitter angekommen: lauern!
+      m.laeuft = false; m.y = G.basis;
+      m.modus = 'lauern'; m.lauerZeit = m.jagt ? info.lauerZeit : 2 + Math.random() * 3;
+      m.gitterNr = haus.gitter.indexOf(G); m.schachtZiel = null;
+    }
+    return 0;
+  }
+  if (m.modus === 'lauern') {   // Er schaut durchs Gitter nach unten ...
+    m.laeuft = false; m.lauerZeit -= dt;
+    m.hoerZeit = (m.hoerZeit || 0) - dt;
+    if (m.hoerZeit <= 0) {
+      m.hoerZeit = 0.2;
+      const o = m.ruhe > 0 ? null : kriecherOpfer(m, info.lauerWeite, true, true);   // Direkt unter ihm: RAUS! (Ducken hilft!)
+      if (o) {
+        m.modus = 'raus'; m.warnZeit = info.warnen; m.opfer = o; m.winkel = Math.atan2(o.x - m.x, o.z - m.z);
+        if (o.helfer) { o.helfer.angst = 3; sagen(o.helfer, 'hilfe', { monster: info.name }, 1); }
+        return 0;
+      }
+      const f = m.ruhe > 0 ? null : kriecherOpfer(m, info.hoerWeite);   // Schritte woanders? Hinkrabbeln!
+      if (f) { const G = naechstesGitter(f.x, f.z, etageVon(f.y)); if (G && G !== haus.gitter[m.gitterNr]) { m.modus = 'schacht'; m.schachtZiel = G; m.jagt = true; return 0; } }
+    }
+    if (m.lauerZeit <= 0) { m.modus = 'schacht'; m.schachtZiel = null; }
+    return 0;
+  }
+  if (m.modus === 'raus') {   // KLAPPER-KLAPPER ... gleich fällt er raus!
+    m.laeuft = false; m.warnZeit -= dt;
+    if (m.warnZeit <= 0) {
+      const G = haus.gitter[m.gitterNr];
+      if (G) { m.x = G.x; m.z = G.z; m.y = G.basis; }
+      m.modus = 'jagen'; m.jagdZeit = info.jagdDauer; m.siehtNicht = 0; m.sichtCheck = 0.4;
+      m.ziel = m.opfer ? { x: m.opfer.x, y: m.opfer.y, z: m.opfer.z } : null; m.zielZeit = 3;
+    }
+    return 0;
+  }
+  if (m.modus === 'jagen') {   // Unten! Er krabbelt hinter dir her
+    m.jagdZeit -= dt;
+    m.sichtCheck -= dt;
+    if (m.sichtCheck <= 0) {
+      m.sichtCheck = 0.2;
+      const o = sichtbaresOpfer(m);
+      if (o) { m.ziel = { x: o.x, y: o.y, z: o.z }; m.zielZeit = 3; m.siehtNicht = 0; } else m.siehtNicht += 0.2;
+    }
+    if (m.jagdZeit <= 0 || m.siehtNicht > 3) { m.modus = 'rauf'; m.rauf = null; m.raufZeit = 0; return info.tempo; }
+    return info.jagdTempo;
+  }
+  if (m.modus === 'rauf') {   // Zurück zum nächsten Gitter
+    if (!m.rauf) { m.rauf = naechstesGitter(m.x, m.z, etageVon(m.y)); m.raufZeit = 0; }
+    const G = m.rauf;
+    m.raufZeit += dt;
+    m.ziel = { x: G.x, y: G.basis, z: G.z }; m.zielZeit = 2;
+    if ((abstand2D(m.x, m.z, G.x, G.z) < 0.45 && Math.abs(m.y - G.basis) < 0.8) || m.raufZeit > 25) {   // (Nach 25 s hängt er wohl fest – dann eben hier hoch)
+      if (m.raufZeit > 25) { m.x = G.x; m.z = G.z; m.y = G.basis; }
+      m.modus = 'klettern'; m.warnZeit = info.klettern; m.gitterNr = haus.gitter.indexOf(G); m.ziel = null; m.rauf = null;
+      return 0;
+    }
+    return info.jagdTempo * 0.8;
+  }
+  if (m.modus === 'klettern') {   // Hoch ins Rohr ...
+    m.ziel = null; m.warnZeit -= dt;
+    if (m.warnZeit <= 0) {
+      const G = haus.gitter[m.gitterNr];
+      if (G) { m.x = G.x; m.z = G.z; m.y = G.basis; }
+      m.modus = 'schacht'; m.schachtZiel = null; m.ruhe = info.ruhe;
+    }
+    return 0;
+  }
+  m.modus = 'schacht';
+  return 0;
+}
+
 // 👵🦯 Die Böse Oma: wandern → (jemand schaut sie an) grummeln → (zu lange hingeschaut!) jagen → BONK → wieder wandern
 // Schaust du gerade auf diese Stelle? (Nur die Mitte vom Bild zählt – aus dem Augenwinkel ist okay)
 function ichSchaueHin(m, weite, hoehe = 1.3) {
@@ -5213,6 +5521,32 @@ function zeigeMonster(m) {
     });
     U.tentakel.forEach((t, k) => t.scale.setScalar(1 + Math.sin(zeit * 20 + k) * 0.25));   // Die Sternnase schnuppert
     U.augeMat.color.set(m.betaeubt > 0 ? '#555' : m.modus === 'oben' ? '#ff1a1a' : '#a33');
+  } else if (m.art === 'kriecher') {   // 🕸️
+    const U = g.userData, oben = KRIECHER_OBEN.includes(m.modus);
+    if (U.alt !== m.modus) { if (m.modus === 'jagen' && U.alt === 'raus') U.fall = 1; if (m.modus === 'klettern') U.kletter = 0; U.alt = m.modus; }
+    U.koerper.visible = !oben;
+    U.spaeher.visible = m.modus === 'lauern' || m.modus === 'raus';
+    g.rotation.set(0, m.winkel, 0);
+    if (oben) {
+      g.position.set(m.x, m.y, m.z);
+      U.spaeher.position.set(0, WAND_HOEHE - 0.07 + (m.modus === 'raus' ? Math.sin(zeit * 50) * 0.02 : 0), 0);
+      U.augenMat.color.set(m.modus === 'raus' ? '#ff3b1f' : Math.sin(zeit * 0.9 + m.phase) > 0.93 ? '#333' : '#ffe14d');   // (blinzelt manchmal)
+    } else {
+      let hoch = 0;
+      if (U.fall > 0) { U.fall = Math.max(0, U.fall - 1 / 60 / 0.35); hoch = U.fall * U.fall * (WAND_HOEHE - 0.6); }   // Plumps! Er fällt von der Decke
+      if (m.modus === 'klettern') { U.kletter = Math.min(1, (U.kletter || 0) + 1 / 60 / m.info.klettern); hoch = U.kletter * (WAND_HOEHE - 0.3); }   // Hoch ins Gitter
+      g.position.set(m.x, m.y + hoch, m.z);
+      U.koerper.rotation.x = m.modus === 'klettern' ? -1.3 * Math.min(1, U.kletter * 3) : 0;
+      const jagt = m.modus === 'jagen' || m.modus === 'rauf', ph = m.phase * (jagt ? 13 : 6), lauf = m.laeuft ? 1 : 0.12;
+      U.beine.forEach(L => {
+        const s = Math.sin(ph + L.userData.phase);
+        L.rotation.x = s * 0.55 * lauf;
+        L.userData.unter.rotation.z = L.userData.side * (1.36 + Math.max(0, s) * 0.45 * lauf);   // Beim Vorziehen hebt er die Hand
+      });
+      U.kopf.rotation.set(0, Math.sin(zeit * 2.3 + m.phase) * 0.35, Math.sin(zeit * 1.1) * (jagt ? 0.1 : 0.4));   // Legt den Kopf schief ...
+      U.augenMat.color.set(m.betaeubt > 0 ? '#555' : jagt ? '#ff3b1f' : '#ffe14d');
+      U.maul.scale.y = jagt ? 1 + Math.abs(Math.sin(zeit * 9)) * 2 : 0.5;
+    }
   } else if (m.art === 'oma') {
     const U = g.userData, jagt = m.modus === 'jagen', sauer = m.modus === 'grummeln';
     const schritt = m.laeuft ? Math.sin(m.phase * (jagt ? 14 : 5)) : 0;
@@ -6088,12 +6422,15 @@ function blitzen() {
 function blitzVon(von, blickRichtung, meldung) {
   let geblendet = 0, starrerDa = false;
   for (const m of monster) {
-    const kopf = new THREE.Vector3(m.x, m.y + 1.2, m.z);
+    if (m.art === 'kriecher' && m.modus === 'schacht') continue;   // 🕸️ Tief im Rohr: Da kommt kein Blitz hin
+    const imGitter = kriecherImSchacht(m);   // ... aber seine Augen im Gitter kannst du anblitzen!
+    const kopf = new THREE.Vector3(m.x, m.y + (imGitter ? WAND_HOEHE - 0.15 : 1.2), m.z);
     const zu = kopf.clone().sub(von), d = zu.length();
     if (d > BLITZ_WEITE || zu.normalize().dot(blickRichtung) < Math.cos(BLITZ_WINKEL)) continue;
     if (!freieSicht(von.clone(), kopf)) continue;
     if (m.art === 'maulwurf' && m.modus !== 'oben') continue;   // Unter der Erde sieht er den Blitz nicht
-    if (!m.info.betaeubbar) { starrerDa = true; continue; }   // Steinaugen kann man nicht blenden ...
+    if (!m.info.betaeubbar) { starrerDa = true; continue; }
+    if (imGitter) { kriecherVerscheucht(m); schwebeText(m.x, m.y + WAND_HOEHE - 0.4, m.z, `💫 ${m.info.name} verscheucht!`, '#ffd166'); geblendet++; continue; }   // Steinaugen kann man nicht blenden ...
     m.betaeubt = Math.max(m.betaeubt, BLITZ_BETAEUBT);
     m.modus = 'wandern'; m.ziel = null; m.zielen = 0;
     schwebeText(m.x, m.y + 2.3, m.z, `💫 ${m.info.name} geblendet!`, '#ffd166');
@@ -6226,6 +6563,7 @@ function trollFreigeben(m) {   // Das Monster denkt wieder selbst
   if (m.art === 'schrank') { m.modus = 'heimweg'; schrankNeuesVersteck(m); }
   else if (m.art === 'maulwurf') { m.modus = 'oben'; m.obenZeit = 0.5; }
   else if (m.art === 'formwandler') m.modus = 'abhauen';
+  else if (m.art === 'kriecher') { m.modus = 'rauf'; m.rauf = null; }
   else if (m.art === 'oma') { m.modus = 'wandern'; m.aerger = 0; m.ruhe = m.info.ruhe; }
   else m.modus = 'wandern';
 }
@@ -6240,6 +6578,7 @@ function trollSteuerJetzt() {   // Aus deinen Tasten: Wohin soll das Monster lau
 }
 function trollSteuern(m, dt) {   // (Läuft beim Gastgeber in updateMonster) Ein Mensch steuert dieses Monster!
   const s = m.steuer || { dx: 0, dz: 0, renn: false };
+  if (kriecherImSchacht(m) || m.modus === 'klettern') kriecherRunter(m);   // 🕸️ Als Kriecher läufst du unten herum
   m.trollSicht = (m.trollSicht || 0) - dt;
   if (m.trollSicht <= 0) { m.trollSicht = 0.3; m.trollSieht = trollSiehtJemanden(m); }
   // So tun, als wäre alles ganz normal (damit Angriffe klappen und die Jagd-Musik echt wirkt)
@@ -6514,7 +6853,7 @@ function jaeger() {   // Welches Monster jagt dich gerade? (das nächste, oder n
   let bestes = null, bestD = 12;
   for (const m of monster) {
     const d = abstand3D(m, p);
-    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.art === 'maulwurf' ? ['auftauchen', 'oben', 'abtauchen'].includes(m.modus) : m.modus === 'jagen')) { bestes = m; bestD = d; }   // (Maulwurf: Musik erst, wenn er rausbricht!)
+    if (m.betaeubt <= 0 && d < bestD && (m.art === 'starrer' ? m.bewegtSeit > 0.3 : m.art === 'maulwurf' ? ['auftauchen', 'oben', 'abtauchen'].includes(m.modus) : m.art === 'kriecher' ? ['raus', 'jagen'].includes(m.modus) : m.modus === 'jagen')) { bestes = m; bestD = d; }   // (Maulwurf: Musik erst, wenn er rausbricht!)
   }
   return bestes;
 }
@@ -7077,6 +7416,7 @@ function zeichne3D() {
   }
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
   for (const m of monster) { zeigeMonster(m); trollUnsichtbarZeigen(m); }   // (👻 Unsichtbare verstecken)
+  gitterZeigen();   // 🕸️ Klappernde und offene Lüftungsgitter
   for (const h of helfer) zeigeHelfer(h);
   mpZeigeAndere();
   andereLampenLichter();
