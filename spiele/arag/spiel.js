@@ -3346,6 +3346,7 @@ function baueZwischendecke(R, boden) {
 
 function hausAufraeumen() {
   troll = null;   // (😈 Neues Spiel: Du bist wieder ein Roboter)
+  lichtSpuks = []; trollLaden = { licht: 0, weg: 0, ton: 0 };
   while (hausGruppe.children.length) {
     const o = hausGruppe.children[0];
     hausGruppe.remove(o);
@@ -6309,6 +6310,117 @@ function trollVomGast(g, tm) {   // (Gastgeber) Ein Gast steuert heimlich ein Mo
   }
 }
 
+// ----- 😈 Troll-Tricks (nur als Monster): 1 = Licht flackern · 2 = unsichtbar · 3 = Gruselgeräusch -----
+const TROLL_TRICKS = {
+  licht: { taste: '1', emoji: '💡', name: 'Licht flackern', laden: 15 },   // laden = so viele Sekunden musst du danach warten
+  weg:   { taste: '2', emoji: '👻', name: 'Unsichtbar',     laden: 20 },
+  ton:   { taste: '3', emoji: '🔊', name: 'Gruselgeräusch', laden: 6 },
+};
+const TROLL_LICHT = { weite: 14, dauer: 5 };       // Alle Lampen bis 14 m um dein Monster spinnen 5 Sekunden lang
+const TROLL_UNSICHTBAR_ZEIT = 6;                    // So lange sieht dich keiner (aber man hört dich noch!)
+const TROLL_TON_WEITE = 25;                         // So weit weg (da, wo du hinschaust) kannst du ein Geräusch machen
+const TROLL_GERAEUSCHE = ['kichern', 'klopfen', 'fluestern', 'schritte', 'kratzen'];
+const TROLL_GERAEUSCH_NAME = { kichern: 'Kichern', klopfen: 'Klopf-klopf', fluestern: 'Flüstern', schritte: 'Schritte', kratzen: 'Kratzen' };
+let trollLaden = { licht: 0, weg: 0, ton: 0 };   // Wie lange der Trick noch lädt
+let lichtSpuks = [];                               // [{ x, y, z, t }] Hier flackern gerade die Lampen
+let letztesGeraeusch = '';
+function trollTrickTaste(k) {   // Du hast 1, 2 oder 3 gedrückt
+  const a = Object.keys(TROLL_TRICKS).find(n => TROLL_TRICKS[n].taste === k);
+  if (!a || !troll || tot || pause) return false;
+  const m = monster[troll.nr];
+  if (!m) return false;
+  if (trollLaden[a] > 0) { zeigeNachricht(`${TROLL_TRICKS[a].emoji} Lädt noch ${Math.ceil(trollLaden[a])} s ...`, 1.2, '#ff9be9'); return true; }
+  const d = { a };
+  if (a === 'ton') {   // Wohin? Dahin, wo du hinschaust (bis zur nächsten Wand)
+    const r = new THREE.Vector3(); kamera.getWorldDirection(r);
+    sichtStrahl.set(kamera.position, r); sichtStrahl.far = TROLL_TON_WEITE;
+    const treffer = sichtStrahl.intersectObjects(sichtBlocker, false)[0];
+    const weg = treffer ? Math.max(1, treffer.distance - 0.4) : TROLL_TON_WEITE;
+    const p = kamera.position.clone().addScaledVector(r, weg);
+    let s; do { s = auswahlZufall(TROLL_GERAEUSCHE); } while (s === letztesGeraeusch);
+    letztesGeraeusch = s;
+    Object.assign(d, { x: r2(p.x), y: r2(p.y), z: r2(p.z), s });
+    zeigeNachricht(`🔊 ${TROLL_GERAEUSCH_NAME[s]}! (${Math.round(weg)} m weit weg) – hihi 😈`, 2, '#ff9be9');
+  } else zeigeNachricht(a === 'licht' ? '💡 Bzzzt! Die Lampen spinnen ...' : '👻 Du bist unsichtbar! (Aber man hört dich noch ...)', 2, '#ff9be9');
+  trollLaden[a] = TROLL_TRICKS[a].laden;
+  if (mp.rolle === 'gast') mpSende({ t: 'trick', ...d });   // Der Gastgeber macht es für alle
+  else trollTrickMachen(m, d);
+  return true;
+}
+function auswahlZufall(liste) { return liste[Math.floor(Math.random() * liste.length)]; }   // (Math.random – NICHT auswahl, das würde das Haus verändern)
+function zufallEcht(a, b) { return a + Math.random() * (b - a); }
+function trollTrickMachen(m, d) {   // (Gastgeber) Der Trick passiert – bei allen!
+  const e = { t: 'trick', a: d.a, nr: monster.indexOf(m) };
+  if (d.a === 'licht') Object.assign(e, { x: r2(m.x), y: r2(m.y), z: r2(m.z) });
+  else if (d.a === 'ton') {
+    if (!TROLL_GERAEUSCHE.includes(d.s)) return;
+    const p = { x: +d.x || 0, y: +d.y || 0, z: +d.z || 0 };
+    if (abstand3D(m, p) > TROLL_TON_WEITE + 5) return;   // (Schummeln gilt nicht)
+    Object.assign(e, p, { s: d.s });
+    laerm(p.x, p.y, p.z, 10);   // 👂 Das hört auch der Lauscher – und rennt hin!
+  }
+  trickEffekt(e);
+  if (mp.aktiv) mpAnAlle(e);
+}
+function trickEffekt(e) {   // (Bei allen) Was man sieht und hört
+  if (e.a === 'licht') {
+    lichtSpuks.push({ x: e.x, y: e.y, z: e.z, t: 0 });
+    const laut = Math.max(0, 1 - abstand3D(e, kamera.position) / 30);
+    if (laut > 0) { rauschen(0, 0.4, 0.15 * laut, 'bandpass', 3000); ton(50, 0, 1.2, 'sawtooth', 0.05 * laut, 48); ton(100, 0.1, 0.8, 'square', 0.02 * laut, 95); }   // Bzzzzt!
+  } else if (e.a === 'weg') {
+    const m = monster[e.nr];
+    if (m) { m.unsichtbar = TROLL_UNSICHTBAR_ZEIT; const l = Math.max(0, 1 - abstand3D(m, kamera.position) / 20); if (l > 0) gruselTon(900, 0, 0.8, 'sine', 0.05 * l, 200, 12); }   // Fffuuup ...
+  } else if (e.a === 'ton') gruselGeraeusch(e.s, Math.max(0, 1 - abstand3D(e, kamera.position) / 30));
+}
+function gruselGeraeusch(s, laut) {   // 🔊 Lauter selbst gebaute Geräusche (ganz ohne Sound-Dateien)
+  if (laut <= 0.02) return;
+  laut = laut * laut * 1.6;   // Nah viel lauter als fern
+  if (s === 'kichern') {        // Hihihihi ... (hoch und zittrig)
+    for (let k = 0; k < 7; k++) gruselTon(zufallEcht(700, 820) * (1 - k * 0.04), k * 0.13, 0.1, 'triangle', 0.06 * laut, null, 30);
+    for (let k = 0; k < 7; k++) rauschen(k * 0.13, 0.07, 0.03 * laut, 'bandpass', 2500);
+  } else if (s === 'klopfen') { // Klopf ... klopf ... klopf.
+    for (let k = 0; k < 3; k++) { ton(140, k * 0.45, 0.12, 'triangle', 0.2 * laut, 70); rauschen(k * 0.45, 0.06, 0.12 * laut, 'lowpass', 900); }
+  } else if (s === 'fluestern') {   // Psssst ... schhhh ... (wie Wörter, die man nicht versteht)
+    for (let k = 0; k < 6; k++) rauschen(k * 0.22 + zufallEcht(0, 0.05), zufallEcht(0.12, 0.25), 0.06 * laut, 'bandpass', zufallEcht(2500, 5000));
+    gruselTon(180, 0.2, 1.4, 'sine', 0.02 * laut, 140, 4);
+  } else if (s === 'schritte') {    // Tapp. Tapp. Tapp. (jemand kommt näher ...)
+    for (let k = 0; k < 6; k++) ton(85, k * 0.4, 0.08, 'sine', (0.08 + k * 0.03) * laut, 45);
+  } else if (s === 'kratzen') {     // Krrrratz – Krallen an der Wand
+    for (let k = 0; k < 3; k++) rauschen(k * 0.5, 0.4, 0.1 * laut, 'bandpass', 1500, null, 4000);
+  }
+}
+function lichtSpukUpdate(dt) {   // (Bei allen) Die Spuk-Zeit läuft
+  for (const s of lichtSpuks) s.t += dt;
+  lichtSpuks = lichtSpuks.filter(s => s.t < TROLL_LICHT.dauer);
+}
+function lichtSpukBei(pos) {   // Spinnt das Licht hier gerade? → Helligkeit 0..1 (oder null = ganz normal)
+  for (const s of lichtSpuks) {
+    if (abstand3D(s, pos) > TROLL_LICHT.weite) continue;
+    if (s.t < 2.5) return Math.random() < 0.45 ? 0.03 : zufallEcht(0.3, 1.3);   // Flacker-flacker!
+    if (s.t < 4.2) return 0.02;                                             // ... dunkel!
+    return Math.random() < 0.3 ? 0.1 : 1;                                   // ... und langsam wieder an
+  }
+  return null;
+}
+function trollUnsichtbarZeigen(m) {   // 👻 Unsichtbare Monster nicht zeigen (du selbst siehst deins blinken)
+  if (!(m.unsichtbar > 0)) { m.mesh.visible = true; return; }
+  m.unsichtbar -= 1 / 60;
+  const meins = troll && monster[troll.nr] === m;
+  m.mesh.visible = meins ? (zeit * 5) % 1 < 0.35 : false;
+}
+function trollTrickHUD() {   // Unten über der Troll-Leiste: deine drei Tricks
+  const m = monster[troll.nr];
+  const teile = Object.entries(TROLL_TRICKS).map(([a, T]) => {
+    if (a === 'weg' && m && m.unsichtbar > 0) return `${T.taste} ${T.emoji} noch ${Math.ceil(m.unsichtbar)} s`;
+    return trollLaden[a] > 0 ? `${T.taste} ${T.emoji} ${Math.ceil(trollLaden[a])} s` : `${T.taste} ${T.emoji} ${T.name}`;
+  });
+  const t = teile.join('   ·   ');
+  ctx.font = 'bold 14px system-ui, sans-serif';
+  const b = ctx.measureText(t).width + 30;
+  ctx.fillStyle = 'rgba(70,0,60,0.7)'; ctx.fillRect(W / 2 - b / 2, H - 82, b, 28);
+  ctx.fillStyle = '#ffd6f5'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, W / 2, H - 68);
+}
+
 // =====================================================================
 // ===== Update =====
 // =====================================================================
@@ -6320,6 +6432,8 @@ function update(dt) {
   for (const f of funk) f.t -= dt;
   funk = funk.filter(f => f.t > 0);
   musikUpdate(zustand === 'spiel' && !pause ? (troll ? trollMusik() : jaeger()?.art ?? null) : null);   // (😈 Als Monster hörst du DEINE Jagd-Musik)
+  for (const a in trollLaden) trollLaden[a] = Math.max(0, trollLaden[a] - dt);   // 😈 Tricks laden wieder auf
+  lichtSpukUpdate(dt);
   mpUpdate(dt);
   try { voiceUpdate(); } catch (e) { /* Voice-Chat darf nie das Spiel kaputt machen */ }
   if (mp.rolle === 'gast') { if (zustand === 'spiel') updateAlsGast(dt); return; }
@@ -6962,7 +7076,7 @@ function zeichne3D() {
     kamera.updateMatrixWorld();
   }
   for (const s of schaetze) { s.mesh.position.copy(s.body.position); s.mesh.quaternion.copy(s.body.quaternion); }
-  for (const m of monster) zeigeMonster(m);
+  for (const m of monster) { zeigeMonster(m); trollUnsichtbarZeigen(m); }   // (👻 Unsichtbare verstecken)
   for (const h of helfer) zeigeHelfer(h);
   mpZeigeAndere();
   andereLampenLichter();
@@ -6970,10 +7084,18 @@ function zeichne3D() {
   if (tot && zeit - totSeit >= VERBINDUNG_WEG_ZEIT) zuschauKamera();   // Kaputt: Du schaust bei einem anderen Roboter mit zu
   // Flackernde Lampen, Kaminfeuer und Pendel
   hausGruppe.children.forEach(o => {
-    if (!o.isPointLight || !o.userData.flackern) return;
+    if (!o.isPointLight || o.userData.stark === undefined) return;
+    const spuk = lichtSpuks.length ? lichtSpukBei(o.position) : null;   // 😈💡 Ein Troll lässt die Lampen spinnen!
+    if (spuk !== null) { o.intensity = o.userData.stark * spuk; o.userData.gespukt = true; return; }
+    if (o.userData.gespukt) { o.userData.gespukt = false; o.intensity = o.userData.stark; }
+    if (!o.userData.flackern) return;
     if (o.userData.flackern === 'feuer') o.intensity = o.userData.stark * (0.75 + Math.random() * 0.35);
     else o.intensity = Math.random() < 0.06 ? 0.1 : o.userData.stark;
   });
+  if (blitzHell <= 0) {   // 🔦 Auch deine Taschenlampe spinnt, wenn du mittendrin stehst
+    const spuk = lichtSpuks.length ? lichtSpukBei(kamera.position) : null;
+    taschenlampe.intensity = spuk === null ? 6 : 6 * Math.max(0.05, spuk);
+  }
   windZeit.value = zeit;   // 🌱 Wind fürs Gras und die Blumen
   for (const d of haus.bewegteDeko) {
     if (d.userData.feuer) d.scale.y = 0.8 + Math.random() * 0.5;
@@ -7012,7 +7134,7 @@ function aufBildschirm(v) {
 }
 
 function zeichneHUD() {
-  if (troll) trollHUD();
+  if (troll) { trollHUD(); trollTrickHUD(); }
   // 🔵 Nebeltrank: blauer Schleier vor den Augen · 🟣 Klebeschleim: lila Rand
   if (nebelZeit > 0) {
     const n = begrenzt(nebelZeit / 1.5, 0, 1);
@@ -7393,6 +7515,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   trollTaste(k);   // 😈 Psst ...
   if (k === 'q' && troll) { trollNaechstes(); return; }
+  if (troll && trollTrickTaste(k)) return;   // 😈 1 / 2 / 3 = Troll-Tricks
   if (k === 'm') tonAn = !tonAn;
   if (k === 'f' && !troll) blitzen();
   if (k === 'n' && mp.aktiv && VOICE_AN) { voice.aus = !voice.aus; zeigeNachricht(voice.aus ? '🔇 Voice-Chat AUS (du hörst niemanden, und keiner hört dich)' : '🎙️ Voice-Chat AN – halte V gedrückt zum Sprechen', 3); }
@@ -7592,6 +7715,7 @@ function mpVomGast(g, d) {
   if (d.t === 'p') { Object.assign(g, { x: d.x, y: d.y, z: d.z, w: d.w, n: d.n || 0, vo: d.vo || 0, dk: d.dk, hg: d.hg, pg: d.pg || null, hz: d.hz, k: d.k, r: d.r }); trollVomGast(g, d.tm); }
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
+  else if (d.t === 'trick') { const m = monster.find(x => x.besessen === g.id); if (m && g.troll) trollTrickMachen(m, d); }   // 😈 Ein Gast trollt
   else if (d.t === 'tuerE') tuerSetzen(tuerListe[d.id], !!d.auf, 'spieler');   // Ein Gast hat E gedrückt
   else if (d.t === 'tot') {   // Ein Gast ist kaputt: Sein Kopf fällt hin
     neuerKopf(g.id, g.farbe, d.x, d.y + 0.3, d.z);
@@ -7726,6 +7850,7 @@ function mpVomHost(d) {
     if (d.h !== undefined) { const h = helfer[d.h]; if (h) helferBlitzEffekt(h); }
     else if (d.id !== mp.peer.id) { const o = mp.andere.get(d.id); if (o) { o.blitzHell = 1; sound.blitz(lautBei({ x: o.x, y: o.y, z: o.z })); } }
   }
+  else if (d.t === 'trick') trickEffekt(d);   // 😈 Ein Troll war's!
   else if (d.t === 'schuss') { const m = monster[d.m]; if (m) schussEffekt(m, new THREE.Vector3(...d.z), d.tr); }
   else if (d.t === 'los') losGehts();   // 🔴 Einer hat den Knopf gedrückt!
   else if (d.t === 'bots') botsSetzen(d.an);   // 🤖 Bots an/aus
