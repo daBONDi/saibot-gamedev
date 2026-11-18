@@ -7564,7 +7564,8 @@ function zeichne3D() {
     }
   }
   // Dein Greifer: Ring dreht sich, Zinken schließen sich beim Greifen, alles leuchtet heller
-  greifer.visible = !tot && introZeit < 0;
+  greifer.visible = !tot && introZeit < 0 && !troll;   // (😈 Monster haben keinen Greifer ...)
+  taschenlampe.visible = !troll;                        // (... und keine Taschenlampe!)
   greifer.position.y = -0.27 + wippen * 0.5;
   const haeltWas = gegriffen || gepackt, siehtWas = schwebend || schwebendSpieler;
   greiferRing.rotation.z += haeltWas ? 0.3 : siehtWas ? 0.08 : 0.02;
