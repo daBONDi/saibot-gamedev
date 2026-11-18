@@ -4519,6 +4519,7 @@ function updateMonster(m, dt) {
   let tempo;
   if (m.besessen) {   // 😈 Ein Mensch steuert dieses Monster!
     tempo = trollSteuern(m, dt);
+    if (kriecherImSchacht(m)) { m.angriffPause = Math.max(m.angriffPause, 0.1); return; }   // 🕸️ Ein Troll krabbelt durch die Schächte
   } else if (m.art === 'schrank') {
     tempo = schrankUpdate(m, dt);
   } else if (m.art === 'formwandler') {
@@ -4939,10 +4940,126 @@ function kriecherVerscheucht(m) {   // 📸 Geblitzt, während er im Gitter laue
   m.schachtZiel = weit.length ? auswahlZufall(weit) : zufallsGitter(m);
   monsterSound.kriecherKlapper(0.6);
 }
-function kriecherRunter(m) {   // (Troll-Modus) Sofort runter aus dem Schacht – unter das nächste Gitter
+// ----- 🕸️😈 Troll-Modus: DU krabbelst durch die Schächte! -----
+// Leertaste unter einem Gitter = hoch in den Schacht · Im Schacht: WASD krabbeln (durch alle Wände!), Leertaste am Gitter = KLAPPER ... runter!
+// E / C im Schacht = ein Stockwerk hoch / runter
+const TROLL_GITTER_RAN = { unten: 1.6, oben: 1.2 };   // So nah musst du am Gitter sein (unten drunter / oben im Schacht)
+function kriecherTroll(m, s, dt) {   // (Gastgeber) null = "unten ganz normal weiterlaufen"
+  const info = m.info;
+  if (m.modus === 'raus') {   // KLAPPER-KLAPPER ...
+    m.laeuft = false; m.warnZeit -= dt;
+    if (m.warnZeit <= 0) { const G = haus.gitter[m.gitterNr]; if (G) { m.x = G.x; m.z = G.z; m.y = G.basis; } m.modus = 'jagen'; m.jagdZeit = 5; }
+    return 0;
+  }
+  if (m.modus === 'klettern') {   // Hoch ins Rohr ...
+    m.ziel = null; m.laeuft = false; m.warnZeit -= dt;
+    if (m.warnZeit <= 0) { const G = haus.gitter[m.gitterNr]; if (G) { m.x = G.x; m.z = G.z; m.y = G.basis; } m.modus = 'schacht'; }
+    return 0;
+  }
+  if (!kriecherImSchacht(m)) return null;
+  m.ziel = null;
+  m.laeuft = !!(s.dx || s.dz);
+  if (m.laeuft) {
+    const tempo = s.renn ? info.schachtJagdTempo : info.schachtTempo;
+    m.x = begrenzt(m.x + s.dx * tempo * dt, 0.4, haus.breit * RAUM - 0.4);
+    m.z = begrenzt(m.z + s.dz * tempo * dt, 0.4, haus.tief * RAUM - 0.4);
+    m.winkel = Math.atan2(s.dx, s.dz);
+  }
   const G = naechstesGitter(m.x, m.z, etageVon(m.y));
-  if (G) { m.x = G.x; m.z = G.z; m.y = G.basis; }
-  m.modus = 'jagen'; m.jagdZeit = 5; m.ziel = null;
+  m.modus = !m.laeuft && G && abstand2D(m.x, m.z, G.x, G.z) < TROLL_GITTER_RAN.oben ? 'lauern' : 'schacht';   // Still am Gitter = Augen leuchten durch!
+  return 0;
+}
+function trollAktion(m, a) {   // (Gastgeber) Rein, raus, hoch oder runter
+  if (!m || m.art !== 'kriecher' || !haus.gitter) return;
+  const G = naechstesGitter(m.x, m.z, etageVon(m.y));
+  const d = G ? abstand2D(m.x, m.z, G.x, G.z) : 99;
+  if (a === 'schacht') {
+    if (kriecherImSchacht(m)) {
+      if (m.modus === 'raus' || d > TROLL_GITTER_RAN.oben) return;
+      m.modus = 'raus'; m.warnZeit = 0.5; m.gitterNr = haus.gitter.indexOf(G); m.opfer = null; m.x = G.x; m.z = G.z;
+    } else if (m.modus !== 'klettern' && d < TROLL_GITTER_RAN.unten && Math.abs(m.y - G.basis) < 0.8) {
+      m.modus = 'klettern'; m.warnZeit = m.info.klettern; m.gitterNr = haus.gitter.indexOf(G); m.x = G.x; m.z = G.z; m.y = G.basis; m.ziel = null;
+    }
+  } else if (kriecherImSchacht(m) && m.modus !== 'raus') {
+    const e = etageVon(m.y) + (a === 'hoch' ? 1 : -1);
+    if (e >= 0 && e < haus.etagen) { m.y = e * ETAGE_HOEHE; m.modus = 'schacht'; }
+  }
+}
+function trollSchachtTaste(a) {   // (Bei dir) Taste gedrückt – geht das hier? Dann los!
+  if (!troll || tot || pause) return false;
+  const m = monster[troll.nr];
+  if (!m || m.art !== 'kriecher' || !haus.gitter || !haus.gitter.length) return false;
+  const G = naechstesGitter(m.x, m.z, etageVon(m.y)), d = G ? abstand2D(m.x, m.z, G.x, G.z) : 99;
+  const sag = (t, f = '#ff9be9') => zeigeNachricht(t, 2, f);
+  if (a === 'schacht') {
+    if (m.modus === 'raus' || m.modus === 'klettern') return true;
+    if (kriecherImSchacht(m)) {
+      if (d > TROLL_GITTER_RAN.oben) { sag('🕸️ Hier ist kein Gitter! Krabbel zu einem grünen Punkt auf dem Radar.'); return true; }
+      sag('🕸️ KLAPPER-KLAPPER ... und RUNTER! 😈');
+    } else {
+      if (d > TROLL_GITTER_RAN.unten || Math.abs(m.y - G.basis) > 0.8) { sag('🕸️ Stell dich unter ein Lüftungsgitter an der Decke!'); return true; }
+      sag('🕸️ Hoch in den Schacht! Keiner sieht dich ...');
+    }
+  } else {
+    if (!kriecherImSchacht(m)) return true;
+    const e = etageVon(m.y) + (a === 'hoch' ? 1 : -1);
+    if (e < 0 || e >= haus.etagen) { sag(a === 'hoch' ? '🕸️ Weiter nach oben geht kein Rohr!' : '🕸️ Weiter nach unten geht kein Rohr!'); return true; }
+    sag(`🕸️ Durchs Rohr ${a === 'hoch' ? 'hoch' : 'runter'}: ${ETAGEN_NAMEN[e] || e + '. Stock'}`);
+  }
+  if (mp.rolle === 'gast') mpSende({ t: 'trollAktion', a });
+  else trollAktion(m, a);
+  return true;
+}
+function trollSchachtHUD() {   // Im Schacht: dunkler Rand, Radar mit Gittern und Schritten, Tipps
+  const m = monster[troll.nr];
+  if (!m || m.art !== 'kriecher' || !haus.gitter) return;
+  const G = naechstesGitter(m.x, m.z, etageVon(m.y)), d = G ? abstand2D(m.x, m.z, G.x, G.z) : 99;
+  const tipp = (t, farbe) => {
+    ctx.font = 'bold 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const b = ctx.measureText(t).width + 30;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(W / 2 - b / 2, H - 122, b, 30);
+    ctx.fillStyle = farbe; ctx.fillText(t, W / 2, H - 107);
+  };
+  if (!kriecherImSchacht(m)) {   // Unten: Ist ein Gitter in der Nähe?
+    if (m.modus !== 'klettern' && d < TROLL_GITTER_RAN.unten) tipp('🕸️ Leertaste = hoch in den Lüftungsschacht!', '#7cf5c6');
+    return;
+  }
+  // Dunkler, blecherner Rand – du bist im Rohr!
+  const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.6);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(10,12,14,0.92)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  ctx.font = 'bold 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#c9d1d6';
+  ctx.fillText(`🕸️ IM LÜFTUNGSSCHACHT · ${ETAGEN_NAMEN[etageVon(m.y)] || ''} · WASD krabbeln · Shift schnell · E/C = Stockwerk hoch/runter`, W / 2, 26);
+  // 📡 Radar (oben ist da, wo du hinschaust)
+  const R = 85, cx = W - R - 24, cy = H - R - 140, weite = 16, yaw = blick.links;
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const punkt = (x, z) => { const dx = x - m.x, dz = z - m.z; return { x: cx + (dx * rx + dz * rz) / weite * R, y: cy - (dx * fx + dz * fz) / weite * R, d: Math.hypot(dx, dz) }; };
+  ctx.fillStyle = 'rgba(20,30,25,0.8)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#4b6b5a'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, R / 2, 0, Math.PI * 2); ctx.stroke();
+  const e = etageVon(m.y);
+  for (const g of haus.gitter) {
+    if (g.e !== e) continue;
+    const q = punkt(g.x, g.z);
+    if (q.d > weite) continue;
+    const nah = g === G && d < TROLL_GITTER_RAN.oben;
+    ctx.fillStyle = nah ? '#7cf5c6' : '#9aa1a6';
+    ctx.fillRect(q.x - (nah ? 6 : 4), q.y - (nah ? 4 : 3), nah ? 12 : 8, nah ? 8 : 6);
+  }
+  const ziele = [];   // Wer läuft da unten herum? (rote Punkte)
+  for (const o of mp.andere.values()) if (o.y > -10 && !o.troll) ziele.push(o);
+  for (const h of helfer) if (h.kaputt <= 0) ziele.push(h.body.position);
+  for (const o of ziele) {
+    if (etageVon(o.y) !== e) continue;
+    const q = punkt(o.x, o.z);
+    if (q.d > weite) continue;
+    ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.arc(q.x, q.y, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx - 6, cy + 6); ctx.lineTo(cx + 6, cy + 6); ctx.closePath(); ctx.fill();   // Du
+  ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = '#c9d1d6'; ctx.fillText('▪ Gitter   ● Roboter', cx, cy + R + 14);
+  if (m.modus === 'raus') tipp('🕸️ KLAPPER-KLAPPER ...', '#ff6b6b');
+  else if (d < TROLL_GITTER_RAN.oben) tipp(m.modus === 'lauern' ? '👀 Sie sehen deine Augen leuchten! · Leertaste = RUNTER!' : '🕸️ Leertaste = durchs Gitter runter!', '#7cf5c6');
 }
 function kriecherUpdate(m, dt) {
   const info = m.info;
@@ -5525,7 +5642,7 @@ function zeigeMonster(m) {
     const U = g.userData, oben = KRIECHER_OBEN.includes(m.modus);
     if (U.alt !== m.modus) { if (m.modus === 'jagen' && U.alt === 'raus') U.fall = 1; if (m.modus === 'klettern') U.kletter = 0; U.alt = m.modus; }
     U.koerper.visible = !oben;
-    U.spaeher.visible = m.modus === 'lauern' || m.modus === 'raus';
+    U.spaeher.visible = (m.modus === 'lauern' || m.modus === 'raus') && !(troll && monster[troll.nr] === m);   // (Deine eigenen Augen würden dir die Sicht versperren)
     g.rotation.set(0, m.winkel, 0);
     if (oben) {
       g.position.set(m.x, m.y, m.z);
@@ -6563,7 +6680,7 @@ function trollFreigeben(m) {   // Das Monster denkt wieder selbst
   if (m.art === 'schrank') { m.modus = 'heimweg'; schrankNeuesVersteck(m); }
   else if (m.art === 'maulwurf') { m.modus = 'oben'; m.obenZeit = 0.5; }
   else if (m.art === 'formwandler') m.modus = 'abhauen';
-  else if (m.art === 'kriecher') { m.modus = 'rauf'; m.rauf = null; }
+  else if (m.art === 'kriecher') { if (kriecherImSchacht(m)) { m.modus = 'schacht'; m.schachtZiel = null; } else if (m.modus !== 'klettern') { m.modus = 'rauf'; m.rauf = null; } }
   else if (m.art === 'oma') { m.modus = 'wandern'; m.aerger = 0; m.ruhe = m.info.ruhe; }
   else m.modus = 'wandern';
 }
@@ -6578,12 +6695,12 @@ function trollSteuerJetzt() {   // Aus deinen Tasten: Wohin soll das Monster lau
 }
 function trollSteuern(m, dt) {   // (Läuft beim Gastgeber in updateMonster) Ein Mensch steuert dieses Monster!
   const s = m.steuer || { dx: 0, dz: 0, renn: false };
-  if (kriecherImSchacht(m) || m.modus === 'klettern') kriecherRunter(m);   // 🕸️ Als Kriecher läufst du unten herum
+  if (m.art === 'kriecher') { const t = kriecherTroll(m, s, dt); if (t !== null) return t; }   // 🕸️ Im Schacht (oder beim Rein- und Rausklettern)
   m.trollSicht = (m.trollSicht || 0) - dt;
   if (m.trollSicht <= 0) { m.trollSicht = 0.3; m.trollSieht = trollSiehtJemanden(m); }
   // So tun, als wäre alles ganz normal (damit Angriffe klappen und die Jagd-Musik echt wirkt)
   if (m.art === 'maulwurf') m.modus = 'oben';
-  else if (m.art === 'oma' || m.art === 'schrank' || m.art === 'formwandler') { m.modus = 'jagen'; m.jagdZeit = 5; }
+  else if (m.art === 'oma' || m.art === 'schrank' || m.art === 'formwandler' || m.art === 'kriecher') { m.modus = 'jagen'; m.jagdZeit = 5; }
   else m.modus = m.trollSieht ? 'jagen' : 'wandern';
   if (m.art === 'lehrer') m.lehrerRuhe = Math.min(m.lehrerRuhe || 0, 3);
   if (!s.dx && !s.dz) { m.ziel = null; m.zielZeit = 1; return 0; }
@@ -6606,6 +6723,7 @@ function trollParken() {   // Dein echter Körper wartet weit weg (da sieht ihn 
 }
 const trollKamZiel = new THREE.Vector3(), trollKamRueck = new THREE.Vector3();
 function trollKamera(m) {   // Die Kamera schwebt hinter deinem Monster (und nicht durch Wände)
+  if (kriecherImSchacht(m)) { kamera.position.set(m.x, m.y + WAND_HOEHE - 0.12, m.z); return; }   // 🕸️ Im Schacht: Du schaust von oben durch die Decke nach unten
   const yaw = blick.links, hoch = begrenzt(blick.hoch, -0.9, 0.7);
   trollKamZiel.set(m.x, m.y + (m.info.augen || 1.6), m.z);
   trollKamRueck.set(Math.sin(yaw) * Math.cos(hoch), -Math.sin(hoch) + TROLL_KAMERA.hoch, Math.cos(yaw) * Math.cos(hoch)).normalize();
@@ -7474,7 +7592,7 @@ function aufBildschirm(v) {
 }
 
 function zeichneHUD() {
-  if (troll) { trollHUD(); trollTrickHUD(); }
+  if (troll) { trollSchachtHUD(); trollHUD(); trollTrickHUD(); }
   // 🔵 Nebeltrank: blauer Schleier vor den Augen · 🟣 Klebeschleim: lila Rand
   if (nebelZeit > 0) {
     const n = begrenzt(nebelZeit / 1.5, 0, 1);
@@ -7855,6 +7973,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   trollTaste(k);   // 😈 Psst ...
   if (k === 'q' && troll) { trollNaechstes(); return; }
+  if (troll && (k === ' ' || k === 'e' || k === 'c') && trollSchachtTaste(k === ' ' ? 'schacht' : k === 'e' ? 'hoch' : 'runter')) return;   // 🕸️ Schacht
   if (troll && trollTrickTaste(k)) return;   // 😈 1 / 2 / 3 = Troll-Tricks
   if (k === 'm') tonAn = !tonAn;
   if (k === 'f' && !troll) blitzen();
@@ -8056,6 +8175,7 @@ function mpVomGast(g, d) {
   else if (zustand !== 'spiel') return;
   else if (d.t === 'l') laerm(d.x, d.y, d.z, d.st);
   else if (d.t === 'trick') { const m = monster.find(x => x.besessen === g.id); if (m && g.troll) trollTrickMachen(m, d); }   // 😈 Ein Gast trollt
+  else if (d.t === 'trollAktion') { const m = monster.find(x => x.besessen === g.id); if (m && g.troll) trollAktion(m, d.a); }   // 🕸️ ... und will in den Schacht (oder raus)
   else if (d.t === 'tuerE') tuerSetzen(tuerListe[d.id], !!d.auf, 'spieler');   // Ein Gast hat E gedrückt
   else if (d.t === 'tot') {   // Ein Gast ist kaputt: Sein Kopf fällt hin
     neuerKopf(g.id, g.farbe, d.x, d.y + 0.3, d.z);
