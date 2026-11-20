@@ -4340,7 +4340,7 @@ const SPRECHER = {
 // Der Boss: Baron Eisenzahns Riesen-Mech (kann man nicht selbst auswählen)
 const BOSS_BARON = {
   id: 'baron', klasse: 'schwer', boss: true, name: 'Eiserner Koloss', emoji: '👑', akzent: '#facc15', text: 'Der Riesen-Mech von Baron Eisenzahn.',
-  dick: 1.8, schulter: 1.7, leben: 700, tempo: 80, groesse: 1.75, boostPause: 9, keinBoost: true,
+  dick: 1.8, schulter: 1.7, leben: 1300, tempo: 85, groesse: 1.75, boostPause: 9, keinBoost: true,
   slots: [['armL', 'kanone', 'kanone'], ['armR', 'kanone', 'kanone'], ['torsoL', 'laser', 'puls'], ['torsoR', 'laser', 'puls'], ['schulterL', 'rakete', 'hagel'], ['schulterR', 'rakete', 'rak4']]
     .map(([ort, art, waffe]) => ({ ort, art, waffe })),
   sterne: { leben: 5, tempo: 1 },
@@ -4403,7 +4403,7 @@ const MISSIONEN = [
     freunde: ['titan', 'rubin', 'nashorn'], gegner: ['baron', 'koloss', 'feuer', 'adler'],
     vorher: [
       ['vega', 'Das ist der letzte Einsatz, Pilot. Baron Eisenzahn sitzt in seinem Riesen-Mech: dem Eisernen Koloss.'],
-      ['vega', 'Er hat 700 Leben, einen Raketenhagel und zwei Kanonen. Aber wenn er einmal kaputt ist, kommt er nicht wieder!'],
+      ['vega', `Er hat ${BOSS_BARON.leben} Leben, einen Raketenhagel und zwei Kanonen. Aber wenn er einmal kaputt ist, kommt er nicht wieder!`],
       ['baron', 'Ihr kleinen Blechdosen! Ich mache Schrott aus euch!'],
       ['bolle', 'Tipp: Schieß auf sein Visier oder auf seine Beine! Dann geht er schneller K.o.'],
       ['vega', 'Besiege den Baron, bevor die Zeit abläuft. Viel Glück!'],
