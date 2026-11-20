@@ -40,38 +40,57 @@ const KO_HOCH = 520;                  // K.o.: So hoch fliegt das Wrack
 //   mg: das Hauptgewehr (pause = Zeit zwischen Schüssen, schaden, tempo = Kugeltempo, weite, streuung = Ungenauigkeit)
 //   rakete: pause, schaden, radius (wie groß die Explosion ist), anzahl (wie viele auf einmal)
 //   sterne: nur für die Anzeige im Auswahl-Menü (1 bis 5)
+//   klasse: leicht, medium, heavy oder schwer (siehe KLASSEN)
+const KLASSEN = [
+  { id: 'leicht', name: 'Leicht', emoji: '🪶', text: 'Klein und flink' },
+  { id: 'medium', name: 'Medium', emoji: '⚖️', text: 'Gute Mischung' },
+  { id: 'heavy',  name: 'Heavy',  emoji: '🏋️', text: 'Groß und stark' },
+  { id: 'schwer', name: 'Schwer', emoji: '🗿', text: 'Riesen-Mechs!' },
+];
 const MECH_TYPEN = [
-  { id: 'waechter', name: 'Wächter', emoji: '⚙️', akzent: '#e5e7eb', text: 'Der Allrounder. Kann alles ein bisschen!',
+  { id: 'waechter', klasse: 'medium', name: 'Wächter', emoji: '⚙️', akzent: '#e5e7eb', text: 'Der Allrounder. Kann alles ein bisschen!',
     leben: 100, tempo: 170, groesse: 1, boostPause: 2.5,
     mg: { pause: 0.11, schaden: 6, tempo: 900, weite: 650, streuung: 0.05 },
     rakete: { pause: 4, schaden: 40, radius: 85, anzahl: 1 },
     sterne: { leben: 3, tempo: 3, schaden: 3, weite: 3 } },
-  { id: 'blitz', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell, hält aber wenig aus.',
+  { id: 'blitz', klasse: 'leicht', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell, hält aber wenig aus.',
     leben: 80, tempo: 290, groesse: 0.85, boostPause: 1.2,
     mg: { pause: 0.075, schaden: 5, tempo: 950, weite: 550, streuung: 0.07 },
     rakete: { pause: 5, schaden: 30, radius: 70, anzahl: 1 },
     sterne: { leben: 1, tempo: 5, schaden: 2, weite: 2 } },
-  { id: 'koloss', name: 'Stahlkoloss', emoji: '🛡️', akzent: '#9ca3af', text: 'Riesig und langsam, aber hält extrem viel aus!',
+  { id: 'koloss', klasse: 'heavy', name: 'Stahlkoloss', emoji: '🛡️', akzent: '#9ca3af', text: 'Riesig und langsam, aber hält extrem viel aus!',
     leben: 150, tempo: 120, groesse: 1.3, boostPause: 4,
     mg: { pause: 0.14, schaden: 7, tempo: 850, weite: 600, streuung: 0.06 },
     rakete: { pause: 5, schaden: 55, radius: 110, anzahl: 1 },
     sterne: { leben: 5, tempo: 1, schaden: 4, weite: 3 } },
-  { id: 'adler', name: 'Adlerauge', emoji: '🎯', akzent: '#4ade80', text: 'Scharfschütze! Die Railgun trifft ganz weit und ganz hart.',
+  { id: 'adler', klasse: 'leicht', name: 'Adlerauge', emoji: '🎯', akzent: '#4ade80', text: 'Scharfschütze! Die Railgun trifft ganz weit und ganz hart.',
     leben: 80, tempo: 160, groesse: 1, boostPause: 2.5,
     mg: { pause: 1.0, schaden: 34, tempo: 2600, weite: 1400, streuung: 0, strahl: true },
     rakete: { pause: 6, schaden: 30, radius: 70, anzahl: 1 },
     sterne: { leben: 2, tempo: 3, schaden: 5, weite: 5 } },
-  { id: 'feuer', name: 'Feuersturm', emoji: '🔥', akzent: '#fb923c', text: 'Raketen-Profi: schießt 3 Raketen auf einmal!',
+  { id: 'feuer', klasse: 'medium', name: 'Feuersturm', emoji: '🔥', akzent: '#fb923c', text: 'Raketen-Profi: schießt 3 Raketen auf einmal!',
     leben: 110, tempo: 150, groesse: 1.1, boostPause: 3,
     mg: { pause: 0.13, schaden: 5, tempo: 900, weite: 600, streuung: 0.06 },
     rakete: { pause: 4.5, schaden: 28, radius: 80, anzahl: 3 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 3 } },
-  { id: 'artillerie', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie mit 2 Werfern an den Armen! Ziel anvisieren, dann regnen 10 Raketen runter. Hoch schauen = weiter!',
+  { id: 'artillerie', klasse: 'heavy', name: 'Donnerhagel', emoji: '☄️', akzent: '#c084fc', text: 'Artillerie mit 2 Werfern an den Armen! Ziel anvisieren, dann regnen 10 Raketen runter. Hoch schauen = weiter!',
     leben: 95, tempo: 140, groesse: 1.15, boostPause: 3.5, keinBoost: true,   // keinBoost: kann nicht boosten
     // salve: Erst anvisieren (zielZeit), dann fliegen "anzahl" Raketen im Bogen und landen im Kreis (streuRadius) ums Ziel
     mg: { salve: true, pause: 5.5, zielZeit: 0.5, anzahl: 10, abstand: 0.1, schaden: 18, radius: 60, streuRadius: 110, tempo: 750, weite: 1100, minWeite: 180 },
     rakete: { pause: 5, schaden: 35, radius: 80, anzahl: 1 },
     sterne: { leben: 3, tempo: 2, schaden: 5, weite: 5 } },
+  // ===== Klasse Schwer: die Riesen! =====
+  { id: 'titan', klasse: 'schwer', name: 'Titan', emoji: '🏔️', akzent: '#38bdf8', text: 'Gigantisch! Riesen-Miniguns und 2 Raketen auf einmal. Sehr langsam.',
+    leben: 220, tempo: 95, groesse: 1.5, boostPause: 5, keinBoost: true,
+    mg: { pause: 0.06, schaden: 4, tempo: 850, weite: 600, streuung: 0.1 },
+    rakete: { pause: 5, schaden: 45, radius: 95, anzahl: 2 },
+    sterne: { leben: 5, tempo: 1, schaden: 4, weite: 3 } },
+  // kanone: schießt langsame, dicke Granaten, die explodieren (radius = Explosion)
+  { id: 'bollwerk', klasse: 'schwer', name: 'Bollwerk', emoji: '🏰', akzent: '#f472b6', text: 'Eine wandelnde Festung mit 2 Riesen-Kanonen! Jeder Schuss explodiert.',
+    leben: 260, tempo: 80, groesse: 1.5, boostPause: 5, keinBoost: true,
+    mg: { kanone: true, pause: 0.7, schaden: 22, radius: 55, tempo: 750, weite: 850, streuung: 0.02 },
+    rakete: { pause: 6, schaden: 70, radius: 130, anzahl: 1 },
+    sterne: { leben: 5, tempo: 1, schaden: 5, weite: 4 } },
 ];
 let meinMech = MECH_TYPEN[0];   // Den Mech, den du ausgesucht hast
 try { meinMech = MECH_TYPEN.find(t => t.id === localStorage.getItem('kaempfer-mech')) || meinMech; } catch (e) { /* egal */ }
@@ -759,7 +778,7 @@ function hoeheAnpassen(m, dt) {
 }
 
 function kollision(m) {
-  const hoehe = MECH_HOEHE * m.typ.groesse;
+  const hoehe = MECH_HOEHE * Math.min(m.typ.groesse, 1.4);   // Riesen ducken sich unter Brücken
   for (const r of WAENDE) {
     const cx = begrenzt(m.x, r.x, r.x + r.w), cy = begrenzt(m.y, r.y, r.y + r.h);
     const dx = m.x - cx, dy = m.y - cy, d = Math.hypot(dx, dy);
@@ -824,10 +843,11 @@ function feuern(m) {
   const x = m.x + cos * 40 * gr - sin * 13 * gr * seite, y = m.y + sin * 40 * gr + cos * 13 * gr * seite;
   const h = m.z + (m.istSpieler ? AUGEN_HOEHE - 8 : 52) * gr;
   const flach = Math.cos(hoch) * mg.tempo;
-  schuesse.push({ art: mg.strahl ? 'strahl' : 'kugel', x, y, h, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(hoch) * mg.tempo, rest: mg.weite, schaden: mg.schaden, team: m.team, von: m });
+  const art = mg.strahl ? 'strahl' : mg.kanone ? 'granate' : 'kugel';   // Granaten explodieren beim Aufprall
+  schuesse.push({ art, x, y, h, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(hoch) * mg.tempo, rest: mg.weite, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m });
   const laut = m.istSpieler ? 1 : lautBei(m) * 0.6;
-  if (mg.strahl) sound.railgun(laut); else sound.mg(laut);
-  if (m.istSpieler) { rueckstoss = mg.strahl ? 10 : 3; muendung = mg.strahl ? 0.1 : 0.05; }
+  if (mg.strahl) sound.railgun(laut); else if (mg.kanone) sound.salve(laut * 1.5); else sound.mg(laut);
+  if (m.istSpieler) { rueckstoss = mg.strahl || mg.kanone ? 10 : 3; muendung = mg.strahl || mg.kanone ? 0.1 : 0.05; }
   else partikel.push({ x, y, h, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
 }
 
@@ -1030,7 +1050,7 @@ function updateSchuesse(dt) {
       if (imFesten(s.x, s.y, s.h) || s.x < 0 || s.y < 0 || s.x > WELT_B || s.y > WELT_H) {
         s.weg = true;
         const zx = s.x - s.vx * 0.02, zy = s.y - s.vy * 0.02, zh = Math.max(2, s.h - (s.vh || 0) * 0.02);
-        if (s.art === 'rakete') explosion(zx, zy, s.team, s.von, s.radius, s.schaden, zh);
+        if (s.art === 'rakete' || s.art === 'granate') explosion(zx, zy, s.team, s.von, s.radius, s.schaden, zh);
         else funken(zx, zy, zh, '#ffe08a');
         break;
       }
@@ -1038,13 +1058,13 @@ function updateSchuesse(dt) {
         if (m.tot || m.team === s.team || dist(m, s) > MECH_RADIUS * m.typ.groesse) continue;
         if (s.h < m.z - 5 || s.h > m.z + 80 * m.typ.groesse) continue;   // drüber oder drunter vorbei
         s.weg = true;
-        if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
+        if (s.art === 'rakete' || s.art === 'granate') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
         else { schaden(m, s.schaden, s.von, trefferTeil(m, s.x, s.y, s.h)); funken(s.x, s.y, s.h, m.schutz > 0 ? '#93c5fd' : '#ffffff'); }
         break;
       }
       if (!s.weg && s.rest <= 0) {
         s.weg = true;
-        if (s.art === 'rakete') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
+        if (s.art === 'rakete' || s.art === 'granate') explosion(s.x, s.y, s.team, s.von, s.radius, s.schaden, s.h);
       }
     }
     if (s.art === 'rakete' && !s.weg) {   // Rauchspur
@@ -1882,7 +1902,7 @@ function baueMech(m) {
   const akzentLeucht = leucht(typ.akzent), augeMat = leucht(T.hell);
   const dueseMat = new THREE.MeshBasicMaterial({ color: '#ff8c1a', transparent: true, opacity: 0.5 });
   const gruppe = new THREE.Group();
-  const dick = typ.id === 'koloss' ? 1.4 : typ.id === 'blitz' ? 0.8 : 1;   // Wie dick die Beine sind
+  const dick = typ.klasse === 'schwer' ? 1.6 : typ.id === 'koloss' ? 1.4 : typ.id === 'blitz' ? 0.8 : 1;   // Wie dick die Beine sind
 
   // ===== Beine (drehen sich in Laufrichtung) =====
   const beine = new THREE.Group();
@@ -1947,7 +1967,7 @@ function baueMech(m) {
   const arme = { armL: new THREE.Group(), armR: new THREE.Group() };
   torso.add(arme.armL, arme.armR);
   const arm = s => arme[s < 0 ? 'armL' : 'armR'];
-  const schulterGross = typ.id === 'koloss' ? 1.35 : typ.id === 'blitz' ? 0.8 : 1;
+  const schulterGross = typ.klasse === 'schwer' ? 1.5 : typ.id === 'koloss' ? 1.35 : typ.id === 'blitz' ? 0.8 : 1;
   for (const s of [-1, 1]) {
     arm(s).add(gelenk(6, 6, grauMat, 0, 16, s * 19));
     arm(s).add(schraeg(klotz(20 * schulterGross, 9 * schulterGross, 12 * schulterGross, koerperMat, 0, 22, s * 22), 0.12));
@@ -1970,6 +1990,16 @@ function baueMech(m) {
       }
       werfer.traverse(o => { o.castShadow = true; });
       arm(s).add(werfer);
+    }
+  } else if (typ.mg.kanone) {
+    // 🏰 Bollwerk: an jedem Arm eine dicke Kanone
+    for (const s of [-1, 1]) {
+      const a = arm(s);
+      a.add(klotz(12, 12, 10, grauMat, 4, 8, s * 24));           // Oberarm
+      a.add(klotz(20, 16, 16, teamDunkel, 16, 6, s * 24));       // Kanonen-Gehäuse
+      a.add(klotz(20.5, 2.5, 16.5, akzentMat, 16, 14, s * 24));
+      a.add(rohr(5, 30, dunkelMat, 38, 6, s * 24));              // Dickes Rohr
+      a.add(rohr(6.5, 5, akzentMat, 52, 6, s * 24));             // Mündung
     }
   } else if (typ.mg.strahl) {
     // 🎯 Adlerauge: eine lange Railgun mit zwei Schienen und leuchtendem Kern (rechter Arm)
@@ -2023,6 +2053,11 @@ function baueMech(m) {
   if (typ.id === 'adler') {    // 🎯 Großes Sensor-Auge oben auf dem Cockpit
     torso.add(gelenk(4, 6, dunkelMat, 12, 30, 0));
     torso.add(rohr(2.5, 4, akzentLeucht, 15, 30, 0));
+  }
+  if (typ.klasse === 'schwer') {   // 🗿 Riesen: Panzerplatten, Rammschild und Lampen auf dem Dach
+    for (const s of [-1, 1]) torso.add(klotz(32, 24, 6, teamDunkel, -2, 12, s * 18));
+    torso.add(schraeg(klotz(6, 18, 34, akzentMat, 20, 4, 0), -0.2));
+    for (const s of [-1, 1]) torso.add(klotz(3, 3, 3, akzentLeucht, 4, 30, s * 10));
   }
   if (typ.id === 'feuer') {    // 🔥 Heiße Lüftung am Bauch
     for (const s of [-1, 1]) torso.add(klotz(1, 6, 8, leucht('#ff6a00'), 12.6, 0, s * 7));
@@ -2211,6 +2246,8 @@ const strahlMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
 const salvenGeo = new THREE.CylinderGeometry(2.5, 3.5, 20, 8).rotateX(Math.PI / 2);   // zeigt nach vorne (z)
 const salvenMat = new THREE.MeshStandardMaterial({ color: '#e5e7eb', emissive: '#c084fc', emissiveIntensity: 0.6 });
 const raketenGeo = new THREE.BoxGeometry(6, 6, 18);
+const granatenGeo = new THREE.SphereGeometry(5, 10, 8);   // 🏰 Kanonen-Kugel vom Bollwerk
+const granatenMat = new THREE.MeshStandardMaterial({ color: '#333333', emissive: '#f472b6', emissiveIntensity: 0.8 });
 const raketenMat = new THREE.MeshStandardMaterial({ color: '#dddddd', emissive: '#ff9f43', emissiveIntensity: 0.4 });
 let schussMeshes = [];
 function zeigeSchuesse() {
@@ -2219,6 +2256,7 @@ function zeigeSchuesse() {
       if (s.art === 'kugel') s.mesh = new THREE.Mesh(kugelGeo, kugelMat[s.team]);
       else if (s.art === 'strahl') s.mesh = new THREE.Mesh(strahlGeo, strahlMat);
       else if (s.art === 'salve') s.mesh = new THREE.Mesh(salvenGeo, salvenMat);
+      else if (s.art === 'granate') s.mesh = new THREE.Mesh(granatenGeo, granatenMat);
       else s.mesh = new THREE.Mesh(raketenGeo, raketenMat);
       szene.add(s.mesh);
       schussMeshes.push(s);
@@ -2768,6 +2806,7 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
     ctx.fillStyle = '#4b5060';
   }
   else if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
+  else if (typ.mg.kanone) { rr(8, -16, 40, 12, 3); ctx.fill(); ctx.stroke(); rr(8, 4, 40, 12, 3); ctx.fill(); ctx.stroke(); }   // zwei dicke Kanonen
   else { rr(8, -13, 34, 7, 2); ctx.fill(); ctx.stroke(); rr(8, 6, 34, 7, 2); ctx.fill(); ctx.stroke(); }
   for (const s of typ.rakete.anzahl > 1 ? [-1, 1] : [-1]) {   // Raketenwerfer
     ctx.fillStyle = T.dunkel; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
@@ -2833,9 +2872,15 @@ function zeichneTitel() {
 // ===== Mech-Auswahl =====
 let gewaehlterModus = 'punkt';
 const ZURUECK_KNOPF = { x: 30, y: 540, w: 150, h: 40 };
-function mechKarten() {
-  const b = Math.floor((900 - (MECH_TYPEN.length - 1) * 10) / MECH_TYPEN.length);
-  return MECH_TYPEN.map((t, i) => ({ t, x: 30 + i * (b + 10), y: 105, w: b, h: 415 }));
+let gewaehlteKlasse = meinMech.klasse;   // Welche Klasse ist im Menü gerade offen?
+function klassenKnoepfe() {   // Oben: ein Knopf pro Klasse
+  return KLASSEN.map((k, i) => ({ k, x: W / 2 - KLASSEN.length * 110 + i * 220 + 5, y: 98, w: 210, h: 48 }));
+}
+function mechKarten() {       // Darunter: die Mechs der gewählten Klasse
+  const liste = MECH_TYPEN.filter(t => t.klasse === gewaehlteKlasse);
+  const b = Math.min(280, Math.floor((900 - (liste.length - 1) * 16) / liste.length));
+  const start = W / 2 - (liste.length * b + (liste.length - 1) * 16) / 2;
+  return liste.map((t, i) => ({ t, x: start + i * (b + 16), y: 158, w: b, h: 370 }));
 }
 function zeichneAuswahl() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -2843,7 +2888,18 @@ function zeichneAuswahl() {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   const modusInfo = MODI.find(x => x.id === gewaehlterModus);
   text('Wähle deinen Mech!', W / 2, 45, 38, '#ffd166');
-  text(`Spielmodus: ${modusInfo.emoji} ${modusInfo.name}  ·  Karte: ${karte.emoji} ${karte.name}`, W / 2, 82, 16, '#c9c3ff', 'center', false);
+  text(`Spielmodus: ${modusInfo.emoji} ${modusInfo.name}  ·  Karte: ${karte.emoji} ${karte.name}`, W / 2, 78, 16, '#c9c3ff', 'center', false);
+
+  // Klassen-Knöpfe: Leicht, Medium, Heavy, Schwer
+  for (const b of klassenKnoepfe()) {
+    const an = b.k.id === gewaehlteKlasse, hover = imRechteck(maus, b);
+    ctx.fillStyle = an ? '#ffd166' : hover ? '#3a4256' : 'rgba(30,34,46,0.92)';
+    rr(b.x, b.y, b.w, b.h, 12); ctx.fill();
+    ctx.strokeStyle = an ? '#ffd166' : '#4a5266'; ctx.lineWidth = 2; ctx.stroke();
+    text(`${b.k.emoji} ${b.k.name}`, b.x + b.w / 2, b.y + 18, 18, an ? '#1b1f3a' : '#fff', 'center', false);
+    text(b.k.text, b.x + b.w / 2, b.y + 37, 11, an ? '#1b1f3a' : '#8a8fb0', 'center', false);
+    if (meinMech.klasse === b.k.id) text('✓', b.x + b.w - 16, b.y + 18, 16, an ? '#1b1f3a' : meinMech.akzent, 'center', false);
+  }
 
   for (const k of mechKarten()) {
     const t = k.t, hover = imRechteck(maus, k), meiner = t === meinMech;
@@ -2852,27 +2908,28 @@ function zeichneAuswahl() {
     ctx.strokeStyle = hover ? '#ffd166' : (meiner ? t.akzent : '#4a5266'); ctx.lineWidth = hover || meiner ? 4 : 2; ctx.stroke();
     const mx = k.x + k.w / 2;
     // Der Mech dreht sich langsam
-    zeichneMech2D('blau', mx - 8, k.y + 85, 1.1, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, hover ? zeit * 8 : 0, t);
+    zeichneMech2D('blau', mx - 8, k.y + 80, 1.1, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, hover ? zeit * 8 : 0, t);
     text(t.emoji, k.x + 22, k.y + 24, 22, '#fff', 'center', false);
     if (meiner) text('✓', k.x + k.w - 20, k.y + 24, 20, t.akzent, 'center', false);
-    text(t.name, mx, k.y + 165, 20, t.akzent);
-    umbrechen(t.text, k.x + 12, k.y + 195, k.w - 24, 17, 12, '#c9c3ff');
+    text(t.name, mx, k.y + 160, 22, t.akzent);
+    umbrechen(t.text, k.x + 16, k.y + 188, k.w - 32, 17, 13, '#c9c3ff');
     // Sterne für die Werte
     [['❤️', 'Leben', t.sterne.leben], ['💨', 'Tempo', t.sterne.tempo], ['💥', 'Schaden', t.sterne.schaden], ['🎯', 'Weite', t.sterne.weite]].forEach(([e, name, n], i) => {
-      const y = k.y + 280 + i * 30;
-      text(e, k.x + 18, y, 14, '#fff', 'center', false);
+      const y = k.y + 266 + i * 22;
+      text(e, mx - 70, y, 14, '#fff', 'center', false);
       for (let j = 0; j < 5; j++) {
         ctx.fillStyle = j < n ? t.akzent : 'rgba(255,255,255,0.12)';
-        rr(k.x + 36 + j * 18, y - 6, 14, 12, 3); ctx.fill();
+        rr(mx - 52 + j * 24, y - 6, 20, 12, 3); ctx.fill();
       }
     });
-    text(t.mg.salve ? '☄️ Raketenhagel' : (t.rakete.anzahl > 1 ? `🚀 ${t.rakete.anzahl} Raketen` : (t.mg.strahl ? '⚡ Railgun' : '🔫 Doppel-MG')), mx, k.y + 395, 13, '#fff', 'center', false);
+    const waffe = t.mg.salve ? '☄️ Raketenhagel' : t.mg.kanone ? '💣 Riesen-Kanonen' : t.mg.strahl ? '⚡ Railgun' : t.klasse === 'schwer' ? '🔫 Riesen-Minigun' : '🔫 Doppel-MG';
+    text(waffe + (t.rakete.anzahl > 1 ? `  ·  🚀 ${t.rakete.anzahl} Raketen` : ''), mx, k.y + 350, 13, '#fff', 'center', false);
   }
   const zh = imRechteck(maus, ZURUECK_KNOPF);
   ctx.fillStyle = zh ? '#3a4256' : 'rgba(30,34,46,0.92)';
   rr(ZURUECK_KNOPF.x, ZURUECK_KNOPF.y, ZURUECK_KNOPF.w, ZURUECK_KNOPF.h, 10); ctx.fill();
   text('← Zurück', ZURUECK_KNOPF.x + ZURUECK_KNOPF.w / 2, ZURUECK_KNOPF.y + 20, 16, zh ? '#ffd166' : '#fff', 'center', false);
-  text('Klick auf einen Mech, um zu starten!', W / 2 + 60, 560, 16, '#8a8fb0', 'center', false);
+  text('Wähle oben eine Klasse, dann klick auf einen Mech, um zu starten!', W / 2 + 60, 560, 16, '#8a8fb0', 'center', false);
 }
 function waehleMech(t) {
   meinMech = t;
@@ -2971,6 +3028,7 @@ canvas.addEventListener('pointerdown', e => {
     return;
   }
   if (zustand === 'auswahl') {
+    for (const b of klassenKnoepfe()) if (imRechteck(maus, b)) { gewaehlteKlasse = b.k.id; return; }
     for (const k of mechKarten()) if (imRechteck(maus, k)) { waehleMech(k.t); return; }
     if (imRechteck(maus, ZURUECK_KNOPF)) zustand = 'titel';
     return;
