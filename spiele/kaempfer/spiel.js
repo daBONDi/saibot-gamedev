@@ -2529,7 +2529,6 @@ function zeichne3D() {
     kamera.rotation.set(blick.hoch, -blick.links - Math.PI / 2, 0);
     waffen.visible = true;
     for (const o of waffen.children) if (o.userData.teil) o.visible = hat(m, o.userData.teil);   // Arm ab = Waffe weg
-    muendungsBlitz.visible = true;
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
     muendungsBlitz.visible = muendungsZeit > 0;
     const ort = letzterSchuss.ort, amArm = ort === 'armL' || ort === 'armR';   // Mündungsfeuer an der Waffe, die zuletzt geschossen hat
@@ -2615,18 +2614,166 @@ function zeichneZielZeichen() {
 }
 
 // Cockpit-Rahmen am Bildrand
+// ===== Das Cockpit (die Kabine, in der du sitzt) =====
+// Große Mechs haben dickere Rahmen. Unten ist das Armaturenbrett mit Kompass, Waffen-Lämpchen und Tempo-Anzeige.
+const RAHMEN_DICKE = { leicht: 0.75, medium: 1, heavy: 1.25, schwer: 1.5 };
+const RISSE = Array.from({ length: 7 }, (_, i) => {   // Risse in der Scheibe (wenn das Visier kaputt geht)
+  const x = 160 + ((i * 337) % 640), y = 90 + ((i * 211) % 300);
+  const linien = [];
+  for (let j = 0; j < 5; j++) {
+    const a = j / 5 * Math.PI * 2 + i, l = 30 + ((i * 7 + j * 13) % 40);
+    linien.push([x, y, x + Math.cos(a) * l, y + Math.sin(a) * l, x + Math.cos(a + 0.3) * l * 1.6, y + Math.sin(a + 0.3) * l * 1.6]);
+  }
+  return linien;
+});
+let anhaenger = { winkel: 0, tempo: 0, letzterBlick: 0 };   // Der Glücksbringer, der vom Dach baumelt
+function niete(x, y) {
+  ctx.fillStyle = '#5b6274'; kreis(x, y, 2.6); ctx.fill();
+  ctx.fillStyle = '#9aa3b8'; kreis(x - 0.8, y - 0.8, 1); ctx.fill();
+}
 function zeichneCockpit() {
-  ctx.fillStyle = 'rgba(20,24,32,0.85)';
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(120, 0); ctx.lineTo(0, 70); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(W, 0); ctx.lineTo(W - 120, 0); ctx.lineTo(W, 70); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, H - 60); ctx.lineTo(60, H); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(W, H); ctx.lineTo(W, H - 60); ctx.lineTo(W - 60, H); ctx.fill();
+  const m = spieler, typ = m.typ, k = RAHMEN_DICKE[typ.klasse] || 1;
+  const wipp = m.laeuft && !m.tot ? Math.abs(Math.sin(m.phase)) * 3 : 0;   // Beim Laufen wackelt alles ein bisschen
+  const rahmen = '#232833', rahmenHell = '#353c4b';
+
+  // ----- Risse in der Scheibe -----
+  const visier = teilAnteil(m, 'visier');
+  if (!m.tot && visier < 0.7) {
+    const n = visier < 0.3 ? RISSE.length : visier < 0.5 ? 4 : 2;
+    ctx.strokeStyle = 'rgba(230,240,255,0.55)'; ctx.lineWidth = 1.2;
+    for (const riss of RISSE.slice(0, n)) for (const [x1, y1, x2, y2, x3, y3] of riss) {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.stroke();
+    }
+  }
+  // ----- Spiegelungen auf der Scheibe -----
+  ctx.fillStyle = 'rgba(255,255,255,0.035)';
+  ctx.beginPath(); ctx.moveTo(W * 0.62, 0); ctx.lineTo(W * 0.7, 0); ctx.lineTo(W * 0.5, H * 0.6); ctx.lineTo(W * 0.46, H * 0.6); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(W * 0.73, 0); ctx.lineTo(W * 0.75, 0); ctx.lineTo(W * 0.56, H * 0.6); ctx.lineTo(W * 0.55, H * 0.6); ctx.fill();
+
+  ctx.save();
+  ctx.translate(0, wipp);
+  // ----- Fensterrahmen oben und an den Seiten -----
+  const oben = 12 * k, saeule = 26 * k, ecke = 110 * k;
+  const yDash = H - (46 + 16 * k);   // Oberkante vom Armaturenbrett
+  ctx.fillStyle = rahmen;
+  ctx.beginPath();
+  ctx.moveTo(0, -10); ctx.lineTo(W, -10); ctx.lineTo(W, oben);
+  ctx.lineTo(W - ecke, oben); ctx.lineTo(W - saeule, ecke * 0.6); ctx.lineTo(W - saeule * 0.7, yDash - 20); ctx.lineTo(W, yDash - 20);
+  ctx.lineTo(W, H + 10); ctx.lineTo(0, H + 10); ctx.lineTo(0, yDash - 20); ctx.lineTo(saeule * 0.7, yDash - 20);
+  ctx.lineTo(saeule, ecke * 0.6); ctx.lineTo(ecke, oben); ctx.lineTo(0, oben);
+  ctx.closePath();
+  // Innen ist das Fenster: nur den Rahmen füllen (Fenster = Loch)
+  ctx.moveTo(ecke, oben); ctx.lineTo(W - ecke, oben); ctx.lineTo(W - saeule, ecke * 0.6); ctx.lineTo(W - saeule * 0.7, yDash - 20);
+  ctx.lineTo(saeule * 0.7, yDash - 20); ctx.lineTo(saeule, ecke * 0.6); ctx.closePath();
+  ctx.fill('evenodd');
+  // Kante vom Fenster in der Mech-Farbe
+  ctx.strokeStyle = typ.akzent; ctx.globalAlpha = 0.7; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(saeule * 0.7, yDash - 20); ctx.lineTo(saeule, ecke * 0.6); ctx.lineTo(ecke, oben); ctx.lineTo(W - ecke, oben);
+  ctx.lineTo(W - saeule, ecke * 0.6); ctx.lineTo(W - saeule * 0.7, yDash - 20);
+  ctx.stroke(); ctx.globalAlpha = 1;
+  // Nieten
+  for (let x = ecke + 20; x < W - ecke - 10; x += 60) niete(x, oben / 2);
+  for (const s of [0, 1]) for (let y = ecke * 0.6 + 20; y < yDash - 30; y += 55) niete(s ? W - saeule * 0.45 : saeule * 0.45, y);
+  // Schwere Mechs: extra Strebe in der Mitte oben
+  if (k >= 1.25) {
+    ctx.fillStyle = rahmen;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 18, oben - 1); ctx.lineTo(W / 2 + 18, oben - 1); ctx.lineTo(W / 2 + 6, oben + 22); ctx.lineTo(W / 2 - 6, oben + 22); ctx.fill();
+    niete(W / 2, oben + 8);
+  }
+  // Warnlampen oben in den Ecken (blinken rot, wenn du wenig Leben hast)
+  const gefahr = !m.tot && gesundheit(m) < 0.35;
+  for (const s of [0, 1]) {
+    const x = s ? W - ecke * 0.55 : ecke * 0.55, y = oben + 14 * k;
+    ctx.fillStyle = '#11141b'; kreis(x, y, 8); ctx.fill();
+    ctx.fillStyle = gefahr && Math.sin(zeit * 10) > 0 ? '#ff3b3b' : '#4a1d1d'; kreis(x, y, 5.5); ctx.fill();
+  }
+
+  // ----- Der Glücksbringer (baumelt, wenn du dich drehst oder läufst) -----
+  const dreh = winkelDiff(anhaenger.letzterBlick, blick.links);
+  anhaenger.letzterBlick = blick.links;
+  anhaenger.tempo += (-anhaenger.winkel * 0.02 + dreh * 0.6 + (m.laeuft ? Math.sin(m.phase) * 0.004 : 0));
+  anhaenger.tempo *= 0.94;
+  anhaenger.winkel = begrenzt(anhaenger.winkel + anhaenger.tempo, -1, 1);
+  const ax = W * 0.28, ay = oben, laenge = 46;
+  const bx = ax + Math.sin(anhaenger.winkel) * laenge, by = ay + Math.cos(anhaenger.winkel) * laenge;
+  ctx.strokeStyle = '#9aa3b8'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  text(typ.emoji, bx, by + 9, 18, '#fff', 'center', false);
+
+  // ----- Armaturenbrett -----
+  const g = ctx.createLinearGradient(0, yDash - 20, 0, H);
+  g.addColorStop(0, rahmenHell); g.addColorStop(1, '#151820');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, H + 10); ctx.lineTo(0, yDash - 20); ctx.lineTo(240, yDash); ctx.lineTo(W - 240, yDash); ctx.lineTo(W, yDash - 20); ctx.lineTo(W, H + 10);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = typ.akzent; ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
+  ctx.beginPath(); ctx.moveTo(0, yDash - 20); ctx.lineTo(240, yDash); ctx.lineTo(W - 240, yDash); ctx.lineTo(W, yDash - 20); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Mittlerer Bildschirm: Kompass oben, Waffen-Lämpchen unten
+  const bx0 = W / 2 - 150, by0 = yDash + 6, bw = 300, bh = H - yDash - 10;
+  ctx.fillStyle = '#0b0f17'; rr(bx0, by0, bw, bh, 8); ctx.fill();
+  ctx.strokeStyle = '#3d4558'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.save();
+  ctx.beginPath(); ctx.rect(bx0 + 4, by0 + 2, bw - 8, 18); ctx.clip();
+  const richtungen = ['O', 'SO', 'S', 'SW', 'W', 'NW', 'N', 'NO'];
+  for (let i = -12; i <= 12; i++) {   // Striche alle 15 Grad, Buchstaben alle 45 Grad
+    const grad = Math.round(blick.links / (Math.PI / 12)) + i;
+    const x = W / 2 + (grad * Math.PI / 12 - blick.links) * 160;
+    const gross = ((grad % 3) + 3) % 3 === 0;
+    ctx.fillStyle = '#4ade80';
+    ctx.fillRect(x - 0.5, by0 + 14, 1, gross ? 6 : 3);
+    if (gross) text(richtungen[(((grad / 3) % 8) + 8) % 8], x, by0 + 8, 10, '#4ade80', 'center', false);
+  }
+  ctx.restore();
+  ctx.fillStyle = '#ffd166'; ctx.fillRect(W / 2 - 1, by0 + 2, 2, 18);
+  // Ein Lämpchen pro Waffen-Slot: hell = bereit, dunkel = lädt, X = Arm ab
+  const n = m.waffen.length, abstand = Math.min(44, (bw - 20) / n);
+  m.waffen.forEach((s, i) => {
+    const x = W / 2 + (i - (n - 1) / 2) * abstand, y = by0 + 22 + (bh - 22) / 2;
+    const farbe = SLOT_ARTEN[s.art];
+    const geht = slotGeht(m, s), bereit = geht && s.pause <= 0;
+    ctx.fillStyle = '#1a1f2b'; kreis(x, y, 12); ctx.fill();
+    if (geht) {
+      const fertig = bereit ? 1 : 1 - Math.max(0, s.pause) / (s.w.pause * (m.istSpieler ? 1 : BOT_FEUER_LANGSAMER));
+      ctx.strokeStyle = farbe.farbe; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, 10, -Math.PI / 2, -Math.PI / 2 + fertig * Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = bereit ? farbe.hell : farbe.farbe; ctx.globalAlpha = bereit ? 1 : 0.35;
+      kreis(x, y, 6); ctx.fill(); ctx.globalAlpha = 1;
+    } else text('✖', x, y, 12, '#ff6b6b', 'center', false);
+  });
+
+  // Rechts daneben: Tempo-Anzeige mit Zeiger
+  const tx = W / 2 + 215, ty = H - 22, tr = 30;
+  const tempo = Math.min(1, Math.hypot(m.vx || 0, m.vy || 0) / (typ.tempo || 1));
+  ctx.fillStyle = '#0b0f17'; ctx.beginPath(); ctx.arc(tx, ty, tr, Math.PI, 0); ctx.fill();
+  ctx.strokeStyle = '#3d4558'; ctx.lineWidth = 2; ctx.stroke();
+  for (let i = 0; i <= 6; i++) {
+    const a = Math.PI + i / 6 * Math.PI;
+    ctx.strokeStyle = i >= 5 ? '#ff6b6b' : '#8a8f9e'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * (tr - 7), ty + Math.sin(a) * (tr - 7)); ctx.lineTo(tx + Math.cos(a) * (tr - 2), ty + Math.sin(a) * (tr - 2)); ctx.stroke();
+  }
+  const za = Math.PI + tempo * Math.PI;
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + Math.cos(za) * (tr - 6), ty + Math.sin(za) * (tr - 6)); ctx.stroke();
+  text('TEMPO', tx, ty + 10, 8, '#8a8f9e', 'center', false);
+  // Links daneben: kleine Knöpfe, die blinken
+  for (let i = 0; i < 6; i++) {
+    const x = W / 2 - 200 + (i % 3) * 16, y = H - 36 + Math.floor(i / 3) * 16;
+    const an = Math.sin(zeit * (1.5 + i * 0.7) + i * 2) > 0.2;
+    ctx.fillStyle = ['#4ade80', '#ffd166', '#38bdf8', '#f472b6', '#4ade80', '#fb923c'][i];
+    ctx.globalAlpha = an ? 1 : 0.2; rr(x - 5, y - 5, 10, 10, 2); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
   // Rote Ränder, wenn du wenig Leben hast
-  if (gesundheit(spieler) < 0.35 && !spieler.tot) {
-    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.8);
-    g.addColorStop(0, 'rgba(255,0,0,0)');
-    g.addColorStop(1, `rgba(255,0,0,${0.25 + Math.sin(zeit * 6) * 0.1})`);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (gefahr) {
+    const g2 = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.8);
+    g2.addColorStop(0, 'rgba(255,0,0,0)');
+    g2.addColorStop(1, `rgba(255,0,0,${0.25 + Math.sin(zeit * 6) * 0.1})`);
+    ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
   }
 }
 
