@@ -177,7 +177,7 @@ function schadenProSekunde(w) {
   return (w.schaden * (w.schrot || w.anzahl || 1) * (w.explodiert ? 1.4 : 1)) / w.pause;
 }
 function mechSterne(typ) {
-  const ws = typ.slots.map(s => WAFFEN[s.waffe]);
+  const ws = typ.slots.map(s => WAFFEN[s.waffe]).filter(Boolean);
   const dps = ws.reduce((summe, w) => summe + schadenProSekunde(w), 0);
   const weite = Math.max(...ws.filter(w => w.art !== 'rakete').map(w => w.weite), 400);
   const r = n => Math.max(1, Math.min(5, Math.round(n)));
@@ -885,6 +885,7 @@ function spawnPunkt(m) {
   let x = m.team === 'blau' ? 130 : WELT_B - 130;
   // Angreifer starten weiter vorne, wenn Punkt A erobert ist
   if ((modus === 'angriff' || modus === 'verteidigung') && m.team === angreifer && aktivesZiel === 1) x = m.team === 'blau' ? WELT_B * 0.3 : WELT_B * 0.7;
+  if (storyMission && storyMission.startX && m.team === 'blau') x = WELT_B * storyMission.startX;   // Im Prolog startest du mitten im Kampf
   const n = mechs.filter(o => o.team === m.team).length;
   return { x, y: WELT_H / 2 + (m.nr - (n - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
 }
@@ -932,6 +933,9 @@ function neuesSpiel(id, aufstellung = null) {
     restZeit = 300;
   } else if (modus === 'boss') {
     restZeit = BOSS_ZEIT;
+  } else if (modus === 'flucht') {   // 🏃 Flucht: Lauf zum Landeplatz (oben links)!
+    ziele = [{ x: WELT_B * 0.07, y: WELT_H * 0.14, r: 110, name: '🛬 Landeplatz', fortschritt: 0, versteckt: true }];
+    restZeit = 150;
   } else if (modus === 'knockout') {
     restZeit = KNOCKOUT_ZEIT;
     runde = 1; rundePause = 0; zuschauen = null;
@@ -950,6 +954,8 @@ function neuesSpiel(id, aufstellung = null) {
     if (a.name) m.name = a.name;
     if (a.ich) m.name = a.name || 'DU';
     m.mensch = a.mensch || null;   // Multiplayer: Ein Mensch steuert diesen Mech
+    m.unverwundbar = !!a.unverwundbar;   // Storymodus: Manche Mechs kann man (noch) nicht kaputt machen
+    m.keinNeustart = !!a.keinNeustart;
     m.boss = !!a.typ.boss;
     mechs.push(m);
   }
@@ -1066,7 +1072,7 @@ function boosten(m, richtung) {
 // Jeder Mech hat eine Liste m.waffen: Jeder Slot hat seine Waffe und lädt selbst nach.
 //   Linksklick = alle 🔵 Laser und 🟣 Kanonen    Rechtsklick / Q = alle 🟢 Raketen
 function neueWaffen(typ) {
-  return typ.slots.map(s => ({ ort: s.ort, art: s.art, w: WAFFEN[s.waffe], pause: s.art === 'rakete' ? 1 : 0 }));
+  return typ.slots.filter(s => WAFFEN[s.waffe]).map(s => ({ ort: s.ort, art: s.art, w: WAFFEN[s.waffe], pause: s.art === 'rakete' ? 1 : 0 }));   // Leere Slots schießen nicht
 }
 const slotGeht = (m, s) => !(s.ort === 'armL' || s.ort === 'armR') || hat(m, s.ort);   // Arm ab = Waffe weg
 const hagelVon = m => m.waffen.find(s => s.w.salve);                                    // Hat der Mech einen Raketenhagel?
@@ -1210,7 +1216,7 @@ function funken(x, y, h, farbe) {
 
 // teil: welches Teil getroffen wurde ('explosion' = alle ein bisschen)
 function schaden(m, menge, von, teil = 'mitte') {
-  if (m.tot || m.schutz > 0 || zustand !== 'spiel') return;
+  if (m.tot || m.schutz > 0 || m.unverwundbar || zustand !== 'spiel') return;
   if (teil === 'explosion') for (const [id, f] of Object.entries(EXPLOSION_VERTEILUNG)) teilSchaden(m, id, menge * f, von);
   else teilSchaden(m, teil, menge, von);
   m.blitz = 0.08;
@@ -1250,7 +1256,7 @@ function zerstoert(m, von) {
   m.tot = true;
   m.totZeit = 0;
   m.salve = null;
-  m.neustart = modus === 'knockout' || m.boss ? Infinity : NEUSTART_ZEIT;   // Im Knockout (und der Boss) kommt man nicht wieder
+  m.neustart = modus === 'knockout' || m.boss || m.keinNeustart ? Infinity : NEUSTART_ZEIT;   // Im Knockout (und der Boss) kommt man nicht wieder
   m.tode++;
   m.zerstoertVon = von;
   wrackStarten(m, von);
@@ -1527,6 +1533,11 @@ function botDenken(m, dt) {
 
 // ===== Spielmodus-Regeln =====
 function updateModus(dt) {
+  if (storyMission && storyMission.skript) {   // 📖 Was in dieser Mission Besonderes passiert
+    storyMission.skriptZeit = (storyMission.skriptZeit || 0) + dt;
+    storyMission.skript(storyMission.skriptZeit, dt);
+  }
+  if (funk) { funk.t -= dt; if (funk.t <= 0) funk = null; }
   if (modus === 'punkt') {
     const z = ziele[0];
     const b = zaehleIn('blau', z), r = zaehleIn('rot', z);
@@ -1549,6 +1560,12 @@ function updateModus(dt) {
     if (restZeit <= 0) zeitUm(punkte.blau, punkte.rot);
   } else if (modus === 'knockout') {
     updateKnockout(dt);
+  } else if (modus === 'flucht') {   // 🏃 Flucht: Erreiche den Landeplatz!
+    const z = ziele[0];
+    if (spieler.tot) beende(anderes(spieler.team), 'Sie haben dich erwischt ...');
+    else if (!z.versteckt && dist(spieler, z) < z.r) beende(spieler.team, 'Du bist entkommen!');
+    restZeit -= dt;
+    if (restZeit <= 0) beende(anderes(spieler.team), 'Zu spät – der Landeplatz ist weg ...');
   } else if (modus === 'boss') {   // 👑 Bosskampf: Besiege den Boss, bevor die Zeit abläuft!
     const boss = mechs.find(m => m.boss);
     if (boss && boss.tot) beende(anderes(boss.team), `${boss.name} ist besiegt!`);
@@ -2787,6 +2804,12 @@ function baueMech(m) {
       pos = [8, 7, seite * 22];
     } else if (slot.ort.startsWith('torso')) pos = [15, 10, seite * 13];
     else pos = [-4, 35, seite * 9];   // Schulter: oben auf dem Rücken
+    if (!w) {   // Leerer Slot: nur eine Halterung mit Lämpchen in der Slot-Farbe
+      const halter = klotz(8, 6, 8, dunkelMat, pos[0], pos[1], pos[2]);
+      halter.add(klotz(3, 2, 3, slotLichtMat[slot.art], 0, 3.5, 0));
+      eltern.add(halter);
+      continue;
+    }
     const modell = waffenModell(w, slot.art, teamDunkel, akzentMat, raketenLicht, slot.ort.startsWith('torso') ? 0.7 : 1);
     modell.position.set(...pos);
     eltern.add(modell);
@@ -2811,7 +2834,17 @@ function baueMech(m) {
     torso.add(schraeg(klotz(6, 18, 34, akzentMat, 20, 4, 0), -0.2));
     for (const s of [-1, 1]) torso.add(klotz(3, 3, 3, akzentLeucht, 4, 30, s * 10));
   }
-  if (typ.boss) {   // 👑 Der Boss hat eine goldene Krone und böse rote Augen
+  if (typ.hoerner) {   // 😈 Kragan: zwei schwarze Hörner
+    const schwarz = new THREE.MeshStandardMaterial({ color: '#111111', metalness: 0.6, roughness: 0.3 });
+    for (const s of [-1, 1]) {
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(4, 22, 6), schwarz);
+      horn.position.set(4, 36, s * 12);
+      horn.rotation.x = s * 0.5;
+      torso.add(horn);
+    }
+  }
+  if (typ.boss) for (const s of [-1, 1]) torso.add(klotz(1, 3, 4, leucht('#ff2222'), 23.6, 22, s * 4));   // Böse rote Augen
+  if (typ.krone) {   // 👑 Der Baron hat eine goldene Krone
     const gold = new THREE.MeshStandardMaterial({ color: '#facc15', metalness: 0.9, roughness: 0.25, emissive: '#a16207', emissiveIntensity: 0.3 });
     torso.add(klotz(26, 4, 26, gold, -2, 30, 0));
     for (let i = 0; i < 8; i++) {
@@ -2820,7 +2853,6 @@ function baueMech(m) {
       zacke.position.set(-2 + Math.cos(a) * 11, 36, Math.sin(a) * 11);
       torso.add(zacke);
     }
-    for (const s of [-1, 1]) torso.add(klotz(1, 3, 4, leucht('#ff2222'), 23.6, 22, s * 4));
   }
   if (typ.id === 'feuer') {    // 🔥 Heiße Lüftung am Bauch
     for (const s of [-1, 1]) torso.add(klotz(1, 6, 8, leucht('#ff6a00'), 12.6, 0, s * 7));
@@ -3102,6 +3134,7 @@ function baueWaffen(typ) {
   for (const slot of typ.slots) {
     if (slot.ort !== 'armL' && slot.ort !== 'armR') continue;
     const s = slot.ort === 'armL' ? -1 : 1;
+    if (!WAFFEN[slot.waffe]) continue;   // Leerer Slot
     const modell = waffenModell(WAFFEN[slot.waffe], slot.art, mat, akzent, licht, 0.9);
     modell.rotation.y = Math.PI / 2;   // Modelle zeigen nach +x, die Kamera schaut nach -z
     modell.position.set(s * 16, -15, -22);
@@ -3127,6 +3160,7 @@ baueWaffen(meinMech);
 const INTRO = { hochfahren: 6.6, aufgehen: 7.4, landen: 11.4, loslassen: 12.1, ende: 14.8 };
 const ABWURF_HOEHE = 650;
 let intro = null;
+let funk = null;   // 📻 Ein Funkspruch während der Mission { wer, text, t }
 
 // ===== Das Steuerpult: Knöpfe, die der Pilot drückt =====
 // hand: -1 = linke Hand, 1 = rechte Hand.  lx / lz: Wo der Knopf auf dem Pult sitzt (lz größer = näher beim Piloten)
@@ -3788,6 +3822,7 @@ function zeichneNamen() {
 function zeichneZielZeichen() {
   if (modus === 'team' || modus === 'knockout' || modus === 'boss' || spieler.tot) return;
   const z = modus === 'punkt' ? ziele[0] : ziele[aktivesZiel];
+  if (z.versteckt) return;
   const w = winkelDiff(blick.links, Math.atan2(z.y - spieler.y, z.x - spieler.x));
   const meter = Math.round(dist(z, spieler) / 10);
   if (Math.abs(w) < 0.8) {
@@ -4003,6 +4038,18 @@ function zeichneMechTeile(m, x, y, s) {
     }
   }
 }
+function funkspruch(wer, t, dauer = 4.5) { funk = { wer, text: t, t: dauer }; sound.piep(); }
+function zeichneFunk() {   // 📻 Funkspruch oben links mit Bild vom Sprecher
+  if (!funk) return;
+  const wer = SPRECHER[funk.wer];
+  ctx.globalAlpha = Math.min(1, funk.t * 2);
+  ctx.fillStyle = 'rgba(10,14,28,0.9)'; rr(16, 84, 430, 86, 12); ctx.fill();
+  ctx.strokeStyle = wer.farbe; ctx.lineWidth = 2; ctx.stroke();
+  text(wer.emoji, 56, 127 + Math.sin(zeit * 25) * 2, 40, '#fff', 'center', false);
+  text(`📻 ${wer.name}`, 98, 102, 13, wer.farbe, 'left', false);
+  umbrechen(funk.text, 98, 126, 336, 19, 15, '#fff');
+  ctx.globalAlpha = 1;
+}
 function zeichneHUD() {
   if (intro) { zeichneIntro(); return; }   // 🎬 Während des Intros nur das Cockpit
   zeichneCockpit();
@@ -4040,6 +4087,11 @@ function zeichneHUD() {
     text(':', W / 2, 32, 26, '#fff');
     text(`${punkte.rot}`, W / 2 + 70, 34, 30, TEAMS.rot.hell);
     text(`Zuerst ${abschussZiel} gewinnt · ${uhr(restZeit)}`, W / 2, 58, 13, '#c9c3ff', 'center', false);
+  } else if (modus === 'flucht') {   // 🏃 Flucht
+    const z = ziele[0];
+    text(z.versteckt ? '⚔️ Bleib bei Papa!' : '🏃 LAUF ZUM LANDEPLATZ!', W / 2 - 40, 30, 18, z.versteckt ? '#93c5fd' : '#ff6b6b');
+    text(uhr(restZeit), W / 2 + 150, 30, 18, '#fff');
+    if (!z.versteckt) text(`noch ${Math.round(dist(spieler, z) / 10)} m`, W / 2, 56, 14, '#ffd166', 'center', false);
   } else if (modus === 'boss') {   // 👑 Großer Lebensbalken vom Boss
     const boss = mechs.find(o => o.boss);
     if (boss) {
@@ -4101,7 +4153,7 @@ function zeichneHUD() {
     ctx.fillRect(mx + r.x * mk, my + r.y * mk, Math.max(1, r.w * mk), Math.max(1, r.h * mk));
   }
   ziele.forEach((z, i) => {
-    if (modus !== 'punkt' && i !== aktivesZiel) return;
+    if ((modus !== 'punkt' && i !== aktivesZiel) || z.versteckt) return;
     ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.5; kreis(mx + z.x * mk, my + z.y * mk, z.r * mk); ctx.stroke();
   });
   for (const o of mechs) {
@@ -4118,6 +4170,7 @@ function zeichneHUD() {
     ctx.restore();
   }
 
+  zeichneFunk();
   // ----- Nachricht -----
   if (nachricht) {
     ctx.globalAlpha = Math.min(1, nachricht.t * 2);
@@ -4244,6 +4297,7 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
   // Die Waffen in den Slots (von oben gesehen), mit einem Streifen in der Slot-Farbe
   for (const slot of typ.slots) {
     const w = WAFFEN[slot.waffe], seite = ORTE[slot.ort].seite < 0 ? -1 : 1, farbe = SLOT_ARTEN[slot.art].farbe;
+    if (!w) continue;   // Leerer Slot
     ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
     if (slot.art === 'rakete') {   // Raketenwerfer
       const y = slot.ort.startsWith('schulter') ? seite * 22.5 : seite * 14;
@@ -4339,7 +4393,7 @@ const SPRECHER = {
 };
 // Der Boss: Baron Eisenzahns Riesen-Mech (kann man nicht selbst auswählen)
 const BOSS_BARON = {
-  id: 'baron', klasse: 'schwer', boss: true, name: 'Eiserner Koloss', emoji: '👑', akzent: '#facc15', text: 'Der Riesen-Mech von Baron Eisenzahn.',
+  id: 'baron', klasse: 'schwer', boss: true, krone: true, name: 'Eiserner Koloss', emoji: '👑', akzent: '#facc15', text: 'Der Riesen-Mech von Baron Eisenzahn.',
   dick: 1.8, schulter: 1.7, leben: 1300, tempo: 85, groesse: 1.75, boostPause: 9, keinBoost: true,
   slots: [['armL', 'kanone', 'kanone'], ['armR', 'kanone', 'kanone'], ['torsoL', 'laser', 'puls'], ['torsoR', 'laser', 'puls'], ['schulterL', 'rakete', 'hagel'], ['schulterR', 'rakete', 'rak4']]
     .map(([ort, art, waffe]) => ({ ort, art, waffe })),
