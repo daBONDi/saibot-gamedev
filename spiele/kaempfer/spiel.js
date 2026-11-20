@@ -1423,7 +1423,7 @@ function zaehleIn(team, z) { return mechs.filter(m => !m.tot && m.team === team 
 
 // Wohin will der Bot gerade?
 function botZiel(m) {
-  if (modus === 'team' || modus === 'knockout' || modus === 'boss') {
+  if (modus === 'team' || modus === 'knockout' || modus === 'boss' || modus === 'flucht') {
     const gegner = mechs.filter(o => !o.tot && o.team !== m.team).sort((a, b) => dist(a, m) - dist(b, m))[0];
     return gegner || { x: WELT_B / 2, y: WELT_H / 2 };
   }
@@ -4474,7 +4474,7 @@ let storyFortschritt = 0;   // So viele Missionen sind geschafft
 try { storyFortschritt = Math.min(MISSIONEN.length, parseInt(localStorage.getItem('kaempfer-story')) || 0); } catch (e) { /* egal */ }
 let storyMission = null;    // Welche Mission läuft gerade? (null = kein Storymodus)
 let abschussZiel = ABSCHUSS_ZIEL;
-const MODUS_EXTRA = { boss: { id: 'boss', emoji: '👑', name: 'Bosskampf' } };
+const MODUS_EXTRA = { boss: { id: 'boss', emoji: '👑', name: 'Bosskampf' }, flucht: { id: 'flucht', emoji: '🏃', name: 'Flucht' } };
 const modusInfoVon = id => MODI.find(x => x.id === id) || MODUS_EXTRA[id];
 
 function teamNamen(story) {
@@ -4499,6 +4499,7 @@ function normalesSpiel() {   // Zurück zu den normalen Einstellungen (ohne Stor
   teamNamen(false);
 }
 function storyNachMission() {   // Wird aufgerufen, wenn man nach einer Mission klickt
+  if (storyMission && storyMission.kampagne === 'rache') { racheNachMission(); return; }
   const m = storyMission, gewonnen = ende && ende.sieger === spieler.team;
   normalesSpiel();
   try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || KARTEN[0]; } catch (e) { karte = KARTEN[0]; }
@@ -4599,7 +4600,7 @@ function zeichneStory() {
   text('Klick auf eine Mission!', W / 2 + 60, 560, 16, '#8a8fb0', 'center', false);
 }
 function storyKlick() {
-  if (imRechteck(maus, STORY_ZURUECK)) { zustand = 'titel'; return; }
+  if (imRechteck(maus, STORY_ZURUECK)) { zustand = 'kampagnen'; return; }
   MISSIONEN.forEach((m, i) => {
     if (i > storyFortschritt || !imRechteck(maus, missionKnopf(m))) return;
     dialogStarten(m.vorher, () => {   // Nach dem Gespräch: Mech aussuchen, dann geht's los
@@ -4609,6 +4610,447 @@ function storyKlick() {
       zustand = 'auswahl';
     });
   });
+}
+
+// =====================================================================
+// ===== ⚔️ Karriere: Rache für Papa =====
+// =====================================================================
+// Die Geschichte: General Kragan und seine Schwarze Legion greifen an. Dein Papa beschützt dich – und wird dabei zerstört.
+// Du flüchtest zu Mila, einer alten Freundin deines Vaters. In ihrem Hangar verdienst du mit Aufträgen Geld,
+// kaufst neue Mechs (die kommen OHNE Waffen!) und Waffen, baust sie ein – und holst dir am Ende Kragan.
+Object.assign(SPRECHER, {
+  vater:  { name: 'Papa (Kommandant Falk)', emoji: '👨‍✈️', farbe: '#93c5fd' },
+  kragan: { name: 'General Kragan',         emoji: '😈',   farbe: '#f87171' },
+  mila:   { name: 'Mechanikerin Mila',      emoji: '👩‍🔧', farbe: '#fde68a' },
+  du:     { name: 'Du',                     emoji: '🧑‍🚀', farbe: '#4ade80' },
+});
+// Kragans Riesen-Mech: der Schwarze Koloss
+const BOSS_KRAGAN = {
+  id: 'kragan', klasse: 'schwer', boss: true, hoerner: true, name: 'Schwarzer Koloss', emoji: '😈', akzent: '#111827', text: 'Der Riesen-Mech von General Kragan.',
+  dick: 1.8, schulter: 1.7, leben: 1500, tempo: 85, groesse: 1.8, boostPause: 9, keinBoost: true,
+  slots: [['armL', 'kanone', 'railgun'], ['armR', 'kanone', 'kanone'], ['torsoL', 'laser', 'puls'], ['torsoR', 'laser', 'puls'], ['schulterL', 'rakete', 'hagel'], ['schulterR', 'rakete', 'rak4']]
+    .map(([ort, art, waffe]) => ({ ort, art, waffe })),
+  sterne: { leben: 5, tempo: 1 },
+};
+// ----- Preise (in Credits) -----
+const MECH_PREISE = { blitz: 1500, hornisse: 1800, adler: 2200, waechter: 4000, rubin: 4500, feuer: 4800, nashorn: 8000, koloss: 8500, artillerie: 9000, titan: 15000, bollwerk: 16000, vulkan: 16500 };
+const WAFFEN_PREISE = { laserK: 400, puls: 900, laserG: 1800, mg: 300, minigun: 800, schrot: 700, kanone: 1500, railgun: 2200, rak1: 500, rak2: 1000, rak4: 2000, hagel: 3000 };
+const VERKAUF_ANTEIL = 0.5;    // Beim Verkaufen bekommt man die Hälfte zurück
+const ABSCHUSS_BONUS = 150;    // So viele Credits gibt es extra für jeden Abschuss
+const geldText = n => `${Math.round(n).toLocaleString('de-DE')} 💰`;
+
+// ----- Dein Spielstand (wird im Browser gespeichert) -----
+function neueKarriere() {
+  return {
+    geld: 0, fortschritt: 0, prolog: false, naechsteNr: 2, aktiv: 1, auftraege: [],
+    mechs: [{ nr: 1, typ: 'blitz', slots: [null, 'mg', 'rak1'] }],   // Papas alter Blitzschlag: nur MG und eine Rakete
+    lager: {},                                                        // Waffen, die du gekauft (oder ausgebaut) hast
+  };
+}
+let karriere = neueKarriere();
+try { const k = JSON.parse(localStorage.getItem('kaempfer-karriere')); if (k && Array.isArray(k.mechs) && k.mechs.length) karriere = { ...neueKarriere(), ...k }; } catch (e) { /* egal */ }
+function karriereSpeichern() { try { localStorage.setItem('kaempfer-karriere', JSON.stringify(karriere)); } catch (e) { /* egal */ } }
+const aktiverMech = () => karriere.mechs.find(m => m.nr === karriere.aktiv) || karriere.mechs[0];
+function karriereTyp(km) {   // Aus deinem Mech im Hangar wird ein richtiger Mech-Typ (leere Slots bleiben leer)
+  const basis = typVon(km.typ);
+  return { ...basis, slots: basis.slots.map((s, i) => ({ ...s, waffe: WAFFEN[km.slots[i]] && WAFFEN[km.slots[i]].art === s.art ? km.slots[i] : null })) };
+}
+
+// ----- Die Story-Missionen -----
+const PAPA_NAME = 'Papa';
+const RACHE = [
+  { id: 'schwarzerTag', name: 'Der schwarze Tag', karte: 'fabrik', modus: 'flucht', ungenau: 0.22, prolog: true, startX: 0.42, belohnung: 0,
+    ziel: 'Bleib bei Papa ... und wenn er „Lauf!“ sagt: Lauf zum Landeplatz!',
+    spielerTyp: 'blitz', spielerSlots: [null, 'mg', 'rak1'],
+    freunde: [{ typ: 'koloss', name: PAPA_NAME, unverwundbar: true }],
+    gegner: [{ typ: 'kragan', name: 'General Kragan', unverwundbar: true }, { typ: 'waechter' }, { typ: 'feuer' }, { typ: 'blitz' }],
+    vorher: [
+      ['vater', 'Na, bereit für deine erste Übungsrunde im Mech? Bleib einfach dicht bei mir.'],
+      ['du', 'Klar, Papa! Ich bin bereit!'],
+      ['vater', 'Moment ... da ist was auf dem Radar. Das sind Mechs der Schwarzen Legion!'],
+      ['kragan', '*knister* Falk! Endlich habe ich dich gefunden. Heute rechnen wir ab!'],
+      ['vater', 'Das ist General Kragan. Hör gut zu: Wenn ich „Lauf!“ sage, dann rennst du zum Landeplatz. Versprochen?'],
+      ['du', 'Versprochen ...'],
+    ],
+    skript(t) {   // Was im Kampf passiert
+      const papa = mechs.find(m => m.name === PAPA_NAME), kragan = mechs.find(m => m.boss);
+      const einmal = (n, f) => { this.schritte = this.schritte || {}; if (t >= n && !this.schritte[n]) { this.schritte[n] = true; f(); } };
+      einmal(1, () => funkspruch('vater', 'Feuer frei! Bleib hinter mir!'));
+      einmal(9, () => funkspruch('kragan', 'Gib auf, Falk! Gegen meinen Schwarzen Koloss hast du keine Chance!'));
+      einmal(13, () => { if (papa && kragan && !papa.tot && dist(papa, kragan) > 450) { kragan.x = papa.x + 330; kragan.y = papa.y; kragan.z = standHoehe(kragan.x, kragan.y, 0); kragan.gegner = papa; } });   // Kragan stürmt heran
+      einmal(16, () => {
+        if (papa && !papa.tot) { papa.unverwundbar = false; explosionEffekt(papa.x, papa.y, papa.z + 60, 140); zerstoert(papa, kragan); }
+        funkspruch('vater', 'LAUF! Lauf zum Landeplatz! Bring dich in Sicherheit!', 5);
+        ziele[0].versteckt = false;
+      });
+      einmal(21.5, () => { funkspruch('du', 'PAPA!!! ... Ich komme wieder, Kragan. Das verspreche ich dir!', 5); zeigeNachricht('📍 Lauf zum Landeplatz – folge dem Pfeil!', 4, '#ffd166'); });
+      if (papa && papa.tot) papa.neustart = Infinity;   // Papa kommt nicht wieder ...
+    },
+    nachher: [
+      ['mila', 'Du hast es bis zu meinem Hangar geschafft! Ich bin Mila – eine alte Freundin von deinem Papa.'],
+      ['mila', 'Es tut mir so leid. Dein Papa war der beste Pilot, den ich kannte.'],
+      ['du', 'Kragan wird dafür bezahlen. Ich will mich rächen!'],
+      ['mila', 'Dann brauchst du bessere Mechs. Und die kosten Geld. Viel Geld.'],
+      ['mila', 'Nimm Söldner-Aufträge an und verdiene Credits. Neue Mechs bekommst du OHNE Waffen – die musst du extra kaufen und im Hangar einbauen.'],
+      ['mila', 'Behalte den alten Blitzschlag von deinem Papa. Hier sind 1.000 Credits für den Anfang. Viel Glück!'],
+    ],
+    startGeld: 1000 },
+  { id: 'spur', name: 'Die Spur der Legion', karte: 'planet', modus: 'team', abschussZiel: 8, ungenau: 0.2, belohnung: 2500, empfohlen: 'Medium',
+    ziel: 'Zerstöre 8 Legion-Mechs! Zwei Söldner helfen dir.',
+    freunde: [{ typ: 'waechter', name: 'Söldner Ole' }, { typ: 'blitz', name: 'Söldnerin Ida' }], gegner: ['waechter', 'feuer', 'hornisse', 'adler'],
+    vorher: [
+      ['mila', 'Ich habe etwas gehört: Ein Trupp der Schwarzen Legion sucht auf Xyloria nach Kristallen.'],
+      ['du', 'Dann fange ich da an. Vielleicht wissen die, wo Kragan ist.'],
+      ['mila', 'Zerstöre 8 Legion-Mechs. Ich schicke dir zwei Söldner mit.'],
+    ],
+    nachher: [
+      ['du', 'Einer von ihnen hat geredet: Kragan bekommt seinen Nachschub vom Eisplaneten Frostheim.'],
+      ['mila', 'Gut gemacht! Hier ist deine Belohnung. Kauf dir was Ordentliches davon!'],
+    ] },
+  { id: 'nachschub', name: 'Kragans Nachschub', karte: 'eis', modus: 'angriff', ungenau: 0.17, belohnung: 3500, empfohlen: 'Medium oder Heavy',
+    ziel: 'Erobere die Nachschub-Lager A und B!',
+    freunde: [{ typ: 'waechter', name: 'Söldner Ole' }, { typ: 'feuer', name: 'Söldnerin Ida' }, { typ: 'hornisse', name: 'Söldner Pit' }], gegner: ['koloss', 'nashorn', 'feuer', 'adler'],
+    vorher: [
+      ['mila', 'Auf Frostheim hat die Legion zwei Nachschub-Lager. Ohne Nachschub wird Kragan schwach!'],
+      ['du', 'Dann nehme ich ihm beide Lager weg.'],
+      ['mila', 'Erobere erst Punkt A und dann B. Pass auf – die haben schwere Mechs!'],
+    ],
+    nachher: [
+      ['kragan', '*knister* Du bist also das Kind von Falk. Du bist genauso lästig wie er!'],
+      ['du', 'Ich komme dich holen, Kragan.'],
+    ] },
+  { id: 'falle', name: 'Die Falle im Dschungel', karte: 'dschungel', modus: 'verteidigung', ungenau: 0.14, belohnung: 4500, empfohlen: 'Heavy',
+    ziel: 'Verteidige A und B, bis die Zeit um ist!',
+    freunde: [{ typ: 'nashorn', name: 'Söldner Ole' }, { typ: 'rubin', name: 'Söldnerin Ida' }, { typ: 'koloss', name: 'Söldner Pit' }], gegner: ['nashorn', 'titan', 'hornisse', 'feuer', 'adler'],
+    vorher: [
+      ['mila', 'Achtung! Kragan hat uns eine Falle gestellt. Die Legion greift unser Versteck im Dschungel an!'],
+      ['mila', 'Halte sie von Punkt A und B fern, bis die Zeit um ist. Sie sind zu fünft!'],
+      ['du', 'Diesmal laufe ich nicht weg.'],
+    ],
+    nachher: [
+      ['mila', 'Sie hauen ab! Und ich habe Kragans Versteck gefunden: die alte Stahlfabrik – da, wo alles angefangen hat.'],
+      ['du', 'Dann beenden wir es dort.'],
+    ] },
+  { id: 'rache', name: 'Die Rache', karte: 'fabrik', modus: 'boss', ungenau: 0.12, belohnung: 10000, empfohlen: 'Schwer',
+    ziel: 'Besiege General Kragan in seinem Schwarzen Koloss!',
+    freunde: [{ typ: 'titan', name: 'Söldner Ole' }, { typ: 'rubin', name: 'Söldnerin Ida' }, { typ: 'nashorn', name: 'Söldner Pit' }],
+    gegner: [{ typ: 'kragan', name: 'General Kragan' }, { typ: 'koloss' }, { typ: 'feuer' }, { typ: 'adler' }],
+    vorher: [
+      ['mila', `Das ist der letzte Kampf. Kragan sitzt in seinem Schwarzen Koloss. Der hat ${BOSS_KRAGAN.leben} Leben!`],
+      ['mila', 'Tipp: Schieß auf sein Visier oder auf seine Beine!'],
+      ['kragan', 'Kleines Falk-Kind! Ich mache aus dir Schrott – genau wie aus deinem Vater!'],
+      ['du', 'Das ist für Papa.'],
+    ],
+    nachher: [
+      ['kragan', 'Nein ... NEIN! Mein Koloss! ... Du ... du bist ein besserer Pilot als dein Vater ...'],
+      ['du', 'Das war für dich, Papa.'],
+      ['mila', 'Die Sternenpolizei hat Kragan festgenommen. Die Schwarze Legion gibt es nicht mehr!'],
+      ['mila', 'Dein Papa wäre so stolz auf dich. Mein Hangar steht dir immer offen – es gibt noch viele Aufträge!'],
+    ] },
+];
+RACHE.forEach(m => { m.kampagne = 'rache'; });
+MISSIONEN.forEach(m => { m.kampagne = 'sternenwacht'; });
+
+// ----- Nebenaufträge (zum Geld verdienen, immer wieder neu) -----
+const AUFTRAG_NAMEN = ['Konvoi-Schutz', 'Piraten verjagen', 'Kristallmine sichern', 'Schrottplatz-Streit', 'Grenzpatrouille', 'Wettkampf der Söldner', 'Banditen am Strand', 'Funkturm retten'];
+const AUFTRAG_GEGNER = [   // Je weiter du in der Story bist, desto stärker die Gegner
+  ['blitz', 'hornisse', 'adler'], ['blitz', 'hornisse', 'waechter', 'rubin'], ['waechter', 'feuer', 'rubin', 'nashorn'],
+  ['feuer', 'nashorn', 'koloss', 'artillerie'], ['koloss', 'artillerie', 'titan', 'bollwerk', 'vulkan'],
+];
+function neuerAuftrag() {
+  const stufe = Math.min(AUFTRAG_GEGNER.length - 1, Math.max(0, karriere.fortschritt - 1));
+  const anzahl = 3 + Math.floor(Math.random() * 2) + (stufe >= 3 ? 1 : 0);
+  const modus = zufall(['team', 'team', 'punkt', 'knockout']);
+  const k = zufall(KARTEN);
+  return {
+    nr: Math.floor(Math.random() * 1e9), name: zufall(AUFTRAG_NAMEN), karte: k.id, modus, nebenjob: true, kampagne: 'rache',
+    abschussZiel: 6 + anzahl, ungenau: 0.24 - stufe * 0.025,
+    gegner: Array.from({ length: anzahl }, () => zufall(AUFTRAG_GEGNER[stufe])),
+    freunde: Array.from({ length: anzahl - 1 }, (_, i) => ({ typ: zufall(AUFTRAG_GEGNER[Math.max(0, stufe - 1)]), name: ['Söldner Ole', 'Söldnerin Ida', 'Söldner Pit', 'Söldnerin Bea'][i] })),
+    belohnung: 700 + stufe * 450 + anzahl * 120,
+    ziel: modus === 'team' ? `Zerstöre ${6 + anzahl} Gegner!` : modus === 'punkt' ? 'Halte den Punkt!' : 'Gewinne 2 Knockout-Runden!',
+  };
+}
+function auftraegeAuffuellen() {
+  while (karriere.auftraege.length < 3) karriere.auftraege.push(neuerAuftrag());
+  karriereSpeichern();
+}
+const naechsteStory = () => RACHE[karriere.fortschritt] || null;   // fortschritt 0 = Prolog
+
+// ----- Mission starten (für beide Kampagnen) -----
+function aufstellungEintrag(team, e) {   // e ist eine Mech-ID oder { typ, name, unverwundbar }
+  const o = typeof e === 'string' ? { typ: e } : e;
+  const typ = o.typ === 'baron' ? BOSS_BARON : o.typ === 'kragan' ? BOSS_KRAGAN : typVon(o.typ);
+  return { team, typ, name: o.name || (o.typ === 'baron' ? 'Baron Eisenzahn' : undefined), unverwundbar: o.unverwundbar };
+}
+function racheStarten(mission) {
+  if (!mission.prolog && !aktiverMech().slots.some(Boolean)) { karriereMeldung = '⚠️ Dein Mech hat keine Waffen! Kauf welche im Waffen-Laden und bau sie im Hangar ein.'; return; }
+  const ablauf = () => {
+    mission.skriptZeit = 0; mission.schritte = null;
+    storyMission = mission;
+    karte = KARTEN.find(k => k.id === mission.karte);
+    botUngenau = mission.ungenau;
+    abschussZiel = mission.abschussZiel || ABSCHUSS_ZIEL;
+    teamNamen(false);
+    TEAMS.blau.name = 'Deine Truppe'; TEAMS.rot.name = 'Schwarze Legion';
+    const ichTyp = mission.prolog ? karriereTyp({ typ: mission.spielerTyp, slots: mission.spielerSlots }) : karriereTyp(aktiverMech());
+    const aufstellung = [{ team: 'blau', typ: ichTyp, ich: true, keinNeustart: mission.modus === 'flucht' }];
+    for (const f of mission.freunde) aufstellung.push(aufstellungEintrag('blau', f));
+    for (const g of mission.gegner) aufstellung.push(aufstellungEintrag('rot', g));
+    neuesSpiel(mission.modus, aufstellung);
+  };
+  if (mission.vorher && !mission.nebenjob) dialogStarten(mission.vorher, ablauf); else ablauf();
+}
+function racheBelohnung(gewonnen) {   // Wie viele Credits gibt es?
+  const m = storyMission, kills = spieler ? spieler.abschuesse : 0;
+  const basis = gewonnen ? m.belohnung : Math.round(m.belohnung * 0.1);   // Verloren: nur ein kleines Trostgeld
+  return { basis, kills, summe: basis + kills * ABSCHUSS_BONUS };
+}
+function racheNachMission() {
+  const m = storyMission, gewonnen = ende && ende.sieger === spieler.team;
+  const b = racheBelohnung(gewonnen);
+  normalesSpiel();
+  try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || KARTEN[0]; } catch (e) { karte = KARTEN[0]; }
+  if (m.prolog) {
+    if (!gewonnen) { zustand = 'kampagnen'; return; }
+    karriere.prolog = true; karriere.fortschritt = Math.max(karriere.fortschritt, 1); karriere.geld += m.startGeld;
+    auftraegeAuffuellen();
+    dialogStarten(m.nachher, () => { zustand = 'karriere'; karriereTab = 'auftraege'; });
+    return;
+  }
+  karriere.geld += b.summe;
+  let danach = null;
+  if (gewonnen && m.nebenjob) karriere.auftraege = karriere.auftraege.filter(a => a.nr !== m.nr);
+  if (gewonnen && !m.nebenjob && RACHE.indexOf(m) === karriere.fortschritt) { karriere.fortschritt++; danach = m.nachher; }
+  auftraegeAuffuellen();
+  karriereMeldung = `${gewonnen ? '✅ Auftrag erledigt' : '❌ Verloren'}: +${geldText(b.summe)}`;
+  if (danach) dialogStarten(danach, () => { zustand = 'karriere'; }); else zustand = 'karriere';
+}
+
+// ===== Kampagne auswählen =====
+const KAMPAGNE_KARTEN = [
+  { id: 'rache', x: 90, y: 150, w: 370, h: 300 },
+  { id: 'sternenwacht', x: 500, y: 150, w: 370, h: 300 },
+];
+function zeichneKampagnen() {
+  sterneMalenHimmel();
+  text('📖 Storymodus', W / 2, 60, 40, '#ffd166');
+  text('Welche Geschichte willst du spielen?', W / 2, 105, 17, '#c9c3ff', 'center', false);
+  for (const k of KAMPAGNE_KARTEN) {
+    const hover = imRechteck(maus, k), rache = k.id === 'rache';
+    ctx.fillStyle = hover ? '#2a3350' : 'rgba(20,26,46,0.92)'; rr(k.x, k.y, k.w, k.h, 16); ctx.fill();
+    ctx.strokeStyle = hover ? '#ffd166' : rache ? '#f87171' : '#93c5fd'; ctx.lineWidth = hover ? 4 : 2; ctx.stroke();
+    text(rache ? '⚔️' : '🌟', k.x + k.w / 2, k.y + 56, 54, '#fff', 'center', false);
+    text(rache ? 'Rache für Papa' : 'Die Sternenwacht', k.x + k.w / 2, k.y + 120, 26, rache ? '#f87171' : '#93c5fd');
+    if (rache) text('NEU!', k.x + k.w - 40, k.y + 26, 16, '#ffd166', 'center', false);
+    umbrechen(rache
+      ? 'General Kragan hat deinen Papa besiegt. Verdiene Geld mit Aufträgen, kauf dir Mechs und Waffen – und hol dir deine Rache!'
+      : 'Rette mit Kommandantin Vega die Galaxis vor Baron Eisenzahn. 5 Missionen mit fertigen Mechs.', k.x + 26, k.y + 162, k.w - 52, 21, 15, '#c9c3ff');
+    const stand = rache ? (karriere.prolog ? `Kapitel ${Math.min(karriere.fortschritt, RACHE.length - 1)} von ${RACHE.length - 1}  ·  ${geldText(karriere.geld)}` : 'Noch nicht angefangen')
+      : `${storyFortschritt} von ${MISSIONEN.length} Missionen geschafft`;
+    text(stand, k.x + k.w / 2, k.y + k.h - 30, 14, '#ffd166', 'center', false);
+  }
+  knopfMalen(STORY_ZURUECK, '← Zurück');
+}
+function kampagnenKlick() {
+  if (imRechteck(maus, STORY_ZURUECK)) { zustand = 'titel'; return; }
+  if (imRechteck(maus, KAMPAGNE_KARTEN[1])) { zustand = 'story'; return; }
+  if (imRechteck(maus, KAMPAGNE_KARTEN[0])) {
+    if (!karriere.prolog) racheStarten(RACHE[0]);   // Zuerst der Prolog
+    else { auftraegeAuffuellen(); karriereMeldung = ''; zustand = 'karriere'; }
+  }
+}
+
+// ===== Milas Hangar (Aufträge, Hangar, Mech-Laden, Waffen-Laden) =====
+let karriereTab = 'auftraege', karriereMeldung = '';
+const KARRIERE_TABS = [
+  { id: 'auftraege', name: '📜 Aufträge' }, { id: 'hangar', name: '🏠 Hangar' },
+  { id: 'mechladen', name: '🤖 Mech-Laden' }, { id: 'waffenladen', name: '🔫 Waffen-Laden' },
+];
+const tabKnopf = i => ({ x: 30 + i * 228, y: 66, w: 216, h: 42 });
+const auftragKnopf = i => ({ x: 490, y: 126 + i * 132, w: 440, h: 120 });
+const STORY_START = { x: 30, y: 126, w: 440, h: 384 };
+const hangarZeile = i => ({ x: 30, y: 124 + i * 48, w: 300, h: 42 });
+const hangarSlotY = i => 300 + i * 38;
+const hangarPfeil = (i, r) => ({ x: r < 0 ? 470 : 860, y: hangarSlotY(i) - 16, w: 32, h: 32 });
+const VERKAUF_MECH = { x: 700, y: 128, w: 230, h: 38 };
+const mechLadenKarte = i => ({ x: 30 + (i % 4) * 228, y: 122 + Math.floor(i / 4) * 134, w: 216, h: 124 });
+const waffenZeileY = i => 136 + i * 30;
+const waffeKaufen = i => ({ x: 690, y: waffenZeileY(i) - 13, w: 110, h: 26 });
+const waffeVerkaufen = i => ({ x: 810, y: waffenZeileY(i) - 13, w: 120, h: 26 });
+const KARRIERE_ZURUECK = { x: 30, y: 548, w: 150, h: 38 };
+
+function zeichneKarriere() {
+  sterneMalenHimmel();
+  text('⚔️ Rache für Papa  ·  Milas Hangar', 30, 34, 24, '#f87171', 'left');
+  text(geldText(karriere.geld), W - 30, 34, 24, '#ffd166', 'right');
+  KARRIERE_TABS.forEach((t, i) => {
+    const k = tabKnopf(i), an = karriereTab === t.id, hover = imRechteck(maus, k);
+    ctx.fillStyle = an ? '#ffd166' : hover ? '#3a4256' : 'rgba(30,34,46,0.92)'; rr(k.x, k.y, k.w, k.h, 10); ctx.fill();
+    text(t.name, k.x + k.w / 2, k.y + k.h / 2, 17, an ? '#1b1f3a' : '#fff', 'center', false);
+  });
+  if (karriereTab === 'auftraege') zeichneAuftraege();
+  else if (karriereTab === 'hangar') zeichneHangar();
+  else if (karriereTab === 'mechladen') zeichneMechLaden();
+  else zeichneWaffenLaden();
+  knopfMalen(KARRIERE_ZURUECK, '← Menü');
+  const am = aktiverMech(), at = typVon(am.typ);
+  text(`Dein Mech: ${at.emoji} ${at.name}  ${karriereTyp(am).slots.map(s => s.waffe ? SLOT_ARTEN[s.art].punkt : '⚪').join('')}`, 200, 567, 14, '#c9c3ff', 'left', false);
+  if (karriereMeldung) text(karriereMeldung, W - 30, 567, 14, karriereMeldung.startsWith('⚠️') || karriereMeldung.startsWith('❌') ? '#ff6b6b' : '#4ade80', 'right', false);
+}
+function zeichneAuftraege() {
+  // Links: die nächste Story-Mission
+  const m = naechsteStory(), k = STORY_START, hover = m && imRechteck(maus, k);
+  ctx.fillStyle = hover ? '#3a2430' : 'rgba(40,20,28,0.92)'; rr(k.x, k.y, k.w, k.h, 14); ctx.fill();
+  ctx.strokeStyle = '#f87171'; ctx.lineWidth = hover ? 4 : 2; ctx.stroke();
+  if (m) {
+    const kk = KARTEN.find(x => x.id === m.karte), mi = modusInfoVon(m.modus);
+    text(`⭐ Kapitel ${karriere.fortschritt}: ${m.name}`, k.x + 20, k.y + 30, 20, '#f87171', 'left');
+    text(`${kk.emoji} ${kk.name}  ·  ${mi.emoji} ${mi.name}`, k.x + 20, k.y + 62, 15, '#c9c3ff', 'left', false);
+    umbrechen(`🎯 ${m.ziel}`, k.x + 20, k.y + 100, k.w - 40, 20, 15, '#fff');
+    text(`👥 Mit dir: ${m.freunde.length} Söldner  ·  Gegner: ${m.gegner.length}`, k.x + 20, k.y + 170, 14, '#c9c3ff', 'left', false);
+    if (m.empfohlen) text(`💡 Empfohlen: ${m.empfohlen}-Mech`, k.x + 20, k.y + 198, 14, '#fde68a', 'left', false);
+    text(`💰 Belohnung: ${geldText(m.belohnung)}  (+${ABSCHUSS_BONUS} pro Abschuss)`, k.x + 20, k.y + 226, 14, '#ffd166', 'left', false);
+    zeichneMech2D('rot', k.x + k.w / 2, k.y + 290, 1.2, Math.PI, Math.PI + Math.sin(zeit) * 0.3, zeit * 4, m.modus === 'boss' ? BOSS_KRAGAN : typVon(typeof m.gegner[0] === 'string' ? m.gegner[0] : m.gegner[0].typ) || BOSS_KRAGAN);
+    text(hover ? '▶ MISSION STARTEN' : '▶ Klick zum Starten', k.x + k.w / 2, k.y + k.h - 24, 18, hover ? '#ffd166' : '#fff', 'center');
+  } else {
+    text('🏆 Kragan ist besiegt!', k.x + k.w / 2, k.y + 120, 26, '#ffd166');
+    umbrechen('Du hast deinen Papa gerächt. Aber Söldner-Aufträge gibt es immer – verdiene weiter Credits und sammle alle Mechs!', k.x + 30, k.y + 170, k.w - 60, 22, 16, '#c9c3ff');
+  }
+  // Rechts: Nebenaufträge
+  text('💼 Nebenaufträge (zum Geld verdienen)', 490, 116, 13, '#8a8fb0', 'left', false);
+  karriere.auftraege.forEach((a, i) => {
+    const b = auftragKnopf(i), h = imRechteck(maus, b), kk = KARTEN.find(x => x.id === a.karte), mi = modusInfoVon(a.modus);
+    ctx.fillStyle = h ? '#2a3350' : 'rgba(20,26,46,0.92)'; rr(b.x, b.y + 6, b.w, b.h - 6, 12); ctx.fill();
+    ctx.strokeStyle = h ? '#ffd166' : '#4a5266'; ctx.lineWidth = 2; ctx.stroke();
+    text(a.name, b.x + 16, b.y + 30, 18, '#fff', 'left', false);
+    text(geldText(a.belohnung), b.x + b.w - 16, b.y + 30, 17, '#ffd166', 'right', false);
+    text(`${kk.emoji} ${kk.name}  ·  ${mi.emoji} ${mi.name}`, b.x + 16, b.y + 58, 13, '#c9c3ff', 'left', false);
+    text(`🎯 ${a.ziel}  ·  ${a.gegner.length} Gegner: ${a.gegner.map(id => typVon(id).emoji).join('')}`, b.x + 16, b.y + 84, 13, '#c9c3ff', 'left', false);
+    text(h ? '▶ Starten' : '', b.x + b.w - 16, b.y + 100, 14, '#ffd166', 'right', false);
+  });
+}
+function zeichneHangar() {
+  text('Deine Mechs (anklicken = nehmen):', 30, 116, 13, '#8a8fb0', 'left', false);
+  karriere.mechs.slice(0, 8).forEach((km, i) => {
+    const k = hangarZeile(i), t = typVon(km.typ), an = km.nr === karriere.aktiv, h = imRechteck(maus, k);
+    ctx.fillStyle = an ? '#3a4256' : h ? '#2a3350' : 'rgba(20,26,46,0.92)'; rr(k.x, k.y, k.w, k.h, 10); ctx.fill();
+    if (an) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.stroke(); }
+    text(`${t.emoji} ${t.name}`, k.x + 14, k.y + k.h / 2, 16, an ? '#ffd166' : '#fff', 'left', false);
+    text(karriereTyp(km).slots.map(s => s.waffe ? SLOT_ARTEN[s.art].punkt : '⚪').join(''), k.x + k.w - 12, k.y + k.h / 2, 12, '#fff', 'right', false);
+  });
+  // Rechts: Waffen einbauen
+  const km = aktiverMech(), typ = karriereTyp(km);
+  ctx.fillStyle = 'rgba(20,26,46,0.92)'; rr(350, 120, 580, 412, 14); ctx.fill();
+  zeichneMech2D('blau', 470, 205, 1.3, zeit * 0.6, zeit * 0.6 + Math.sin(zeit * 2) * 0.3, zeit * 5, typ);
+  text(`${typ.emoji} ${typ.name}`, 560, 180, 22, typ.akzent, 'left');
+  text(`${KLASSEN.find(k => k.id === typ.klasse).name}  ·  ❤️ ${typ.leben}  ·  💨 ${typ.tempo}`, 560, 210, 14, '#c9c3ff', 'left', false);
+  if (karriere.mechs.length > 1) knopfMalen(VERKAUF_MECH, `Verkaufen (+${geldText(MECH_PREISE[km.typ] * VERKAUF_ANTEIL)})`, '#ff6b6b');
+  text('🔧 Waffen einbauen: Klick auf ◀ ▶ (nur Waffen aus deinem Lager mit der gleichen Farbe)', 370, 272, 12, '#8a8fb0', 'left', false);
+  typ.slots.forEach((s, i) => {
+    const y = hangarSlotY(i), a = SLOT_ARTEN[s.art];
+    ctx.fillStyle = a.farbe; rr(370, y - 16, 90, 32, 8); ctx.fill();
+    text(`${a.punkt} ${ORTE[s.ort].name.replace('Schulter ', 'Schult. ')}`, 415, y, 10, '#fff', 'center', false);
+    knopfMalen(hangarPfeil(i, -1), '◀'); knopfMalen(hangarPfeil(i, 1), '▶');
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(508, y - 16, 346, 32, 8); ctx.fill();
+    const w = WAFFEN[s.waffe];
+    text(w ? w.name : '— leer —', 681, y, 15, w ? '#fff' : '#6b7080', 'center', false);
+  });
+  const lager = Object.entries(karriere.lager).filter(([, n]) => n > 0);
+  text(`📦 Lager: ${lager.length ? lager.map(([id, n]) => `${SLOT_ARTEN[WAFFEN[id].art].punkt}${WAFFEN[id].name} ×${n}`).join(', ') : 'leer – kauf Waffen im Waffen-Laden!'}`, 370, 520, 12, '#c9c3ff', 'left', false);
+}
+function zeichneMechLaden() {
+  MECH_TYPEN.forEach((t, i) => {
+    const k = mechLadenKarte(i), preis = MECH_PREISE[t.id], genug = karriere.geld >= preis, h = imRechteck(maus, k);
+    const besitzt = karriere.mechs.filter(m => m.typ === t.id).length;
+    ctx.fillStyle = h ? '#2a3350' : 'rgba(20,26,46,0.92)'; rr(k.x, k.y, k.w, k.h, 12); ctx.fill();
+    ctx.strokeStyle = h && genug ? '#ffd166' : '#4a5266'; ctx.lineWidth = 2; ctx.stroke();
+    zeichneMech2D('blau', k.x + 44, k.y + 52, 0.75, zeit * 0.5 + i, zeit * 0.5 + i, h ? zeit * 6 : 0, { ...t, slots: t.slots.map(s => ({ ...s, waffe: null })) });
+    text(`${t.emoji} ${t.name}`, k.x + 84, k.y + 22, 15, t.akzent, 'left', false);
+    text(KLASSEN.find(x => x.id === t.klasse).name, k.x + 84, k.y + 44, 12, '#8a8fb0', 'left', false);
+    slotPunkte(t, k.x + 140, k.y + 66, 5);
+    text(geldText(preis), k.x + k.w / 2, k.y + 94, 16, genug ? '#ffd166' : '#ff6b6b', 'center', false);
+    text(besitzt ? `✓ hast du ${besitzt > 1 ? besitzt + '×' : ''}` : h ? (genug ? 'Klick = kaufen' : 'zu teuer') : 'ohne Waffen', k.x + k.w / 2, k.y + 112, 11, besitzt ? '#4ade80' : '#8a8fb0', 'center', false);
+  });
+  text('Neue Mechs kommen OHNE Waffen. Die kaufst du im Waffen-Laden und baust sie im Hangar ein.', W / 2, 532, 13, '#8a8fb0', 'center', false);
+}
+function zeichneWaffenLaden() {
+  text('Waffe', 40, 118, 12, '#8a8fb0', 'left', false);
+  text('Preis', 590, 118, 12, '#8a8fb0', 'center', false);
+  text('Lager', 650, 118, 12, '#8a8fb0', 'center', false);
+  WAFFEN_LISTE.forEach((w, i) => {
+    const y = waffenZeileY(i), a = SLOT_ARTEN[w.art], preis = WAFFEN_PREISE[w.id], n = karriere.lager[w.id] || 0;
+    ctx.fillStyle = i % 2 ? 'rgba(20,26,46,0.6)' : 'rgba(30,38,60,0.6)'; ctx.fillRect(30, y - 14, 900, 28);
+    ctx.fillStyle = a.farbe; rr(36, y - 8, 6, 16, 2); ctx.fill();
+    text(w.name, 52, y, 15, '#fff', 'left', false);
+    text(w.text, 190, y, 11, '#8a8fb0', 'left', false);
+    text(geldText(preis), 590, y, 13, karriere.geld >= preis ? '#ffd166' : '#ff6b6b', 'center', false);
+    text(String(n), 650, y, 14, n ? '#4ade80' : '#6b7080', 'center', false);
+    knopfMalen(waffeKaufen(i), 'Kaufen', karriere.geld >= preis ? '#4ade80' : '#6b7080');
+    if (n) knopfMalen(waffeVerkaufen(i), `+${Math.round(preis * VERKAUF_ANTEIL)}`, '#ff6b6b');
+  });
+}
+function karriereKlick() {
+  if (imRechteck(maus, KARRIERE_ZURUECK)) { zustand = 'kampagnen'; return; }
+  KARRIERE_TABS.forEach((t, i) => { if (imRechteck(maus, tabKnopf(i))) { karriereTab = t.id; karriereMeldung = ''; sound.piep(); } });
+  if (karriereTab === 'auftraege') {
+    const m = naechsteStory();
+    if (m && imRechteck(maus, STORY_START)) { racheStarten(m); return; }
+    karriere.auftraege.forEach((a, i) => { if (imRechteck(maus, auftragKnopf(i))) racheStarten(a); });
+  } else if (karriereTab === 'hangar') {
+    karriere.mechs.slice(0, 8).forEach((km, i) => { if (imRechteck(maus, hangarZeile(i))) { karriere.aktiv = km.nr; sound.piep(); karriereSpeichern(); } });
+    const km = aktiverMech(), basis = typVon(km.typ);
+    if (karriere.mechs.length > 1 && imRechteck(maus, VERKAUF_MECH)) {
+      if (!confirm(`${basis.name} wirklich verkaufen? Die eingebauten Waffen kommen zurück ins Lager.`)) return;
+      for (const w of km.slots) if (w) karriere.lager[w] = (karriere.lager[w] || 0) + 1;
+      karriere.geld += MECH_PREISE[km.typ] * VERKAUF_ANTEIL;
+      karriere.mechs = karriere.mechs.filter(m => m !== km);
+      karriere.aktiv = karriere.mechs[0].nr;
+      sound.abschuss(); karriereSpeichern();
+      return;
+    }
+    basis.slots.forEach((s, i) => {
+      for (const r of [-1, 1]) if (imRechteck(maus, hangarPfeil(i, r))) {
+        // Möglich: leer, die Waffe, die gerade drin ist, und alle passenden Waffen aus dem Lager
+        const jetzt = WAFFEN[km.slots[i]] ? km.slots[i] : null;
+        const moeglich = [null, ...WAFFEN_LISTE.filter(w => w.art === s.art && (w.id === jetzt || (karriere.lager[w.id] || 0) > 0)).map(w => w.id)];
+        const j = Math.max(0, moeglich.indexOf(jetzt));
+        const neu = moeglich[(j + r + moeglich.length) % moeglich.length];
+        if (neu === jetzt) return;
+        if (jetzt) karriere.lager[jetzt] = (karriere.lager[jetzt] || 0) + 1;   // Alte Waffe zurück ins Lager
+        if (neu) karriere.lager[neu]--;                                        // Neue Waffe aus dem Lager nehmen
+        while (km.slots.length < basis.slots.length) km.slots.push(null);
+        km.slots[i] = neu;
+        sound.piep(); karriereSpeichern();
+      }
+    });
+  } else if (karriereTab === 'mechladen') {
+    MECH_TYPEN.forEach((t, i) => {
+      if (!imRechteck(maus, mechLadenKarte(i))) return;
+      const preis = MECH_PREISE[t.id];
+      if (karriere.geld < preis) { karriereMeldung = `❌ Dafür fehlen dir noch ${geldText(preis - karriere.geld)}`; sound.autsch(); return; }
+      if (!confirm(`${t.name} für ${preis} Credits kaufen? (ohne Waffen)`)) return;
+      karriere.geld -= preis;
+      const nr = karriere.naechsteNr++;
+      karriere.mechs.push({ nr, typ: t.id, slots: t.slots.map(() => null) });
+      karriere.aktiv = nr;
+      karriereMeldung = `✅ ${t.name} gekauft! Bau im Hangar Waffen ein.`;
+      sound.los(); karriereSpeichern();
+    });
+  } else {
+    WAFFEN_LISTE.forEach((w, i) => {
+      const preis = WAFFEN_PREISE[w.id];
+      if (imRechteck(maus, waffeKaufen(i))) {
+        if (karriere.geld < preis) { karriereMeldung = `❌ Dafür fehlen dir noch ${geldText(preis - karriere.geld)}`; sound.autsch(); return; }
+        karriere.geld -= preis; karriere.lager[w.id] = (karriere.lager[w.id] || 0) + 1;
+        karriereMeldung = `✅ ${w.name} gekauft – bau sie im Hangar ein!`;
+        sound.piep(); karriereSpeichern();
+      } else if ((karriere.lager[w.id] || 0) > 0 && imRechteck(maus, waffeVerkaufen(i))) {
+        karriere.lager[w.id]--; karriere.geld += Math.round(preis * VERKAUF_ANTEIL);
+        sound.piep(); karriereSpeichern();
+      }
+    });
+  }
 }
 
 // =====================================================================
@@ -5324,7 +5766,12 @@ function zeichneEnde() {
       text(String(m.tode), x + 265, y, 16, '#fff', 'center', false);
     });
   });
-  if (zeit - ende.seit > 1) text(mp.aktiv ? (mp.rolle === 'host' ? 'Klicken: Zurück in die Lobby' : '⏳ Warte auf den Gastgeber ...') : storyMission ? (ende.sieger === spieler.team ? 'Klicken: Weiter ▶  ·  Enter: Nochmal' : 'Klicken: Zur Sternenkarte  ·  Enter: Nochmal versuchen') : 'Klicken: Zurück zum Menü  ·  Enter: Nochmal', W / 2, 500, 20, '#c9c3ff', 'center', false);
+  if (storyMission && storyMission.kampagne === 'rache' && !storyMission.prolog) {   // 💰 Wie viel Geld gibt es?
+    const b = racheBelohnung(ende.sieger === spieler.team);
+    text(`💰 +${geldText(b.summe)}`, W / 2, 440, 30, '#ffd166');
+    text(`${ende.sieger === spieler.team ? 'Belohnung' : 'Trostgeld'} ${b.basis} + ${b.kills} Abschüsse × ${ABSCHUSS_BONUS}`, W / 2, 470, 14, '#c9c3ff', 'center', false);
+  }
+  if (zeit - ende.seit > 1) text(mp.aktiv ? (mp.rolle === 'host' ? 'Klicken: Zurück in die Lobby' : '⏳ Warte auf den Gastgeber ...') : storyMission ? (storyMission.kampagne === 'rache' ? 'Klicken: Weiter ▶' : ende.sieger === spieler.team ? 'Klicken: Weiter ▶  ·  Enter: Nochmal' : 'Klicken: Zur Sternenkarte  ·  Enter: Nochmal versuchen') : 'Klicken: Zurück zum Menü  ·  Enter: Nochmal', W / 2, 500, 20, '#c9c3ff', 'center', false);
 }
 
 function zeichne() {
@@ -5332,6 +5779,8 @@ function zeichne() {
   if (zustand === 'titel') { zeichneTitel(); return; }
   if (zustand === 'auswahl') { zeichneAuswahl(); return; }
   if (zustand === 'story') { zeichneStory(); return; }
+  if (zustand === 'kampagnen') { zeichneKampagnen(); return; }
+  if (zustand === 'karriere') { zeichneKarriere(); return; }
   if (zustand === 'mpLobby') { zeichneMpLobby(); return; }
   if (zustand === 'dialog') { zeichneDialog(); return; }
   if (zustand === 'werkstatt') { zeichneWerkstatt(); return; }
@@ -5366,11 +5815,13 @@ addEventListener('keydown', e => {
   if (zustand === 'spiel' && k === 'escape' && !pause) { pause = true; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && pause && k === 'enter') { if (mp.aktiv) mpBeenden(); zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && intro && !pause && (k === ' ' || k === 'enter')) introBeenden();   // Intro überspringen
-  else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) { if (mp.aktiv) { if (mp.rolle === 'host') mpZurLobby(); } else if (storyMission) starteMission(storyMission); else neuesSpiel(modus); }
+  else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) { if (mp.aktiv) { if (mp.rolle === 'host') mpZurLobby(); } else if (storyMission && storyMission.kampagne === 'rache') storyNachMission(); else if (storyMission) starteMission(storyMission); else neuesSpiel(modus); }
   else if (zustand === 'mpLobby' && k === 'escape' && !mp.aktiv) zustand = 'titel';
   else if (zustand === 'dialog' && (k === ' ' || k === 'enter')) dialogWeiter();
   else if (zustand === 'dialog' && k === 'escape') { const d = dialog.danach; dialog = null; d(); }   // Gespräch überspringen
-  else if (zustand === 'story' && k === 'escape') zustand = 'titel';
+  else if (zustand === 'story' && k === 'escape') zustand = 'kampagnen';
+  else if (zustand === 'kampagnen' && k === 'escape') zustand = 'titel';
+  else if (zustand === 'karriere' && k === 'escape') zustand = 'kampagnen';
   else if (zustand === 'auswahl' && k === 'escape') zustand = 'titel';
   else if (zustand === 'werkstatt' && k === 'escape') zustand = 'auswahl';
 });
@@ -5394,7 +5845,7 @@ canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch' && zustand === 'spiel') { touchRunter(e); return; }
   if (zustand === 'titel') {
     for (const k of modusKarten()) if (imRechteck(maus, k)) { normalesSpiel(); gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
-    if (imRechteck(maus, STORY_KNOPF)) { normalesSpiel(); zustand = 'story'; return; }
+    if (imRechteck(maus, STORY_KNOPF)) { normalesSpiel(); zustand = 'kampagnen'; return; }
     if (imRechteck(maus, ONLINE_KNOPF)) { normalesSpiel(); zustand = 'mpLobby'; return; }
     for (const b of kartenKnoepfe()) if (imRechteck(maus, b)) {
       karte = b.k;
@@ -5416,6 +5867,8 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'ende') { if (zeit - ende.seit > 1) { if (mp.aktiv) { if (mp.rolle === 'host') mpZurLobby(); } else if (storyMission) storyNachMission(); else zustand = 'titel'; } return; }
   if (zustand === 'mpLobby') { mpLobbyKlick(); return; }
   if (zustand === 'story') { storyKlick(); return; }
+  if (zustand === 'kampagnen') { kampagnenKlick(); return; }
+  if (zustand === 'karriere') { karriereKlick(); return; }
   if (zustand === 'dialog') { dialogWeiter(); return; }
   if (pause) { pause = false; mausFangen(); return; }
   if (!mausGefangen) mausFangen();
