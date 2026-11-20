@@ -1708,6 +1708,7 @@ function baueKarte3D(k) {
   kartenAnimation = null;
   if (k.id === 'planet') bauePlanet(kartenGruppe);
   else if (k.id === 'eis') baueEis(kartenGruppe);
+  else if (k.id === 'dschungel') baueDschungel(kartenGruppe);
   else baueFabrik(kartenGruppe);
   // Basen (farbiger Boden) gibt es überall
   for (const [team, x] of [['blau', 150], ['rot', WELT_B - 150]]) {
@@ -2272,6 +2273,260 @@ function baueEis(g) {
       l.band.material.opacity = 0.35 + Math.sin(zeit * 0.5 + l.p) * 0.15;
     }
     for (const lampe of lampen) lampe.visible = Math.sin(zeit * 5) > 0;   // Wrack-Lampen blinken
+  };
+}
+
+// ===== Karte 4: 🌴 Dschungel & Strand =====
+const urwaldTextur = malTextur(256, 256, (g, b, h) => {   // Waldboden mit Laub
+  g.fillStyle = '#3b4a24'; g.fillRect(0, 0, b, h);
+  const z = zufallsGenerator(21);
+  for (let i = 0; i < 160; i++) {
+    g.fillStyle = ['#4d5e2c', '#2f3b1c', '#5c4a2a', '#466b2a'][Math.floor(z() * 4)];
+    g.beginPath(); g.ellipse(z() * b, z() * h, 3 + z() * 9, 2 + z() * 4, z() * 3, 0, 7); g.fill();
+  }
+});
+const sandTextur = malTextur(256, 256, (g, b, h) => {
+  g.fillStyle = '#f0d9a0'; g.fillRect(0, 0, b, h);
+  const z = zufallsGenerator(31);
+  for (let i = 0; i < 400; i++) { g.fillStyle = z() < 0.5 ? '#e2c486' : '#fbe9bd'; g.fillRect(z() * b, z() * h, 2, 2); }
+  g.strokeStyle = 'rgba(200,170,110,0.4)'; g.lineWidth = 2;   // Wellen im Sand
+  for (let y = 10; y < h; y += 22) { g.beginPath(); for (let x = 0; x <= b; x += 8) g.lineTo(x, y + Math.sin(x * 0.08) * 3); g.stroke(); }
+});
+const steinTextur = malTextur(128, 128, (g, b, h) => {   // Alte Tempelsteine mit Moos
+  g.fillStyle = '#8a8471'; g.fillRect(0, 0, b, h);
+  g.strokeStyle = '#5e5948'; g.lineWidth = 3;
+  for (let y = 0; y < h; y += 32) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(b, y); g.stroke();
+    for (let x = (y / 32) % 2 * 32; x < b; x += 64) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 32); g.stroke(); }
+  }
+  const z = zufallsGenerator(9);
+  for (let i = 0; i < 30; i++) { g.fillStyle = 'rgba(70,120,40,0.55)'; g.beginPath(); g.arc(z() * b, z() * h, 3 + z() * 9, 0, 7); g.fill(); }
+});
+const rindeMat = new THREE.MeshStandardMaterial({ color: '#5b4128', roughness: 1 });
+const blattMats = ['#2f6b2a', '#3d8a34', '#25591f', '#4c9a3c'].map(f => new THREE.MeshStandardMaterial({ color: f, roughness: 0.9, flatShading: true }));
+const lianenMat = new THREE.MeshStandardMaterial({ color: '#3f6b2a', roughness: 1 });
+const tempelMat = new THREE.MeshStandardMaterial({ map: steinTextur, roughness: 0.95 });
+const palmStammMat = new THREE.MeshStandardMaterial({ color: '#9c7a4f', roughness: 1 });
+const palmBlattMat = new THREE.MeshStandardMaterial({ color: '#4caf50', roughness: 0.8, side: THREE.DoubleSide, flatShading: true });
+const holzMat = new THREE.MeshStandardMaterial({ color: '#8b5a2b', roughness: 0.9 });
+const strohMat = new THREE.MeshStandardMaterial({ color: '#d8b56a', roughness: 1, flatShading: true });
+
+function urwaldBaum(g, x, z, groesse, zufall) {   // Riesiger Baum mit Brettwurzeln, Krone und Lianen
+  const hoch = 300 * groesse;
+  const stamm = new THREE.Mesh(new THREE.CylinderGeometry(18 * groesse, 30 * groesse, hoch, 9), rindeMat);
+  stamm.position.set(x, hoch / 2, z);
+  stamm.castShadow = true;
+  g.add(stamm);
+  for (let i = 0; i < 4; i++) {   // Brettwurzeln
+    const a = i / 4 * Math.PI * 2 + zufall();
+    const w = new THREE.Mesh(new THREE.BoxGeometry(6 * groesse, 40 * groesse, 34 * groesse), rindeMat);
+    w.position.set(x + Math.cos(a) * 26 * groesse, 18 * groesse, z + Math.sin(a) * 26 * groesse);
+    w.rotation.y = -a;
+    g.add(w);
+  }
+  for (let i = 0; i < 6; i++) {   // Blätterkrone aus vielen Kugeln
+    const k = new THREE.Mesh(new THREE.IcosahedronGeometry((60 + zufall() * 40) * groesse, 0), blattMats[Math.floor(zufall() * blattMats.length)]);
+    const a = zufall() * Math.PI * 2, r = zufall() * 70 * groesse;
+    k.position.set(x + Math.cos(a) * r, hoch - 10 + zufall() * 50 * groesse, z + Math.sin(a) * r);
+    k.scale.y = 0.6;
+    k.castShadow = true;
+    g.add(k);
+  }
+  for (let i = 0; i < 3; i++) {   // Lianen hängen runter
+    const a = zufall() * Math.PI * 2, r = 40 + zufall() * 50;
+    const l = 120 + zufall() * 120;
+    const liane = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, l, 4), lianenMat);
+    liane.position.set(x + Math.cos(a) * r * groesse, hoch - l / 2, z + Math.sin(a) * r * groesse);
+    g.add(liane);
+  }
+}
+function dschungelBusch(g, r, zufall) {
+  const n = 4 + Math.floor(r.w * r.h / 2500);
+  for (let i = 0; i < n; i++) {
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(22 + zufall() * 16, 0), blattMats[Math.floor(zufall() * blattMats.length)]);
+    b.position.set(r.x + 15 + zufall() * (r.w - 30), 20 + zufall() * 25, r.y + 12 + zufall() * (r.h - 24));
+    b.scale.y = 0.8 + zufall() * 0.4;
+    b.castShadow = true;
+    g.add(b);
+  }
+}
+function palme(g, x, z, zufall, groesse = 1) {   // Gebogene Palme mit Kokosnüssen
+  const neigung = 0.15 + zufall() * 0.2, richtung = zufall() * Math.PI * 2;
+  let px = x, py = 0, pz = z;
+  const teile = 7;
+  for (let i = 0; i < teile; i++) {
+    const l = 30 * groesse, kipp = neigung * (i / teile) * 2;
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(6 * groesse - i * 0.4, 7 * groesse - i * 0.4, l, 7), palmStammMat);
+    const dx = Math.cos(richtung) * Math.sin(kipp) * l, dz = Math.sin(richtung) * Math.sin(kipp) * l, dy = Math.cos(kipp) * l;
+    s.position.set(px + dx / 2, py + dy / 2, pz + dz / 2);
+    s.rotation.set(Math.sin(richtung) * kipp, 0, -Math.cos(richtung) * kipp);
+    s.castShadow = true;
+    g.add(s);
+    px += dx; py += dy; pz += dz;
+  }
+  for (let i = 0; i < 7; i++) {   // Palmwedel
+    const a = i / 7 * Math.PI * 2;
+    const blatt = new THREE.Mesh(new THREE.ConeGeometry(10 * groesse, 90 * groesse, 3), palmBlattMat);
+    blatt.scale.set(1, 1, 0.25);
+    blatt.position.set(px + Math.cos(a) * 38 * groesse, py - 12 * groesse, pz + Math.sin(a) * 38 * groesse);
+    blatt.rotation.set(0, -a, 0);
+    blatt.rotateZ(-1.9);
+    blatt.castShadow = true;
+    g.add(blatt);
+  }
+  for (let i = 0; i < 3; i++) {
+    const nuss = new THREE.Mesh(new THREE.SphereGeometry(5 * groesse, 8, 6), rindeMat);
+    nuss.position.set(px + Math.cos(i * 2.1) * 7, py - 8 * groesse, pz + Math.sin(i * 2.1) * 7);
+    g.add(nuss);
+  }
+}
+function baueDschungel(g) {
+  const HIMMEL = '#86c9f0';
+  szene.background = new THREE.Color(HIMMEL);
+  szene.fog = new THREE.Fog('#9fd3c0', 900, 3600);
+  himmelsLicht.color.set('#e6f6ff'); himmelsLicht.groundColor.set('#4a5a2a'); himmelsLicht.intensity = 1.15;
+  sonne.color.set('#fff1cc'); sonne.intensity = 1.8;
+  const z = zufallsGenerator(64);
+
+  // Boden: Urwald oben, Sand unten
+  urwaldTextur.repeat.set(WELT_B / 160, STRAND_AB / 160);
+  const wald = new THREE.Mesh(new THREE.PlaneGeometry(WELT_B, STRAND_AB + 40), new THREE.MeshStandardMaterial({ map: urwaldTextur, roughness: 1 }));
+  wald.rotation.x = -Math.PI / 2;
+  wald.position.set(WELT_B / 2, 0, (STRAND_AB + 40) / 2);
+  wald.receiveShadow = true;
+  g.add(wald);
+  const sandTiefe = WELT_H - STRAND_AB + 260;
+  sandTextur.repeat.set(WELT_B / 200, sandTiefe / 200);
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(WELT_B + 2000, sandTiefe), new THREE.MeshStandardMaterial({ map: sandTextur, roughness: 1 }));
+  sand.rotation.x = -Math.PI / 2;
+  sand.position.set(WELT_B / 2, 0.3, STRAND_AB + sandTiefe / 2);
+  sand.receiveShadow = true;
+  g.add(sand);
+  const aussen = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#2f4a1f', roughness: 1 }));
+  aussen.rotation.x = -Math.PI / 2;
+  aussen.position.set(WELT_B / 2, -1, WELT_H / 2 - 3000);
+  g.add(aussen);
+  // Das Meer (mit Wellen)
+  const meerGeo = new THREE.PlaneGeometry(14000, 5000, 80, 30);
+  const meer = new THREE.Mesh(meerGeo, new THREE.MeshStandardMaterial({ color: '#1e90c8', roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.92 }));
+  meer.rotation.x = -Math.PI / 2;
+  meer.position.set(WELT_B / 2, -2, WELT_H + 160 + 2500);
+  g.add(meer);
+  const meerBasis = Float32Array.from(meerGeo.attributes.position.array);
+  const schaum = new THREE.Mesh(new THREE.PlaneGeometry(14000, 30), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7 }));
+  schaum.rotation.x = -Math.PI / 2;
+  schaum.position.set(WELT_B / 2, 0.8, WELT_H + 170);
+  g.add(schaum);
+
+  // Hindernisse
+  WAENDE.forEach(r => {
+    const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
+    if (r.art === 'baum') urwaldBaum(g, cx, cz, 1 + z() * 0.3, z);
+    else if (r.art === 'busch') dschungelBusch(g, r, z);
+    else if (r.art === 'dschungelfels') {
+      const f = fels(g, cx, cz, r.w * 0.6, 85, r.h * 0.6, z());
+      f.material = new THREE.MeshStandardMaterial({ color: '#6b6b5a', roughness: 1, flatShading: true });
+      dschungelBusch(g, { x: r.x + r.w * 0.2, y: r.y + r.h * 0.2, w: r.w * 0.6, h: r.h * 0.6 }, z);   // Moos und Farn oben drauf
+    } else if (r.art === 'ruine') {
+      const t = steinTextur.clone(); t.repeat.set(Math.max(r.w, r.h) / 64, 2);
+      kasten(g, r, new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 }), 0, r.oben - 15 - z() * 20);
+      kasten(g, { x: r.x + r.w * 0.1, y: r.y + r.h * 0.1, w: r.w * 0.5, h: r.h * 0.5 }, tempelMat, 0, r.oben);   // abgebrochene Ecke
+    } else if (r.art === 'tempel') {
+      // Stufenpyramide: jede Stufe etwas kleiner
+      for (let i = 0; i < 3; i++) {
+        const e = i * 14;
+        kasten(g, { x: r.x + e, y: r.y + e, w: r.w - 2 * e, h: r.h - 2 * e }, tempelMat, i * r.oben / 3, i === 2 ? r.oben : (i + 1) * r.oben / 3);
+      }
+      for (const [px, pz] of [[r.x + 20, r.y + 20], [r.x + r.w - 20, r.y + 20]]) {   // Fackeln oben
+        const f = new THREE.Mesh(new THREE.ConeGeometry(5, 14, 6), new THREE.MeshBasicMaterial({ color: '#ff9f43' }));
+        f.position.set(px, r.oben + 12, pz);
+        g.add(f);
+      }
+    } else if (r.art === 'tempeltreppe') {
+      const t = steinTextur.clone(); t.repeat.set(2, 6);
+      const m = new THREE.Mesh(rampenGeo(r), new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 }));
+      m.position.set(cx, 0, cz);
+      m.castShadow = m.receiveShadow = true;
+      g.add(m);
+    } else if (r.art === 'palme') palme(g, cx, cz, z);
+    else if (r.art === 'strandfels') {
+      const f = fels(g, cx, cz, r.w * 0.6, 50, r.h * 0.6, z());
+      f.material = new THREE.MeshStandardMaterial({ color: '#9a9488', roughness: 1, flatShading: true });
+    } else if (r.art === 'boot') {   // Altes Holzboot, halb im Sand
+      const rumpf = new THREE.Mesh(new THREE.CylinderGeometry(r.h * 0.5, r.h * 0.5, r.w, 10, 1, true, 0, Math.PI), holzMat);
+      rumpf.material.side = THREE.DoubleSide;
+      rumpf.rotation.z = -Math.PI / 2;   // Liegt längs, die offene Seite zeigt nach oben
+      rumpf.position.set(cx, r.h * 0.5, cz);
+      rumpf.castShadow = true;
+      g.add(rumpf);
+      kasten(g, { x: r.x + r.w * 0.3, y: r.y + 4, w: 6, h: r.h - 8 }, holzMat, 0, 36);   // Sitzbank
+    } else if (r.art === 'huette') {   // Strandhütte mit Strohdach
+      kasten(g, r, holzMat, 0, 80);
+      const dach = new THREE.Mesh(new THREE.ConeGeometry(Math.max(r.w, r.h) * 0.85, 60, 4), strohMat);
+      dach.position.set(cx, 110, cz);
+      dach.rotation.y = Math.PI / 4;
+      dach.castShadow = true;
+      g.add(dach);
+    }
+  });
+
+  // Farne und Pflanzen auf dem Waldboden (viele auf einmal, darum "Instanced")
+  const farnGeo = new THREE.ConeGeometry(10, 26, 4);
+  const farne = new THREE.InstancedMesh(farnGeo, blattMats[1], 700);
+  const hilf = new THREE.Object3D();
+  let n = 0;
+  for (let i = 0; i < 2000 && n < 700; i++) {
+    const x = z() * WELT_B, y = z() * (STRAND_AB + 30);
+    if (WAENDE.some(r => x > r.x - 15 && x < r.x + r.w + 15 && y > r.y - 15 && y < r.y + r.h + 15)) continue;
+    hilf.position.set(x, 10, y);
+    hilf.rotation.set((z() - 0.5) * 0.6, z() * 3, (z() - 0.5) * 0.6);
+    hilf.scale.setScalar(0.6 + z() * 1.2);
+    hilf.updateMatrix();
+    farne.setMatrixAt(n++, hilf.matrix);
+  }
+  farne.count = n;
+  g.add(farne);
+  // Büsche am Waldrand zum Strand
+  for (let x = 40; x < WELT_B; x += 70 + z() * 60) {
+    if (WAENDE.some(r => x > r.x - 40 && x < r.x + r.w + 40 && STRAND_AB > r.y - 40 && STRAND_AB < r.y + r.h + 40)) continue;
+    for (let i = 0; i < 2; i++) {
+      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(12 + z() * 10, 0), blattMats[Math.floor(z() * 4)]);
+      b.position.set(x + (z() - 0.5) * 40, 8, STRAND_AB + (z() - 0.5) * 30);
+      g.add(b);
+    }
+  }
+  // Rand: Ringsum dichter Urwald (oben, links, rechts), unten das Meer
+  for (let i = 0; i < 70; i++) {
+    const seite = z();
+    let x, y;
+    if (seite < 0.5) { x = z() * (WELT_B + 600) - 300; y = -60 - z() * 400; }
+    else { x = seite < 0.75 ? -60 - z() * 400 : WELT_B + 60 + z() * 400; y = z() * STRAND_AB; }
+    urwaldBaum(g, x, y, 0.9 + z() * 0.6, z);
+  }
+  for (let i = 0; i < 14; i++) palme(g, z() < 0.5 ? -40 - z() * 200 : WELT_B + 40 + z() * 200, STRAND_AB + 80 + z() * 700, z, 1.2);
+  // Unsichtbare Grenze unten ist das Wasser – ein paar Steine im Wasser zeigen das Ende
+  for (let x = 60; x < WELT_B; x += 260) fels(g, x + z() * 80, WELT_H + 60, 30 + z() * 20, 20 + z() * 20, 25, z() * 3);
+
+  // Glühwürmchen im Dschungel und Wellen im Meer
+  const ANZ = 250, lichtPos = new Float32Array(ANZ * 3), basis = [];
+  for (let i = 0; i < ANZ; i++) basis.push({ x: z() * WELT_B, y: 20 + z() * 120, z: z() * STRAND_AB, p: z() * 6 });
+  const lichtGeo = new THREE.BufferGeometry();
+  lichtGeo.setAttribute('position', new THREE.BufferAttribute(lichtPos, 3));
+  const lichter = new THREE.Points(lichtGeo, new THREE.PointsMaterial({ color: '#fde047', size: 5, map: kreisTextur, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  lichter.frustumCulled = false;
+  g.add(lichter);
+  kartenAnimation = () => {
+    basis.forEach((b, i) => {
+      lichtPos[i * 3] = b.x + Math.sin(zeit * 0.5 + b.p) * 25;
+      lichtPos[i * 3 + 1] = b.y + Math.sin(zeit * 1.1 + b.p) * 12;
+      lichtPos[i * 3 + 2] = b.z + Math.cos(zeit * 0.4 + b.p) * 25;
+    });
+    lichtGeo.attributes.position.needsUpdate = true;
+    const pos = meerGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.sin(meerBasis[i * 3] * 0.004 + zeit * 1.2) * 6 + Math.cos(meerBasis[i * 3 + 1] * 0.006 + zeit) * 5);
+    pos.needsUpdate = true;
+    schaum.material.opacity = 0.45 + Math.sin(zeit * 1.5) * 0.25;
+    schaum.position.z = WELT_H + 170 + Math.sin(zeit * 1.5) * 12;   // Die Wellen rollen an den Strand
   };
 }
 
