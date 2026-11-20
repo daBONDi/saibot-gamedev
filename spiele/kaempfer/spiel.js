@@ -816,6 +816,10 @@ let maus = { x: W / 2, y: H / 2, links: false, rechts: false };
 let blick = { links: 0, hoch: 0 };   // Wohin du schaust (Drehung und Neigung)
 let wackeln = 0, rueckstoss = 0, muendungsZeit = 0;
 let letzterSchuss = { ort: 'armR', farbe: '#ffd166' };   // Für das Mündungsfeuer im Cockpit
+// 🌐 Multiplayer-Zustand (siehe "Online-Multiplayer" weiter unten)
+const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), liste: [], meineId: null, verbinde: false, status: '',
+  einst: { karte: 'fabrik', modus: 'team', bots: 2, gesperrt: [] }, ich: { team: 'blau', mech: 'waechter' },
+  sendeT: 0, ereignisse: [], schussNr: 0, schuesse: new Map(), feuer: false, rakete: false };
 let trefferAnzeige = 0, trefferRichtungen = [];
 let zeit = 0;
 const tasten = {};
@@ -964,6 +968,7 @@ function beende(sieger, grund) {
   if (zustand !== 'spiel') return;
   zustand = 'ende';
   ende = { sieger, grund, seit: zeit };
+  if (mp.rolle === 'host') { mpSchnappschussSenden(); mpAnAlle({ t: 'ende', s: sieger, g: grund }); }
   maus.links = maus.rechts = false;
   if (document.pointerLockElement) document.exitPointerLock();
   if (sieger === spieler.team) sound.sieg(); else sound.niederlage();
@@ -1086,7 +1091,7 @@ function muendung(m, s, vorne = 40) {
   return {
     x: m.x + cos * vorne * gr - sin * 15 * gr * seite,
     y: m.y + sin * vorne * gr + cos * 15 * gr * seite,
-    h: m.z + (m.istSpieler ? AUGEN_HOEHE - 8 : 52 + oben) * gr,
+    h: m.z + (m.istSpieler || m.mensch ? AUGEN_HOEHE - 8 : 52 + oben) * gr,   // Menschen schießen dahin, wo ihr Fadenkreuz ist
   };
 }
 function schiessen(m, s) {
@@ -1401,8 +1406,10 @@ function updateSpieler(dt) {
     const w = hagel.w;
     m.zielWeite = w.minWeite + (blick.hoch + 0.5) / 0.9 * (w.weite - w.minWeite);
   }
-  if (maus.links) feuern(m, 'haupt');
-  if (maus.rechts || tasten['q'] || tasten['e'] || touch.rakete) feuern(m, 'rakete');
+  const linksFeuer = maus.links && !pause, raketenFeuer = (maus.rechts || tasten['q'] || tasten['e'] || touch.rakete) && !pause;
+  if (mp.rolle === 'gast') { mp.feuer = linksFeuer; mp.rakete = raketenFeuer; return; }   // 🌐 Der Gastgeber schießt für dich
+  if (linksFeuer) feuern(m, 'haupt');
+  if (raketenFeuer) feuern(m, 'rakete');
 }
 
 // ===== Die Computer-Mechs (Bots) =====
@@ -1646,8 +1653,10 @@ function update(dt) {
   trefferAnzeige -= dt;
   for (const t of trefferRichtungen) t.t -= dt;
   trefferRichtungen = trefferRichtungen.filter(t => t.t > 0);
-  if (zustand !== 'spiel' || pause) return;
+  if (zustand !== 'spiel' || (pause && !mp.aktiv)) return;   // (Im Multiplayer geht das Spiel auch in der Pause weiter)
+  if (mp.aktiv) mpTick(dt);
   if (intro) { updateIntro(dt); return; }   // 🎬 Intro läuft
+  if (mp.rolle === 'gast') { updateGast(dt); return; }   // 🌐 Beim Gast rechnet der Gastgeber
 
   if (countdown > 0) {   // 3 ... 2 ... 1 ... LOS!
     const vorher = Math.ceil(countdown);
@@ -3615,6 +3624,11 @@ function updateIntro(dt) {
   introPositionen();
   if (t >= INTRO.ende) introBeenden();
 }
+function introWeg() {   // Intro ganz wegräumen (z. B. wenn man den Raum verlässt)
+  if (!intro) return;
+  for (const s of intro.schiffe) szene.remove(s.gruppe);
+  intro = null;
+}
 function introBeenden() {
   if (!intro) return;
   for (const s of intro.schiffe) szene.remove(s.gruppe);
@@ -4279,6 +4293,10 @@ function zeichneTitel() {
   ctx.fillStyle = sh ? '#ffd166' : 'rgba(30,34,46,0.9)'; rr(STORY_KNOPF.x, STORY_KNOPF.y, STORY_KNOPF.w, STORY_KNOPF.h, 12); ctx.fill();
   ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.stroke();
   text('📖 Storymodus', STORY_KNOPF.x + STORY_KNOPF.w / 2, STORY_KNOPF.y + 23, 18, sh ? '#1b1f3a' : '#ffd166', 'center', false);
+  const oh = imRechteck(maus, ONLINE_KNOPF);   // ... und für Online (oben rechts)
+  ctx.fillStyle = oh ? '#93c5fd' : 'rgba(30,34,46,0.9)'; rr(ONLINE_KNOPF.x, ONLINE_KNOPF.y, ONLINE_KNOPF.w, ONLINE_KNOPF.h, 12); ctx.fill();
+  ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 2; ctx.stroke();
+  text('🌐 Online', ONLINE_KNOPF.x + ONLINE_KNOPF.w / 2, ONLINE_KNOPF.y + 23, 18, oh ? '#1b1f3a' : '#93c5fd', 'center', false);
 
   const titelG = ctx.createLinearGradient(W / 2 - 300, 0, W / 2 + 300, 0);
   titelG.addColorStop(0, '#93c5fd'); titelG.addColorStop(0.5, '#ffffff'); titelG.addColorStop(1, '#fca5a5');
@@ -4539,6 +4557,507 @@ function storyKlick() {
   });
 }
 
+// =====================================================================
+// ===== 🌐 Online-Multiplayer (mit PeerJS) =====
+// =====================================================================
+// So funktioniert es:
+//   - Einer erstellt einen Raum (der Gastgeber) und bekommt einen Code mit 4 Zeichen.
+//   - Die Freunde geben den Code ein und kommen in die Lobby.
+//   - Der Gastgeber stellt Karte, Modus, Bots und gesperrte Mechs ein und startet.
+//   - Im Spiel rechnet der Gastgeber alles (Bots, Treffer, Punkte) und schickt 15-mal pro Sekunde, wo alles ist.
+//     Jeder Gast steuert seinen eigenen Mech selbst und schickt, wo er ist und ob er schießt.
+// Zum Finden benutzt PeerJS einen kostenlosen Vermittlungs-Server. Danach reden die Computer direkt miteinander.
+// PeerJS wird erst geladen, wenn jemand auf "Raum erstellen" oder "Beitreten" klickt.
+const MP_MAX_SPIELER = 8;       // So viele Menschen passen in einen Raum (mit Gastgeber)
+const MP_SENDE_RATE = 15;       // So oft pro Sekunde schickt der Gastgeber, wo alles ist
+const MP_EINGABE_RATE = 20;     // So oft pro Sekunde schickt ein Gast, was er macht
+const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+const MP_VORSILBE = 'kaempfer-stahl-';   // Damit unsere Raum-Codes nicht mit anderen Spielen zusammenstoßen
+const MP_MAX_BOTS = 4;          // So viele Bots pro Team kann man einstellen
+const TEIL_IDS = Object.keys(TEILE);
+const SCHUSS_ARTEN = ['kugel', 'strahl', 'granate', 'rakete', 'salve'];
+const r0 = v => Math.round(v), r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
+let mpName = '';
+try { mpName = localStorage.getItem('kaempfer-name') || ''; } catch (e) { /* egal */ }
+if (!mpName) mpName = 'Pilot' + Math.floor(10 + Math.random() * 90);
+const nameSauber = n => String(n || '').replace(/[<>]/g, '').trim().slice(0, 14);
+
+function mpLadePeerJS() {
+  if (window.Peer) return Promise.resolve();
+  return new Promise((ok, fehler) => {
+    const sc = document.createElement('script');
+    sc.src = MP_PEERJS; sc.onload = ok; sc.onerror = () => fehler(new Error('PeerJS nicht geladen'));
+    document.head.appendChild(sc);
+  });
+}
+function mpNeuerCode() {   // 4 Zeichen, ohne verwechselbare wie 0/O und 1/I
+  const z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let k = 0; k < 4; k++) c += z[Math.floor(Math.random() * z.length)];
+  return c;
+}
+function mpFehlerText(e) {
+  if (e && (e.type === 'network' || e.type === 'server-error')) return 'Keine Verbindung zum Vermittlungs-Server (Internet?)';
+  if (e && e.type === 'browser-incompatible') return 'Dein Browser kann das leider nicht';
+  if (e && e.type === 'peer-unavailable') return 'Raum nicht gefunden – stimmt der Code?';
+  return (e && (e.type || e.message)) || 'unbekannt';
+}
+function mpSendeAn(g, n) { try { if (g.conn && g.conn.open) g.conn.send(n); } catch (e) { /* egal */ } }
+function mpAnAlle(n) { for (const g of mp.gaeste.values()) mpSendeAn(g, n); }
+function mpSende(n) { try { if (mp.conn && mp.conn.open) mp.conn.send(n); } catch (e) { /* egal */ } }
+function mpEreignis(e) { if (mp.ereignisse.length < 300) mp.ereignisse.push(e); }
+const mpErlaubt = () => MECH_TYPEN.filter(t => !mp.einst.gesperrt.includes(t.id));
+function mpSlotsVon(typId) { const t = typVon(typId); return t ? umgebaut(t).slots.map(s => s.waffe) : []; }
+function mpMeinEintrag() { return { id: mp.meineId, name: mpName, team: mp.ich.team, mech: mp.ich.mech }; }
+
+function mpBeenden() {
+  try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ }
+  mp.gaeste.clear();
+  Object.assign(mp, { aktiv: false, rolle: null, code: '', peer: null, conn: null, liste: [], ereignisse: [], meineId: null, verbinde: false });
+}
+function mpVerbindungWeg(text) {
+  const warImSpiel = zustand === 'spiel' || zustand === 'ende';
+  mpBeenden();
+  mp.status = '❌ ' + text;
+  introWeg();
+  zustand = 'mpLobby';
+  if (warImSpiel && document.pointerLockElement) document.exitPointerLock();
+}
+
+// ----- Gastgeber -----
+async function mpRaumErstellen(versuch = 0) {
+  if ((mp.peer || mp.verbinde) && versuch === 0) return;
+  mp.verbinde = true;
+  mp.status = '⏳ Raum wird erstellt ...';
+  try { await mpLadePeerJS(); } catch (e) { mp.verbinde = false; mp.status = '❌ Multiplayer konnte nicht geladen werden (Internet?)'; return; }
+  const code = mpNeuerCode();
+  const peer = new window.Peer(MP_VORSILBE + code);
+  mp.peer = peer;
+  peer.on('open', () => {
+    Object.assign(mp, { aktiv: true, rolle: 'host', code, meineId: 'host', verbinde: false });
+    mp.ich = { team: 'blau', mech: meinMech.id };
+    mp.status = '';
+    mpLobbySenden();
+  });
+  peer.on('connection', conn => mpNeuerGast(conn));
+  peer.on('disconnected', () => { try { if (mp.peer === peer) peer.reconnect(); } catch (e) { /* egal */ } });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id' && versuch < 3) { peer.destroy(); mp.peer = null; mpRaumErstellen(versuch + 1); return; }   // Code schon vergeben? Neuer Code!
+    if (!mp.aktiv) { peer.destroy(); mp.peer = null; mp.verbinde = false; mp.status = '❌ ' + mpFehlerText(e); }
+  });
+}
+function mpNeuerGast(conn) {
+  conn.on('open', () => {
+    if (mp.gaeste.size + 1 >= MP_MAX_SPIELER) { conn.send({ t: 'nein', grund: 'Der Raum ist voll.' }); setTimeout(() => conn.close(), 500); return; }
+    if (zustand !== 'mpLobby') { conn.send({ t: 'nein', grund: 'Dort läuft gerade ein Spiel. Versuch es gleich nochmal!' }); setTimeout(() => conn.close(), 500); return; }
+    const md = conn.metadata || {};
+    const zaehle = t => mp.liste.filter(s => s.team === t).length;
+    const g = {
+      id: conn.peer, conn, name: nameSauber(md.name) || 'Gast',
+      team: zaehle('blau') <= zaehle('rot') ? 'blau' : 'rot',   // Ins kleinere Team
+      mech: mpErlaubt().some(t => t.id === md.mech) ? md.mech : mpErlaubt()[0].id,
+      slots: Array.isArray(md.slots) ? md.slots : [], e: null,
+    };
+    mp.gaeste.set(g.id, g);
+    sound.piep();
+    mpLobbySenden();
+  });
+  conn.on('data', d => { const g = mp.gaeste.get(conn.peer); if (g) mpVomGast(g, d); });
+  conn.on('close', () => mpGastWeg(conn.peer));
+  conn.on('error', () => mpGastWeg(conn.peer));
+}
+function mpGastWeg(id) {
+  const g = mp.gaeste.get(id);
+  if (!g) return;
+  mp.gaeste.delete(id);
+  const m = mechs.find(o => o.mensch === id);
+  if (m && (zustand === 'spiel' || zustand === 'ende')) {   // Ein Bot übernimmt seinen Mech
+    m.mensch = null;
+    m.name += ' 🤖';
+    zeigeNachricht(`👋 ${g.name} ist weg – ein Bot übernimmt.`, 3, '#c9c3ff');
+  }
+  mpLobbySenden();
+}
+function mpLobbySenden() {   // Alle bekommen die neue Spielerliste und die Einstellungen
+  if (mp.rolle !== 'host') return;
+  if (mp.einst.gesperrt.includes(mp.ich.mech)) mp.ich.mech = mpErlaubt()[0].id;
+  for (const g of mp.gaeste.values()) if (mp.einst.gesperrt.includes(g.mech)) g.mech = mpErlaubt()[0].id;
+  mp.liste = [mpMeinEintrag(), ...[...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name, team: g.team, mech: g.mech }))];
+  for (const g of mp.gaeste.values()) mpSendeAn(g, { t: 'lobby', einst: mp.einst, liste: mp.liste, du: g.id, code: mp.code });
+}
+function mpVomGast(g, d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'wahl') {   // Der Gast hat Team, Mech oder Namen geändert
+    if (d.team === 'blau' || d.team === 'rot') g.team = d.team;
+    if (typVon(d.mech) && !mp.einst.gesperrt.includes(d.mech)) g.mech = d.mech;
+    if (Array.isArray(d.slots)) g.slots = d.slots;
+    if (d.name) g.name = nameSauber(d.name) || g.name;
+    mpLobbySenden();
+  } else if (d.t === 'e') g.e = d;   // Was der Gast gerade macht (Position, Blick, Schießen)
+}
+function mpStarten() {   // Der Gastgeber startet das Spiel
+  if (mp.rolle !== 'host') return;
+  mpLobbySenden();
+  const erlaubt = mpErlaubt();
+  const auf = [];
+  for (const team of ['blau', 'rot']) {
+    const menschen = mp.liste.filter(s => s.team === team);
+    for (const s of menschen) {
+      const g = mp.gaeste.get(s.id);
+      auf.push({ team, typ: s.mech, slots: s.id === 'host' ? mpSlotsVon(s.mech) : (g ? g.slots : []), name: s.name, mensch: s.id });
+    }
+    const bots = Math.max(mp.einst.bots, menschen.length === 0 ? 1 : 0);   // Jedes Team braucht mindestens einen Mech
+    for (let i = 0; i < bots; i++) auf.push({ team, typ: zufall(erlaubt).id, slots: [], name: null, mensch: null });
+  }
+  const start = { t: 'start', karte: mp.einst.karte, modus: mp.einst.modus, auf };
+  mpAnAlle(start);
+  mpSpielStarten(start);
+}
+
+// ----- Gast -----
+async function mpBeitreten(code) {
+  code = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { mp.status = 'Der Code hat 4 Zeichen, z. B. K7PX'; return; }
+  if (mp.peer || mp.verbinde) return;
+  mp.verbinde = true;
+  mp.status = '⏳ Verbinde ...';
+  try { await mpLadePeerJS(); } catch (e) { mp.verbinde = false; mp.status = '❌ Multiplayer konnte nicht geladen werden (Internet?)'; return; }
+  const peer = new window.Peer();
+  mp.peer = peer;
+  peer.on('open', id => {
+    mp.ich = { team: 'blau', mech: meinMech.id };
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true, metadata: { name: mpName, mech: meinMech.id, slots: mpSlotsVon(meinMech.id) } });
+    mp.conn = conn;
+    conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code, meineId: id, verbinde: false }); mp.status = ''; });
+    conn.on('data', d => mpVomHost(d));
+    conn.on('close', () => { if (mp.conn === conn) mpVerbindungWeg('Die Verbindung zum Gastgeber ist weg.'); });
+  });
+  peer.on('error', e => { if (mp.peer === peer) mpVerbindungWeg(mpFehlerText(e)); });
+}
+function mpWahlSenden() {   // Gast: Team, Mech und Namen an den Gastgeber schicken
+  if (mp.rolle === 'gast') mpSende({ t: 'wahl', team: mp.ich.team, mech: mp.ich.mech, slots: mpSlotsVon(mp.ich.mech), name: mpName });
+  else mpLobbySenden();
+}
+function mpVomHost(d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'lobby') {
+    mp.einst = d.einst; mp.liste = d.liste; mp.code = d.code || mp.code;
+    const ich = d.liste.find(s => s.id === d.du);
+    if (ich) mp.ich = { team: ich.team, mech: ich.mech };
+  } else if (d.t === 'start') mpSpielStarten(d);
+  else if (d.t === 's') mpSchnappschuss(d);
+  else if (d.t === 'ende') {
+    if (zustand !== 'spiel') return;
+    zustand = 'ende';
+    ende = { sieger: d.s, grund: d.g, seit: zeit };
+    maus.links = maus.rechts = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (d.s === spieler.team) sound.sieg(); else sound.niederlage();
+  } else if (d.t === 'lobbyZurueck') { introWeg(); zustand = 'mpLobby'; if (document.pointerLockElement) document.exitPointerLock(); }
+  else if (d.t === 'nein') { const grund = d.grund; mpBeenden(); mp.status = '❌ ' + grund; }
+}
+
+// ----- Spiel starten (beim Gastgeber und bei allen Gästen gleich) -----
+function mpSpielStarten(d) {
+  karte = KARTEN.find(k => k.id === d.karte) || KARTEN[0];
+  normalesSpiel();
+  const aufstellung = d.auf.map(a => {
+    const basis = typVon(a.typ) || MECH_TYPEN[0];
+    const typ = { ...basis, slots: basis.slots.map((s, i) => { const w = WAFFEN[a.slots && a.slots[i]]; return { ...s, waffe: w && w.art === s.art ? w.id : s.waffe }; }) };
+    const ich = a.mensch === mp.meineId;
+    return { team: a.team, typ, name: a.name || undefined, mensch: ich ? null : a.mensch, ich };
+  });
+  mp.ereignisse = [];
+  mp.schuesse = new Map();
+  neuesSpiel(d.modus, aufstellung);
+}
+function mpZurLobby() {   // Gastgeber: Nach dem Spiel alle zurück in die Lobby
+  mpAnAlle({ t: 'lobbyZurueck' });
+  introWeg();
+  zustand = 'mpLobby';
+  mpLobbySenden();
+}
+
+// ----- Jedes Bild: Daten verschicken -----
+function mpTick(dt) {
+  mp.sendeT -= dt;
+  if (mp.rolle === 'host') {
+    // Was die Gäste machen, auf ihre Mechs übertragen
+    for (const m of mechs) {
+      if (!m.mensch || m.tot) continue;
+      const g = mp.gaeste.get(m.mensch);
+      if (!g || !g.e || !g.e.p) continue;
+      const [x, y, z, zw, zh, lw, lf] = g.e.p;
+      m.vx = (x - m.x) / Math.max(dt, 0.001); m.vy = (y - m.y) / Math.max(dt, 0.001);
+      Object.assign(m, { x, y, z, zielWinkel: zw, zielHoch: zh, laufWinkel: lw, laeuft: !!lf });
+      if (m.laeuft) m.phase += dt * 10;
+      if (typeof g.e.zw2 === 'number') m.zielWeite = g.e.zw2;
+      if (!intro && countdown <= 0) {
+        if (g.e.f & 1) feuern(m, 'haupt');
+        if (g.e.f & 2) feuern(m, 'rakete');
+      }
+    }
+    if (mp.sendeT <= 0) { mp.sendeT = 1 / MP_SENDE_RATE; mpSchnappschussSenden(); }
+  } else if (mp.rolle === 'gast' && spieler) {
+    if (mp.sendeT <= 0) {
+      mp.sendeT = 1 / MP_EINGABE_RATE;
+      const m = spieler;
+      mpSende({ t: 'e', p: [r0(m.x), r0(m.y), r1(m.z), r2(m.zielWinkel), r2(m.zielHoch), r2(m.laufWinkel), m.laeuft ? 1 : 0],
+        f: (mp.feuer ? 1 : 0) | (mp.rakete ? 2 : 0), zw2: r0(m.zielWeite || 500) });
+    }
+  }
+}
+function mpSchnappschussSenden() {
+  const ms = mechs.map(m => [
+    r0(m.x), r0(m.y), r1(m.z), r2(m.zielWinkel), r2(m.zielHoch), r2(m.laufWinkel), m.laeuft ? 1 : 0, m.tot ? 1 : 0, m.schutz > 0 ? 1 : 0,
+    TEIL_IDS.map(id => r0(m.teile[id].hp)), m.spawnNr || 0, m.abschuesse, m.tode, m.neustart === Infinity ? -1 : r1(m.neustart),
+    m.salve ? [r0(m.salve.ziel.x), r0(m.salve.ziel.y), r1(m.salve.warten), m.salve.rest] : 0,
+    m.mensch || m.istSpieler ? m.waffen.map(s => r2(Math.max(0, s.pause))) : 0,
+    m.blitz > 0 ? 1 : 0, m.zerstoertVon ? mechs.indexOf(m.zerstoertVon) : -1, m.koGrund || 0,
+  ]);
+  const sc = [];
+  for (const s of schuesse) {
+    if (s.weg) continue;
+    if (!s.id) s.id = ++mp.schussNr;
+    const v = s.bogen ? [(s.dx || 0) * 60, (s.dy || 0) * 60, (s.dh || 0) * 60] : [s.vx, s.vy, s.vh || 0];
+    sc.push([s.id, SCHUSS_ARTEN.indexOf(s.art), r0(s.x), r0(s.y), r0(s.h), r0(v[0]), r0(v[1]), r0(v[2]), s.laser ? 1 : 0]);
+  }
+  const sp = {
+    p: [r1(punkte.blau), r1(punkte.rot)], rz: r1(restZeit), cd: r2(countdown), az: aktivesZiel,
+    zi: ziele.map(z => [r1(z.fortschritt || 0), z.besitzer || 0, z.erobert ? 1 : 0, z.umkaempft ? 1 : 0, z.wer || 0]),
+    ru: runde, rp: r1(rundePause), vl: verlaengerung ? 1 : 0, in: intro ? 1 : 0,
+  };
+  mpAnAlle({ t: 's', ms, sc, sp, ev: mp.ereignisse });
+  mp.ereignisse = [];
+}
+
+// ----- Gast: Was der Gastgeber schickt, übernehmen -----
+function mpSchnappschuss(d) {
+  if (zustand !== 'spiel' && zustand !== 'ende') return;
+  d.ms.forEach((e, i) => {
+    const m = mechs[i];
+    if (!m) return;
+    const [x, y, z, zw, zh, lw, lf, tot, schutz, hp, sn, ab, td, ns, sv, wp, bl, von, ko] = e;
+    TEIL_IDS.forEach((id, k) => { m.teile[id].hp = hp[k]; });
+    m.schutz = schutz ? 1 : 0;
+    m.abschuesse = ab; m.tode = td;
+    m.neustart = ns < 0 ? Infinity : ns;
+    if (bl) m.blitz = 0.08;
+    m.koGrund = ko || null;
+    if (tot && !m.tot) {   // Gerade zerstört: Das Wrack fliegt!
+      m.tot = true; m.totZeit = 0; m.salve = null;
+      m.zerstoertVon = mechs[von] || null;
+      wrackStarten(m, m.zerstoertVon, false);
+    } else if (!tot && m.tot) { m.tot = false; m.wrack = null; }
+    if (m === spieler) {
+      if (sn !== m.spawnNr) {   // Neu gestartet: an den Startplatz springen
+        m.spawnNr = sn;
+        Object.assign(m, { x, y, z, vz: 0, zielWinkel: zw, laufWinkel: zw });
+        blick.links = zw; blick.hoch = 0;
+      }
+      if (wp) wp.forEach((p, k) => { if (m.waffen[k]) m.waffen[k].pause = p; });
+    } else {
+      m.netz = { x, y, z, zw, zh, lw };
+      m.laeuft = !!lf;
+    }
+    if (sv) {
+      const h = hagelVon(m);
+      m.salve = { w: h ? h.w : WAFFEN.hagel, ziel: { x: sv[0], y: sv[1] }, warten: sv[2], rest: sv[3], bemerkt: new Map() };
+    } else m.salve = null;
+  });
+  // Schüsse
+  const da = new Set();
+  for (const [id, art, x, y, h, vx, vy, vh, laser] of d.sc) {
+    da.add(id);
+    let s = mp.schuesse.get(id);
+    if (!s) {
+      s = { id, art: SCHUSS_ARTEN[art], laser: !!laser, x, y, h, vx, vy, vh, rest: 1e9 };
+      mp.schuesse.set(id, s);
+      schuesse.push(s);
+      const laut = Math.max(0.1, lautBei(s));
+      if (s.art === 'kugel') sound.mg(laut * 0.6); else if (s.art === 'strahl') { if (s.laser) sound.laser(laut); else sound.railgun(laut); }
+      else if (s.art === 'rakete') sound.rakete(laut); else sound.salve(laut);
+    }
+    Object.assign(s, { x, y, h, vx, vy, vh, alter: 0 });
+  }
+  for (const [id, s] of mp.schuesse) if (!da.has(id)) { s.weg = true; mp.schuesse.delete(id); }
+  // Spielstand
+  const sp = d.sp;
+  const vorher = Math.ceil(countdown);
+  punkte.blau = sp.p[0]; punkte.rot = sp.p[1];
+  restZeit = sp.rz; countdown = sp.cd; aktivesZiel = sp.az;
+  sp.zi.forEach((w, i) => { const z = ziele[i]; if (z) Object.assign(z, { fortschritt: w[0], besitzer: w[1] || null, erobert: !!w[2], umkaempft: !!w[3], wer: w[4] || null }); });
+  runde = sp.ru; rundePause = sp.rp; verlaengerung = !!sp.vl;
+  mp.hostIntro = !!sp.in;
+  if (!intro && countdown > 0 && Math.ceil(countdown) !== vorher) sound.piep();
+  if (!intro && vorher > 0 && countdown <= 0) sound.los();
+  if (!sp.in && intro && intro.t > 1) introBeenden();   // Der Gastgeber ist mit dem Intro fertig
+  // Ereignisse
+  for (const e of d.ev) mpEreignisAusfuehren(e);
+}
+function mpEreignisAusfuehren(e) {
+  const art = e[0];
+  if (art === 'b') explosionEffekt(e[1], e[2], e[3], e[4]);
+  else if (art === 'f') funken(e[1], e[2], e[3], e[4]);
+  else if (art === 'k') killfeedDazu(mechs[e[1]] || null, mechs[e[2]]);
+  else if (art === 't') teamMeldung(e[1], e[2], e[3]);
+  else if (art === 'w') hagelWarnung(e[1], e[2], e[3], e[4]);
+  else if (art === 'p' && mechs[e[1]] === spieler) persoenlich(e[2], e.slice(3));
+}
+// Gast: alle anderen Mechs weich zur Position vom Gastgeber gleiten lassen
+function updateGast(dt) {
+  for (const k of killfeed) k.t -= dt;
+  killfeed = killfeed.filter(k => k.t > 0);
+  mp.feuer = mp.rakete = false;
+  if (countdown <= 0 && !mp.hostIntro && !spieler.tot) updateSpieler(dt);   // Erst los, wenn auch der Gastgeber fertig ist
+  if (pause) mp.feuer = mp.rakete = false;
+  const k = Math.min(1, dt * 12);
+  for (const m of mechs) {
+    m.blitz -= dt;
+    if (m.tot) { m.totZeit += dt; if (m.wrack) updateWrack(m, dt); continue; }
+    if (m === spieler || !m.netz) continue;
+    const n = m.netz;
+    m.vx = (n.x - m.x) * 12; m.vy = (n.y - m.y) * 12;
+    m.x += (n.x - m.x) * k; m.y += (n.y - m.y) * k; m.z += (n.z - m.z) * k;
+    m.zielWinkel = drehe(m.zielWinkel, n.zw, dt * 12);
+    m.laufWinkel = drehe(m.laufWinkel, n.lw, dt * 12);
+    m.zielHoch += (n.zh - m.zielHoch) * k;
+    if (m.laeuft) m.phase += dt * 10;
+  }
+  for (const s of schuesse) {   // Schüsse fliegen weiter, bis der nächste Schnappschuss kommt
+    s.alter = (s.alter || 0) + dt;
+    if (s.alter > 0.4) { s.weg = true; mp.schuesse.delete(s.id); continue; }
+    s.x += s.vx * dt; s.y += s.vy * dt; s.h += (s.vh || 0) * dt;
+    if ((s.art === 'rakete' || s.art === 'salve') && Math.random() < 0.7) partikel.push({ x: s.x, y: s.y, h: s.h, vh: 10, vx: 0, vy: 0, t: 0.6, max: 0.6, farbe: s.art === 'salve' ? '#b9a7d6' : '#9a9a9a', rauch: true });
+  }
+  schuesse = schuesse.filter(s => !s.weg);
+}
+
+// ===== Die Lobby (auf dem Bildschirm) =====
+const MPK = {   // Knöpfe
+  erstellen: { x: W / 2 - 250, y: 210, w: 230, h: 76 },
+  beitreten: { x: W / 2 + 20, y: 210, w: 230, h: 76 },
+  name: { x: W / 2 - 160, y: 316, w: 320, h: 44 },
+  zurueck: { x: 30, y: 540, w: 170, h: 40 },
+  verlassen: { x: 30, y: 540, w: 200, h: 40 },
+  starten: { x: W - 260, y: 532, w: 230, h: 52 },
+  blau: { x: 600, y: 410, w: 140, h: 36 },
+  rot: { x: 750, y: 410, w: 140, h: 36 },
+  mechL: { x: 600, y: 462, w: 40, h: 40 },
+  mechR: { x: 850, y: 462, w: 40, h: 40 },
+};
+const mpZeile = i => 132 + i * 52;
+const mpPfeil = (i, r) => ({ x: r < 0 ? 170 : 420, y: mpZeile(i) - 18, w: 36, h: 36 });
+const mpMechKachel = i => ({ x: 30 + (i % 4) * 108, y: 296 + Math.floor(i / 4) * 60, w: 100, h: 52 });
+const MP_EINST_ZEILEN = [
+  { name: 'Karte', werte: () => KARTEN.map(k => k.id), feld: 'karte', zeige: v => { const k = KARTEN.find(x => x.id === v); return `${k.emoji} ${k.name}`; } },
+  { name: 'Modus', werte: () => MODI.map(x => x.id), feld: 'modus', zeige: v => { const x = modusInfoVon(v); return `${x.emoji} ${x.name}`; } },
+  { name: 'Bots/Team', werte: () => Array.from({ length: MP_MAX_BOTS + 1 }, (_, i) => i), feld: 'bots', zeige: v => v === 0 ? 'keine Bots' : `${v} Bot${v > 1 ? 's' : ''} pro Team` },
+];
+function zeichneMpLobby() {
+  sterneMalenHimmel();
+  if (!mp.aktiv) {   // Noch in keinem Raum
+    text('🌐 Online spielen', W / 2, 60, 40, '#ffd166');
+    text('Spiel mit deinen Freunden auf ihren eigenen Computern!', W / 2, 108, 17, '#c9c3ff', 'center', false);
+    text('Einer erstellt einen Raum und sagt den anderen den Code.', W / 2, 136, 15, '#8a8fb0', 'center', false);
+    knopfMalen(MPK.erstellen, '🏠 Raum erstellen', '#4ade80');
+    knopfMalen(MPK.beitreten, '🔑 Raum beitreten', '#93c5fd');
+    knopfMalen(MPK.name, `✏️ Dein Name: ${mpName}`);
+    text('Tipp: Nimm einen Spitznamen, nicht deinen echten Namen!', W / 2, 380, 13, '#8a8fb0', 'center', false);
+    if (mp.status) text(mp.status, W / 2, 440, 18, mp.status.startsWith('❌') ? '#ff6b6b' : '#ffd166', 'center', false);
+    knopfMalen(MPK.zurueck, '← Zurück');
+    return;
+  }
+  const host = mp.rolle === 'host';
+  text(`🌐 Raum-Code: ${mp.code}`, W / 2, 34, 32, '#ffd166');
+  text('Sag den Code deinen Freunden! Sie klicken auf „Raum beitreten“.', W / 2, 64, 14, '#c9c3ff', 'center', false);
+  // Links: Einstellungen
+  ctx.fillStyle = 'rgba(20,26,46,0.9)'; rr(20, 82, 452, 444, 14); ctx.fill();
+  text('⚙️ Einstellungen', 36, 104, 18, '#fff', 'left', false);
+  if (!host) text('(stellt der Gastgeber ein)', 456, 104, 12, '#8a8fb0', 'right', false);
+  MP_EINST_ZEILEN.forEach((z, i) => {
+    const y = mpZeile(i);
+    text(z.name, 36, y, 15, '#c9c3ff', 'left', false);
+    if (host) { knopfMalen(mpPfeil(i, -1), '◀'); knopfMalen(mpPfeil(i, 1), '▶'); }
+    text(z.zeige(mp.einst[z.feld]), 313, y, 15, '#fff', 'center', false);
+  });
+  text(host ? '🚫 Mechs sperren (anklicken):' : '🚫 Gesperrte Mechs:', 36, 280, 14, '#c9c3ff', 'left', false);
+  MECH_TYPEN.forEach((t, i) => {
+    const k = mpMechKachel(i), weg = mp.einst.gesperrt.includes(t.id), hover = host && imRechteck(maus, k);
+    ctx.fillStyle = weg ? 'rgba(60,20,20,0.9)' : hover ? '#3a4256' : 'rgba(40,46,62,0.95)'; rr(k.x, k.y, k.w, k.h, 8); ctx.fill();
+    ctx.strokeStyle = weg ? '#ef4444' : '#4a5266'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.globalAlpha = weg ? 0.35 : 1;
+    text(t.emoji, k.x + 16, k.y + 18, 16, '#fff', 'center', false);
+    text(t.name, k.x + k.w / 2 + 8, k.y + 38, 11, '#fff', 'center', false);
+    ctx.globalAlpha = 1;
+    if (weg) text('✖', k.x + k.w - 14, k.y + 15, 16, '#ef4444', 'center', false);
+  });
+  // Rechts: Spieler
+  ctx.fillStyle = 'rgba(20,26,46,0.9)'; rr(488, 82, 452, 444, 14); ctx.fill();
+  text(`👥 Spieler (${mp.liste.length}/${MP_MAX_SPIELER})`, 504, 104, 18, '#fff', 'left', false);
+  mp.liste.forEach((s, i) => {
+    const y = 132 + i * 32, t = typVon(s.mech) || MECH_TYPEN[0];
+    ctx.fillStyle = TEAMS[s.team].farbe; kreis(514, y, 7); ctx.fill();
+    text(`${s.name}${s.id === 'host' ? ' 👑' : ''}${s.id === mp.meineId ? ' (du)' : ''}`, 530, y, 15, s.id === mp.meineId ? '#ffd166' : '#fff', 'left', false);
+    text(`${t.emoji} ${t.name}`, 924, y, 13, '#c9c3ff', 'right', false);
+  });
+  const bots = mp.einst.bots;
+  if (bots) text(`+ ${bots} Bot${bots > 1 ? 's' : ''} in jedem Team 🤖`, 504, 132 + mp.liste.length * 32, 13, '#8a8fb0', 'left', false);
+  text('Dein Team:', 504, 428, 14, '#c9c3ff', 'left', false);
+  for (const team of ['blau', 'rot']) {
+    const k = MPK[team], an = mp.ich.team === team;
+    ctx.fillStyle = an ? TEAMS[team].farbe : 'rgba(40,46,62,0.95)'; rr(k.x, k.y, k.w, k.h, 8); ctx.fill();
+    ctx.strokeStyle = TEAMS[team].farbe; ctx.lineWidth = 2; ctx.stroke();
+    text(team === 'blau' ? '🔵 Blau' : '🔴 Rot', k.x + k.w / 2, k.y + k.h / 2, 15, '#fff', 'center', false);
+  }
+  text('Dein Mech:', 504, 482, 14, '#c9c3ff', 'left', false);
+  knopfMalen(MPK.mechL, '◀'); knopfMalen(MPK.mechR, '▶');
+  const mt = typVon(mp.ich.mech) || MECH_TYPEN[0];
+  text(`${mt.emoji} ${mt.name}`, 745, 474, 15, mt.akzent, 'center', false);
+  slotPunkte(umgebaut(mt), 745, 494, 5);
+  // Unten
+  knopfMalen(MPK.verlassen, '🚪 Raum verlassen', '#ff6b6b');
+  if (host) knopfMalen(MPK.starten, '▶ Spiel starten', '#4ade80');
+  else text('⏳ Warte, bis der Gastgeber startet ...', W - 150, 558, 15, '#c9c3ff', 'center', false);
+}
+function mpLobbyKlick() {
+  if (!mp.aktiv) {
+    if (imRechteck(maus, MPK.zurueck)) { if (!mp.verbinde) { mpBeenden(); mp.status = ''; } zustand = 'titel'; return; }
+    if (imRechteck(maus, MPK.erstellen)) { mpRaumErstellen(); return; }
+    if (imRechteck(maus, MPK.beitreten)) { const c = prompt('Raum-Code (4 Zeichen):'); if (c) mpBeitreten(c); return; }
+    if (imRechteck(maus, MPK.name)) {
+      const n = nameSauber(prompt('Dein Spitzname (bitte nicht dein echter Name):', mpName));
+      if (n) { mpName = n; try { localStorage.setItem('kaempfer-name', n); } catch (e) { /* egal */ } }
+    }
+    return;
+  }
+  const host = mp.rolle === 'host';
+  if (imRechteck(maus, MPK.verlassen)) { mpBeenden(); mp.status = ''; zustand = 'titel'; return; }
+  if (host && imRechteck(maus, MPK.starten)) { mpStarten(); return; }
+  if (host) {
+    MP_EINST_ZEILEN.forEach((z, i) => {
+      for (const r of [-1, 1]) if (imRechteck(maus, mpPfeil(i, r))) {
+        const liste = z.werte(), j = Math.max(0, liste.indexOf(mp.einst[z.feld]));
+        mp.einst[z.feld] = liste[(j + r + liste.length) % liste.length];
+        sound.piep(); mpLobbySenden();
+      }
+    });
+    MECH_TYPEN.forEach((t, i) => {
+      if (!imRechteck(maus, mpMechKachel(i))) return;
+      const g = mp.einst.gesperrt;
+      if (g.includes(t.id)) mp.einst.gesperrt = g.filter(x => x !== t.id);
+      else if (g.length < MECH_TYPEN.length - 1) mp.einst.gesperrt = [...g, t.id];   // Einer muss erlaubt bleiben
+      sound.piep(); mpLobbySenden();
+    });
+  }
+  for (const team of ['blau', 'rot']) if (imRechteck(maus, MPK[team])) { mp.ich.team = team; mpWahlSenden(); }
+  for (const r of [-1, 1]) if (imRechteck(maus, r < 0 ? MPK.mechL : MPK.mechR)) {
+    const liste = mpErlaubt(), j = Math.max(0, liste.findIndex(t => t.id === mp.ich.mech));
+    mp.ich.mech = liste[(j + r + liste.length) % liste.length].id;
+    sound.piep(); mpWahlSenden();
+  }
+}
+
 // ===== Mech-Auswahl =====
 let gewaehlterModus = 'punkt';
 const ZURUECK_KNOPF = { x: 30, y: 540, w: 150, h: 40 };
@@ -4751,7 +5270,7 @@ function zeichneEnde() {
       text(String(m.tode), x + 265, y, 16, '#fff', 'center', false);
     });
   });
-  if (zeit - ende.seit > 1) text(storyMission ? (ende.sieger === spieler.team ? 'Klicken: Weiter ▶  ·  Enter: Nochmal' : 'Klicken: Zur Sternenkarte  ·  Enter: Nochmal versuchen') : 'Klicken: Zurück zum Menü  ·  Enter: Nochmal', W / 2, 500, 20, '#c9c3ff', 'center', false);
+  if (zeit - ende.seit > 1) text(mp.aktiv ? (mp.rolle === 'host' ? 'Klicken: Zurück in die Lobby' : '⏳ Warte auf den Gastgeber ...') : storyMission ? (ende.sieger === spieler.team ? 'Klicken: Weiter ▶  ·  Enter: Nochmal' : 'Klicken: Zur Sternenkarte  ·  Enter: Nochmal versuchen') : 'Klicken: Zurück zum Menü  ·  Enter: Nochmal', W / 2, 500, 20, '#c9c3ff', 'center', false);
 }
 
 function zeichne() {
@@ -4759,6 +5278,7 @@ function zeichne() {
   if (zustand === 'titel') { zeichneTitel(); return; }
   if (zustand === 'auswahl') { zeichneAuswahl(); return; }
   if (zustand === 'story') { zeichneStory(); return; }
+  if (zustand === 'mpLobby') { zeichneMpLobby(); return; }
   if (zustand === 'dialog') { zeichneDialog(); return; }
   if (zustand === 'werkstatt') { zeichneWerkstatt(); return; }
   zeichne3D();
@@ -4790,9 +5310,10 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (k === 'm') tonAn = !tonAn;
   if (zustand === 'spiel' && k === 'escape' && !pause) { pause = true; if (document.pointerLockElement) document.exitPointerLock(); }
-  else if (zustand === 'spiel' && pause && k === 'enter') { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); }
+  else if (zustand === 'spiel' && pause && k === 'enter') { if (mp.aktiv) mpBeenden(); zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && intro && !pause && (k === ' ' || k === 'enter')) introBeenden();   // Intro überspringen
-  else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) { if (storyMission) starteMission(storyMission); else neuesSpiel(modus); }
+  else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) { if (mp.aktiv) { if (mp.rolle === 'host') mpZurLobby(); } else if (storyMission) starteMission(storyMission); else neuesSpiel(modus); }
+  else if (zustand === 'mpLobby' && k === 'escape' && !mp.aktiv) zustand = 'titel';
   else if (zustand === 'dialog' && (k === ' ' || k === 'enter')) dialogWeiter();
   else if (zustand === 'dialog' && k === 'escape') { const d = dialog.danach; dialog = null; d(); }   // Gespräch überspringen
   else if (zustand === 'story' && k === 'escape') zustand = 'titel';
@@ -4814,12 +5335,13 @@ canvas.addEventListener('pointerdown', e => {
   tonStart();
   if (e.pointerType === 'touch') touchModus = true;
   if (!mausGefangen) { const p = punkt(e); maus.x = p.x; maus.y = p.y; }
-  if (zustand === 'spiel' && pause && imRechteck(punkt(e), MENUE_KNOPF)) { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); return; }
+  if (zustand === 'spiel' && pause && imRechteck(punkt(e), MENUE_KNOPF)) { if (mp.aktiv) mpBeenden(); zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); return; }
   if (zustand === 'spiel' && intro && !pause) { introBeenden(); if (!mausGefangen && e.pointerType !== 'touch') mausFangen(); return; }   // Intro überspringen
   if (e.pointerType === 'touch' && zustand === 'spiel') { touchRunter(e); return; }
   if (zustand === 'titel') {
     for (const k of modusKarten()) if (imRechteck(maus, k)) { normalesSpiel(); gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
     if (imRechteck(maus, STORY_KNOPF)) { normalesSpiel(); zustand = 'story'; return; }
+    if (imRechteck(maus, ONLINE_KNOPF)) { normalesSpiel(); zustand = 'mpLobby'; return; }
     for (const b of kartenKnoepfe()) if (imRechteck(maus, b)) {
       karte = b.k;
       try { localStorage.setItem('kaempfer-karte', karte.id); } catch (e) { /* egal */ }
@@ -4837,7 +5359,8 @@ canvas.addEventListener('pointerdown', e => {
     return;
   }
   if (zustand === 'werkstatt') { werkstattKlick(); return; }
-  if (zustand === 'ende') { if (zeit - ende.seit > 1) { if (storyMission) storyNachMission(); else zustand = 'titel'; } return; }
+  if (zustand === 'ende') { if (zeit - ende.seit > 1) { if (mp.aktiv) { if (mp.rolle === 'host') mpZurLobby(); } else if (storyMission) storyNachMission(); else zustand = 'titel'; } return; }
+  if (zustand === 'mpLobby') { mpLobbyKlick(); return; }
   if (zustand === 'story') { storyKlick(); return; }
   if (zustand === 'dialog') { dialogWeiter(); return; }
   if (pause) { pause = false; mausFangen(); return; }
