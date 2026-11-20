@@ -822,6 +822,49 @@ const tasten = {};
 
 function zeigeNachricht(t, dauer = 2.5, farbe = '#ffd166') { nachricht = { text: t, t: dauer, farbe }; }
 
+// ===== Rückmeldungen für den Menschen, der einen Mech steuert =====
+// Im Multiplayer schickt der Gastgeber sie an den richtigen Mitspieler weiter.
+function fuerMensch(m, art, ...daten) {
+  if (!m) return;
+  if (m.istSpieler) persoenlich(art, daten);
+  else if (m.mensch && mp.rolle === 'host') mpEreignis(['p', mechs.indexOf(m), art, ...daten]);
+}
+function persoenlich(art, d) {   // Passiert bei dir, an deinem Mech
+  if (art === 'au') {   // Du wurdest getroffen
+    wackeln = Math.max(wackeln, 4);
+    sound.autsch();
+    const von = mechs[d[0]];
+    if (von) trefferRichtungen.push({ von: { x: von.x, y: von.y }, t: 1 });
+  } else if (art === 'hit') { trefferAnzeige = 0.12; sound.treffer(); }   // Du hast getroffen
+  else if (art === 'msg') zeigeNachricht(d[0], d[2] || 2, d[1]);
+  else if (art === 'abschuss') { sound.abschuss(); zeigeNachricht(d[0], 1.5, '#4ade80'); }
+  else if (art === 'ziel') { sound.anvisieren(); zeigeNachricht('🎯 Ziel erfasst!', 1.2, d[0]); }
+  else if (art === 'rueck') {   // Rückstoß und Mündungsfeuer, wenn du schießt
+    rueckstoss = Math.max(rueckstoss, d[0]);
+    if (d[1]) { muendungsZeit = d[3] || 0.05; letzterSchuss = { ort: d[1], farbe: d[2] }; }
+  }
+}
+// Meldungen, die für ein Team gut und für das andere schlecht sind
+function teamMeldung(art, team, extra = 0) {
+  if (mp.rolle === 'host') mpEreignis(['t', art, team, extra]);
+  const gut = team === spieler.team;
+  if (art === 'punkt') { sound.erobert(gut); zeigeNachricht(gut ? '🚩 Dein Team hat den Punkt erobert!' : '⚠️ Die Gegner haben den Punkt erobert!', 2.5, gut ? '#4ade80' : '#ff6b6b'); }
+  else if (art === 'A') { sound.erobert(gut); zeigeNachricht(gut ? `✅ Punkt A erobert! Weiter zu B! (+${ANGRIFF_BONUS} s)` : '⚠️ Punkt A ist verloren! Verteidigt B!', 3, gut ? '#4ade80' : '#ff6b6b'); }
+  else if (art === 'B') sound.erobert(gut);
+  else if (art === 'verl') zeigeNachricht('⏰ VERLÄNGERUNG!', 2, '#ff9f43');
+  else if (art === 'runde') {
+    if (!team) zeigeNachricht('🤝 Unentschieden! Keiner kriegt einen Punkt.', 3.5, '#fff');
+    else { zeigeNachricht(gut ? `🏆 Runde ${extra} gewonnen!` : `💀 Runde ${extra} verloren!`, 3.5, gut ? '#4ade80' : '#ff6b6b'); sound.erobert(gut); }
+  }
+}
+// Warnung vor einem Raketenhagel (alle, die drunter stehen und im anderen Team sind)
+function hagelWarnung(x, y, r, team) {
+  if (mp.rolle === 'host') mpEreignis(['w', Math.round(x), Math.round(y), r, team]);
+  if (spieler && !spieler.tot && team !== spieler.team && dist({ x, y }, spieler) < r + 150) {
+    sound.warnung(); zeigeNachricht('⚠️ Raketenhagel! Lauf weg!', 1.5, '#ff6b6b');
+  }
+}
+
 function neuerMech(team, nr, istSpieler, typ) {
   return {
     team, nr, istSpieler, typ, name: NAMEN[team][nr],
@@ -842,6 +885,7 @@ function spawnPunkt(m) {
   return { x, y: WELT_H / 2 + (m.nr - (n - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
 }
 function spawnen(m) {
+  m.spawnNr = (m.spawnNr || 0) + 1;   // Zählt mit, wie oft der Mech neu gestartet ist (für den Multiplayer)
   const p = spawnPunkt(m);
   m.x = p.x; m.y = p.y; m.z = standHoehe(p.x, p.y, 0); m.vz = 0;
   m.teile = neueTeile(m.typ); m.tot = false; m.schutz = SCHUTZ_ZEIT; m.koGrund = null;
@@ -1028,7 +1072,7 @@ function feuern(m, gruppe = 'haupt') {
     if (s.pause > 0 || !slotGeht(m, s)) continue;
     if ((s.art === 'rakete') !== (gruppe === 'rakete')) continue;
     if (s.w.salve && m.salve) continue;   // Es regnet schon Raketen
-    s.pause = s.w.pause * (m.istSpieler || s.w.salve ? 1 : BOT_FEUER_LANGSAMER);   // Bots laden etwas langsamer
+    s.pause = s.w.pause * (m.istSpieler || m.mensch || s.w.salve ? 1 : BOT_FEUER_LANGSAMER);   // Bots laden etwas langsamer
     if (s.w.salve) salveStarten(m, s.w);
     else if (s.art === 'rakete') rakete(m, s);
     else schiessen(m, s);
@@ -1058,12 +1102,8 @@ function schiessen(m, s) {
   const laut = m.istSpieler ? 1 : lautBei(m) * 0.6;
   if (w.laser) sound.laser(laut * (w.gross ? 1.5 : 1)); else if (w.strahl) sound.railgun(laut); else if (w.explodiert) sound.salve(laut * 1.5); else if (w.schrot) sound.boom(laut * 0.35); else sound.mg(laut);
   const dick = (w.strahl && w.gross) || w.id === 'railgun' || w.explodiert || w.schrot;
-  if (m.istSpieler) {
-    rueckstoss = Math.max(rueckstoss, dick ? 10 : w.laser ? 4 : 3);
-    muendungsZeit = dick ? 0.1 : 0.05;
-    letzterSchuss = { ort: s.ort, farbe: w.laser ? SLOT_ARTEN.laser.hell : w.strahl ? '#a7f3d0' : '#ffd166' };
-  }
-  else partikel.push({ x, y, h, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: w.laser ? SLOT_ARTEN.laser.hell : w.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
+  if (m.istSpieler || m.mensch) fuerMensch(m, 'rueck', dick ? 10 : w.laser ? 4 : 3, s.ort, w.laser ? SLOT_ARTEN.laser.hell : w.strahl ? '#a7f3d0' : '#ffd166', dick ? 0.1 : 0.05);
+  if (!m.istSpieler) partikel.push({ x, y, h, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: w.laser ? SLOT_ARTEN.laser.hell : w.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
 }
 
 // ☄️ Raketenhagel: Ziel anvisieren ... und dann regnet es Raketen!
@@ -1077,10 +1117,8 @@ function landePunkt(m) {
 }
 function salveStarten(m, w) {
   m.salve = { w, ziel: landePunkt(m), warten: w.zielZeit, rest: w.anzahl, timer: 0, laengste: 0, bemerkt: new Map() };
-  if (m.istSpieler) { sound.anvisieren(); zeigeNachricht('🎯 Ziel erfasst!', 1.2, m.typ.akzent); }
-  else if (spieler && !spieler.tot && m.team !== spieler.team && dist(m.salve.ziel, spieler) < w.streuRadius + 150) {
-    sound.warnung(); zeigeNachricht('⚠️ Raketenhagel! Lauf weg!', 1.5, '#ff6b6b');
-  }
+  fuerMensch(m, 'ziel', m.typ.akzent);
+  hagelWarnung(m.salve.ziel.x, m.salve.ziel.y, w.streuRadius, m.team);
 }
 function updateSalve(m, dt) {
   const sv = m.salve, w = sv.w;
@@ -1115,7 +1153,7 @@ function salvenRakete(m, ziel) {
   m.salve.laengste = Math.max(m.salve.laengste, dauer + 0.1);
   partikel.push({ x, y, h, vh: 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 0.8, max: 0.8, farbe: '#999999', rauch: true });
   sound.salve(m.istSpieler ? 1 : lautBei(m));
-  if (m.istSpieler) { rueckstoss = Math.max(rueckstoss, 4); }
+  fuerMensch(m, 'rueck', 4);
 }
 
 function rakete(m, s) {
@@ -1126,21 +1164,11 @@ function rakete(m, s) {
     schuesse.push({ art: 'rakete', x: p.x, y: p.y, h: m.z + 75 * m.typ.groesse, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(m.zielHoch) * RAKETE_TEMPO, rest: RAKETE_WEITE, schaden: r.schaden, radius: r.radius, team: m.team, von: m });
   }
   sound.rakete(m.istSpieler ? 1 : lautBei(m));
-  if (m.istSpieler) rueckstoss = Math.max(rueckstoss, 8);
+  fuerMensch(m, 'rueck', 8);
 }
 
 function explosion(x, y, team, von, radius = 85, schadenMax = 40, h = 30) {
-  const menge = Math.min(1, radius / 85);
-  for (let i = 0; i < 30 * menge; i++) {
-    const a = Math.random() * Math.PI * 2, v = 50 + Math.random() * 200;
-    partikel.push({ x, y, h, vh: 50 + Math.random() * 250, g: 400, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.6, max: 0.6, farbe: zufall(['#ffd166', '#ff9f43', '#ff5e3a', '#ffffff']) });
-  }
-  for (let i = 0; i < 10 * menge; i++) {
-    partikel.push({ x: x + (Math.random() - 0.5) * 40, y: y + (Math.random() - 0.5) * 40, h: h - 10 + Math.random() * 30, vh: 30 + Math.random() * 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 1.4, max: 1.4, farbe: zufall(['#555555', '#444444', '#666666']), rauch: true });
-  }
-  partikel.push({ x, y, h: h + 10, vh: 0, vx: 0, vy: 0, t: 0.35, max: 0.35, kugel: radius, farbe: '#ffb347' });
-  sound.boom(Math.max(0.15, lautBei({ x, y })) * menge);
-  if (spieler && dist({ x, y }, spieler) < 400) wackeln = Math.max(wackeln, 8);
+  explosionEffekt(x, y, h, radius);
   if (team === null) return;
   for (const m of mechs) {
     if (m.tot || m.team === team) continue;
@@ -1152,8 +1180,23 @@ function explosion(x, y, team, von, radius = 85, schadenMax = 40, h = 30) {
     }
   }
 }
+function explosionEffekt(x, y, h, radius) {   // Nur das Aussehen und der Knall (keinen Schaden)
+  if (mp.rolle === 'host') mpEreignis(['b', Math.round(x), Math.round(y), Math.round(h), Math.round(radius)]);
+  const menge = Math.min(1, radius / 85);
+  for (let i = 0; i < 30 * menge; i++) {
+    const a = Math.random() * Math.PI * 2, v = 50 + Math.random() * 200;
+    partikel.push({ x, y, h, vh: 50 + Math.random() * 250, g: 400, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.6, max: 0.6, farbe: zufall(['#ffd166', '#ff9f43', '#ff5e3a', '#ffffff']) });
+  }
+  for (let i = 0; i < 10 * menge; i++) {
+    partikel.push({ x: x + (Math.random() - 0.5) * 40, y: y + (Math.random() - 0.5) * 40, h: h - 10 + Math.random() * 30, vh: 30 + Math.random() * 40, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, t: 1.4, max: 1.4, farbe: zufall(['#555555', '#444444', '#666666']), rauch: true });
+  }
+  partikel.push({ x, y, h: h + 10, vh: 0, vx: 0, vy: 0, t: 0.35, max: 0.35, kugel: radius, farbe: '#ffb347' });
+  sound.boom(Math.max(0.15, lautBei({ x, y })) * menge);
+  if (spieler && dist({ x, y }, spieler) < 400) wackeln = Math.max(wackeln, 8);
+}
 
 function funken(x, y, h, farbe) {
+  if (mp.rolle === 'host') mpEreignis(['f', Math.round(x), Math.round(y), Math.round(h), farbe]);
   for (let i = 0; i < 5; i++) {
     const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 120;
     partikel.push({ x, y, h, vh: Math.random() * 150, g: 500, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.3, max: 0.3, farbe });
@@ -1167,12 +1210,8 @@ function schaden(m, menge, von, teil = 'mitte') {
   else teilSchaden(m, teil, menge, von);
   m.blitz = 0.08;
   m.seitHit = 0;
-  if (m.istSpieler) {
-    wackeln = Math.max(wackeln, 4);
-    sound.autsch();
-    if (von) trefferRichtungen.push({ von: { x: von.x, y: von.y }, t: 1 });
-  }
-  if (von && von.istSpieler) { trefferAnzeige = 0.12; sound.treffer(); }
+  fuerMensch(m, 'au', von ? mechs.indexOf(von) : -1);   // Autsch!
+  if (von) fuerMensch(von, 'hit');                       // Treffer-Kreuz für den Schützen
   // K.o.? Mitte kaputt, Visier kaputt oder beide Beine weg!
   if (!hat(m, 'mitte')) m.koGrund = 'Mitte zerstört';
   else if (!hat(m, 'visier')) m.koGrund = 'Visier zerschossen';
@@ -1198,17 +1237,27 @@ function teilAb(m, id, von) {
   sound.boom((m.istSpieler ? 1 : lautBei(m)) * 0.4);
   if (id.startsWith('bein')) m.boostZeit = 0;
   if (id === 'mitte' || id === 'visier') return;   // Das gibt gleich sowieso K.o.
-  if (m.istSpieler) zeigeNachricht(`⚠️ ${TEILE[id].name} ab!`, 2, '#ff6b6b');
-  else if (von && von.istSpieler) zeigeNachricht(`💥 ${TEILE[id].name} abgeschossen!`, 1.5, '#4ade80');
+  fuerMensch(m, 'msg', `⚠️ ${TEILE[id].name} ab!`, '#ff6b6b', 2);
+  if (von) fuerMensch(von, 'msg', `💥 ${TEILE[id].name} abgeschossen!`, '#4ade80', 1.5);
 }
 
 function zerstoert(m, von) {
   m.tot = true;
   m.totZeit = 0;
   m.salve = null;
-  m.neustart = modus === 'knockout' || m.boss ? Infinity : NEUSTART_ZEIT;   // Im Knockout (und der Boss) kommt man nicht wieder   // Knockout: Kein Neustart!
+  m.neustart = modus === 'knockout' || m.boss ? Infinity : NEUSTART_ZEIT;   // Im Knockout (und der Boss) kommt man nicht wieder
   m.tode++;
   m.zerstoertVon = von;
+  wrackStarten(m, von);
+  if (von) {
+    von.abschuesse++;
+    if (modus === 'team') punkte[von.team]++;
+    fuerMensch(von, 'abschuss', `💥 ${m.name} zerstört!`);
+  }
+  killfeedDazu(von, m);
+  if (mp.rolle === 'host') mpEreignis(['k', mechs.indexOf(von), mechs.indexOf(m)]);
+}
+function wrackStarten(m, von) {
   // 💥 Das Wrack wird durch die Luft geschleudert – weg von dem, der dich zerstört hat!
   const wegRichtung = von ? Math.atan2(m.y - von.y, m.x - von.x) : Math.random() * Math.PI * 2;
   const wucht = KO_WUCHT * (0.8 + Math.random() * 0.4);
@@ -1225,12 +1274,9 @@ function zerstoert(m, von) {
     const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 160;
     partikel.push({ x: m.x, y: m.y, h: m.z + 40, vh: 150 + Math.random() * 200, g: 600, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.2, max: 1.2, farbe: TEAMS[m.team].dunkel, rauch: true });
   }
-  if (von) {
-    von.abschuesse++;
-    if (modus === 'team') punkte[von.team]++;
-    if (von.istSpieler) { sound.abschuss(); zeigeNachricht(`💥 ${m.name} zerstört!`, 1.5, '#4ade80'); }
-  }
-  killfeed.unshift({ von, opfer: m, t: 5 });
+}
+function killfeedDazu(von, opfer) {
+  killfeed.unshift({ von, opfer, t: 5 });
   if (killfeed.length > 5) killfeed.pop();
 }
 
@@ -1484,9 +1530,7 @@ function updateModus(dt) {
       z.fortschritt += dt * (14 + 4 * (Math.max(b, r) - 1));
       if (z.fortschritt >= 100) {
         z.besitzer = allein; z.wer = null; z.fortschritt = 0;
-        const gut = allein === spieler.team;
-        sound.erobert(gut);
-        zeigeNachricht(gut ? '🚩 Dein Team hat den Punkt erobert!' : '⚠️ Die Gegner haben den Punkt erobert!', 2.5, gut ? '#4ade80' : '#ff6b6b');
+        teamMeldung('punkt', allein);
       }
     } else if (!z.umkaempft) {
       z.fortschritt = Math.max(0, z.fortschritt - dt * 10);
@@ -1516,15 +1560,14 @@ function updateModus(dt) {
     else if (a === 0) z.fortschritt = Math.max(0, z.fortschritt - dt * 2);   // Ohne Angreifer geht es langsam zurück
     if (z.fortschritt >= 100) {
       z.fortschritt = 100; z.erobert = true;
-      const gut = angreifer === spieler.team;
-      sound.erobert(gut);
       if (aktivesZiel === 0) {
         aktivesZiel = 1;
         restZeit += ANGRIFF_BONUS;
         verlaengerung = false;
-        zeigeNachricht(gut ? `✅ Punkt A erobert! Weiter zu B! (+${ANGRIFF_BONUS} s)` : '⚠️ Punkt A ist verloren! Verteidigt B!', 3, gut ? '#4ade80' : '#ff6b6b');
+        teamMeldung('A', angreifer);
         for (const m of mechs) m.wegZeit = 0;
       } else {
+        teamMeldung('B', angreifer);
         beende(angreifer, 'Die Angreifer haben beide Punkte erobert!');
         return;
       }
@@ -1533,7 +1576,7 @@ function updateModus(dt) {
     if (restZeit <= 0) {
       restZeit = 0;
       if (a > 0) {   // Verlängerung: Solange Angreifer auf dem Punkt stehen, geht es weiter!
-        if (!verlaengerung) zeigeNachricht('⏰ VERLÄNGERUNG!', 2, '#ff9f43');
+        if (!verlaengerung) teamMeldung('verl', null);
         verlaengerung = true;
       } else {
         beende(verteidiger, 'Die Verteidiger haben durchgehalten!');
@@ -1569,10 +1612,7 @@ function rundeVorbei(sieger) {
     beende(sieger, `${TEAMS[sieger].name} hat ${KNOCKOUT_SIEGE} Runden gewonnen!`);
     return;
   }
-  const gut = sieger === spieler.team;
-  if (!sieger) zeigeNachricht('🤝 Unentschieden! Keiner kriegt einen Punkt.', 3.5, '#fff');
-  else zeigeNachricht(gut ? `🏆 Runde ${runde} gewonnen!` : `💀 Runde ${runde} verloren!`, 3.5, gut ? '#4ade80' : '#ff6b6b');
-  if (sieger) sound.erobert(gut);
+  teamMeldung('runde', sieger, runde);
   rundePause = 4;
 }
 function neueRunde() {
@@ -1635,7 +1675,7 @@ function update(dt) {
     if (m.salve) updateSalve(m, dt);
   }
   updateSpieler(dt);
-  for (const m of mechs) if (!m.istSpieler && !m.tot) botDenken(m, dt);
+  for (const m of mechs) if (!m.istSpieler && !m.mensch && !m.tot) botDenken(m, dt);
   mechsSchieben();
   updateSchuesse(dt);
   updateTruemmer(dt);
@@ -4220,8 +4260,8 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
 function kartenKnoepfe() {
   return KARTEN.map((k, i) => ({ k, x: W / 2 - KARTEN.length * 92 + i * 184 + 4, y: 510, w: 176, h: 48 }));
 }
-const STORY_KNOPF = { x: 20, y: 18, w: 190, h: 46 };
-const ONLINE_KNOPF = { x: W - 210, y: 18, w: 190, h: 46 };
+const STORY_KNOPF = { x: 16, y: 16, w: 160, h: 44 };
+const ONLINE_KNOPF = { x: W - 176, y: 16, w: 160, h: 44 };
 function zeichneTitel() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#14161c'); g.addColorStop(1, '#2b3140');
