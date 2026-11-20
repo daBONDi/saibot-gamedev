@@ -54,12 +54,12 @@ const MECH_TYPEN = [
     rakete: { pause: 4, schaden: 40, radius: 85, anzahl: 1 },
     sterne: { leben: 3, tempo: 3, schaden: 3, weite: 3 } },
   { id: 'blitz', klasse: 'leicht', name: 'Blitzschlag', emoji: '⚡', akzent: '#facc15', text: 'Superschnell, hält aber wenig aus.',
-    leben: 80, tempo: 290, groesse: 0.85, boostPause: 1.2,
+    dick: 0.8, schulter: 0.8, leben: 80, tempo: 290, groesse: 0.85, boostPause: 1.2,
     mg: { pause: 0.075, schaden: 5, tempo: 950, weite: 550, streuung: 0.07 },
     rakete: { pause: 5, schaden: 30, radius: 70, anzahl: 1 },
     sterne: { leben: 1, tempo: 5, schaden: 2, weite: 2 } },
   { id: 'koloss', klasse: 'heavy', name: 'Stahlkoloss', emoji: '🛡️', akzent: '#9ca3af', text: 'Riesig und langsam, aber hält extrem viel aus!',
-    leben: 150, tempo: 120, groesse: 1.3, boostPause: 4,
+    dick: 1.4, schulter: 1.35, leben: 150, tempo: 120, groesse: 1.3, boostPause: 4,
     mg: { pause: 0.14, schaden: 7, tempo: 850, weite: 600, streuung: 0.06 },
     rakete: { pause: 5, schaden: 55, radius: 110, anzahl: 1 },
     sterne: { leben: 5, tempo: 1, schaden: 4, weite: 3 } },
@@ -90,6 +90,29 @@ const MECH_TYPEN = [
     leben: 260, tempo: 80, groesse: 1.5, boostPause: 5, keinBoost: true,
     mg: { kanone: true, pause: 0.7, schaden: 22, radius: 55, tempo: 750, weite: 850, streuung: 0.02 },
     rakete: { pause: 6, schaden: 70, radius: 130, anzahl: 1 },
+    sterne: { leben: 5, tempo: 1, schaden: 5, weite: 4 } },
+  // ===== Noch mehr Mechs! =====
+  // schrot: so viele Kugeln fliegen bei einem Schuss (Schrotflinte)
+  // laser: ein roter Laserstrahl (schneller als die Railgun, aber schwächer)
+  { id: 'hornisse', klasse: 'leicht', name: 'Hornisse', emoji: '🐝', akzent: '#fde047', text: 'Flitzt ran und ballert mit der Schrotflinte. Ganz nah ist sie gefährlich!',
+    leben: 85, tempo: 270, groesse: 0.85, boostPause: 1.5,
+    mg: { schrot: 6, pause: 0.65, schaden: 6, tempo: 800, weite: 380, streuung: 0.14 },
+    rakete: { pause: 5, schaden: 30, radius: 70, anzahl: 1 },
+    sterne: { leben: 1, tempo: 5, schaden: 4, weite: 1 } },
+  { id: 'rubin', klasse: 'medium', name: 'Rubin', emoji: '💎', akzent: '#f43f5e', text: 'Pulslaser! Trifft sofort und ganz genau, auch von weit weg.',
+    leben: 105, tempo: 175, groesse: 1.05, boostPause: 2.5,
+    mg: { strahl: true, laser: true, pause: 0.35, schaden: 12, tempo: 2600, weite: 900, streuung: 0.01 },
+    rakete: { pause: 4.5, schaden: 35, radius: 80, anzahl: 1 },
+    sterne: { leben: 3, tempo: 3, schaden: 3, weite: 4 } },
+  { id: 'nashorn', klasse: 'heavy', name: 'Nashorn', emoji: '🦏', akzent: '#a3e635', text: 'Stürmt nach vorn mit einer dicken Schrotflinte und 2 Raketen.',
+    leben: 140, tempo: 145, groesse: 1.25, boostPause: 3.5,
+    mg: { schrot: 8, pause: 0.8, schaden: 7, tempo: 800, weite: 420, streuung: 0.15 },
+    rakete: { pause: 5, schaden: 35, radius: 85, anzahl: 2 },
+    sterne: { leben: 4, tempo: 2, schaden: 5, weite: 1 } },
+  { id: 'vulkan', klasse: 'schwer', name: 'Vulkan', emoji: '🌋', akzent: '#ef4444', text: 'Der Laser-Riese! Pulslaser und 4 Raketen auf einmal.',
+    leben: 230, tempo: 90, groesse: 1.5, boostPause: 5, keinBoost: true,
+    mg: { strahl: true, laser: true, pause: 0.3, schaden: 13, tempo: 2600, weite: 950, streuung: 0.01 },
+    rakete: { pause: 6, schaden: 30, radius: 85, anzahl: 4 },
     sterne: { leben: 5, tempo: 1, schaden: 5, weite: 4 } },
 ];
 let meinMech = MECH_TYPEN[0];   // Den Mech, den du ausgesucht hast
@@ -609,6 +632,7 @@ const sound = {
   warnung() { for (let i = 0; i < 3; i++) { ton(440, i * 0.25, 0.12, 'square', 0.09); ton(330, i * 0.25 + 0.12, 0.12, 'square', 0.09); } },
   salve(laut = 1) { if (spiele('rakete', 0.4 * laut, zufallsTempo(1.2, 1.4))) return; ton(260, 0, 0.25, 'sawtooth', 0.05 * laut, 900); rauschen(0, 0.2, 0.08 * laut, 3000); },
   pfeifen(laut = 1) { ton(1400, 0, 0.9, 'sine', 0.05 * laut, 500); },
+  laser(laut = 1) { ton(1500, 0, 0.14, 'square', 0.05 * laut, 400); ton(2200, 0, 0.08, 'sine', 0.04 * laut, 900); },
   railgun(laut = 1) { if (spiele('railgun', 0.8 * laut, 0.8)) return; ton(1800, 0, 0.35, 'sawtooth', 0.08 * laut, 120); ton(3000, 0, 0.1, 'square', 0.04 * laut, 800); rauschen(0, 0.3, 0.15 * laut, 5000); },
   rakete(laut = 1) { if (spiele('rakete', 0.6 * laut, zufallsTempo(0.9, 1.1))) return; ton(180, 0, 0.45, 'sawtooth', 0.07 * laut, 700); rauschen(0, 0.4, 0.12 * laut, 2500); },
   boom(laut = 1) {
@@ -837,18 +861,21 @@ function feuern(m) {
     if (arme === 1) m.mgPause *= 2;                                 // Nur ein Gewehr = halb so schnell
   }
   const seite = mg.strahl ? 0.4 : m.lauf;
-  const w = m.zielWinkel + (Math.random() - 0.5) * 2 * mg.streuung;
-  const hoch = m.zielHoch + (Math.random() - 0.5) * 2 * mg.streuung * 0.5;   // nach oben oder unten zielen
   const cos = Math.cos(m.zielWinkel), sin = Math.sin(m.zielWinkel);
   const x = m.x + cos * 40 * gr - sin * 13 * gr * seite, y = m.y + sin * 40 * gr + cos * 13 * gr * seite;
   const h = m.z + (m.istSpieler ? AUGEN_HOEHE - 8 : 52) * gr;
-  const flach = Math.cos(hoch) * mg.tempo;
   const art = mg.strahl ? 'strahl' : mg.kanone ? 'granate' : 'kugel';   // Granaten explodieren beim Aufprall
-  schuesse.push({ art, x, y, h, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(hoch) * mg.tempo, rest: mg.weite, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m });
+  for (let i = 0; i < (mg.schrot || 1); i++) {   // Schrotflinte: viele Kugeln auf einmal!
+    const w = m.zielWinkel + (Math.random() - 0.5) * 2 * mg.streuung;
+    const hoch = m.zielHoch + (Math.random() - 0.5) * 2 * mg.streuung * 0.5;   // nach oben oder unten zielen
+    const flach = Math.cos(hoch) * mg.tempo;
+    schuesse.push({ art, laser: mg.laser, x, y, h, vx: Math.cos(w) * flach, vy: Math.sin(w) * flach, vh: Math.sin(hoch) * mg.tempo, rest: mg.weite, schaden: mg.schaden, radius: mg.radius, team: m.team, von: m });
+  }
   const laut = m.istSpieler ? 1 : lautBei(m) * 0.6;
-  if (mg.strahl) sound.railgun(laut); else if (mg.kanone) sound.salve(laut * 1.5); else sound.mg(laut);
-  if (m.istSpieler) { rueckstoss = mg.strahl || mg.kanone ? 10 : 3; muendung = mg.strahl || mg.kanone ? 0.1 : 0.05; }
-  else partikel.push({ x, y, h, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
+  if (mg.laser) sound.laser(laut); else if (mg.strahl) sound.railgun(laut); else if (mg.kanone) sound.salve(laut * 1.5); else if (mg.schrot) sound.boom(laut * 0.5); else sound.mg(laut);
+  const gross = (mg.strahl && !mg.laser) || mg.kanone || mg.schrot;
+  if (m.istSpieler) { rueckstoss = gross ? 10 : mg.laser ? 5 : 3; muendung = gross ? 0.1 : 0.05; }
+  else partikel.push({ x, y, h, vh: 0, vx: 0, vy: 0, t: 0.05, max: 0.05, farbe: mg.laser ? '#fb7185' : mg.strahl ? '#a7f3d0' : '#ffe08a' });   // Mündungsfeuer
 }
 
 // ☄️ Artillerie: Ziel anvisieren ... und dann regnet es Raketen!
@@ -1902,7 +1929,7 @@ function baueMech(m) {
   const akzentLeucht = leucht(typ.akzent), augeMat = leucht(T.hell);
   const dueseMat = new THREE.MeshBasicMaterial({ color: '#ff8c1a', transparent: true, opacity: 0.5 });
   const gruppe = new THREE.Group();
-  const dick = typ.klasse === 'schwer' ? 1.6 : typ.id === 'koloss' ? 1.4 : typ.id === 'blitz' ? 0.8 : 1;   // Wie dick die Beine sind
+  const dick = typ.dick || { leicht: 0.85, medium: 1, heavy: 1.25, schwer: 1.6 }[typ.klasse];   // Wie dick die Beine sind   // Wie dick die Beine sind
 
   // ===== Beine (drehen sich in Laufrichtung) =====
   const beine = new THREE.Group();
@@ -1967,7 +1994,7 @@ function baueMech(m) {
   const arme = { armL: new THREE.Group(), armR: new THREE.Group() };
   torso.add(arme.armL, arme.armR);
   const arm = s => arme[s < 0 ? 'armL' : 'armR'];
-  const schulterGross = typ.klasse === 'schwer' ? 1.5 : typ.id === 'koloss' ? 1.35 : typ.id === 'blitz' ? 0.8 : 1;
+  const schulterGross = typ.schulter || { leicht: 0.85, medium: 1, heavy: 1.2, schwer: 1.5 }[typ.klasse];
   for (const s of [-1, 1]) {
     arm(s).add(gelenk(6, 6, grauMat, 0, 16, s * 19));
     arm(s).add(schraeg(klotz(20 * schulterGross, 9 * schulterGross, 12 * schulterGross, koerperMat, 0, 22, s * 22), 0.12));
@@ -2243,6 +2270,7 @@ const kugelGeo = new THREE.BoxGeometry(2.5, 2.5, 26);
 const kugelMat = { blau: new THREE.MeshBasicMaterial({ color: '#bfdbfe' }), rot: new THREE.MeshBasicMaterial({ color: '#fecaca' }) };
 const strahlGeo = new THREE.BoxGeometry(3, 3, 90);
 const strahlMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
+const laserMat = new THREE.MeshBasicMaterial({ color: '#fb7185' });   // 💎 Pulslaser ist rot
 const salvenGeo = new THREE.CylinderGeometry(2.5, 3.5, 20, 8).rotateX(Math.PI / 2);   // zeigt nach vorne (z)
 const salvenMat = new THREE.MeshStandardMaterial({ color: '#e5e7eb', emissive: '#c084fc', emissiveIntensity: 0.6 });
 const raketenGeo = new THREE.BoxGeometry(6, 6, 18);
@@ -2254,7 +2282,7 @@ function zeigeSchuesse() {
   for (const s of schuesse) {
     if (!s.mesh) {
       if (s.art === 'kugel') s.mesh = new THREE.Mesh(kugelGeo, kugelMat[s.team]);
-      else if (s.art === 'strahl') s.mesh = new THREE.Mesh(strahlGeo, strahlMat);
+      else if (s.art === 'strahl') s.mesh = new THREE.Mesh(strahlGeo, s.laser ? laserMat : strahlMat);
       else if (s.art === 'salve') s.mesh = new THREE.Mesh(salvenGeo, salvenMat);
       else if (s.art === 'granate') s.mesh = new THREE.Mesh(granatenGeo, granatenMat);
       else s.mesh = new THREE.Mesh(raketenGeo, raketenMat);
@@ -2361,7 +2389,8 @@ function baueWaffen(typ) {
     halter.position.set(s * 15, -14, -22);
     const streifen = new THREE.Mesh(new THREE.BoxGeometry(7.4, 2, 10), akzent);
     streifen.position.set(s * 15, -10.4, -22);
-    const lauf = new THREE.Mesh(new THREE.CylinderGeometry(typ.mg.strahl ? 2.4 : 1.8, 2.2, laenge, 10), dunkelMat);
+    const dicke = typ.mg.kanone ? 4.5 : typ.mg.strahl ? 2.4 : 1.8;   // 🏰 Kanone = dickes Rohr
+    const lauf = new THREE.Mesh(new THREE.CylinderGeometry(dicke, dicke + 0.4, laenge, 10), dunkelMat);
     lauf.rotation.x = Math.PI / 2;
     lauf.position.set(s * 15, -13, -30 - laenge / 2);
     for (const o of [halter, streifen, lauf]) o.userData.teil = s < 0 ? 'armL' : 'armR';
@@ -2375,7 +2404,7 @@ function baueWaffen(typ) {
       waffen.add(ring);
     }
   }
-  blitzMat.color.set(typ.mg.strahl ? '#a7f3d0' : '#ffd166');
+  blitzMat.color.set(typ.mg.laser ? '#fb7185' : typ.mg.strahl ? '#a7f3d0' : '#ffd166');
   waffen.add(muendungsBlitz);
   waffen.userData.muendungZ = -34 - laenge;
   waffen.traverse(o => { o.renderOrder = 10; });
@@ -3144,7 +3173,7 @@ function zeichneTouch() {
     ctx.globalAlpha = 1;
   };
   const mg = m.typ.mg;
-  knopf('feuer', mg.salve ? '☄️' : mg.strahl ? '🎯' : '🔫', mg.salve || mg.strahl ? Math.max(0, 1 - m.mgPause / mg.pause) : 1, m.typ.akzent);
+  knopf('feuer', mg.salve ? '☄️' : mg.strahl ? '🎯' : mg.kanone ? '💣' : '🔫', mg.salve || mg.strahl || mg.kanone ? Math.max(0, 1 - m.mgPause / mg.pause) : 1, m.typ.akzent);
   knopf('rakete', '🚀', Math.max(0, 1 - m.raketePause / m.typ.rakete.pause), '#ffd166');
   if (BOOST_AN) knopf('boost', '💨', Math.max(0, 1 - m.boostPause / m.typ.boostPause), '#6fe3ff');
   knopf('pause', '⏸️', 1, '#fff');
