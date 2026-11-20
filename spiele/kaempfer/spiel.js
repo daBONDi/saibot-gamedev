@@ -2005,6 +2005,64 @@ function gelenk(r, l, mat, x, y, z) {   // Ein rundes Gelenk, das zur Seite (z) 
 }
 function schraeg(k, winkel) { k.rotation.z = winkel; return k; }   // Ein Teil nach vorne/hinten kippen
 
+// ===== Die 3D-Modelle der Waffen (zeigen nach vorne = +x) =====
+const slotLichtMat = Object.fromEntries(Object.entries(SLOT_ARTEN).map(([id, a]) => [id, new THREE.MeshBasicMaterial({ color: a.farbe })]));
+const laserLinseMat = new THREE.MeshBasicMaterial({ color: SLOT_ARTEN.laser.hell });
+const railKernMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
+function waffenModell(w, art, gehaeuseMat, streifenMat, raketenLicht, g = 1) {
+  const m = new THREE.Group();
+  if (art === 'rakete') {
+    // 🟢 Raketenwerfer: ein Kasten mit Löchern vorne (so viele wie Raketen)
+    const gross = w.salve || w.anzahl >= 4, b = gross ? 16 : w.anzahl > 1 ? 14 : 12;
+    const kasten = new THREE.Group();
+    if (w.salve) kasten.rotation.z = 0.45;   // Raketenhagel zeigt schräg nach oben
+    kasten.add(klotz(22, b, 14, gehaeuseMat, 0, 0, 0));
+    kasten.add(klotz(22.5, 2, 14.5, streifenMat, 0, b / 2, 0));
+    kasten.add(klotz(6, 2.5, 3, slotLichtMat.rakete, -6, b / 2 + 1, 0));
+    const reihen = w.salve ? [[-4, -4], [-4, 0], [-4, 4], [4, -4], [4, 0], [4, 4]]
+      : w.anzahl >= 4 ? [[-3.5, -3.5], [-3.5, 3.5], [3.5, -3.5], [3.5, 3.5]]
+      : w.anzahl === 2 ? [[0, -3.5], [0, 3.5]] : [[0, 0]];
+    for (const [dy, dz] of reihen) {
+      const l = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 2, 8), raketenLicht);
+      l.rotation.z = Math.PI / 2; l.position.set(11.5, dy, dz);
+      kasten.add(l);
+    }
+    m.add(kasten);
+  } else {
+    // Gehäuse mit Licht in der Slot-Farbe
+    const dick = w.explodiert ? 1.4 : 1;
+    m.add(klotz(16 * g, 11 * dick * g, 11 * dick * g, gehaeuseMat, 6 * g, 0, 0));
+    m.add(klotz(16 * g, 2, 11.5 * dick * g, streifenMat, 6 * g, 5.5 * dick * g, 0));
+    m.add(klotz(4, 2.5, 4, slotLichtMat[art], 2 * g, 6.5 * dick * g, 0));
+    if (w.laser) {         // 🔵 Laser: glattes Rohr mit Kühlrippen und blauer Linse
+      const l = (w.gross ? 34 : w.id === 'laserK' ? 14 : 22) * g, r = (w.gross ? 2.6 : 2) * g;
+      m.add(rohr(r, l, dunkelMat, 14 * g + l / 2, 0, 0));
+      for (let x = 16 * g; x < 14 * g + l - 4; x += 5 * g) m.add(rohr(r + 1.2 * g, 1.2, stahlMat, x, 0, 0));
+      m.add(rohr(r + 0.4, 2, laserLinseMat, 14 * g + l + 1, 0, 0));
+    } else if (w.id === 'railgun') {   // Railgun: zwei Schienen mit leuchtendem Kern
+      for (const y of [-4, 4]) m.add(klotz(46 * g, 2.5, 5, dunkelMat, 34 * g, y * g, 0));
+      m.add(klotz(44 * g, 1.6, 1.6, railKernMat, 34 * g, 0, 0));
+      for (const x of [22, 36, 50]) m.add(klotz(2.5, 11 * g, 6, streifenMat, x * g, 0, 0));
+    } else if (w.explodiert) {         // Kanone: dickes Rohr mit Mündung
+      m.add(rohr(5 * g, 26 * g, dunkelMat, 27 * g, 0, 0));
+      m.add(rohr(6.5 * g, 5 * g, streifenMat, 41 * g, 0, 0));
+    } else if (w.schrot) {             // Schrotflinte: zwei kurze dicke Läufe nebeneinander
+      for (const z of [-2.8, 2.8]) m.add(rohr(2.6 * g, 14 * g, dunkelMat, 21 * g, 0, z * g));
+      m.add(klotz(3, 9 * g, 12 * g, stahlMat, 20 * g, 0, 0));
+    } else {                           // MG (3 Läufe) oder Minigun (6 Läufe und ein Munitions-Kasten)
+      const n = w.id === 'minigun' ? 6 : 3, rad = w.id === 'minigun' ? 3.4 : 2.6;
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2;
+        m.add(rohr(1.3 * g, 22 * g, dunkelMat, 25 * g, Math.sin(a) * rad * g, Math.cos(a) * rad * g));
+      }
+      m.add(rohr((rad + 2) * g, 3, grauMat, 34 * g, 0, 0));
+      if (w.id === 'minigun') m.add(klotz(8 * g, 8 * g, 6 * g, stahlMat, 4 * g, -8 * g, 0));
+    }
+  }
+  m.traverse(o => { o.castShadow = true; });
+  return m;
+}
+
 // So ist ein Mech aufgebaut (vorne ist +x):
 //   Beine: Hüfte -> Oberschenkel -> Knie -> Unterschenkel -> Fuß. Jedes Gelenk kann sich drehen, damit er richtig läuft!
 //   Oberkörper: Rumpf mit Cockpit, Schultern, Waffen und Düsen hinten.
@@ -2087,71 +2145,21 @@ function baueMech(m) {
     arm(s).add(schraeg(klotz(20 * schulterGross, 9 * schulterGross, 12 * schulterGross, koerperMat, 0, 22, s * 22), 0.12));
     arm(s).add(schraeg(klotz(20 * schulterGross, 2, 12.5 * schulterGross, akzentMat, 0, 22 + 4.5 * schulterGross, s * 22), 0.12));
   }
-  if (typ.mg.salve) {
-    // ☄️ Donnerhagel: an jedem Arm ein Raketenwerfer, schräg nach oben
-    for (const s of [-1, 1]) {
-      arm(s).add(klotz(12, 10, 8, grauMat, 4, 8, s * 22));          // Oberarm
-      const werfer = new THREE.Group();
-      werfer.position.set(12, 12, s * 25);
-      werfer.rotation.z = 0.5;
-      werfer.add(klotz(24, 16, 14, teamDunkel, 0, 0, 0));
-      werfer.add(klotz(24.5, 2.5, 14.5, akzentMat, 0, 8, 0));
-      for (const y of [-4, 4]) for (const z of [-4, 0, 4]) {
-        const loch = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 2, 8), akzentLeucht);
-        loch.rotation.z = Math.PI / 2;
-        loch.position.set(12.5, y, z);
-        werfer.add(loch);
-      }
-      werfer.traverse(o => { o.castShadow = true; });
-      arm(s).add(werfer);
-    }
-  } else if (typ.mg.kanone) {
-    // 🏰 Bollwerk: an jedem Arm eine dicke Kanone
-    for (const s of [-1, 1]) {
-      const a = arm(s);
-      a.add(klotz(12, 12, 10, grauMat, 4, 8, s * 24));           // Oberarm
-      a.add(klotz(20, 16, 16, teamDunkel, 16, 6, s * 24));       // Kanonen-Gehäuse
-      a.add(klotz(20.5, 2.5, 16.5, akzentMat, 16, 14, s * 24));
-      a.add(rohr(5, 30, dunkelMat, 38, 6, s * 24));              // Dickes Rohr
-      a.add(rohr(6.5, 5, akzentMat, 52, 6, s * 24));             // Mündung
-    }
-  } else if (typ.mg.strahl) {
-    // 🎯 Adlerauge: eine lange Railgun mit zwei Schienen und leuchtendem Kern (rechter Arm)
-    const z = 22, r = arm(1);
-    r.add(klotz(22, 12, 10, grauMat, 10, 8, z));
-    for (const y of [3, 13]) r.add(klotz(60, 3, 6, dunkelMat, 48, y, z));     // die zwei Schienen
-    r.add(klotz(58, 2, 2, akzentLeucht, 48, 8, z));                           // leuchtender Kern
-    for (const x of [30, 46, 62]) r.add(klotz(3, 14, 8, akzentMat, x, 8, z)); // Klammern
-    r.add(rohr(3, 12, stahlMat, 12, 19, z));                                  // Zielfernrohr
-    r.add(klotz(1, 4, 4, akzentLeucht, 18.5, 19, z));
-    arm(-1).add(klotz(12, 8, 8, grauMat, 8, 8, -22));                          // Kleiner Arm links
-  } else {
-    // Zwei Maschinengewehre mit je drei Läufen (wie eine Gatling)
-    for (const s of [-1, 1]) {
-      const a = arm(s);
-      a.add(klotz(10, 10, 8, grauMat, 4, 8, s * 22));            // Oberarm
-      a.add(klotz(16, 11, 11, teamDunkel, 14, 6, s * 22));       // Waffengehäuse
-      a.add(klotz(16, 2, 11.5, akzentMat, 14, 11, s * 22));
-      for (let i = 0; i < 3; i++) {
-        const w = i / 3 * Math.PI * 2;
-        a.add(rohr(1.3, 22, dunkelMat, 32, 6 + Math.sin(w) * 2.6, s * 22 + Math.cos(w) * 2.6));
-      }
-      a.add(rohr(4, 3, grauMat, 40, 6, s * 22));                  // Mündung
-    }
-  }
-  // Raketenwerfer oben auf dem Rücken: Der Feuersturm hat zwei große, alle anderen einen
-  const raketenLicht = new THREE.MeshBasicMaterial({ color: '#ffd166' });
-  const gross = typ.rakete.anzahl > 1;
-  for (const s of gross ? [-1, 1] : [-1]) {
-    const y = gross ? 36 : 34, b = gross ? 16 : 12, z = gross ? s * 9 : -8;
-    torso.add(klotz(22, b, 14, teamDunkel, -4, y, z));
-    torso.add(klotz(22.5, 2, 14.5, akzentMat, -4, y + b / 2, z));
-    const lichter = gross ? [[-3.5, -3.5], [-3.5, 3.5], [3.5, -3.5], [3.5, 3.5]] : [[0, -3], [0, 3]];
-    for (const [dy, dz] of lichter) {
-      const l = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 2, 8), raketenLicht);
-      l.rotation.z = Math.PI / 2; l.position.set(7.5, y + dy, z + dz);
-      torso.add(l);
-    }
+  // ===== Waffen in den Slots =====
+  // Jede Waffe bekommt ihr eigenes Modell. Ein kleines Licht zeigt die Slot-Farbe (🔵 Laser, 🟣 Kanone, 🟢 Raketen).
+  const raketenLicht = new THREE.MeshBasicMaterial({ color: SLOT_ARTEN.rakete.hell });
+  for (const slot of typ.slots) {
+    const w = WAFFEN[slot.waffe], seite = ORTE[slot.ort].seite < 0 ? -1 : 1;
+    let eltern = torso, pos;
+    if (slot.ort === 'armL' || slot.ort === 'armR') {
+      eltern = arm(seite);
+      eltern.add(klotz(10, 10, 8, grauMat, 4, 8, seite * 22));   // Oberarm
+      pos = [8, 7, seite * 22];
+    } else if (slot.ort.startsWith('torso')) pos = [15, 10, seite * 13];
+    else pos = [-4, 35, seite * 9];   // Schulter: oben auf dem Rücken
+    const modell = waffenModell(w, slot.art, teamDunkel, akzentMat, raketenLicht, slot.ort.startsWith('torso') ? 0.7 : 1);
+    modell.position.set(...pos);
+    eltern.add(modell);
   }
   // Besonderheiten der Mechs
   if (typ.id === 'koloss') {   // 🛡️ Dicke Panzerplatten an den Seiten und ein Rammschild vorne
@@ -2177,7 +2185,7 @@ function baueMech(m) {
     for (const s of [-1, 1]) torso.add(klotz(1, 6, 8, leucht('#ff6a00'), 12.6, 0, s * 7));
   }
   // Antenne mit leuchtender Spitze
-  const antZ = gross ? 0 : 10;
+  const antZ = typ.slots.some(sl => sl.ort === 'schulterR') ? 0 : 10;
   const antenne = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 22, 4), grauMat);
   antenne.position.set(-14, 38, antZ);
   torso.add(antenne);
@@ -2357,12 +2365,12 @@ const kugelGeo = new THREE.BoxGeometry(2.5, 2.5, 26);
 const kugelMat = { blau: new THREE.MeshBasicMaterial({ color: '#bfdbfe' }), rot: new THREE.MeshBasicMaterial({ color: '#fecaca' }) };
 const strahlGeo = new THREE.BoxGeometry(3, 3, 90);
 const strahlMat = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
-const laserMat = new THREE.MeshBasicMaterial({ color: '#fb7185' });   // 💎 Pulslaser ist rot
+const laserMat = new THREE.MeshBasicMaterial({ color: SLOT_ARTEN.laser.hell });   // 🔵 Laser sind blau
 const salvenGeo = new THREE.CylinderGeometry(2.5, 3.5, 20, 8).rotateX(Math.PI / 2);   // zeigt nach vorne (z)
 const salvenMat = new THREE.MeshStandardMaterial({ color: '#e5e7eb', emissive: '#c084fc', emissiveIntensity: 0.6 });
 const raketenGeo = new THREE.BoxGeometry(6, 6, 18);
 const granatenGeo = new THREE.SphereGeometry(5, 10, 8);   // 🏰 Kanonen-Kugel vom Bollwerk
-const granatenMat = new THREE.MeshStandardMaterial({ color: '#333333', emissive: '#f472b6', emissiveIntensity: 0.8 });
+const granatenMat = new THREE.MeshStandardMaterial({ color: '#333333', emissive: SLOT_ARTEN.kanone.farbe, emissiveIntensity: 0.8 });   // 🟣 lila Kanonenkugel
 const raketenMat = new THREE.MeshStandardMaterial({ color: '#dddddd', emissive: '#ff9f43', emissiveIntensity: 0.4 });
 let schussMeshes = [];
 function zeigeSchuesse() {
@@ -2447,53 +2455,20 @@ muendungsBlitz.scale.set(14, 14, 1);
 function baueWaffen(typ) {
   while (waffen.children.length) waffen.remove(waffen.children[0]);
   const mat = metall(TEAMS.blau.farbe), akzent = metall(typ.akzent);
-  if (typ.mg.salve) {   // ☄️ Zwei Raketenwerfer, links und rechts, schräg nach oben
-    for (const s of [-1, 1]) {
-      const werfer = new THREE.Group();
-      werfer.position.set(s * 18, -14, -34);
-      werfer.rotation.x = 0.35;
-      werfer.add(new THREE.Mesh(new THREE.BoxGeometry(14, 12, 26), mat));
-      for (const x of [-3.5, 3.5]) for (const y of [-3, 3]) {
-        const loch = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 1.5, 8), akzent);
-        loch.rotation.x = Math.PI / 2;
-        loch.position.set(x, y, -13.2);
-        werfer.add(loch);
-      }
-      werfer.userData.teil = s < 0 ? 'armL' : 'armR';
-      waffen.add(werfer);
-    }
-    blitzMat.color.set('#ffb347');
-    waffen.add(muendungsBlitz);
-    waffen.userData.muendungZ = -50;
-    waffen.userData.muendungY = -6;
-    waffen.traverse(o => { o.renderOrder = 10; });
-    return;
+  const licht = new THREE.MeshBasicMaterial({ color: SLOT_ARTEN.rakete.hell });
+  waffen.userData.spitze = {};
+  // Du siehst die Waffen an deinen Armen links und rechts unten im Bild
+  for (const slot of typ.slots) {
+    if (slot.ort !== 'armL' && slot.ort !== 'armR') continue;
+    const s = slot.ort === 'armL' ? -1 : 1;
+    const modell = waffenModell(WAFFEN[slot.waffe], slot.art, mat, akzent, licht, 0.9);
+    modell.rotation.y = Math.PI / 2;   // Modelle zeigen nach +x, die Kamera schaut nach -z
+    modell.position.set(s * 16, -15, -22);
+    modell.traverse(o => { o.userData.teil = slot.ort; });
+    waffen.add(modell);
+    waffen.userData.spitze[slot.ort] = -22 - (slot.art === 'rakete' ? 14 : 44);
   }
-  waffen.userData.muendungY = -13;
-  const laenge = typ.mg.strahl ? 46 : 24;
-  for (const s of typ.mg.strahl ? [1] : [-1, 1]) {   // Railgun: nur ein langes Rohr rechts
-    const halter = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 16), mat);
-    halter.position.set(s * 15, -14, -22);
-    const streifen = new THREE.Mesh(new THREE.BoxGeometry(7.4, 2, 10), akzent);
-    streifen.position.set(s * 15, -10.4, -22);
-    const dicke = typ.mg.kanone ? 4.5 : typ.mg.strahl ? 2.4 : 1.8;   // 🏰 Kanone = dickes Rohr
-    const lauf = new THREE.Mesh(new THREE.CylinderGeometry(dicke, dicke + 0.4, laenge, 10), dunkelMat);
-    lauf.rotation.x = Math.PI / 2;
-    lauf.position.set(s * 15, -13, -30 - laenge / 2);
-    for (const o of [halter, streifen, lauf]) o.userData.teil = s < 0 ? 'armL' : 'armR';
-    waffen.add(halter, streifen, lauf);
-  }
-  if (typ.mg.strahl) {
-    for (const z of [-40, -52, -64]) {   // leuchtende Ringe an der Railgun
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 1.5, 12), akzent);
-      ring.rotation.x = Math.PI / 2; ring.position.set(15, -13, z);
-      ring.userData.teil = 'armR';
-      waffen.add(ring);
-    }
-  }
-  blitzMat.color.set(typ.mg.laser ? '#fb7185' : typ.mg.strahl ? '#a7f3d0' : '#ffd166');
   waffen.add(muendungsBlitz);
-  waffen.userData.muendungZ = -34 - laenge;
   waffen.traverse(o => { o.renderOrder = 10; });
 }
 baueWaffen(meinMech);
@@ -2554,9 +2529,12 @@ function zeichne3D() {
     kamera.rotation.set(blick.hoch, -blick.links - Math.PI / 2, 0);
     waffen.visible = true;
     for (const o of waffen.children) if (o.userData.teil) o.visible = hat(m, o.userData.teil);   // Arm ab = Waffe weg
+    muendungsBlitz.visible = true;
     waffen.position.set(0, m.laeuft ? Math.sin(m.phase) * 0.8 : 0, rueckstoss);
     muendungsBlitz.visible = muendungsZeit > 0;
-    muendungsBlitz.position.set(m.typ.mg.strahl ? 15 : (m.typ.mg.salve ? 17 : m.lauf * 15), waffen.userData.muendungY, waffen.userData.muendungZ);
+    const ort = letzterSchuss.ort, amArm = ort === 'armL' || ort === 'armR';   // Mündungsfeuer an der Waffe, die zuletzt geschossen hat
+    muendungsBlitz.position.set(ORTE[ort].seite * (amArm ? 16 : 10), amArm ? -15 : -20, (amArm && waffen.userData.spitze[ort]) || -40);
+    blitzMat.color.set(letzterSchuss.farbe);
   } else if (modus === 'knockout' && m.totZeit > 3 && mechs.some(o => o.team === m.team && !o.tot)) {
     // Knockout: Du bist raus – die Kamera fliegt hinter einem Teamkollegen her
     if (!zuschauen || zuschauen.tot) zuschauen = mechs.find(o => o.team === m.team && !o.tot);
