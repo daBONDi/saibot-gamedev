@@ -25,6 +25,7 @@ const SCHUTZ_ZEIT = 2;                // Schutzschild nach dem Neustart
 const HEILEN_NACH = 4;                // Nach so vielen Sekunden ohne Treffer ...
 const HEILEN_TEMPO = 12;              // ... heilt man so viel pro Sekunde
 const BOT_UNGENAU = 0.13;             // Wie schlecht die Bots zielen (größer = schlechter)
+let botUngenau = BOT_UNGENAU;         // Im Storymodus kann das je nach Mission anders sein
 const BOT_FEUER_LANGSAMER = 1.5;      // Bots schießen etwas langsamer als du
 const MAUS_EMPFINDLICH = 0.0025;      // Wie schnell du dich mit der Maus drehst
 const AUGEN_HOEHE = 64;               // Wie hoch das Cockpit ist
@@ -154,6 +155,7 @@ const MECH_TYPEN = [
 ];
 // Aus den Slot-Listen werden Objekte: { ort, art, waffe }
 for (const t of MECH_TYPEN) t.slots = t.slots.map(([ort, art, waffe]) => ({ ort, art, waffe }));
+const BOT_MECHS = MECH_TYPEN;   // Aus diesen Mechs suchen sich die Bots einen aus
 
 // ===== 🔧 Werkstatt: Deine Umbauten =====
 // Für jeden Mech wird gespeichert, welche Waffe in welchem Slot steckt
@@ -238,7 +240,7 @@ function teilPos(m, teil) {
   return { x: m.x - Math.sin(w) * seite * gr, y: m.y + Math.cos(w) * seite * gr, h: m.z + h * gr };
 }
 
-const NAMEN = { blau: ['DU', 'Blitz', 'Titan', 'Funke'], rot: ['Kralle', 'Donner', 'Rost', 'Viper'] };
+const NAMEN = { blau: ['DU', 'Blitz', 'Titan', 'Funke', 'Komet', 'Nova', 'Falke', 'Pixel'], rot: ['Kralle', 'Donner', 'Rost', 'Viper', 'Schrott', 'Zange', 'Bolzen', 'Ruß'] };
 const anderes = team => team === 'blau' ? 'rot' : 'blau';
 
 // ===== Spielmodi =====
@@ -251,7 +253,7 @@ const MODI = [
 ];
 const KNOCKOUT_SIEGE = 2;     // Knockout: So viele Runden muss man gewinnen
 const KNOCKOUT_ZEIT = 150;    // Knockout: So lange dauert eine Runde (Sekunden)
-const GROSSE_KARTE = { b: 3600, h: 2000 };   // Knockout: So groß ist die Arena
+const GROSSE_KARTE = { b: 3600, h: 2000 };   // Knockout (und immer große Karten): So groß ist die Arena
 const PUNKT_ZIEL = 100;       // Punkt halten: So viele Punkte zum Sieg
 const ABSCHUSS_ZIEL = 20;     // Team-Kampf: So viele Abschüsse zum Sieg
 const ANGRIFF_ZEIT = 150;     // Angriff: Startzeit in Sekunden
@@ -265,6 +267,9 @@ const EROBERN_TEMPO = 4;      // Angriff: So schnell wird ein Punkt erobert (Pro
 //   Fabrik: wand, kiste, plattform (zum Draufstehen), rampe, steg (Brücke), gelaender, saeule
 //   Planet: fels, kristall, pilz, stein, huegel (zum Draufstehen), hang (Rampe)
 //   Eis: eisblock, schneehaufen, eiszacke, wrack (abgestürztes Raumschiff), schneehuegel (zum Draufstehen), schneehang (Rampe)
+//   Dschungel: baum, busch, dschungelfels, ruine, tempel (zum Draufstehen), tempeltreppe (Rampe)
+//   Strand: palme, strandfels, boot, huette
+// "immerGross: true" heißt: Die Karte ist in jedem Modus groß (3600 x 2000). Dann gibt es nur "links" und "mitte".
 // "oben" ist die Höhe der Oberkante, "unten" die Unterkante (bei Brücken kann man drunter durchlaufen!)
 // "rampe" sagt, wo die hohe Seite einer Rampe ist: 'n' (oben), 's' (unten), 'w' (links), 'o' (rechts)
 // Wichtig: Die Mitte (1200, 700) und die Punkte A und B (780 / 1620, 700) müssen frei bleiben!
@@ -383,9 +388,51 @@ const KARTEN = [
       { x: 1780, y: 980, w: 40, h: 40, art: 'schneehaufen' },
     ],
   },
+  {
+    id: 'dschungel', name: 'Dschungel & Strand', emoji: '🌴', immerGross: true,
+    // Oben dichter Dschungel, unten ab y = 1350 ein offener Sandstrand. Mitte: 1800 / 1000, Punkt B: 1170 / 1000
+    links: [
+      // Riesige Urwaldbäume
+      { x: 330, y: 140, w: 60, h: 60, art: 'baum' }, { x: 520, y: 420, w: 60, h: 60, art: 'baum' },
+      { x: 250, y: 640, w: 60, h: 60, art: 'baum' }, { x: 720, y: 230, w: 60, h: 60, art: 'baum' },
+      { x: 880, y: 560, w: 60, h: 60, art: 'baum' }, { x: 1020, y: 170, w: 60, h: 60, art: 'baum' },
+      { x: 1250, y: 430, w: 60, h: 60, art: 'baum' }, { x: 1480, y: 330, w: 60, h: 60, art: 'baum' },
+      { x: 1580, y: 620, w: 60, h: 60, art: 'baum' }, { x: 560, y: 800, w: 60, h: 60, art: 'baum' },
+      { x: 860, y: 1190, w: 60, h: 60, art: 'baum' }, { x: 1380, y: 760, w: 60, h: 60, art: 'baum' },
+      { x: 420, y: 1060, w: 60, h: 60, art: 'baum' }, { x: 1560, y: 1200, w: 60, h: 60, art: 'baum' },
+      // Dichte Büsche (Deckung)
+      { x: 400, y: 290, w: 100, h: 60, art: 'busch' }, { x: 640, y: 600, w: 110, h: 60, art: 'busch' },
+      { x: 900, y: 380, w: 100, h: 60, art: 'busch' }, { x: 1110, y: 620, w: 100, h: 60, art: 'busch' },
+      { x: 1340, y: 540, w: 100, h: 60, art: 'busch' }, { x: 300, y: 430, w: 80, h: 70, art: 'busch' },
+      { x: 740, y: 960, w: 100, h: 60, art: 'busch' }, { x: 520, y: 1220, w: 110, h: 60, art: 'busch' },
+      { x: 1480, y: 880, w: 100, h: 60, art: 'busch' }, { x: 1200, y: 1220, w: 100, h: 60, art: 'busch' },
+      // Moosige Felsen und alte Ruinen
+      { x: 1150, y: 760, w: 80, h: 60, art: 'dschungelfels' }, { x: 600, y: 1090, w: 90, h: 70, art: 'dschungelfels' },
+      { x: 990, y: 940, w: 40, h: 170, art: 'ruine' }, { x: 1440, y: 1040, w: 170, h: 40, art: 'ruine' },
+      { x: 700, y: 700, w: 180, h: 40, art: 'ruine' },
+      // Tempel zum Draufklettern (mit Treppe)
+      { x: 1150, y: 60, w: 380, h: 220, art: 'tempel', oben: 110 },
+      { x: 1150, y: 280, w: 140, h: 200, art: 'tempeltreppe', rampe: 'n', oben: 110 },
+      // ===== Der Strand (offen, nur ein paar Sachen) =====
+      { x: 300, y: 1500, w: 24, h: 24, art: 'palme' }, { x: 620, y: 1720, w: 24, h: 24, art: 'palme' },
+      { x: 950, y: 1460, w: 24, h: 24, art: 'palme' }, { x: 1250, y: 1800, w: 24, h: 24, art: 'palme' },
+      { x: 1550, y: 1560, w: 24, h: 24, art: 'palme' }, { x: 460, y: 1880, w: 24, h: 24, art: 'palme' },
+      { x: 800, y: 1600, w: 70, h: 50, art: 'strandfels' }, { x: 1400, y: 1700, w: 80, h: 60, art: 'strandfels' },
+      { x: 1050, y: 1640, w: 160, h: 60, art: 'boot' },
+      { x: 180, y: 1700, w: 110, h: 100, art: 'huette' },
+    ],
+    mitte: [
+      { x: 1700, y: 90, w: 200, h: 190, art: 'tempel', oben: 140 },
+      { x: 1740, y: 280, w: 120, h: 220, art: 'tempeltreppe', rampe: 'n', oben: 140 },
+      { x: 1760, y: 1240, w: 80, h: 60, art: 'dschungelfels' },
+      { x: 1740, y: 1620, w: 120, h: 80, art: 'strandfels' },
+    ],
+  },
 ];
-const STANDARD_HOEHE = { wand: 110, kiste: 40, fels: 100, kristall: 130, pilz: 150, stein: 40, saeule: 100, eisblock: 110, schneehaufen: 40, eiszacke: 130, wrack: 90 };
-const DRAUFSTEHEN = ['plattform', 'huegel', 'schneehuegel'];   // Auf diesen Blöcken kann man oben stehen
+const STANDARD_HOEHE = { wand: 110, kiste: 40, fels: 100, kristall: 130, pilz: 150, stein: 40, saeule: 100, eisblock: 110, schneehaufen: 40, eiszacke: 130, wrack: 90,
+  baum: 400, busch: 60, dschungelfels: 90, ruine: 110, palme: 220, strandfels: 55, boot: 50, huette: 120 };
+const DRAUFSTEHEN = ['plattform', 'huegel', 'schneehuegel', 'tempel'];
+const STRAND_AB = 1350;   // Dschungel-Karte: Ab hier (nach unten) ist Sandstrand   // Auf diesen Blöcken kann man oben stehen
 let karte = KARTEN[0];
 try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || karte; } catch (e) { /* egal */ }
 let WAENDE = [];
@@ -790,8 +837,9 @@ function neuerMech(team, nr, istSpieler, typ) {
 function spawnPunkt(m) {
   let x = m.team === 'blau' ? 130 : WELT_B - 130;
   // Angreifer starten weiter vorne, wenn Punkt A erobert ist
-  if ((modus === 'angriff' || modus === 'verteidigung') && m.team === angreifer && aktivesZiel === 1) x = m.team === 'blau' ? 720 : WELT_B - 720;
-  return { x, y: WELT_H / 2 + (m.nr - (TEAM_GROESSE - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
+  if ((modus === 'angriff' || modus === 'verteidigung') && m.team === angreifer && aktivesZiel === 1) x = m.team === 'blau' ? WELT_B * 0.3 : WELT_B * 0.7;
+  const n = mechs.filter(o => o.team === m.team).length;
+  return { x, y: WELT_H / 2 + (m.nr - (n - 1) / 2) * 85 };   // Nicht zu weit auseinander, sonst steht man hinter einer Wand
 }
 function spawnen(m) {
   const p = spawnPunkt(m);
@@ -805,9 +853,19 @@ function spawnen(m) {
   if (m.istSpieler) { blick.links = m.zielWinkel; blick.hoch = 0; }
 }
 
-function neuesSpiel(id) {
+// Wer spielt mit? Normal: Du + 3 Bots gegen 4 Bots. Storymodus und Multiplayer geben eine eigene Aufstellung mit.
+//   aufstellung: Liste von { team, typ, name?, mensch? (Multiplayer-Spieler-ID), ich? (das bist du) }
+function standardAufstellung() {
+  const liste = [];
+  for (const team of ['blau', 'rot']) for (let i = 0; i < TEAM_GROESSE; i++) {
+    const ich = team === 'blau' && i === 0;
+    liste.push({ team, typ: ich ? meinMech : zufall(BOT_MECHS), ich });
+  }
+  return liste;
+}
+function neuesSpiel(id, aufstellung = null) {
   modus = id;
-  ladeKarte(karte, modus === 'knockout');   // Knockout hat eine große Karte
+  ladeKarte(karte, modus === 'knockout' || !!karte.immerGross);   // Knockout hat eine große Karte
   // Alte 3D-Sachen aufräumen
   for (const m of mechs) if (m.g3) szene.remove(m.g3.gruppe);
   for (const s of schussMeshes) szene.remove(s.mesh);
@@ -820,7 +878,7 @@ function neuesSpiel(id) {
   punkte = { blau: 0, rot: 0 };
   ziele = []; aktivesZiel = 0;
   if (modus === 'punkt') {
-    ziele = [{ x: 1200, y: 700, r: 140, name: '🚩', besitzer: null, wer: null, fortschritt: 0 }];
+    ziele = [{ x: WELT_B / 2, y: WELT_H / 2, r: 140, name: '🚩', besitzer: null, wer: null, fortschritt: 0 }];
     restZeit = 300;
   } else if (modus === 'team') {
     restZeit = 300;
@@ -831,21 +889,24 @@ function neuesSpiel(id) {
     angreifer = modus === 'angriff' ? 'blau' : 'rot';
     verteidiger = anderes(angreifer);
     ziele = [
-      { x: 1200, y: 700, r: 130, name: 'A', fortschritt: 0, erobert: false },
-      { x: angreifer === 'blau' ? WELT_B - 780 : 780, y: 700, r: 120, name: 'B', fortschritt: 0, erobert: false },
+      { x: WELT_B / 2, y: WELT_H / 2, r: 130, name: 'A', fortschritt: 0, erobert: false },
+      { x: angreifer === 'blau' ? WELT_B * 0.675 : WELT_B * 0.325, y: WELT_H / 2, r: 120, name: 'B', fortschritt: 0, erobert: false },
     ];
     restZeit = ANGRIFF_ZEIT;
   }
-  for (const team of ['blau', 'rot']) {
-    for (let i = 0; i < TEAM_GROESSE; i++) {
-      const istSpieler = team === 'blau' && i === 0;
-      mechs.push(neuerMech(team, i, istSpieler, istSpieler ? meinMech : zufall(MECH_TYPEN)));   // Bots bekommen zufällige Mechs
-    }
+  const nr = { blau: 0, rot: 0 };
+  for (const a of aufstellung || standardAufstellung()) {
+    const m = neuerMech(a.team, nr[a.team]++, !!a.ich, a.typ);
+    if (a.name) m.name = a.name;
+    if (a.ich) m.name = a.name || 'DU';
+    m.mensch = a.mensch || null;   // Multiplayer: Ein Mensch steuert diesen Mech
+    m.boss = !!a.typ.boss;
+    mechs.push(m);
   }
-  spieler = mechs[0];
+  spieler = mechs.find(m => m.istSpieler);
   for (const m of mechs) { spawnen(m); m.g3 = baueMech(m); szene.add(m.g3.gruppe); }
   baueZiele();
-  baueWaffen(meinMech);
+  baueWaffen(spieler.typ);
   countdown = 0;
   zustand = 'spiel';
   if (intro) for (const s of intro.schiffe) szene.remove(s.gruppe);   // Altes Intro wegräumen
@@ -1367,7 +1428,7 @@ function botDenken(m, dt) {
     // Zielen (mit Vorhalten, damit sie bewegte Ziele treffen)
     const flug = d / hw.tempo;   // Wo ist der Gegner, wenn der Schuss ankommt?
     const vorne = { x: g.x + g.vx * flug, y: g.y + g.vy * flug };   // Da wird der Gegner gleich sein
-    const zielW = Math.atan2(vorne.y - m.y, vorne.x - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * BOT_UNGENAU;
+    const zielW = Math.atan2(vorne.y - m.y, vorne.x - m.x) + (Math.sin(zeit * 7 + m.seed * 3)) * botUngenau;
     m.zielWeite = dist(m, vorne);
     m.zielHoch = Math.atan2((g.z + 40 * g.typ.groesse) - (m.z + 52 * m.typ.groesse), Math.max(1, dist(m, vorne)));   // hoch oder runter zielen
     m.zielWinkel = drehe(m.zielWinkel, zielW, dt * 7);
@@ -2222,11 +2283,12 @@ function ladeKarte(k, gross = false) {
   geladeneKarte = schluessel;
   WELT_B = gross ? GROSSE_KARTE.b : 2400;
   WELT_H = gross ? GROSSE_KARTE.h : 1400;
-  WAENDE = waendeVon(gross ? { links: k.grossLinks, mitte: k.grossMitte } : k);
+  WAENDE = waendeVon(gross ? { links: k.grossLinks || k.links, mitte: k.grossMitte || k.mitte } : k);
   // Boden-Muster, Sonne und Schatten an die Größe anpassen
   bodenTextur.repeat.set(WELT_B / 100, WELT_H / 100);
   alienBodenTextur.repeat.set(WELT_B / 220, WELT_H / 220);
   schneeTextur.repeat.set(WELT_B / 200, WELT_H / 200);
+  if (k.id === 'dschungel') Object.assign(sonne.shadow.mapSize, { x: 4096, y: 4096 });   // Große Karte: schärfere Schatten
   sonne.position.set(WELT_B / 2 - 600, 900, WELT_H / 2 - 400);
   sonne.target.position.set(WELT_B / 2, 0, WELT_H / 2);
   Object.assign(sonne.shadow.camera, { left: -WELT_B / 2 - 200, right: WELT_B / 2 + 200, top: WELT_H / 2 + 300, bottom: -WELT_H / 2 - 300, far: 3500 });
@@ -3906,7 +3968,7 @@ function zeichneTitel() {
   }
 
   text(`🎮 WASD: Laufen  ·  Maus: Umschauen  ·  Linksklick: MG  ·  Rechtsklick / Q: Rakete${BOOST_AN ? '  ·  Shift: Boost' : ''}  ·  Esc: Pause`, W / 2, 455, 13, '#c9c3ff', 'center', false);
-  text(`Du (blau) + 3 Computer-Mechs gegen ${TEAM_GROESSE} Gegner (rot)  ·  ${MECH_TYPEN.length} verschiedene Mechs!`, W / 2, 478, 13, '#8a8fb0', 'center', false);
+  text(`Du (blau) + 3 Computer-Mechs gegen ${TEAM_GROESSE} Gegner (rot)  ·  ${BOT_MECHS.length} verschiedene Mechs!`, W / 2, 478, 13, '#8a8fb0', 'center', false);
   text('Karte:', W / 2, 498, 13, '#8a8fb0', 'center', false);
   for (const b of kartenKnoepfe()) {
     const an = b.k === karte, hover = imRechteck(maus, b);
@@ -4118,7 +4180,7 @@ function zeichneEnde() {
   ['blau', 'rot'].forEach((team, ti) => {
     const x = W / 2 - 330 + ti * 360;
     ctx.fillStyle = 'rgba(30,34,46,0.95)';
-    rr(x, 170, 300, 50 + TEAM_GROESSE * 34, 12); ctx.fill();
+    rr(x, 170, 300, 50 + Math.max(...['blau', 'rot'].map(t => mechs.filter(o => o.team === t).length)) * 34, 12); ctx.fill();
     ctx.strokeStyle = TEAMS[team].farbe; ctx.lineWidth = 3; ctx.stroke();
     text(TEAMS[team].name, x + 15, 192, 18, TEAMS[team].hell, 'left', false);
     text('💥', x + 215, 192, 16, '#fff', 'center', false);
