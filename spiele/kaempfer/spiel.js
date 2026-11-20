@@ -3114,23 +3114,35 @@ function zeichneTitel() {
 // ===== Mech-Auswahl =====
 let gewaehlterModus = 'punkt';
 const ZURUECK_KNOPF = { x: 30, y: 540, w: 150, h: 40 };
-let gewaehlteKlasse = meinMech.eigen ? 'eigene' : meinMech.klasse;   // Welche Klasse ist im Menü gerade offen?
-const REITER = [...KLASSEN, { id: 'eigene', name: 'Eigene', emoji: '🔧', text: 'Deine Werkstatt' }];
-function klassenKnoepfe() {   // Oben: ein Knopf pro Klasse (und einer für deine eigenen Mechs)
-  return REITER.map((k, i) => ({ k, x: W / 2 - REITER.length * 92 + i * 184 + 4, y: 98, w: 176, h: 48 }));
+let gewaehlteKlasse = meinMech.klasse;   // Welche Klasse ist im Menü gerade offen?
+function klassenKnoepfe() {   // Oben: ein Knopf pro Klasse
+  return KLASSEN.map((k, i) => ({ k, x: W / 2 - KLASSEN.length * 110 + i * 220 + 5, y: 98, w: 210, h: 48 }));
 }
 function mechKarten() {       // Darunter: die Mechs der gewählten Klasse
-  const liste = gewaehlteKlasse === 'eigene'
-    ? [...eigeneMechs(), ...(eigeneBauplaene.length < MAX_EIGENE ? [{ neu: true }] : [])]
-    : MECH_TYPEN.filter(t => t.klasse === gewaehlteKlasse);
+  const liste = MECH_TYPEN.filter(t => t.klasse === gewaehlteKlasse);
   const b = Math.min(280, Math.floor((900 - (liste.length - 1) * 16) / liste.length));
   const start = W / 2 - (liste.length * b + (liste.length - 1) * 16) / 2;
-  return liste.map((t, i) => ({ t, neu: t.neu, x: start + i * (b + 16), y: 158, w: b, h: 370 }));
+  return liste.map((t, i) => ({ t, x: start + i * (b + 16), y: 158, w: b, h: 370 }));
 }
-const bearbeitenKnopf = k => ({ x: k.x + k.w - 48, y: k.y + 8, w: 40, h: 32 });   // ✏️ auf eigenen Mechs
-function waffenText(t) {
-  return t.waffenName || (t.mg.salve ? '☄️ Raketenhagel' : t.mg.kanone ? '💣 Riesen-Kanonen' : t.mg.laser ? '💎 Pulslaser' : t.mg.strahl ? '⚡ Railgun'
-    : t.mg.schrot ? '💥 Schrotflinte' : t.klasse === 'schwer' ? '🔫 Riesen-Minigun' : '🔫 Doppel-MG');
+const umbauKnopf = k => ({ x: k.x + 16, y: k.y + k.h - 44, w: k.w - 32, h: 34 });   // 🔧 auf jeder Karte
+// Kleine bunte Punkte: welche Slots hat der Mech?
+function slotPunkte(typ, mx, y, r = 7) {
+  const n = typ.slots.length, ab = r * 2.8;
+  typ.slots.forEach((s, i) => {
+    const x = mx + (i - (n - 1) / 2) * ab;
+    ctx.fillStyle = SLOT_ARTEN[s.art].farbe; kreis(x, y, r); ctx.fill();
+    ctx.strokeStyle = SLOT_ARTEN[s.art].hell; ctx.lineWidth = 1.5; ctx.stroke();
+  });
+}
+function sterneMalen(sterne, farbe, mx, y0, abstand = 20) {
+  [['❤️', sterne.leben], ['💨', sterne.tempo], ['💥', sterne.schaden], ['🎯', sterne.weite]].forEach(([e, n], i) => {
+    const y = y0 + i * abstand;
+    text(e, mx - 70, y, 14, '#fff', 'center', false);
+    for (let j = 0; j < 5; j++) {
+      ctx.fillStyle = j < n ? farbe : 'rgba(255,255,255,0.12)';
+      rr(mx - 52 + j * 24, y - 6, 20, 12, 3); ctx.fill();
+    }
+  });
 }
 function zeichneAuswahl() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -3148,21 +3160,11 @@ function zeichneAuswahl() {
     ctx.strokeStyle = an ? '#ffd166' : '#4a5266'; ctx.lineWidth = 2; ctx.stroke();
     text(`${b.k.emoji} ${b.k.name}`, b.x + b.w / 2, b.y + 18, 18, an ? '#1b1f3a' : '#fff', 'center', false);
     text(b.k.text, b.x + b.w / 2, b.y + 37, 11, an ? '#1b1f3a' : '#8a8fb0', 'center', false);
-    if ((meinMech.eigen ? 'eigene' : meinMech.klasse) === b.k.id) text('✓', b.x + b.w - 16, b.y + 18, 16, an ? '#1b1f3a' : meinMech.akzent, 'center', false);
+    if (meinMech.klasse === b.k.id) text('✓', b.x + b.w - 16, b.y + 18, 16, an ? '#1b1f3a' : meinMech.akzent, 'center', false);
   }
 
   for (const k of mechKarten()) {
-    if (k.neu) {   // ➕ Karte: Neuen Mech bauen
-      const hover = imRechteck(maus, k);
-      ctx.fillStyle = hover ? '#3a4256' : 'rgba(30,34,46,0.6)';
-      rr(k.x, k.y, k.w, k.h, 14); ctx.fill();
-      ctx.setLineDash([10, 8]); ctx.strokeStyle = hover ? '#ffd166' : '#4a5266'; ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
-      text('➕', k.x + k.w / 2, k.y + 150, 60, '#fff', 'center', false);
-      text('Neuen Mech bauen', k.x + k.w / 2, k.y + 220, 18, hover ? '#ffd166' : '#fff', 'center', false);
-      umbrechen('In der Werkstatt suchst du Waffe, Raketen, Panzerung und Motor aus.', k.x + 16, k.y + 255, k.w - 32, 17, 13, '#8a8fb0');
-      continue;
-    }
-    const t = k.t, hover = imRechteck(maus, k), meiner = t.id === meinMech.id;
+    const t = umgebaut(k.t), hover = imRechteck(maus, k), meiner = t.id === meinMech.id;
     ctx.fillStyle = hover ? '#3a4256' : 'rgba(30,34,46,0.92)';
     rr(k.x, k.y, k.w, k.h, 14); ctx.fill();
     ctx.strokeStyle = hover ? '#ffd166' : (meiner ? t.akzent : '#4a5266'); ctx.lineWidth = hover || meiner ? 4 : 2; ctx.stroke();
@@ -3170,154 +3172,128 @@ function zeichneAuswahl() {
     // Der Mech dreht sich langsam
     zeichneMech2D('blau', mx - 8, k.y + 80, 1.1, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, hover ? zeit * 8 : 0, t);
     text(t.emoji, k.x + 22, k.y + 24, 22, '#fff', 'center', false);
-    if (meiner) text('✓', k.x + k.w - (t.eigen ? 64 : 20), k.y + 24, 20, t.akzent, 'center', false);
-    if (t.eigen) {   // ✏️ Bearbeiten-Knopf
-      const e = bearbeitenKnopf(k), eh = imRechteck(maus, e);
-      ctx.fillStyle = eh ? '#ffd166' : '#4a5266'; rr(e.x, e.y, e.w, e.h, 8); ctx.fill();
-      text('✏️', e.x + e.w / 2, e.y + e.h / 2, 16, '#fff', 'center', false);
-    }
-    text(t.name, mx, k.y + 160, 22, t.akzent);
-    umbrechen(t.text, k.x + 16, k.y + 188, k.w - 32, 17, 13, '#c9c3ff');
-    // Sterne für die Werte
-    [['❤️', 'Leben', t.sterne.leben], ['💨', 'Tempo', t.sterne.tempo], ['💥', 'Schaden', t.sterne.schaden], ['🎯', 'Weite', t.sterne.weite]].forEach(([e, name, n], i) => {
-      const y = k.y + 266 + i * 22;
-      text(e, mx - 70, y, 14, '#fff', 'center', false);
-      for (let j = 0; j < 5; j++) {
-        ctx.fillStyle = j < n ? t.akzent : 'rgba(255,255,255,0.12)';
-        rr(mx - 52 + j * 24, y - 6, 20, 12, 3); ctx.fill();
-      }
-    });
-    text(waffenText(t) + (t.rakete.anzahl > 1 ? `  ·  🚀 ${t.rakete.anzahl} Raketen` : ''), mx, k.y + 350, 13, '#fff', 'center', false);
+    if (meiner) text('✓', k.x + k.w - 20, k.y + 24, 20, t.akzent, 'center', false);
+    if (umbauten[t.id]) text('🔧 umgebaut', k.x + k.w - 16, k.y + 46, 11, '#ffd166', 'right', false);
+    text(t.name, mx, k.y + 158, 22, t.akzent);
+    umbrechen(t.text, k.x + 16, k.y + 184, k.w - 32, 16, 12, '#c9c3ff');
+    slotPunkte(t, mx, k.y + 236);
+    sterneMalen(mechSterne(t), t.akzent, mx, k.y + 262);
+    // 🔧 Umbauen-Knopf
+    const u = umbauKnopf(k), uh = imRechteck(maus, u);
+    ctx.fillStyle = uh ? '#ffd166' : '#2f3647'; rr(u.x, u.y, u.w, u.h, 8); ctx.fill();
+    text('🔧 Umbauen', u.x + u.w / 2, u.y + u.h / 2, 15, uh ? '#1b1f3a' : '#fff', 'center', false);
   }
   const zh = imRechteck(maus, ZURUECK_KNOPF);
   ctx.fillStyle = zh ? '#3a4256' : 'rgba(30,34,46,0.92)';
   rr(ZURUECK_KNOPF.x, ZURUECK_KNOPF.y, ZURUECK_KNOPF.w, ZURUECK_KNOPF.h, 10); ctx.fill();
   text('← Zurück', ZURUECK_KNOPF.x + ZURUECK_KNOPF.w / 2, ZURUECK_KNOPF.y + 20, 16, zh ? '#ffd166' : '#fff', 'center', false);
-  text(gewaehlteKlasse === 'eigene' ? 'Klick auf deinen Mech zum Starten, ✏️ zum Umbauen!' : 'Wähle oben eine Klasse, dann klick auf einen Mech, um zu starten!', W / 2 + 60, 560, 16, '#8a8fb0', 'center', false);
+  text('Klick auf einen Mech zum Starten  ·  🔵 Laser  🟣 Kanone  🟢 Raketen', W / 2 + 80, 560, 15, '#8a8fb0', 'center', false);
 }
 function waehleMech(t) {
-  meinMech = t;
+  meinMech = umgebaut(t);
   try { localStorage.setItem('kaempfer-mech', t.id); } catch (e) { /* egal */ }
   neuesSpiel(gewaehlterModus);
 }
 
-// ===== 🔧 Der Werkstatt-Bildschirm =====
-let bau = null, bauNeu = true;   // Der Bauplan, an dem du gerade schraubst
-function werkstattOeffnen(b) {
-  bauNeu = !b;
-  bau = b ? { ...b } : { id: 'eigen-' + Date.now(), name: 'Mein Mech', klasse: 'medium', waffe: 'mg', raketen: 1, panzer: 40, motor: 2, farbe: '#38bdf8', zeichen: '🤖' };
+// ===== 🔧 Die Werkstatt: Waffen in die Slots stecken =====
+// Jeder Slot hat eine Farbe. Du kannst nur Waffen mit der gleichen Farbe hineinstecken!
+let bauTyp = null, bauListe = [], bauAktiv = 0;   // Welcher Mech, welche Waffen, welcher Slot ist ausgewählt
+function werkstattOeffnen(typ) {
+  bauTyp = typ;
+  bauListe = umgebaut(typ).slots.map(s => s.waffe);
+  bauAktiv = 0;
   zustand = 'werkstatt';
 }
-// Jede Zeile: ◀ Wert ▶ (mit den Pfeilen blätterst du durch die Möglichkeiten)
-const BAU_ZEILEN = [
-  { name: 'Klasse', feld: 'klasse', werte: () => KLASSEN.map(k => k.id),
-    zeige: v => { const k = KLASSEN.find(x => x.id === v); return `${k.emoji} ${k.name} (max. ${CHASSIS[v].tonnen} t)`; } },
-  { name: 'Waffe', feld: 'waffe', werte: () => WAFFEN.map(w => w.id),
-    zeige: v => { const w = WAFFEN.find(x => x.id === v); return `${w.name} (${w.tonnen} t)`; } },
-  { name: 'Raketen', feld: 'raketen', werte: () => [1, 2, 3, 4], zeige: v => `🚀 × ${v}  (${v * RAKETE_T} t)` },
-  { name: 'Panzerung', feld: 'panzer', werte: () => Array.from({ length: CHASSIS[bau.klasse].maxPanzer / 10 + 1 }, (_, i) => i * 10),
-    zeige: v => `🛡️ +${v} Leben  (${v / 10 * PANZER_T} t)` },
-  { name: 'Motor', feld: 'motor', werte: () => [0, 1, 2, 3, 4], zeige: v => `⚙️ Stufe ${v}  (${v * CHASSIS[bau.klasse].motorT} t)` },
-  { name: 'Farbe', feld: 'farbe', werte: () => FARBEN, zeige: () => '' },
-  { name: 'Zeichen', feld: 'zeichen', werte: () => ZEICHEN, zeige: v => v },
-];
-const bauZeileY = i => 118 + i * 52;
-const pfeilKnopf = (i, r) => ({ x: r < 0 ? 160 : 510, y: bauZeileY(i) - 20, w: 44, h: 40 });
-const NAME_KNOPF = { x: 160, y: bauZeileY(BAU_ZEILEN.length) - 20, w: 394, h: 40 };
+const bauZeileY = i => 128 + i * 62;
+const pfeilKnopf = (i, r) => ({ x: r < 0 ? 196 : 512, y: bauZeileY(i) - 22, w: 44, h: 44 });
 const SPEICHERN_KNOPF = { x: W - 210, y: 540, w: 180, h: 40 };
-const LOESCHEN_KNOPF = { x: W - 410, y: 540, w: 180, h: 40 };
-
-function bauWechseln(z, richtung) {
-  const liste = z.werte();
-  const i = Math.max(0, liste.indexOf(bau[z.feld]));
-  bau[z.feld] = liste[(i + richtung + liste.length) % liste.length];
-  if (z.feld === 'klasse') bau.panzer = Math.min(bau.panzer, CHASSIS[bau.klasse].maxPanzer);   // Leichte Mechs tragen weniger Panzer
+const STANDARD_KNOPF = { x: W - 410, y: 540, w: 180, h: 40 };
+function bauWechseln(i, richtung) {
+  const art = bauTyp.slots[i].art;
+  const passende = WAFFEN_LISTE.filter(w => w.art === art);   // Nur Waffen mit der richtigen Farbe!
+  const j = Math.max(0, passende.findIndex(w => w.id === bauListe[i]));
+  bauListe[i] = passende[(j + richtung + passende.length) % passende.length].id;
+  bauAktiv = i;
   sound.piep();
 }
 function bauSpeichern() {
-  if (gewicht(bau) > CHASSIS[bau.klasse].tonnen) { sound.autsch(); return; }   // Zu schwer!
-  const i = eigeneBauplaene.findIndex(b => b.id === bau.id);
-  if (i >= 0) eigeneBauplaene[i] = bau; else eigeneBauplaene.push(bau);
-  eigeneSpeichern();
-  meinMech = bauplanZuMech(bau);
-  try { localStorage.setItem('kaempfer-mech', meinMech.id); } catch (e) { /* egal */ }
+  const standard = bauTyp.slots.map(s => s.waffe);
+  if (bauListe.every((w, i) => w === standard[i])) delete umbauten[bauTyp.id];   // Alles wie am Anfang
+  else umbauten[bauTyp.id] = [...bauListe];
+  umbautenSpeichern();
+  meinMech = umgebaut(bauTyp);
+  try { localStorage.setItem('kaempfer-mech', bauTyp.id); } catch (e) { /* egal */ }
   sound.los();
-  gewaehlteKlasse = 'eigene';
+  gewaehlteKlasse = bauTyp.klasse;
   zustand = 'auswahl';
 }
-function bauLoeschen() {
-  if (!confirm(`Willst du „${bau.name}“ wirklich verschrotten?`)) return;
-  eigeneBauplaene = eigeneBauplaene.filter(b => b.id !== bau.id);
-  eigeneSpeichern();
-  if (meinMech.id === bau.id) meinMech = MECH_TYPEN[0];
-  zustand = 'auswahl';
-}
-function knopfMalen(k, beschriftung, farbe = '#fff', aus = false) {
-  const hover = !aus && imRechteck(maus, k);
-  ctx.fillStyle = aus ? 'rgba(30,34,46,0.5)' : hover ? '#3a4256' : 'rgba(30,34,46,0.92)';
+function knopfMalen(k, beschriftung, farbe = '#fff') {
+  const hover = imRechteck(maus, k);
+  ctx.fillStyle = hover ? '#3a4256' : 'rgba(30,34,46,0.92)';
   rr(k.x, k.y, k.w, k.h, 10); ctx.fill();
   ctx.strokeStyle = hover ? '#ffd166' : '#4a5266'; ctx.lineWidth = 2; ctx.stroke();
-  text(beschriftung, k.x + k.w / 2, k.y + k.h / 2, 17, aus ? '#5a6070' : hover ? '#ffd166' : farbe, 'center', false);
+  text(beschriftung, k.x + k.w / 2, k.y + k.h / 2, 17, hover ? '#ffd166' : farbe, 'center', false);
 }
 function zeichneWerkstatt() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#14161c'); g.addColorStop(1, '#2b3140');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  text('🔧 Werkstatt', W / 2, 40, 36, '#ffd166');
-  text('Bau deinen eigenen Mech! Aber Achtung: Jede Klasse kann nur so viele Tonnen tragen.', W / 2, 74, 15, '#c9c3ff', 'center', false);
+  // Ein Gitter wie in einer Werkstatt-Halle
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 0; y <= H; y += 40) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  text(`🔧 Werkstatt: ${bauTyp.emoji} ${bauTyp.name}`, W / 2, 38, 32, '#ffd166');
+  text('Stecke Waffen in die Slots! Nur gleiche Farben passen:  🔵 Laser   🟣 Kanone   🟢 Raketen', W / 2, 74, 15, '#c9c3ff', 'center', false);
 
-  // Links: die Teile zum Aussuchen
-  BAU_ZEILEN.forEach((z, i) => {
-    const y = bauZeileY(i);
-    text(z.name, 40, y, 17, '#c9c3ff', 'left', false);
+  // Links: die Slots
+  bauTyp.slots.forEach((slot, i) => {
+    const y = bauZeileY(i), a = SLOT_ARTEN[slot.art], w = WAFFEN[bauListe[i]], aktiv = i === bauAktiv;
+    // Der Slot: farbiges Schild mit Art und Ort
+    ctx.fillStyle = a.farbe; rr(30, y - 22, 156, 44, 10); ctx.fill();
+    if (aktiv) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.stroke(); }
+    text(`${a.punkt} ${a.name}`, 108, y - 7, 15, '#fff', 'center', false);
+    text(ORTE[slot.ort].name, 108, y + 11, 11, '#ffffffcc', 'center', false);
     knopfMalen(pfeilKnopf(i, -1), '◀');
     knopfMalen(pfeilKnopf(i, 1), '▶');
-    ctx.fillStyle = 'rgba(30,34,46,0.92)'; rr(210, y - 20, 294, 40, 10); ctx.fill();
-    if (z.feld === 'farbe') { ctx.fillStyle = bau.farbe; rr(300, y - 12, 114, 24, 6); ctx.fill(); }
-    else text(z.zeige(bau[z.feld]), 357, y, z.feld === 'zeichen' ? 22 : 16, '#fff', 'center', false);
+    ctx.fillStyle = aktiv ? '#2f3647' : 'rgba(30,34,46,0.92)'; rr(246, y - 22, 260, 44, 10); ctx.fill();
+    ctx.strokeStyle = a.farbe; ctx.lineWidth = 2; ctx.stroke();
+    text(w.name, 376, y - 6, 17, '#fff', 'center', false);
+    const geaendert = w.id !== slot.waffe;
+    text(geaendert ? '🔧 umgebaut' : 'Standard', 376, y + 12, 10, geaendert ? '#ffd166' : '#8a8fb0', 'center', false);
   });
-  text('Name', 40, bauZeileY(BAU_ZEILEN.length), 17, '#c9c3ff', 'left', false);
-  knopfMalen(NAME_KNOPF, `✏️ ${bau.name}`);
 
   // Rechts: So sieht dein Mech aus
-  const typ = bauplanZuMech(bau), c = CHASSIS[bau.klasse], kg = gewicht(bau), zuSchwer = kg > c.tonnen;
-  const px = 590, pw = 340;
-  ctx.fillStyle = 'rgba(30,34,46,0.92)'; rr(px, 96, pw, 424, 14); ctx.fill();
-  ctx.strokeStyle = bau.farbe; ctx.lineWidth = 3; ctx.stroke();
-  zeichneMech2D('blau', px + pw / 2 - 8, 170, 1.3, zeit * 0.8, zeit * 0.8 + Math.sin(zeit * 2) * 0.3, zeit * 6, typ);
-  text(`${bau.zeichen} ${bau.name}`, px + pw / 2, 250, 22, bau.farbe);
-  umbrechen(waffeVon(bau).text, px + 20, 280, pw - 40, 17, 13, '#c9c3ff');
-  [['❤️', `${typ.leben} Leben`, typ.sterne.leben], ['💨', `Tempo ${typ.tempo}`, typ.sterne.tempo], ['💥', 'Schaden', typ.sterne.schaden], ['🎯', 'Weite', typ.sterne.weite]].forEach(([e, name, n], i) => {
-    const y = 330 + i * 26;
-    text(e, px + 26, y, 14, '#fff', 'center', false);
-    text(name, px + 44, y, 13, '#c9c3ff', 'left', false);
-    for (let j = 0; j < 5; j++) {
-      ctx.fillStyle = j < n ? bau.farbe : 'rgba(255,255,255,0.12)';
-      rr(px + 170 + j * 30, y - 6, 26, 12, 3); ctx.fill();
-    }
-  });
-  // Die Waage: Wie schwer ist der Mech?
-  text(`⚖️ Gewicht: ${kg} von ${c.tonnen} Tonnen`, px + pw / 2, 450, 16, zuSchwer ? '#ff6b6b' : '#4ade80', 'center', false);
-  ctx.fillStyle = 'rgba(255,255,255,0.12)'; rr(px + 20, 466, pw - 40, 16, 6); ctx.fill();
-  ctx.fillStyle = zuSchwer ? '#ef4444' : '#4ade80'; rr(px + 20, 466, (pw - 40) * Math.min(1, kg / c.tonnen), 16, 6); ctx.fill();
-  text(zuSchwer ? `😵 ${kg - c.tonnen} Tonnen zu schwer! Nimm etwas weg.` : `Noch ${c.tonnen - kg} Tonnen frei`, px + pw / 2, 500, 13, zuSchwer ? '#ff6b6b' : '#8a8fb0', 'center', false);
+  const typ = { ...bauTyp, slots: bauTyp.slots.map((s, i) => ({ ...s, waffe: bauListe[i] })) };
+  const px = 580, pw = 350;
+  ctx.fillStyle = 'rgba(30,34,46,0.92)'; rr(px, 96, pw, 428, 14); ctx.fill();
+  ctx.strokeStyle = bauTyp.akzent; ctx.lineWidth = 3; ctx.stroke();
+  zeichneMech2D('blau', px + pw / 2 - 8, 175, 1.5, zeit * 0.6, zeit * 0.6 + Math.sin(zeit * 2) * 0.3, zeit * 6, typ);
+  slotPunkte(typ, px + pw / 2, 262);
+  sterneMalen(mechSterne(typ), bauTyp.akzent, px + pw / 2, 292, 22);
+  // Infos zur Waffe im ausgewählten Slot
+  const w = WAFFEN[bauListe[bauAktiv]], a = SLOT_ARTEN[w.art];
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(px + 14, 384, pw - 28, 128, 10); ctx.fill();
+  ctx.fillStyle = a.farbe; rr(px + 14, 384, 6, 128, 3); ctx.fill();
+  text(`${a.punkt} ${w.name}`, px + 32, 402, 17, a.hell, 'left', false);
+  umbrechen(w.text, px + 32, 426, pw - 60, 16, 12, '#c9c3ff');
+  const schuss = w.salve ? `${w.anzahl} × ${w.schaden}` : w.anzahl > 1 ? `${w.anzahl} × ${w.schaden}` : w.schrot ? `${w.schrot} × ${w.schaden}` : `${w.schaden}`;
+  text(`💥 Schaden ${schuss}   ⏱️ lädt ${w.pause} s   🎯 Weite ${w.art === 'rakete' && !w.salve ? Math.round(RAKETE_WEITE / 10) : Math.round(w.weite / 10)} m`, px + 32, 492, 12, '#fff', 'left', false);
 
   // Unten: Knöpfe
   knopfMalen(ZURUECK_KNOPF, '← Zurück');
-  if (!bauNeu) knopfMalen(LOESCHEN_KNOPF, '🗑️ Verschrotten', '#ff6b6b');
-  knopfMalen(SPEICHERN_KNOPF, '💾 Speichern', '#4ade80', zuSchwer);
+  knopfMalen(STANDARD_KNOPF, '↺ Standard', '#c9c3ff');
+  knopfMalen(SPEICHERN_KNOPF, '💾 Speichern', '#4ade80');
 }
 function werkstattKlick() {
-  for (let i = 0; i < BAU_ZEILEN.length; i++) for (const r of [-1, 1]) {
-    if (imRechteck(maus, pfeilKnopf(i, r))) { bauWechseln(BAU_ZEILEN[i], r); return; }
-  }
-  if (imRechteck(maus, NAME_KNOPF)) {
-    const n = prompt('Wie soll dein Mech heißen?', bau.name);
-    if (n && n.trim()) bau.name = n.trim().slice(0, 16);
-    return;
+  for (let i = 0; i < bauTyp.slots.length; i++) {
+    for (const r of [-1, 1]) if (imRechteck(maus, pfeilKnopf(i, r))) { bauWechseln(i, r); return; }
+    const y = bauZeileY(i);
+    if (maus.x > 30 && maus.x < 560 && maus.y > y - 22 && maus.y < y + 22) { bauAktiv = i; return; }   // Slot anklicken = Infos zeigen
   }
   if (imRechteck(maus, ZURUECK_KNOPF)) { zustand = 'auswahl'; return; }
-  if (!bauNeu && imRechteck(maus, LOESCHEN_KNOPF)) { bauLoeschen(); return; }
+  if (imRechteck(maus, STANDARD_KNOPF)) { bauListe = bauTyp.slots.map(s => s.waffe); sound.piep(); return; }
   if (imRechteck(maus, SPEICHERN_KNOPF)) bauSpeichern();
 }
 
@@ -3416,8 +3392,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'auswahl') {
     for (const b of klassenKnoepfe()) if (imRechteck(maus, b)) { gewaehlteKlasse = b.k.id; return; }
     for (const k of mechKarten()) if (imRechteck(maus, k)) {
-      if (k.neu) werkstattOeffnen(null);
-      else if (k.t.eigen && imRechteck(maus, bearbeitenKnopf(k))) werkstattOeffnen(k.t.bauplan);
+      if (imRechteck(maus, umbauKnopf(k))) werkstattOeffnen(k.t);   // 🔧 Umbauen
       else waehleMech(k.t);
       return;
     }
