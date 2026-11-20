@@ -2861,22 +2861,18 @@ function zeichneHUD() {
   rr(12, H - 150, 290, 138, 12); ctx.fill();
   text(`${m.typ.emoji} ${m.typ.name}`, 22, H - 164, 16, m.typ.akzent, 'left');
   zeichneMechTeile(m, 66, H - 140, 1.2);
-  const rBereit = m.raketePause <= 0;
-  text('🚀', 140, H - 122, 16, '#fff', 'center', false);
-  balken(158, H - 128, 128, 12, rBereit ? 1 : 1 - m.raketePause / m.typ.rakete.pause, rBereit ? '#ffd166' : '#8a8f9e');
-  text(rBereit && !touchModus ? 'Rechtsklick' : '', 222, H - 106, 10, '#c9c3ff', 'center', false);
-  const humpelt = !hat(m, 'beinL') || !hat(m, 'beinR');
-  if (BOOST_AN) text('💨', 140, H - 84, 16, '#fff', 'center', false);
-  if (!BOOST_AN) { if (humpelt) text('🦵 Bein ab – du humpelst!', 222, H - 84, 12, '#ff6b6b', 'center', false); }
-  else if (m.typ.keinBoost) text('kein Boost', 222, H - 84, 12, '#8a8f9e', 'center', false);
-  else if (humpelt) text('Bein ab!', 222, H - 84, 12, '#ff6b6b', 'center', false);
-  else {
-    const bBereit = m.boostPause <= 0;
-    balken(158, H - 90, 128, 12, bBereit ? 1 : 1 - m.boostPause / m.typ.boostPause, bBereit ? '#6fe3ff' : '#8a8f9e');
-    text(bBereit && !touchModus ? 'Shift' : '', 222, H - 68, 10, '#c9c3ff', 'center', false);
-  }
-  text('K.o., wenn Mitte, Visier', 222, H - 44, 11, '#c9c3ff', 'center', false);
-  text('oder beide Beine kaputt!', 222, H - 29, 11, '#c9c3ff', 'center', false);
+  // Deine Waffen: Farbe = Slot-Art, der Balken zeigt das Nachladen
+  const zeilenH = Math.min(20, 118 / m.waffen.length);
+  m.waffen.forEach((s, i) => {
+    const y = H - 136 + i * zeilenH + zeilenH / 2, farbe = SLOT_ARTEN[s.art], geht = slotGeht(m, s);
+    ctx.fillStyle = geht ? farbe.farbe : '#3a3e4a'; rr(126, y - 6, 6, 12, 2); ctx.fill();
+    text(s.w.name, 138, y, 11, geht ? '#fff' : '#6b7080', 'left', false);
+    if (!geht) { text('Arm ab!', 290, y, 10, '#ff6b6b', 'right', false); return; }
+    const bereit = s.pause <= 0;
+    balken(222, y - 4, 68, 8, bereit ? 1 : 1 - s.pause / s.w.pause, bereit ? farbe.hell : '#5a6070');
+  });
+  text(touchModus ? '' : 'Linksklick: 🔵🟣  ·  Rechtsklick: 🟢', 157, H - 6, 10, '#8a8fb0', 'center', false);
+  if (!hat(m, 'beinL') || !hat(m, 'beinR')) text('🦵 Bein ab – du humpelst!', 157, H - 192, 13, '#ff6b6b', 'center');
 
   // ----- Oben rechts: Wer hat wen zerstört? -----
   killfeed.forEach((k, i) => {
@@ -2955,15 +2951,16 @@ function zeichneHUD() {
   }
 
   // ----- Artillerie: Wie weit ist das Ziel, und ist der Raketenhagel bereit? -----
-  if (zustand === 'spiel' && !m.tot && m.typ.mg.salve) {
+  const hagel = hagelVon(m);
+  if (zustand === 'spiel' && !m.tot && hagel) {
     if (m.salve) text(m.salve.warten > 0 ? '🎯 Ziel erfasst ...' : `☄️ Raketenhagel! ${m.salve.rest}`, W / 2, H / 2 + 40, 16, m.typ.akzent);
     else {
       const weite = Math.round(dist(m, landePunkt(m)) / 10);
       text(`🎯 ${weite} m`, W / 2 + 30, H / 2 + 34, 15, m.typ.akzent, 'left');
-      if (m.mgPause > 0) {
-        balken(W / 2 - 25, H / 2 + 50, 50, 5, 1 - m.mgPause / m.typ.mg.pause, m.typ.akzent);
-        text(`Nachladen ${Math.ceil(m.mgPause)} s`, W / 2, H / 2 + 64, 11, '#c9c3ff', 'center', false);
-      } else text(touchModus ? 'Feuer-Knopf: anvisieren!' : 'Linksklick: anvisieren!', W / 2, H / 2 + 58, 12, '#fff', 'center', false);
+      if (hagel.pause > 0) {
+        balken(W / 2 - 25, H / 2 + 50, 50, 5, 1 - hagel.pause / hagel.w.pause, SLOT_ARTEN.rakete.hell);
+        text(`Raketenhagel lädt ${Math.ceil(hagel.pause)} s`, W / 2, H / 2 + 64, 11, '#c9c3ff', 'center', false);
+      } else text(touchModus ? '🚀-Knopf: Raketenhagel!' : 'Rechtsklick: Raketenhagel!', W / 2, H / 2 + 58, 12, '#fff', 'center', false);
     }
   }
 
@@ -3039,22 +3036,25 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
   ctx.restore();
   ctx.rotate(zielWinkel);
   ctx.fillStyle = '#4b5060'; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
-  if (typ.mg.salve) {   // Zwei Raketenwerfer an den Armen
-    for (const s of [-1, 1]) {
-      ctx.fillStyle = T.dunkel; rr(4, s > 0 ? 14 : -28, 26, 14, 4); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = typ.akzent;
-      for (let i = 0; i < 3; i++) { kreis(10 + i * 8, s > 0 ? 21 : -21, 2.3); ctx.fill(); }
+  // Die Waffen in den Slots (von oben gesehen), mit einem Streifen in der Slot-Farbe
+  for (const slot of typ.slots) {
+    const w = WAFFEN[slot.waffe], seite = ORTE[slot.ort].seite < 0 ? -1 : 1, farbe = SLOT_ARTEN[slot.art].farbe;
+    ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
+    if (slot.art === 'rakete') {   // Raketenwerfer
+      const y = slot.ort.startsWith('schulter') ? seite * 22.5 : seite * 14;
+      const b = w.salve || w.anzahl >= 4 ? 14 : 11;
+      ctx.fillStyle = T.dunkel; rr(-16, y - b / 2, 24, b, 3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = farbe;
+      const n = w.salve ? 3 : Math.min(w.anzahl, 2);
+      for (let i = 0; i < n; i++) { kreis(-10 + i * 7, y, 2.5); ctx.fill(); }
+      continue;
     }
-    ctx.fillStyle = '#4b5060';
-  }
-  else if (typ.mg.strahl) { rr(8, 15, 70, 9, 2); ctx.fill(); ctx.stroke(); }   // lange Railgun
-  else if (typ.mg.kanone) { rr(8, -16, 40, 12, 3); ctx.fill(); ctx.stroke(); rr(8, 4, 40, 12, 3); ctx.fill(); ctx.stroke(); }   // zwei dicke Kanonen
-  else { rr(8, -13, 34, 7, 2); ctx.fill(); ctx.stroke(); rr(8, 6, 34, 7, 2); ctx.fill(); ctx.stroke(); }
-  for (const s of typ.rakete.anzahl > 1 ? [-1, 1] : [-1]) {   // Raketenwerfer
-    ctx.fillStyle = T.dunkel; ctx.strokeStyle = '#1a1c22'; ctx.lineWidth = 2;
-    rr(-16, s > 0 ? 17 : -28, 24, 11, 3); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#ffd166';
-    kreis(-9, s > 0 ? 22.5 : -22.5, 2.5); ctx.fill(); kreis(0, s > 0 ? 22.5 : -22.5, 2.5); ctx.fill();
+    const torso = slot.ort.startsWith('torso');
+    const y = torso ? seite * 7 : seite * 13;
+    const lang = (w.id === 'railgun' ? 62 : w.gross ? 50 : w.explodiert ? 40 : w.schrot ? 24 : w.laser ? 30 : 34) * (torso ? 0.6 : 1);
+    const dick = (w.explodiert ? 11 : w.schrot || w.id === 'minigun' ? 9 : 7) * (torso ? 0.7 : 1);
+    ctx.fillStyle = '#4b5060'; rr(torso ? 14 : 8, y - dick / 2, lang, dick, 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = farbe; ctx.fillRect((torso ? 14 : 8) + lang - 5, y - dick / 2 + 1, 4, dick - 2);
   }
   ctx.fillStyle = T.farbe; ctx.strokeStyle = T.dunkel; ctx.lineWidth = 3;
   rr(-19, -17, 36, 34, 9); ctx.fill(); ctx.stroke();
@@ -3535,9 +3535,12 @@ function zeichneTouch() {
     text(emoji, k.x, k.y + 2, k.r * 0.75, '#fff', 'center', false);
     ctx.globalAlpha = 1;
   };
-  const mg = m.typ.mg;
-  knopf('feuer', mg.salve ? '☄️' : mg.strahl ? '🎯' : mg.kanone ? '💣' : '🔫', mg.salve || mg.strahl || mg.kanone ? Math.max(0, 1 - m.mgPause / mg.pause) : 1, m.typ.akzent);
-  knopf('rakete', '🚀', Math.max(0, 1 - m.raketePause / m.typ.rakete.pause), '#ffd166');
+  const bereit = art => {   // Wie weit ist die am weitesten geladene Waffe dieser Gruppe?
+    const ws = m.waffen.filter(s => (s.art === 'rakete') === (art === 'rakete') && slotGeht(m, s));
+    return ws.length ? Math.max(...ws.map(s => 1 - Math.max(0, s.pause) / s.w.pause)) : 0;
+  };
+  knopf('feuer', '🔫', bereit('haupt'), SLOT_ARTEN.laser.farbe);
+  knopf('rakete', '🚀', bereit('rakete'), SLOT_ARTEN.rakete.farbe);
   if (BOOST_AN) knopf('boost', '💨', Math.max(0, 1 - m.boostPause / m.typ.boostPause), '#6fe3ff');
   knopf('pause', '⏸️', 1, '#fff');
 }
