@@ -78,7 +78,21 @@
       try { await document.documentElement.requestFullscreen(); } catch (e) { /* egal, dann eben nicht */ }
     });
   </script>
+  <!-- Fehler-Anzeige: Wenn etwas kaputt ist, steht es hier in einer roten Box (statt nur schwarzem Bildschirm) -->
+  <div id="fehler" style="display:none; position:fixed; left:8px; right:8px; bottom:8px; background:#7f1d1d; color:#fff; padding:8px 12px; border-radius:8px; font:13px monospace; white-space:pre-wrap; z-index:10;"></div>
+  <script>
+    const gemeldet = new Set();
+    window.zeigeFehler = (t) => {
+      if (gemeldet.has(t) || gemeldet.size > 4) return;
+      gemeldet.add(t);
+      const box = document.getElementById('fehler');
+      box.style.display = 'block';
+      box.textContent += (box.textContent ? '\n' : '⚠️ Fehler (bitte Claude zeigen!):\n') + t;
+    };
+    addEventListener('error', e => zeigeFehler(`${e.message} (Zeile ${e.lineno})`));
+    addEventListener('unhandledrejection', e => zeigeFehler(String(e.reason && e.reason.stack || e.reason).split('\n').slice(0, 2).join(' ')));
+  </script>
   <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-  <script type="module" src="spiel.js?v=7"></script>
+  <script type="module" src="spiel.js?v=9"></script>
 </body>
 </html>

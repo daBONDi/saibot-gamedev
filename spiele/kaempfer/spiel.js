@@ -3521,6 +3521,10 @@ function zeichneTouch() {
 }
 
 // ===== Spielschleife =====
+function fehlerMelden(wo, e) {   // Zeigt den Fehler in der roten Box (siehe index.html)
+  const stelle = ((e.stack || '').split('\n').find(z => z.includes('spiel.js')) || '').trim();
+  if (window.zeigeFehler) window.zeigeFehler(`${wo}: ${e.message}  ${stelle}`);
+}
 let letzte = performance.now();
 function schleife(jetzt) {
   const dt = Math.min(0.05, (jetzt - letzte) / 1000);
@@ -3528,8 +3532,8 @@ function schleife(jetzt) {
   zeit += dt;
   // Wenn irgendwo ein Fehler passiert, soll das Spiel nicht einfrieren, sondern einfach weiterlaufen.
   // Der Fehler steht dann in der Browser-Konsole (F12), damit man ihn finden kann.
-  try { update(dt); } catch (e) { console.error('Fehler in update:', e); }
-  try { zeichne(); } catch (e) { console.error('Fehler beim Zeichnen:', e); }
+  try { update(dt); } catch (e) { console.error('Fehler in update:', e); fehlerMelden('update', e); }
+  try { zeichne(); } catch (e) { console.error('Fehler beim Zeichnen:', e); fehlerMelden('zeichnen', e); }
   requestAnimationFrame(schleife);
 }
 requestAnimationFrame(schleife);
