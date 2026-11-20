@@ -4682,6 +4682,7 @@ const RACHE = [
         if (papa && !papa.tot) { papa.unverwundbar = false; explosionEffekt(papa.x, papa.y, papa.z + 60, 140); zerstoert(papa, kragan); }
         funkspruch('vater', 'LAUF! Lauf zum Landeplatz! Bring dich in Sicherheit!', 5);
         ziele[0].versteckt = false;
+        spieler.unverwundbar = false; spieler.schutz = 3;   // Ab jetzt musst du selbst aufpassen (3 Sekunden Schutzschild zum Loslaufen)
       });
       einmal(21.5, () => { funkspruch('du', 'PAPA!!! ... Ich komme wieder, Kragan. Das verspreche ich dir!', 5); zeigeNachricht('📍 Lauf zum Landeplatz – folge dem Pfeil!', 4, '#ffd166'); });
       if (papa && papa.tot) papa.neustart = Infinity;   // Papa kommt nicht wieder ...
@@ -4794,7 +4795,7 @@ function racheStarten(mission) {
     teamNamen(false);
     TEAMS.blau.name = 'Deine Truppe'; TEAMS.rot.name = 'Schwarze Legion';
     const ichTyp = mission.prolog ? karriereTyp({ typ: mission.spielerTyp, slots: mission.spielerSlots }) : karriereTyp(aktiverMech());
-    const aufstellung = [{ team: 'blau', typ: ichTyp, ich: true, keinNeustart: mission.modus === 'flucht' }];
+    const aufstellung = [{ team: 'blau', typ: ichTyp, ich: true, keinNeustart: mission.modus === 'flucht', unverwundbar: !!mission.prolog }];   // Im Prolog beschützt dich Papa
     for (const f of mission.freunde) aufstellung.push(aufstellungEintrag('blau', f));
     for (const g of mission.gegner) aufstellung.push(aufstellungEintrag('rot', g));
     neuesSpiel(mission.modus, aufstellung);
