@@ -882,6 +882,8 @@ function neuesSpiel(id, aufstellung = null) {
     restZeit = 300;
   } else if (modus === 'team') {
     restZeit = 300;
+  } else if (modus === 'boss') {
+    restZeit = BOSS_ZEIT;
   } else if (modus === 'knockout') {
     restZeit = KNOCKOUT_ZEIT;
     runde = 1; rundePause = 0; zuschauen = null;
@@ -1204,7 +1206,7 @@ function zerstoert(m, von) {
   m.tot = true;
   m.totZeit = 0;
   m.salve = null;
-  m.neustart = modus === 'knockout' ? Infinity : NEUSTART_ZEIT;   // Knockout: Kein Neustart!
+  m.neustart = modus === 'knockout' || m.boss ? Infinity : NEUSTART_ZEIT;   // Im Knockout (und der Boss) kommt man nicht wieder   // Knockout: Kein Neustart!
   m.tode++;
   m.zerstoertVon = von;
   // 💥 Das Wrack wird durch die Luft geschleudert – weg von dem, der dich zerstört hat!
@@ -1362,7 +1364,7 @@ function zaehleIn(team, z) { return mechs.filter(m => !m.tot && m.team === team 
 
 // Wohin will der Bot gerade?
 function botZiel(m) {
-  if (modus === 'team' || modus === 'knockout') {
+  if (modus === 'team' || modus === 'knockout' || modus === 'boss') {
     const gegner = mechs.filter(o => !o.tot && o.team !== m.team).sort((a, b) => dist(a, m) - dist(b, m))[0];
     return gegner || { x: WELT_B / 2, y: WELT_H / 2 };
   }
@@ -1496,9 +1498,14 @@ function updateModus(dt) {
     if (restZeit <= 0) zeitUm(punkte.blau, punkte.rot);
   } else if (modus === 'knockout') {
     updateKnockout(dt);
+  } else if (modus === 'boss') {   // 👑 Bosskampf: Besiege den Boss, bevor die Zeit abläuft!
+    const boss = mechs.find(m => m.boss);
+    if (boss && boss.tot) beende(anderes(boss.team), `${boss.name} ist besiegt!`);
+    restZeit -= dt;
+    if (restZeit <= 0) beende(boss ? boss.team : 'rot', 'Die Zeit ist um – der Boss ist entkommen!');
   } else if (modus === 'team') {
-    if (punkte.blau >= ABSCHUSS_ZIEL) beende('blau', `Team Blau hat zuerst ${ABSCHUSS_ZIEL} Mechs zerstört!`);
-    else if (punkte.rot >= ABSCHUSS_ZIEL) beende('rot', `Team Rot hat zuerst ${ABSCHUSS_ZIEL} Mechs zerstört!`);
+    if (punkte.blau >= abschussZiel) beende('blau', `${TEAMS.blau.name} hat zuerst ${abschussZiel} Mechs zerstört!`);
+    else if (punkte.rot >= abschussZiel) beende('rot', `${TEAMS.rot.name} hat zuerst ${abschussZiel} Mechs zerstört!`);
     restZeit -= dt;
     if (restZeit <= 0) zeitUm(punkte.blau, punkte.rot);
   } else {
@@ -2755,6 +2762,17 @@ function baueMech(m) {
     torso.add(schraeg(klotz(6, 18, 34, akzentMat, 20, 4, 0), -0.2));
     for (const s of [-1, 1]) torso.add(klotz(3, 3, 3, akzentLeucht, 4, 30, s * 10));
   }
+  if (typ.boss) {   // 👑 Der Boss hat eine goldene Krone und böse rote Augen
+    const gold = new THREE.MeshStandardMaterial({ color: '#facc15', metalness: 0.9, roughness: 0.25, emissive: '#a16207', emissiveIntensity: 0.3 });
+    torso.add(klotz(26, 4, 26, gold, -2, 30, 0));
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2;
+      const zacke = new THREE.Mesh(new THREE.ConeGeometry(2.5, 9, 4), gold);
+      zacke.position.set(-2 + Math.cos(a) * 11, 36, Math.sin(a) * 11);
+      torso.add(zacke);
+    }
+    for (const s of [-1, 1]) torso.add(klotz(1, 3, 4, leucht('#ff2222'), 23.6, 22, s * 4));
+  }
   if (typ.id === 'feuer') {    // 🔥 Heiße Lüftung am Bauch
     for (const s of [-1, 1]) torso.add(klotz(1, 6, 8, leucht('#ff6a00'), 12.6, 0, s * 7));
   }
@@ -3587,7 +3605,7 @@ function zeichneIntro() {
     else info = '👋 Das Raumschiff fliegt weg. Viel Glück, Pilot!';
     ctx.fillStyle = 'rgba(15,17,24,0.8)'; rr(W / 2 - 230, 40, 460, 58, 12); ctx.fill();
     text(info, W / 2, 60, 18, '#ffd166', 'center', false);
-    const modusInfo = MODI.find(x => x.id === modus);
+    const modusInfo = modusInfoVon(modus);
     text(`${karte.emoji} ${karte.name}  ·  ${modusInfo.emoji} ${modusInfo.name}`, W / 2, 84, 13, '#c9c3ff', 'center', false);
   }
   text(touchModus ? 'Tippen: Intro überspringen' : 'Klick oder Leertaste: Intro überspringen', W / 2, H - 100, 13, 'rgba(255,255,255,0.7)', 'center', false);
@@ -3714,7 +3732,7 @@ function zeichneNamen() {
 
 // Wo ist das Ziel? Zeichen über dem Punkt oder Pfeil am Rand
 function zeichneZielZeichen() {
-  if (modus === 'team' || modus === 'knockout' || spieler.tot) return;
+  if (modus === 'team' || modus === 'knockout' || modus === 'boss' || spieler.tot) return;
   const z = modus === 'punkt' ? ziele[0] : ziele[aktivesZiel];
   const w = winkelDiff(blick.links, Math.atan2(z.y - spieler.y, z.x - spieler.x));
   const meter = Math.round(dist(z, spieler) / 10);
@@ -3967,7 +3985,15 @@ function zeichneHUD() {
     text(`${punkte.blau}`, W / 2 - 70, 34, 30, TEAMS.blau.hell);
     text(':', W / 2, 32, 26, '#fff');
     text(`${punkte.rot}`, W / 2 + 70, 34, 30, TEAMS.rot.hell);
-    text(`Zuerst ${ABSCHUSS_ZIEL} gewinnt · ${uhr(restZeit)}`, W / 2, 58, 13, '#c9c3ff', 'center', false);
+    text(`Zuerst ${abschussZiel} gewinnt · ${uhr(restZeit)}`, W / 2, 58, 13, '#c9c3ff', 'center', false);
+  } else if (modus === 'boss') {   // 👑 Großer Lebensbalken vom Boss
+    const boss = mechs.find(o => o.boss);
+    if (boss) {
+      const anteil = boss.tot ? 0 : Math.min(...['mitte', 'visier'].map(t => teilAnteil(boss, t)));
+      text(`👑 ${boss.name}`, W / 2 - 60, 26, 17, '#facc15');
+      text(uhr(restZeit), W / 2 + 150, 26, 18, restZeit < 30 ? '#ff6b6b' : '#fff');
+      balken(W / 2 - 180, 42, 360, 16, anteil, anteil < 0.3 ? '#ef4444' : '#facc15');
+    }
   } else {
     const z = ziele[aktivesZiel];
     const wirGreifenAn = spieler.team === angreifer;
@@ -4067,7 +4093,7 @@ function zeichneHUD() {
   if (countdown > 0 && zustand === 'spiel') {
     const n = Math.ceil(countdown) - 1;
     const pop = 1 + (countdown % 1) * 0.5;
-    const modusInfo = MODI.find(x => x.id === modus);
+    const modusInfo = modusInfoVon(modus);
     text(`${modusInfo.emoji} ${modusInfo.name}${modus === 'knockout' ? ' · Runde ' + runde : ''}`, W / 2, H / 2 - 110, 34, '#ffd166');
     text(n > 0 ? String(n) : 'LOS!', W / 2, H / 2 - 20, 90 * pop, n > 0 ? '#fff' : '#4ade80');
     if (modus === 'angriff' || modus === 'verteidigung') {
@@ -4109,7 +4135,7 @@ function zeichneHUD() {
     }
   }
 
-  text(tonAn ? '🔊 M' : '🔇 M', W - 30, 20, 14, '#fff', 'center', false);
+  text(tonAn ? '🔊 M' : '🔇 M', W - 30, H - 14, 14, '#fff', 'center', false);
 
   if (zustand === 'spiel' && touchModus && !pause) zeichneTouch();
 
@@ -4192,8 +4218,10 @@ function zeichneMech2D(team, x, y, groesse, laufWinkel, zielWinkel, phase, typ =
 }
 
 function kartenKnoepfe() {
-  return KARTEN.map((k, i) => ({ k, x: W / 2 - KARTEN.length * 105 + i * 210 + 5, y: 510, w: 200, h: 48 }));
+  return KARTEN.map((k, i) => ({ k, x: W / 2 - KARTEN.length * 92 + i * 184 + 4, y: 510, w: 176, h: 48 }));
 }
+const STORY_KNOPF = { x: 20, y: 18, w: 190, h: 46 };
+const ONLINE_KNOPF = { x: W - 210, y: 18, w: 190, h: 46 };
 function zeichneTitel() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#14161c'); g.addColorStop(1, '#2b3140');
@@ -4204,8 +4232,13 @@ function zeichneTitel() {
   for (let y = 0; y <= H; y += 60) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
   ctx.stroke();
 
-  zeichneMech2D('blau', 90, 515, 2, 0, Math.atan2(maus.y - 515, maus.x - 90), zeit * 6, meinMech);
-  zeichneMech2D('rot', W - 90, 515, 2, Math.PI, Math.PI + Math.sin(zeit) * 0.3, zeit * 6, MECH_TYPEN[2]);
+  zeichneMech2D('blau', 70, 530, 1.6, 0, Math.atan2(maus.y - 530, maus.x - 70), zeit * 6, meinMech);
+  zeichneMech2D('rot', W - 70, 530, 1.6, Math.PI, Math.PI + Math.sin(zeit) * 0.3, zeit * 6, MECH_TYPEN[2]);
+  // Großer Knopf für den Storymodus (oben links)
+  const sh = imRechteck(maus, STORY_KNOPF);
+  ctx.fillStyle = sh ? '#ffd166' : 'rgba(30,34,46,0.9)'; rr(STORY_KNOPF.x, STORY_KNOPF.y, STORY_KNOPF.w, STORY_KNOPF.h, 12); ctx.fill();
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.stroke();
+  text('📖 Storymodus', STORY_KNOPF.x + STORY_KNOPF.w / 2, STORY_KNOPF.y + 23, 18, sh ? '#1b1f3a' : '#ffd166', 'center', false);
 
   const titelG = ctx.createLinearGradient(W / 2 - 300, 0, W / 2 + 300, 0);
   titelG.addColorStop(0, '#93c5fd'); titelG.addColorStop(0.5, '#ffffff'); titelG.addColorStop(1, '#fca5a5');
@@ -4230,10 +4263,240 @@ function zeichneTitel() {
     ctx.fillStyle = an ? '#3a4256' : 'rgba(30,34,46,0.9)';
     rr(b.x, b.y, b.w, b.h, 12); ctx.fill();
     ctx.strokeStyle = an ? '#ffd166' : (hover ? '#8a8fb0' : '#4a5266'); ctx.lineWidth = an ? 3 : 2; ctx.stroke();
-    text(`${b.k.emoji} ${b.k.name}`, b.x + b.w / 2, b.y + b.h / 2, 17, an ? '#ffd166' : '#fff', 'center', false);
+    text(`${b.k.emoji} ${b.k.name}`, b.x + b.w / 2, b.y + b.h / 2, 14, an ? '#ffd166' : '#fff', 'center', false);
   }
   if (!renderer) text('⚠️ 3D geht auf diesem Computer leider nicht (kein WebGL).', W / 2, 580, 16, '#ff6b6b');
-  text(tonAn ? '🔊 M' : '🔇 M', W - 30, 20, 14, '#fff', 'center', false);
+  text(tonAn ? '🔊 M' : '🔇 M', W - 30, H - 14, 14, '#fff', 'center', false);
+}
+
+// =====================================================================
+// ===== 📖 Storymodus: Die Sternenwacht =====
+// =====================================================================
+// Die Geschichte: Du bist ein neuer Pilot der Sternenwacht. Baron Eisenzahn und seine Rostbande
+// klauen überall in der Galaxis Sternkristalle. 5 Missionen – und am Ende wartet der Baron in seinem Riesen-Mech!
+const SPRECHER = {
+  vega:  { name: 'Kommandantin Vega', emoji: '👩‍🚀', farbe: '#93c5fd' },
+  bolle: { name: 'Funker Bolle',      emoji: '🧑‍🔧', farbe: '#fde68a' },
+  baron: { name: 'Baron Eisenzahn',   emoji: '🦹',   farbe: '#fca5a5' },
+};
+// Der Boss: Baron Eisenzahns Riesen-Mech (kann man nicht selbst auswählen)
+const BOSS_BARON = {
+  id: 'baron', klasse: 'schwer', boss: true, name: 'Eiserner Koloss', emoji: '👑', akzent: '#facc15', text: 'Der Riesen-Mech von Baron Eisenzahn.',
+  dick: 1.8, schulter: 1.7, leben: 700, tempo: 80, groesse: 1.75, boostPause: 9, keinBoost: true,
+  slots: [['armL', 'kanone', 'kanone'], ['armR', 'kanone', 'kanone'], ['torsoL', 'laser', 'puls'], ['torsoR', 'laser', 'puls'], ['schulterL', 'rakete', 'hagel'], ['schulterR', 'rakete', 'rak4']]
+    .map(([ort, art, waffe]) => ({ ort, art, waffe })),
+  sterne: { leben: 5, tempo: 1 },
+};
+const typVon = id => MECH_TYPEN.find(t => t.id === id);
+// Die Missionen. gegner / freunde: Welche Mechs mitspielen. ungenau: Wie schlecht die Gegner zielen.
+const MISSIONEN = [
+  { id: 'pruefung', name: 'Die Prüfung', karte: 'fabrik', modus: 'team', abschussZiel: 8, ungenau: 0.26, pos: [140, 380],
+    ziel: 'Zerstöre 8 Übungs-Mechs!',
+    freunde: ['waechter', 'blitz', 'rubin'], gegner: ['blitz', 'hornisse', 'adler', 'blitz'],
+    vorher: [
+      ['vega', 'Willkommen bei der Sternenwacht, Rekrut! Ich bin Kommandantin Vega.'],
+      ['vega', 'Die Rostbande klaut überall in der Galaxis Sternkristalle. Ohne die Kristalle gehen auf vielen Planeten die Lichter aus!'],
+      ['vega', 'Bevor du in den Einsatz darfst, musst du die Prüfung bestehen: Zerstöre 8 Übungs-Mechs in der alten Stahlfabrik.'],
+      ['bolle', 'Keine Sorge, die Übungs-Mechs zielen ziemlich schlecht. Hehe.'],
+    ],
+    nachher: [
+      ['vega', 'Stark! Du hast bestanden. Ab heute bist du Pilot der Sternenwacht!'],
+      ['bolle', 'Kommandantin! Ein Notruf von Planet Xyloria!'],
+    ] },
+  { id: 'signal', name: 'Das Kristall-Signal', karte: 'planet', modus: 'punkt', ungenau: 0.19, pos: [320, 230],
+    ziel: 'Halte den Punkt, bis ihr 100 Punkte habt!',
+    freunde: ['waechter', 'feuer', 'rubin'], gegner: ['waechter', 'feuer', 'rubin', 'hornisse'],
+    vorher: [
+      ['vega', 'Auf Xyloria sendet ein Kristallfeld ein seltsames Signal. Die Rostbande will es sich schnappen.'],
+      ['baron', '*knister* Hahaha! Die Kristalle gehören bald mir, Baron Eisenzahn! Schnappt sie euch, Jungs!'],
+      ['bolle', 'Uff, wir haben gerade den Funk vom Baron abgehört. Der klingt ja fies.'],
+      ['vega', 'Halte den Punkt in der Mitte, bis wir 100 Punkte haben. Los geht\'s!'],
+    ],
+    nachher: [
+      ['vega', 'Das Kristallfeld ist sicher. Gute Arbeit, Pilot!'],
+      ['bolle', 'Ich hab ihre Spur! Die Rostbande versteckt geklaute Kristalle auf dem Eisplaneten Frostheim.'],
+    ] },
+  { id: 'eiskalt', name: 'Eiskalter Angriff', karte: 'eis', modus: 'angriff', ungenau: 0.16, pos: [490, 390],
+    ziel: 'Erobere Punkt A und dann Punkt B!',
+    freunde: ['koloss', 'feuer', 'waechter'], gegner: ['koloss', 'nashorn', 'artillerie', 'adler'],
+    vorher: [
+      ['vega', 'Die Rostbande hat auf Frostheim zwei Lager: A und B. Dort liegen die geklauten Kristalle.'],
+      ['vega', 'Wir greifen an! Erobere erst Punkt A, dann Punkt B, bevor die Zeit abläuft.'],
+      ['bolle', 'Achtung, da unten schneit es. Die Mechs haben aber eine Heizung. Glaube ich.'],
+    ],
+    nachher: [
+      ['vega', 'Beide Lager erobert! Wir haben ganz viele Kristalle zurück.'],
+      ['baron', '*knister* WAS?! Das werdet ihr bereuen! Ich komme euch holen!'],
+    ] },
+  { id: 'hinterhalt', name: 'Hinterhalt am Strand', karte: 'dschungel', modus: 'verteidigung', ungenau: 0.14, pos: [670, 240],
+    ziel: 'Verteidige A und B, bis die Zeit um ist!',
+    freunde: ['nashorn', 'rubin', 'koloss'], gegner: ['nashorn', 'titan', 'hornisse', 'feuer', 'adler'],
+    vorher: [
+      ['bolle', 'Alarm! Die Rostbande hat uns im Dschungel eingekreist!'],
+      ['vega', 'Sie wollen den alten Tempel, in dem wir die Kristalle versteckt haben. Wir verteidigen!'],
+      ['vega', 'Halte sie von Punkt A und B fern, bis die Zeit um ist. Vorsicht: Diesmal sind sie zu fünft!'],
+    ],
+    nachher: [
+      ['vega', 'Sie hauen ab! Und jetzt weiß ich, wo der Baron sich versteckt: in der Stahlfabrik!'],
+      ['baron', '*knister* Kommt nur her ... mein Riesen-Mech wartet schon auf euch!'],
+    ] },
+  { id: 'baron', name: 'Baron Eisenzahn', karte: 'fabrik', modus: 'boss', ungenau: 0.12, pos: [840, 370],
+    ziel: 'Besiege den Eisernen Koloss!',
+    freunde: ['titan', 'rubin', 'nashorn'], gegner: ['baron', 'koloss', 'feuer', 'adler'],
+    vorher: [
+      ['vega', 'Das ist der letzte Einsatz, Pilot. Baron Eisenzahn sitzt in seinem Riesen-Mech: dem Eisernen Koloss.'],
+      ['vega', 'Er hat 700 Leben, einen Raketenhagel und zwei Kanonen. Aber wenn er einmal kaputt ist, kommt er nicht wieder!'],
+      ['baron', 'Ihr kleinen Blechdosen! Ich mache Schrott aus euch!'],
+      ['bolle', 'Tipp: Schieß auf sein Visier oder auf seine Beine! Dann geht er schneller K.o.'],
+      ['vega', 'Besiege den Baron, bevor die Zeit abläuft. Viel Glück!'],
+    ],
+    nachher: [
+      ['baron', 'Neeeein! Mein schöner Koloss! ... Na gut, ihr habt gewonnen. Ihr kriegt die Kristalle zurück.'],
+      ['vega', 'Geschafft! Die Galaxis ist gerettet – dank dir!'],
+      ['bolle', 'Überall gehen die Lichter wieder an! PARTY! 🎉'],
+      ['vega', 'Ab heute bist du kein Rekrut mehr. Du bist ein Held der Sternenwacht! 🏅'],
+    ] },
+];
+const BOSS_ZEIT = 300;   // So lange hat man Zeit, den Baron zu besiegen
+let storyFortschritt = 0;   // So viele Missionen sind geschafft
+try { storyFortschritt = Math.min(MISSIONEN.length, parseInt(localStorage.getItem('kaempfer-story')) || 0); } catch (e) { /* egal */ }
+let storyMission = null;    // Welche Mission läuft gerade? (null = kein Storymodus)
+let abschussZiel = ABSCHUSS_ZIEL;
+const MODUS_EXTRA = { boss: { id: 'boss', emoji: '👑', name: 'Bosskampf' } };
+const modusInfoVon = id => MODI.find(x => x.id === id) || MODUS_EXTRA[id];
+
+function teamNamen(story) {
+  TEAMS.blau.name = story ? 'Sternenwacht' : 'Team Blau';
+  TEAMS.rot.name = story ? 'Rostbande' : 'Team Rot';
+}
+function starteMission(mission) {
+  storyMission = mission;
+  karte = KARTEN.find(k => k.id === mission.karte);
+  botUngenau = mission.ungenau;
+  abschussZiel = mission.abschussZiel || ABSCHUSS_ZIEL;
+  teamNamen(true);
+  const aufstellung = [{ team: 'blau', typ: meinMech, ich: true }];
+  mission.freunde.forEach(id => aufstellung.push({ team: 'blau', typ: typVon(id) }));
+  mission.gegner.forEach(id => aufstellung.push(id === 'baron' ? { team: 'rot', typ: BOSS_BARON, name: 'Baron Eisenzahn' } : { team: 'rot', typ: typVon(id) }));
+  neuesSpiel(mission.modus, aufstellung);
+}
+function normalesSpiel() {   // Zurück zu den normalen Einstellungen (ohne Story)
+  storyMission = null;
+  botUngenau = BOT_UNGENAU;
+  abschussZiel = ABSCHUSS_ZIEL;
+  teamNamen(false);
+}
+function storyNachMission() {   // Wird aufgerufen, wenn man nach einer Mission klickt
+  const m = storyMission, gewonnen = ende && ende.sieger === spieler.team;
+  normalesSpiel();
+  try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || KARTEN[0]; } catch (e) { karte = KARTEN[0]; }
+  if (!gewonnen) { zustand = 'story'; return; }
+  const nr = MISSIONEN.indexOf(m);
+  if (nr + 1 > storyFortschritt) {
+    storyFortschritt = nr + 1;
+    try { localStorage.setItem('kaempfer-story', String(storyFortschritt)); } catch (e) { /* egal */ }
+  }
+  dialogStarten(m.nachher, () => { zustand = 'story'; });
+}
+
+// ----- Gespräche (Dialoge) mit Schreibmaschinen-Text -----
+let dialog = null;
+function dialogStarten(zeilen, danach) {
+  dialog = { zeilen, i: 0, start: zeit, danach };
+  zustand = 'dialog';
+}
+function dialogWeiter() {
+  const z = dialog.zeilen[dialog.i];
+  const fertig = (zeit - dialog.start) * 45 >= z[1].length;
+  if (!fertig) { dialog.start = -1e9; return; }   // Erst mal den ganzen Text zeigen
+  dialog.i++;
+  dialog.start = zeit;
+  sound.piep();
+  if (dialog.i >= dialog.zeilen.length) { const d = dialog.danach; dialog = null; d(); }
+}
+function sterneMalenHimmel() {   // Hintergrund: Weltraum mit Sternen
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#05070f'); g.addColorStop(1, '#141a33');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 120; i++) {
+    const x = (i * 197) % W, y = (i * 113) % H, f = 0.4 + 0.6 * Math.abs(Math.sin(zeit * 0.8 + i));
+    ctx.fillStyle = `rgba(255,255,255,${f * 0.8})`;
+    ctx.fillRect(x, y, i % 7 === 0 ? 2 : 1, i % 7 === 0 ? 2 : 1);
+  }
+}
+function zeichneDialog() {
+  sterneMalenHimmel();
+  const z = dialog.zeilen[dialog.i], wer = SPRECHER[z[0]];
+  const mission = MISSIONEN.find(m => m.vorher === dialog.zeilen || m.nachher === dialog.zeilen);
+  if (mission) {
+    text(`📖 Mission ${MISSIONEN.indexOf(mission) + 1}: ${mission.name}`, W / 2, 50, 30, '#ffd166');
+    if (mission.vorher === dialog.zeilen) text(`🎯 ${mission.ziel}`, W / 2, 88, 17, '#c9c3ff', 'center', false);
+  }
+  // Das Bild vom Sprecher (wie auf einem Funk-Bildschirm)
+  const px = 70, py = 170, ps = 200;
+  ctx.fillStyle = '#0b1020'; rr(px, py, ps, ps, 16); ctx.fill();
+  ctx.strokeStyle = wer.farbe; ctx.lineWidth = 4; ctx.stroke();
+  ctx.save(); ctx.beginPath(); rr(px, py, ps, ps, 16); ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  for (let y = py; y < py + ps; y += 4) ctx.fillRect(px, y + (zeit * 30) % 4, ps, 1);   // Bildschirm-Streifen
+  const reden = (zeit - dialog.start) * 45 < z[1].length;
+  text(wer.emoji, px + ps / 2, py + ps / 2 + (reden ? Math.sin(zeit * 25) * 3 : 0), 110, '#fff', 'center', false);
+  ctx.restore();
+  text(wer.name, px + ps / 2, py + ps + 26, 18, wer.farbe);
+  // Die Sprechblase mit Schreibmaschinen-Text
+  const bx = 300, by = 170, bw = 600, bh = 200;
+  ctx.fillStyle = 'rgba(20,26,46,0.95)'; rr(bx, by, bw, bh, 16); ctx.fill();
+  ctx.strokeStyle = wer.farbe; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = 'rgba(20,26,46,0.95)';
+  ctx.beginPath(); ctx.moveTo(bx, by + 60); ctx.lineTo(bx - 24, by + 80); ctx.lineTo(bx, by + 100); ctx.fill();
+  const zeichen = Math.floor((zeit - dialog.start) * 45);
+  umbrechen(z[1].slice(0, Math.max(0, zeichen)), bx + 26, by + 36, bw - 52, 30, 21, '#ffffff');
+  if (!reden && Math.sin(zeit * 6) > 0) text('▼', bx + bw - 30, by + bh - 24, 18, wer.farbe, 'center', false);
+  text(`${dialog.i + 1} / ${dialog.zeilen.length}  ·  Klick oder Leertaste: weiter`, W / 2, 470, 15, '#8a8fb0', 'center', false);
+}
+
+// ----- Die Sternenkarte mit allen Missionen -----
+const STORY_ZURUECK = { x: 30, y: 540, w: 150, h: 40 };
+const missionKnopf = m => ({ x: m.pos[0] - 60, y: m.pos[1] - 60, w: 120, h: 120 });
+function zeichneStory() {
+  sterneMalenHimmel();
+  text('📖 Die Sternenwacht', W / 2, 50, 38, '#ffd166');
+  text(storyFortschritt >= MISSIONEN.length ? '🏅 Du hast alle Missionen geschafft! Du bist ein Held der Sternenwacht!' : 'Rette die Galaxis vor Baron Eisenzahn und seiner Rostbande!', W / 2, 92, 16, '#c9c3ff', 'center', false);
+  // Weg zwischen den Missionen
+  ctx.setLineDash([8, 8]); ctx.lineWidth = 3;
+  for (let i = 0; i < MISSIONEN.length - 1; i++) {
+    const a = MISSIONEN[i].pos, b = MISSIONEN[i + 1].pos;
+    ctx.strokeStyle = i < storyFortschritt ? '#ffd166' : '#3a4256';
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  MISSIONEN.forEach((m, i) => {
+    const offen = i <= storyFortschritt, geschafft = i < storyFortschritt, naechste = i === storyFortschritt;
+    const k = missionKnopf(m), hover = offen && imRechteck(maus, k);
+    const r = 46 + (naechste ? Math.sin(zeit * 3) * 4 : 0) + (hover ? 6 : 0);
+    const kk = KARTEN.find(x => x.id === m.karte);
+    ctx.fillStyle = offen ? (m.modus === 'boss' ? '#7f1d1d' : '#1e3a5f') : '#1a1d24';
+    kreis(m.pos[0], m.pos[1], r); ctx.fill();
+    ctx.strokeStyle = geschafft ? '#ffd166' : naechste ? '#4ade80' : '#3a4256'; ctx.lineWidth = hover ? 5 : 3; ctx.stroke();
+    text(offen ? (m.modus === 'boss' ? '👑' : kk.emoji) : '🔒', m.pos[0], m.pos[1] - 4, 36, '#fff', 'center', false);
+    if (geschafft) text('⭐', m.pos[0] + 36, m.pos[1] - 36, 22, '#fff', 'center', false);
+    text(`${i + 1}. ${m.name}`, m.pos[0], m.pos[1] + r + 18, 15, offen ? '#fff' : '#5a6070', 'center', false);
+    if (offen) text(modusInfoVon(m.modus).emoji + ' ' + modusInfoVon(m.modus).name, m.pos[0], m.pos[1] + r + 36, 12, '#8a8fb0', 'center', false);
+  });
+  knopfMalen(STORY_ZURUECK, '← Zurück');
+  text('Klick auf eine Mission!', W / 2 + 60, 560, 16, '#8a8fb0', 'center', false);
+}
+function storyKlick() {
+  if (imRechteck(maus, STORY_ZURUECK)) { zustand = 'titel'; return; }
+  MISSIONEN.forEach((m, i) => {
+    if (i > storyFortschritt || !imRechteck(maus, missionKnopf(m))) return;
+    dialogStarten(m.vorher, () => {   // Nach dem Gespräch: Mech aussuchen, dann geht's los
+      storyMission = m;
+      gewaehlterModus = m.modus;
+      karte = KARTEN.find(k => k.id === m.karte);
+      zustand = 'auswahl';
+    });
+  });
 }
 
 // ===== Mech-Auswahl =====
@@ -4273,7 +4536,7 @@ function zeichneAuswahl() {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#14161c'); g.addColorStop(1, '#2b3140');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  const modusInfo = MODI.find(x => x.id === gewaehlterModus);
+  const modusInfo = modusInfoVon(gewaehlterModus);
   text('Wähle deinen Mech!', W / 2, 45, 38, '#ffd166');
   text(`Spielmodus: ${modusInfo.emoji} ${modusInfo.name}  ·  Karte: ${karte.emoji} ${karte.name}`, W / 2, 78, 16, '#c9c3ff', 'center', false);
 
@@ -4317,7 +4580,8 @@ function zeichneAuswahl() {
 function waehleMech(t) {
   meinMech = umgebaut(t);
   try { localStorage.setItem('kaempfer-mech', t.id); } catch (e) { /* egal */ }
-  neuesSpiel(gewaehlterModus);
+  if (storyMission) starteMission(storyMission);   // 📖 Storymodus
+  else neuesSpiel(gewaehlterModus);
 }
 
 // ===== 🔧 Die Werkstatt: Waffen in die Slots stecken =====
@@ -4447,13 +4711,15 @@ function zeichneEnde() {
       text(String(m.tode), x + 265, y, 16, '#fff', 'center', false);
     });
   });
-  if (zeit - ende.seit > 1) text('Klicken: Zurück zum Menü  ·  Enter: Nochmal', W / 2, 500, 20, '#c9c3ff', 'center', false);
+  if (zeit - ende.seit > 1) text(storyMission ? (ende.sieger === spieler.team ? 'Klicken: Weiter ▶  ·  Enter: Nochmal' : 'Klicken: Zur Sternenkarte  ·  Enter: Nochmal versuchen') : 'Klicken: Zurück zum Menü  ·  Enter: Nochmal', W / 2, 500, 20, '#c9c3ff', 'center', false);
 }
 
 function zeichne() {
   ctx.clearRect(0, 0, W, H);
   if (zustand === 'titel') { zeichneTitel(); return; }
   if (zustand === 'auswahl') { zeichneAuswahl(); return; }
+  if (zustand === 'story') { zeichneStory(); return; }
+  if (zustand === 'dialog') { zeichneDialog(); return; }
   if (zustand === 'werkstatt') { zeichneWerkstatt(); return; }
   zeichne3D();
   zeichneHUD();
@@ -4486,7 +4752,10 @@ addEventListener('keydown', e => {
   if (zustand === 'spiel' && k === 'escape' && !pause) { pause = true; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && pause && k === 'enter') { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && intro && !pause && (k === ' ' || k === 'enter')) introBeenden();   // Intro überspringen
-  else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) neuesSpiel(modus);
+  else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) { if (storyMission) starteMission(storyMission); else neuesSpiel(modus); }
+  else if (zustand === 'dialog' && (k === ' ' || k === 'enter')) dialogWeiter();
+  else if (zustand === 'dialog' && k === 'escape') { const d = dialog.danach; dialog = null; d(); }   // Gespräch überspringen
+  else if (zustand === 'story' && k === 'escape') zustand = 'titel';
   else if (zustand === 'auswahl' && k === 'escape') zustand = 'titel';
   else if (zustand === 'werkstatt' && k === 'escape') zustand = 'auswahl';
 });
@@ -4509,7 +4778,8 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'spiel' && intro && !pause) { introBeenden(); if (!mausGefangen && e.pointerType !== 'touch') mausFangen(); return; }   // Intro überspringen
   if (e.pointerType === 'touch' && zustand === 'spiel') { touchRunter(e); return; }
   if (zustand === 'titel') {
-    for (const k of modusKarten()) if (imRechteck(maus, k)) { gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
+    for (const k of modusKarten()) if (imRechteck(maus, k)) { normalesSpiel(); gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
+    if (imRechteck(maus, STORY_KNOPF)) { normalesSpiel(); zustand = 'story'; return; }
     for (const b of kartenKnoepfe()) if (imRechteck(maus, b)) {
       karte = b.k;
       try { localStorage.setItem('kaempfer-karte', karte.id); } catch (e) { /* egal */ }
@@ -4523,11 +4793,13 @@ canvas.addEventListener('pointerdown', e => {
       else waehleMech(k.t);
       return;
     }
-    if (imRechteck(maus, ZURUECK_KNOPF)) zustand = 'titel';
+    if (imRechteck(maus, ZURUECK_KNOPF)) zustand = storyMission ? 'story' : 'titel';
     return;
   }
   if (zustand === 'werkstatt') { werkstattKlick(); return; }
-  if (zustand === 'ende') { if (zeit - ende.seit > 1) zustand = 'titel'; return; }
+  if (zustand === 'ende') { if (zeit - ende.seit > 1) { if (storyMission) storyNachMission(); else zustand = 'titel'; } return; }
+  if (zustand === 'story') { storyKlick(); return; }
+  if (zustand === 'dialog') { dialogWeiter(); return; }
   if (pause) { pause = false; mausFangen(); return; }
   if (!mausGefangen) mausFangen();
   if (e.button === 0) maus.links = true;
