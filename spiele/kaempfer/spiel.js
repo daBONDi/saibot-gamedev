@@ -264,6 +264,7 @@ const EROBERN_TEMPO = 4;      // Angriff: So schnell wird ein Punkt erobert (Pro
 // "art" sagt, wie ein Block aussieht:
 //   Fabrik: wand, kiste, plattform (zum Draufstehen), rampe, steg (Brücke), gelaender, saeule
 //   Planet: fels, kristall, pilz, stein, huegel (zum Draufstehen), hang (Rampe)
+//   Eis: eisblock, schneehaufen, eiszacke, wrack (abgestürztes Raumschiff), schneehuegel (zum Draufstehen), schneehang (Rampe)
 // "oben" ist die Höhe der Oberkante, "unten" die Unterkante (bei Brücken kann man drunter durchlaufen!)
 // "rampe" sagt, wo die hohe Seite einer Rampe ist: 'n' (oben), 's' (unten), 'w' (links), 'o' (rechts)
 // Wichtig: Die Mitte (1200, 700) und die Punkte A und B (780 / 1620, 700) müssen frei bleiben!
@@ -349,9 +350,41 @@ const KARTEN = [
       { x: 1760, y: 480, w: 80, h: 200, art: 'kristall', auchUnten: true },
       { x: 1780, y: 980, w: 40, h: 40, art: 'stein' },
     ],
+  {
+    id: 'eis', name: 'Eisplanet Frostheim', emoji: '❄️',
+    links: [
+      { x: 300, y: 280, w: 160, h: 60, art: 'eisblock', auchUnten: true },
+      { x: 420, y: 600, w: 60, h: 200, art: 'wrack' },
+      { x: 990, y: 650, w: 40, h: 100, art: 'schneehaufen' },
+      { x: 1100, y: 250, w: 60, h: 60, art: 'schneehaufen', auchUnten: true },
+      { x: 960, y: 470, w: 50, h: 50, art: 'eiszacke', auchUnten: true },
+      // Schneehügel zum Draufklettern, mit zwei Hängen
+      { x: 560, y: 160, w: 260, h: 200, art: 'schneehuegel', oben: 100, auchUnten: true },
+      { x: 600, y: 360, w: 120, h: 160, art: 'schneehang', rampe: 'n', oben: 100, auchUnten: true },
+      { x: 820, y: 160, w: 140, h: 200, art: 'schneehang', rampe: 'w', oben: 100, auchUnten: true },
+    ],
+    mitte: [{ x: 1150, y: 230, w: 100, h: 140, art: 'eisblock', auchUnten: true }],
+    // Die große Version für Knockout (3600 x 2000, Mitte bei 1800 / 1000)
+    grossLinks: [
+      { x: 420, y: 320, w: 200, h: 70, art: 'eisblock', auchUnten: true },
+      { x: 520, y: 880, w: 70, h: 240, art: 'wrack' },
+      { x: 760, y: 640, w: 50, h: 50, art: 'schneehaufen', auchUnten: true },
+      { x: 900, y: 480, w: 60, h: 60, art: 'eiszacke', auchUnten: true },
+      { x: 1000, y: 60, w: 320, h: 240, art: 'schneehuegel', oben: 100, auchUnten: true },
+      { x: 1000, y: 300, w: 140, h: 240, art: 'schneehang', rampe: 'n', oben: 100, auchUnten: true },
+      { x: 1320, y: 60, w: 220, h: 200, art: 'schneehang', rampe: 'w', oben: 100, auchUnten: true },
+      { x: 1260, y: 700, w: 70, h: 200, art: 'eisblock', auchUnten: true },
+      { x: 1500, y: 560, w: 60, h: 60, art: 'eiszacke', auchUnten: true },
+      { x: 1520, y: 940, w: 80, h: 120, art: 'wrack' },
+    ],
+    grossMitte: [
+      { x: 1750, y: 480, w: 100, h: 200, art: 'eisblock', auchUnten: true },
+      { x: 1780, y: 980, w: 40, h: 40, art: 'schneehaufen' },
+    ],
   },
 ];
-const STANDARD_HOEHE = { wand: 110, kiste: 40, fels: 100, kristall: 130, pilz: 150, stein: 40, saeule: 100 };
+const STANDARD_HOEHE = { wand: 110, kiste: 40, fels: 100, kristall: 130, pilz: 150, stein: 40, saeule: 100, eisblock: 110, schneehaufen: 40, eiszacke: 130, wrack: 90 };
+const DRAUFSTEHEN = ['plattform', 'huegel', 'schneehuegel'];   // Auf diesen Blöcken kann man oben stehen
 let karte = KARTEN[0];
 try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || karte; } catch (e) { /* egal */ }
 let WAENDE = [];
@@ -1271,7 +1304,7 @@ function botZiel(m) {
   }
   // Scharfschützen und Artillerie stellen sich manchmal auf eine Plattform oder einen Hügel
   if ((hauptWaffe(m).weite > 1000 || hagelVon(m)) && m.seed > 4) {
-    const hoch = WAENDE.filter(b => (b.art === 'plattform' || b.art === 'huegel') && (b.x + b.w / 2 < WELT_B / 2) === (m.team === 'blau'));
+    const hoch = WAENDE.filter(b => DRAUFSTEHEN.includes(b.art) && (b.x + b.w / 2 < WELT_B / 2) === (m.team === 'blau'));
     if (hoch.length) {
       const b = hoch[Math.floor(m.seed) % hoch.length];
       return { x: b.x + b.w / 2, y: b.y + b.h / 2, z: b.oben };
@@ -1608,7 +1641,9 @@ function baueKarte3D(k) {
   kartenGruppe = new THREE.Group();
   szene.add(kartenGruppe);
   kartenAnimation = null;
-  if (k.id === 'planet') bauePlanet(kartenGruppe); else baueFabrik(kartenGruppe);
+  if (k.id === 'planet') bauePlanet(kartenGruppe);
+  else if (k.id === 'eis') baueEis(kartenGruppe);
+  else baueFabrik(kartenGruppe);
   // Basen (farbiger Boden) gibt es überall
   for (const [team, x] of [['blau', 150], ['rot', WELT_B - 150]]) {
     const basis = new THREE.Mesh(new THREE.PlaneGeometry(300, WELT_H), new THREE.MeshBasicMaterial({ color: TEAMS[team].farbe, transparent: true, opacity: 0.18, depthWrite: false }));
@@ -1958,6 +1993,225 @@ function bauePlanet(g) {
   };
 }
 
+// ===== Karte 3: ❄️ Eisplanet Frostheim =====
+const schneeTextur = malTextur(256, 256, (g, b, h) => {
+  g.fillStyle = '#e8f1fa'; g.fillRect(0, 0, b, h);
+  const z = zufallsGenerator(11);
+  for (let i = 0; i < 70; i++) {   // Schneewehen und Spuren
+    g.fillStyle = z() < 0.5 ? 'rgba(190,210,235,0.5)' : 'rgba(255,255,255,0.8)';
+    g.beginPath(); g.ellipse(z() * b, z() * h, 8 + z() * 30, 3 + z() * 8, z() * 3, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 40; i++) {   // Glitzern
+    g.fillStyle = '#ffffff';
+    g.fillRect(z() * b, z() * h, 2, 2);
+  }
+});
+schneeTextur.repeat.set(WELT_B / 200, WELT_H / 200);
+const eisTextur = malTextur(128, 128, (g, b, h) => {
+  const v = g.createLinearGradient(0, 0, b, h);
+  v.addColorStop(0, '#bfe6ff'); v.addColorStop(1, '#7cc4f2');
+  g.fillStyle = v; g.fillRect(0, 0, b, h);
+  const z = zufallsGenerator(5);
+  g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.5;
+  for (let i = 0; i < 10; i++) {   // Risse im Eis
+    let x = z() * b, y = z() * h;
+    g.beginPath(); g.moveTo(x, y);
+    for (let j = 0; j < 4; j++) { x += (z() - 0.5) * 40; y += (z() - 0.5) * 40; g.lineTo(x, y); }
+    g.stroke();
+  }
+});
+const eisMat = new THREE.MeshStandardMaterial({ map: eisTextur, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.88, emissive: '#3b82c4', emissiveIntensity: 0.25 });
+const schneeMat = new THREE.MeshStandardMaterial({ color: '#f4f8fc', roughness: 1, flatShading: true });
+const eisZackenMats = ['#a5f3fc', '#bae6fd', '#c7d2fe'].map(f => new THREE.MeshStandardMaterial({ color: f, emissive: f, emissiveIntensity: 0.35, roughness: 0.1, transparent: true, opacity: 0.85, flatShading: true }));
+const wrackMat = new THREE.MeshStandardMaterial({ color: '#4b5263', roughness: 0.6, metalness: 0.6 });
+const tanneMat = new THREE.MeshStandardMaterial({ color: '#1f4d3a', roughness: 0.9, flatShading: true });
+
+function schneeHaufen(g, x, z, b, h, t) {   // Ein runder Schneehaufen
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), schneeMat);
+  s.scale.set(b, h, t);
+  s.position.set(x, 0, z);
+  s.castShadow = s.receiveShadow = true;
+  g.add(s);
+}
+function eisZacken(g, r, z, nr) {   // Spitze Eiskristalle
+  const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
+  for (let i = 0; i < 4; i++) {
+    const hoehe = 70 + z() * 80;
+    const k = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 5), eisZackenMats[(nr + i) % eisZackenMats.length]);
+    k.scale.set(10 + z() * 10, hoehe, 10 + z() * 10);
+    k.position.set(cx + (z() - 0.5) * r.w * 0.6, hoehe / 2, cz + (z() - 0.5) * r.h * 0.6);
+    k.rotation.set((z() - 0.5) * 0.4, z() * 3, (z() - 0.5) * 0.4);
+    k.castShadow = true;
+    g.add(k);
+  }
+  schneeHaufen(g, cx, cz, r.w * 0.7, 14, r.h * 0.7);
+}
+function tanne(g, x, z, groesse) {   // Tannenbaum mit Schnee
+  const stamm = new THREE.Mesh(new THREE.CylinderGeometry(4 * groesse, 5 * groesse, 20 * groesse, 6), new THREE.MeshStandardMaterial({ color: '#5b3a24' }));
+  stamm.position.set(x, 10 * groesse, z);
+  g.add(stamm);
+  for (let i = 0; i < 3; i++) {
+    const r = (34 - i * 9) * groesse, h = 40 * groesse, y = (26 + i * 26) * groesse;
+    const ast = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), tanneMat);
+    ast.position.set(x, y + h / 2, z);
+    ast.castShadow = true;
+    const schnee = new THREE.Mesh(new THREE.ConeGeometry(r * 0.55, h * 0.45, 7), schneeMat);
+    schnee.position.set(x, y + h * 0.78, z);
+    g.add(ast, schnee);
+  }
+}
+function wrackTeil(g, r, z) {   // Ein Stück von einem abgestürzten Raumschiff
+  const cx = r.x + r.w / 2, cz = r.y + r.h / 2, lang = r.h > r.w;
+  const rumpf = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(r.w, r.h) * 0.5, Math.min(r.w, r.h) * 0.6, Math.max(r.w, r.h), 8, 1, true), wrackMat);
+  rumpf.material.side = THREE.DoubleSide;
+  rumpf.rotation.set(lang ? Math.PI / 2 : 0, 0, lang ? 0 : Math.PI / 2);
+  rumpf.rotation.y = (z() - 0.5) * 0.3;
+  rumpf.position.set(cx, Math.min(r.w, r.h) * 0.45, cz);
+  rumpf.castShadow = rumpf.receiveShadow = true;
+  g.add(rumpf);
+  // Flügel steckt schräg im Schnee, mit Warnstreifen
+  const fluegel = kasten(g, { x: cx - 4, y: cz - r.h * 0.3, w: 8, h: r.h * 0.6 }, wrackMat, 0, 90);
+  fluegel.rotation.x = 0.35;
+  const st = streifenTextur.clone(); st.repeat.set(2, 1);
+  const streifen = new THREE.Mesh(new THREE.BoxGeometry(9, 10, r.h * 0.6), new THREE.MeshStandardMaterial({ map: st }));
+  streifen.position.set(cx, 80, cz - r.h * 0.03);
+  streifen.rotation.x = 0.35;
+  g.add(streifen);
+  // Ein Lämpchen blinkt noch ...
+  const lampe = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), new THREE.MeshBasicMaterial({ color: '#ff3b3b' }));
+  lampe.position.set(cx, 96, cz + r.h * 0.2);
+  g.add(lampe);
+  schneeHaufen(g, cx, cz, r.w * 0.9, 18, r.h * 0.7);
+  return lampe;
+}
+
+function baueEis(g) {
+  const HIMMEL = '#0e1a33';   // Dunkler Polarhimmel
+  szene.background = new THREE.Color(HIMMEL);
+  szene.fog = new THREE.Fog('#5b7aa6', 600, 2600);
+  himmelsLicht.color.set('#dbeafe'); himmelsLicht.groundColor.set('#93c5fd'); himmelsLicht.intensity = 1.25;
+  sonne.color.set('#e0f2fe'); sonne.intensity = 1.4;
+  const z = zufallsGenerator(77);
+
+  // Boden aus Schnee
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(WELT_B, WELT_H), new THREE.MeshStandardMaterial({ map: schneeTextur, roughness: 1 }));
+  boden.rotation.x = -Math.PI / 2;
+  boden.position.set(WELT_B / 2, 0, WELT_H / 2);
+  boden.receiveShadow = true;
+  g.add(boden);
+  const aussen = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#c9d9ea', roughness: 1 }));
+  aussen.rotation.x = -Math.PI / 2;
+  aussen.position.set(WELT_B / 2, -1, WELT_H / 2);
+  g.add(aussen);
+  // Zugefrorener See in der Mitte
+  const see = new THREE.Mesh(new THREE.CircleGeometry(260, 40), new THREE.MeshStandardMaterial({ map: eisTextur, roughness: 0.05, metalness: 0.3, color: '#cfeaff' }));
+  see.rotation.x = -Math.PI / 2;
+  see.scale.set(1.3, 1, 1);
+  see.position.set(WELT_B / 2, 0.6, WELT_H / 2);
+  see.receiveShadow = true;
+  g.add(see);
+
+  // Hindernisse
+  const lampen = [];
+  WAENDE.forEach((r, nr) => {
+    const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
+    if (r.art === 'eisblock') {
+      const t = eisTextur.clone(); t.repeat.set(Math.max(1, r.w / 80), 1);
+      const block = kasten(g, r, new THREE.MeshStandardMaterial({ map: t, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.88, emissive: '#3b82c4', emissiveIntensity: 0.25 }), 0, r.oben);
+      const kanten = new THREE.LineSegments(new THREE.EdgesGeometry(block.geometry), new THREE.LineBasicMaterial({ color: '#e0f2fe' }));
+      kanten.position.copy(block.position);
+      g.add(kanten);
+      kasten(g, { x: r.x - 3, y: r.y - 3, w: r.w + 6, h: r.h + 6 }, schneeMat, r.oben, r.oben + 8);   // Schnee oben drauf
+    } else if (r.art === 'schneehaufen') {
+      schneeHaufen(g, cx, cz, r.w * 0.75, 48, r.h * 0.75);
+    } else if (r.art === 'eiszacke') {
+      eisZacken(g, r, z, nr);
+    } else if (r.art === 'wrack') {
+      lampen.push(wrackTeil(g, r, z));
+    } else if (r.art === 'schneehuegel') {
+      kasten(g, r, eisMat, 0, r.oben - 8);
+      kasten(g, r, schneeMat, r.oben - 8, r.oben);
+      for (let i = 0; i < 2; i++) tanne(g, r.x + 40 + z() * (r.w - 80), r.y + 40 + z() * (r.h - 80), 0.8, r.oben);
+    } else if (r.art === 'schneehang') {
+      const m = new THREE.Mesh(rampenGeo(r), schneeMat);
+      m.position.set(cx, 0, cz);
+      m.castShadow = m.receiveShadow = true;
+      g.add(m);
+    }
+  });
+  // Tannen auf dem Hügel stehen oben drauf
+  g.children.forEach(o => { if (o.userData.aufHuegel) o.position.y += o.userData.aufHuegel; });
+
+  // Rand der Arena: Schneewall
+  for (let x = 0; x <= WELT_B; x += 90) for (const y of [-40, WELT_H + 40]) schneeHaufen(g, x, y, 60 + z() * 20, 40 + z() * 30, 40);
+  for (let y = 0; y <= WELT_H; y += 90) for (const x of [-40, WELT_B + 40]) schneeHaufen(g, x, y, 40, 40 + z() * 30, 60 + z() * 20);
+
+  // Draußen: Tannenwald und riesige Eisberge
+  for (let i = 0; i < 70; i++) {
+    const a = z() * Math.PI * 2, d = 250 + z() * 600;
+    const x = WELT_B / 2 + Math.cos(a) * (WELT_B / 2 + d), y = WELT_H / 2 + Math.sin(a) * (WELT_H / 2 + d);
+    tanne(g, x, y, 1 + z() * 1.5);
+  }
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2 + z() * 0.3;
+    const berg = new THREE.Mesh(new THREE.ConeGeometry(300 + z() * 250, 700 + z() * 600, 6), z() < 0.5 ? schneeMat : eisZackenMats[i % 3]);
+    berg.position.set(WELT_B / 2 + Math.cos(a) * (WELT_B / 2 + 1500), 300, WELT_H / 2 + Math.sin(a) * (WELT_H / 2 + 1400));
+    g.add(berg);
+  }
+
+  // Sterne und Polarlichter am Himmel
+  const sternPos = [];
+  for (let i = 0; i < 500; i++) {
+    const a = z() * Math.PI * 2, b = 0.2 + z() * 1.2;
+    sternPos.push(WELT_B / 2 + Math.cos(a) * Math.cos(b) * 4500, Math.sin(b) * 4500, WELT_H / 2 + Math.sin(a) * Math.cos(b) * 4500);
+  }
+  const sternGeo = new THREE.BufferGeometry();
+  sternGeo.setAttribute('position', new THREE.Float32BufferAttribute(sternPos, 3));
+  g.add(new THREE.Points(sternGeo, new THREE.PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false })));
+  const polarTextur = malTextur(256, 64, (c, b, h) => {
+    const v = c.createLinearGradient(0, 0, 0, h);
+    v.addColorStop(0, 'rgba(74,222,128,0)'); v.addColorStop(0.6, 'rgba(74,222,128,0.8)'); v.addColorStop(1, 'rgba(56,189,248,0)');
+    c.fillStyle = v; c.fillRect(0, 0, b, h);
+  });
+  const polarlichter = [];
+  for (let i = 0; i < 3; i++) {
+    const geo = new THREE.PlaneGeometry(5000, 900, 40, 1);
+    const band = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: polarTextur, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, color: ['#ffffff', '#c4b5fd', '#99f6e4'][i] }));
+    band.position.set(WELT_B / 2 + (i - 1) * 600, 1700 + i * 250, WELT_H / 2 - 2600 - i * 300);
+    band.rotation.x = 0.25;
+    g.add(band);
+    polarlichter.push({ band, basis: Float32Array.from(geo.attributes.position.array), p: i * 2 });
+  }
+
+  // Schneefall
+  const ANZ = 900, flockenPos = new Float32Array(ANZ * 3), flocken = [];
+  for (let i = 0; i < ANZ; i++) flocken.push({ x: z() * WELT_B, y: z() * 500, z: z() * WELT_H, p: z() * 6, v: 25 + z() * 30 });
+  const flockenGeo = new THREE.BufferGeometry();
+  flockenGeo.setAttribute('position', new THREE.BufferAttribute(flockenPos, 3));
+  const schnee = new THREE.Points(flockenGeo, new THREE.PointsMaterial({ color: '#ffffff', size: 4, map: kreisTextur, transparent: true, depthWrite: false }));
+  schnee.frustumCulled = false;
+  g.add(schnee);
+  let letzteZeit = zeit;
+  kartenAnimation = () => {
+    const dt = Math.min(0.05, Math.max(0, zeit - letzteZeit)); letzteZeit = zeit;
+    flocken.forEach((f, i) => {
+      f.y -= f.v * dt;
+      if (f.y < 0) f.y = 500;
+      flockenPos[i * 3] = f.x + Math.sin(zeit * 0.8 + f.p) * 20;
+      flockenPos[i * 3 + 1] = f.y;
+      flockenPos[i * 3 + 2] = f.z + Math.cos(zeit * 0.6 + f.p) * 20;
+    });
+    flockenGeo.attributes.position.needsUpdate = true;
+    for (const l of polarlichter) {   // Die Polarlichter wabern langsam
+      const pos = l.band.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.sin(l.basis[i * 3] * 0.002 + zeit * 0.4 + l.p) * 180);
+      pos.needsUpdate = true;
+      l.band.material.opacity = 0.35 + Math.sin(zeit * 0.5 + l.p) * 0.15;
+    }
+    for (const lampe of lampen) lampe.visible = Math.sin(zeit * 5) > 0;   // Wrack-Lampen blinken
+  };
+}
+
 // Karte laden: Hindernisse, Wege für die Bots und die 3D-Welt
 let geladeneKarte = null;
 function ladeKarte(k, gross = false) {
@@ -1970,6 +2224,7 @@ function ladeKarte(k, gross = false) {
   // Boden-Muster, Sonne und Schatten an die Größe anpassen
   bodenTextur.repeat.set(WELT_B / 100, WELT_H / 100);
   alienBodenTextur.repeat.set(WELT_B / 220, WELT_H / 220);
+  schneeTextur.repeat.set(WELT_B / 200, WELT_H / 200);
   sonne.position.set(WELT_B / 2 - 600, 900, WELT_H / 2 - 400);
   sonne.target.position.set(WELT_B / 2, 0, WELT_H / 2);
   Object.assign(sonne.shadow.camera, { left: -WELT_B / 2 - 200, right: WELT_B / 2 + 200, top: WELT_H / 2 + 300, bottom: -WELT_H / 2 - 300, far: 3500 });
@@ -2892,7 +3147,7 @@ function zeichneHUD() {
   const mx = touchModus ? 12 : W - 12 - WELT_B * mk, my = touchModus ? 12 : H - 12 - WELT_H * mk;   // Auf dem Handy oben links, damit unten Platz für die Knöpfe ist
   ctx.fillStyle = 'rgba(15,17,24,0.85)'; ctx.fillRect(mx - 3, my - 3, WELT_B * mk + 6, WELT_H * mk + 6);
   for (const r of WAENDE) {   // Wände grau, Plattformen und Brücken hell, Rampen dazwischen
-    ctx.fillStyle = ['plattform', 'huegel', 'steg'].includes(r.art) ? '#4b5a7a' : (r.rampe ? '#3d4863' : (r.art === 'gelaender' ? '#ffd166' : '#737d93'));
+    ctx.fillStyle = [...DRAUFSTEHEN, 'steg'].includes(r.art) ? '#4b5a7a' : (r.rampe ? '#3d4863' : (r.art === 'gelaender' ? '#ffd166' : '#737d93'));
     ctx.fillRect(mx + r.x * mk, my + r.y * mk, Math.max(1, r.w * mk), Math.max(1, r.h * mk));
   }
   ziele.forEach((z, i) => {
