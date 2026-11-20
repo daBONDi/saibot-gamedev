@@ -2734,27 +2734,205 @@ baueWaffen(meinMech);
 // ===== 🎬 Das Intro: Mech hochfahren und Abwurf aus dem Raumschiff =====
 // =====================================================================
 // Ablauf (in Sekunden):
-//   0   bis 3.8   Der Pilot fährt den Mech hoch (der Sichtschutz vor dem Fenster ist noch zu)
-//   3.8 bis 4.6   Der Sichtschutz geht auf – du hängst unter einem Raumschiff hoch in der Luft!
-//   4.6 bis 8.6   Das Raumschiff fliegt runter
-//   8.6           RUMMS! Gelandet. Kurz danach gehen die Klammern auf
-//   9.3 bis 12    Das Raumschiff fliegt weg
+//   0   bis 6.6   Der Pilot fährt den Mech hoch: Hauptschalter, Knöpfe drücken, Steuerknüppel testen
+//   6.6 bis 7.4   Der Sichtschutz geht auf – du hängst unter einem Raumschiff hoch in der Luft!
+//   7.4 bis 11.4  Das Raumschiff fliegt runter
+//   11.4          RUMMS! Gelandet. Kurz danach gehen die Klammern auf
+//   12.1 bis 14.8 Das Raumschiff fliegt weg
 // Mit Klick oder Leertaste kann man das Intro überspringen.
-const INTRO = { hochfahren: 3.8, aufgehen: 4.6, landen: 8.6, loslassen: 9.3, ende: 12 };
+const INTRO = { hochfahren: 6.6, aufgehen: 7.4, landen: 11.4, loslassen: 12.1, ende: 14.8 };
 const ABWURF_HOEHE = 650;
 let intro = null;
 
-function bootZeilen(typ) {   // Was der Bordcomputer beim Hochfahren anzeigt
+// ===== Das Steuerpult: Knöpfe, die der Pilot drückt (hand: -1 = linke Hand, 1 = rechte Hand) =====
+const PILOT_KNOEPFE = [
+  { id: 'strom',     name: 'HAUPTSCHALTER', x: 480, y: 356, farbe: '#ef4444', hand: 1,  zeit: 0.7, hebel: true },
+  { id: 'reaktor',   name: 'REAKTOR',       x: 265, y: 392, farbe: '#facc15', hand: -1, zeit: 1.4 },
+  { id: 'hydraulik', name: 'HYDRAULIK',     x: 695, y: 392, farbe: '#38bdf8', hand: 1,  zeit: 2.0 },
+  { id: 'waffen',    name: 'WAFFEN',        x: 370, y: 420, farbe: '#a855f7', hand: -1, zeit: 2.6 },
+  { id: 'funk',      name: 'FUNK',          x: 590, y: 420, farbe: '#4ade80', hand: 1,  zeit: 3.2 },
+];
+// Der Steuerungstest: Wann macht der Pilot was mit den Steuerknüppeln?
+const STEUER_TEST = { greifen: 3.7, beine: [3.9, 4.5], drehen: [4.5, 5.1], abzug: [5.25, 5.45], daumen: 5.75 };
+const strombei = t => t < 0.7 ? 0 : Math.min(1, (t - 0.7) / 2.6);   // Wie viel Strom hat das Cockpit schon?
+
+function bootAblauf(typ) {   // Was der Bordcomputer beim Hochfahren anzeigt (und wann)
   return [
-    '⏻  Hauptschalter ............ AN',
-    '⚡  Reaktor startet .......... OK',
-    '🔧  Hydraulik ................ OK',
-    '🦿  Beine und Arme ........... OK',
-    `🎯  Waffen-Slots ${typ.slots.map(s => SLOT_ARTEN[s.art].punkt).join('')} ..... OK`,
-    '📡  Funk zum Team ............ OK',
-    '🛡️  Panzerung ............... 100%',
-    `✅  ${typ.name.toUpperCase()} IST BEREIT!`,
+    { t: 0.7, text: '⏻  Hauptschalter ......... AN', ton: 'schalter' },
+    { t: 1.4, text: '⚡  Reaktor startet ....... OK', ton: 'knopf' },
+    { t: 2.0, text: '🔧  Hydraulik ............. OK', ton: 'knopf' },
+    { t: 2.6, text: `🎯  Waffen-Slots ${typ.slots.map(s => SLOT_ARTEN[s.art].punkt).join('')} ... OK`, ton: 'knopf' },
+    { t: 3.2, text: '📡  Funk zum Team ......... OK', ton: 'knopf' },
+    { t: 3.7, text: '🕹️  Steuerungstest ...', ton: 'piep' },
+    { t: 4.5, text: '      🦿 Beine ............ ✓', ton: 'piep' },
+    { t: 5.1, text: '      🔄 Drehen ........... ✓', ton: 'piep' },
+    { t: 5.5, text: '      🔫 Abzug ............ ✓', ton: 'piep' },
+    { t: 5.9, text: '      🚀 Raketen .......... ✓', ton: 'piep' },
+    { t: 6.2, text: `✅  ${typ.name.toUpperCase()} IST BEREIT!`, ton: 'bereit' },
   ];
+}
+
+// Wo ist der Steuerknüppel gerade? (seite: -1 = links, 1 = rechts)
+function knueppel(seite, t) {
+  const bx = seite < 0 ? 205 : W - 205;
+  let dx = 0, dy = 0;
+  const [b0, b1] = STEUER_TEST.beine, [d0, d1] = STEUER_TEST.drehen;
+  if (seite < 0 && t > b0 && t < b1) dy = -Math.sin((t - b0) / (b1 - b0) * Math.PI * 2) * 30;   // Links: vor und zurück
+  if (seite > 0 && t > d0 && t < d1) dx = Math.sin((t - d0) / (d1 - d0) * Math.PI * 2) * 30;    // Rechts: links und rechts
+  return { bx, by: 592, gx: bx + dx, gy: 478 + dy, dx, dy };
+}
+// Wo ist die Hand des Piloten gerade, und was macht sie?
+const glatt = k => k * k * (3 - 2 * k);   // Sanft losfahren und sanft ankommen
+function handBei(seite, t) {
+  const ruhe = { x: seite < 0 ? 150 : W - 150, y: H + 40, pose: 'offen' };
+  if (t >= STEUER_TEST.greifen) {   // Hand am Steuerknüppel
+    const k = knueppel(seite, t);
+    let pose = 'greifen';
+    if (seite > 0 && ((t > 5.25 && t < 5.33) || (t > 5.45 && t < 5.53))) pose = 'abzug';
+    if (seite < 0 && t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.25) pose = 'daumen';
+    return { x: k.gx, y: k.gy + 22, pose };
+  }
+  // Wegpunkte: Ruhe -> zum Knopf -> drücken -> zum nächsten Knopf ... -> zum Steuerknüppel
+  const punkte = [{ t: 0, ...ruhe }];
+  const meine = PILOT_KNOEPFE.filter(k => k.hand === seite);
+  punkte.push({ t: meine[0].zeit - 0.55, ...ruhe });
+  for (const k of meine) {
+    punkte.push({ t: k.zeit - 0.12, x: k.x, y: k.y - 6, pose: 'zeigen' });
+    punkte.push({ t: k.zeit, x: k.x, y: k.y + 3, pose: 'zeigen' });
+    punkte.push({ t: k.zeit + 0.15, x: k.x, y: k.y - 8, pose: 'zeigen' });
+  }
+  const k = knueppel(seite, STEUER_TEST.greifen);
+  punkte.push({ t: STEUER_TEST.greifen, x: k.gx, y: k.gy + 22, pose: 'greifen' });
+  for (let i = 0; i < punkte.length - 1; i++) {
+    const a = punkte[i], b = punkte[i + 1];
+    if (t >= a.t && t < b.t) {
+      const f = glatt((t - a.t) / Math.max(0.001, b.t - a.t));
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, pose: f > 0.5 ? b.pose : a.pose };
+    }
+  }
+  return punkte[punkte.length - 1];
+}
+
+// Eine Hand mit Handschuh und Ärmel vom Pilotenanzug
+function zeichneHand(x, y, seite, pose) {
+  const schulter = { x: seite < 0 ? 30 : W - 30, y: H + 170 };
+  const zeigt = pose === 'zeigen' || pose === 'offen';
+  const hand = { x: x + seite * 6, y: y + (zeigt ? 40 : 4) };   // Mitte der Handfläche
+  // Ärmel (orange Pilotenanzug mit Streifen)
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#9a3412'; ctx.lineWidth = 58;
+  ctx.beginPath(); ctx.moveTo(schulter.x, schulter.y); ctx.lineTo(hand.x + seite * 8, hand.y + 30); ctx.stroke();
+  ctx.strokeStyle = '#ea580c'; ctx.lineWidth = 48;
+  ctx.beginPath(); ctx.moveTo(schulter.x, schulter.y); ctx.lineTo(hand.x + seite * 8, hand.y + 30); ctx.stroke();
+  ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(schulter.x - seite * 10, schulter.y); ctx.lineTo(hand.x + seite * 2, hand.y + 32); ctx.stroke();
+  ctx.lineCap = 'butt';
+  // Bündchen am Handgelenk
+  ctx.fillStyle = '#d1d5db'; ctx.beginPath(); ctx.ellipse(hand.x + seite * 6, hand.y + 24, 25, 11, 0, 0, Math.PI * 2); ctx.fill();
+  // Handschuh
+  const handschuh = '#2a2c33', licht = '#4b505d';
+  ctx.fillStyle = handschuh; ctx.strokeStyle = '#111318'; ctx.lineWidth = 2;
+  if (pose === 'zeigen') {
+    ctx.beginPath(); ctx.ellipse(hand.x, hand.y, 21, 19, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    rr(x - 6, y, 12, hand.y - y, 6); ctx.fill(); ctx.stroke();                    // Zeigefinger
+    for (let i = 0; i < 3; i++) { kreis(hand.x + seite * (4 + i * 8), hand.y - 14, 6.5); ctx.fill(); ctx.stroke(); }   // eingerollte Finger
+    ctx.beginPath(); ctx.ellipse(hand.x - seite * 20, hand.y + 2, 8, 13, seite * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();   // Daumen
+    ctx.fillStyle = licht; kreis(x, y + 4, 3); ctx.fill();
+  } else if (pose === 'offen') {
+    ctx.beginPath(); ctx.ellipse(hand.x, hand.y, 22, 19, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    for (let i = 0; i < 4; i++) { rr(hand.x - 17 + i * 10, hand.y - 38, 9, 28, 4.5); ctx.fill(); ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(hand.x - seite * 22, hand.y, 8, 13, seite * 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  } else {   // Faust am Steuerknüppel: greifen, abzug (Zeigefinger zieht), daumen (Daumen drückt oben)
+    ctx.beginPath(); ctx.ellipse(x, y, 25, 21, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    for (let i = 0; i < 4; i++) { kreis(x - 15 + i * 10, y - 15, 6.5); ctx.fill(); ctx.stroke(); }   // Knöchel
+    ctx.fillStyle = licht;
+    for (let i = 0; i < 4; i++) { kreis(x - 16 + i * 10, y - 17, 2); ctx.fill(); }
+    // Daumen oben auf dem Knüppel
+    ctx.fillStyle = handschuh;
+    const daumenY = pose === 'daumen' ? y - 30 : y - 24;
+    ctx.beginPath(); ctx.ellipse(x - seite * 8, daumenY, 8, 11, -seite * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (pose === 'abzug') {   // Zeigefinger zieht den Abzug: Blitz!
+      ctx.fillStyle = '#ffd166'; ctx.globalAlpha = 0.8; kreis(x + seite * 30, y + 4, 9); ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// Das Steuerpult mit den Knöpfen, den Steuerknüppeln und den Händen des Piloten
+function zeichneSteuerpult(t, typ) {
+  const strom = strombei(t);
+  // Pult
+  const g = ctx.createLinearGradient(0, 315, 0, H);
+  g.addColorStop(0, '#3a404e'); g.addColorStop(1, '#1a1d24');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, H + 400); ctx.lineTo(0, 405); ctx.lineTo(110, 318); ctx.lineTo(W - 110, 318); ctx.lineTo(W, 405); ctx.lineTo(W, H + 400);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = strom > 0 ? typ.akzent : '#4a5266'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, 405); ctx.lineTo(110, 318); ctx.lineTo(W - 110, 318); ctx.lineTo(W, 405); ctx.stroke();
+  for (let x = 140; x < W - 130; x += 70) niete(x, 328);
+  // Kleine Lämpchen oben am Pult gehen nacheinander an
+  for (let i = 0; i < 12; i++) {
+    const x = 170 + i * 56, an = strom > i / 12;
+    ctx.fillStyle = an ? ['#4ade80', '#ffd166', '#38bdf8'][i % 3] : '#2a2f3a';
+    rr(x - 6, 336, 12, 5, 2); ctx.fill();
+  }
+  // Die Knöpfe
+  for (const k of PILOT_KNOEPFE) {
+    const an = t >= k.zeit, gedrueckt = t >= k.zeit && t < k.zeit + 0.15;
+    if (k.hebel) {   // Hauptschalter: Kippschalter unter einer roten Schutzklappe
+      ctx.fillStyle = '#111318'; rr(k.x - 34, k.y - 26, 68, 52, 8); ctx.fill();
+      ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      const hoch = an ? 1 : t > k.zeit - 0.1 ? 0.5 : 0;
+      ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(k.x, k.y + 6); ctx.lineTo(k.x, k.y + 6 - 26 * (hoch * 2 - 1)); ctx.stroke(); ctx.lineCap = 'butt';
+      ctx.fillStyle = k.farbe; kreis(k.x, k.y + 6 - 26 * (hoch * 2 - 1), 8); ctx.fill();
+      // Die Schutzklappe ist aufgeklappt (rot, durchsichtig)
+      ctx.fillStyle = 'rgba(239,68,68,0.35)'; rr(k.x - 30, k.y - 62, 60, 34, 6); ctx.fill();
+      text(an ? 'AN' : 'AUS', k.x + 48, k.y, 12, an ? '#4ade80' : '#ff6b6b', 'center', false);
+    } else {
+      const r = gedrueckt ? 18 : 21;
+      if (an) { ctx.fillStyle = k.farbe; ctx.globalAlpha = 0.3; kreis(k.x, k.y, 34); ctx.fill(); ctx.globalAlpha = 1; }   // Leuchten
+      ctx.fillStyle = '#111318'; kreis(k.x, k.y, 26); ctx.fill();
+      ctx.fillStyle = an ? k.farbe : strom > 0 ? '#3a3f4c' : '#22252d'; kreis(k.x, k.y, r); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; kreis(k.x - 6, k.y - 7, r * 0.3); ctx.fill();
+    }
+    text(k.name, k.x, k.y + 38, 10, strom > 0 ? '#c9c3ff' : '#5a6070', 'center', false);
+  }
+  // Kleiner Test-Bildschirm in der Mitte: Der Punkt zeigt, wohin die Steuerknüppel drücken
+  const sx = W / 2, sy = 520;
+  ctx.fillStyle = '#050a07'; rr(sx - 90, sy - 50, 180, 100, 8); ctx.fill();
+  ctx.strokeStyle = '#3d4558'; ctx.lineWidth = 2; ctx.stroke();
+  if (strom > 0.6) {
+    ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(sx - 80, sy); ctx.lineTo(sx + 80, sy); ctx.moveTo(sx, sy - 42); ctx.lineTo(sx, sy + 42); ctx.stroke();
+    const l = knueppel(-1, t), r = knueppel(1, t);
+    ctx.fillStyle = '#4ade80'; kreis(sx + r.dx * 2, sy + l.dy * 1.2, 6); ctx.fill();
+    text(t > STEUER_TEST.greifen ? 'STEUERUNGSTEST' : 'BEREIT FÜR TEST', sx, sy - 38, 9, '#4ade80', 'center', false);
+    if (t > STEUER_TEST.abzug[0] && t < STEUER_TEST.abzug[1] + 0.1) text('🔫 PENG!', sx, sy + 34, 11, '#ffd166', 'center', false);
+    if (t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.35) text('🚀 WUSCH!', sx, sy + 34, 11, '#4ade80', 'center', false);
+  }
+  // Die zwei Steuerknüppel
+  for (const seite of [-1, 1]) {
+    const k = knueppel(seite, t);
+    ctx.fillStyle = '#111318'; ctx.beginPath(); ctx.ellipse(k.bx, k.by, 54, 18, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2a2d36'; ctx.beginPath(); ctx.ellipse(k.bx, k.by - 4, 30, 11, 0, 0, Math.PI * 2); ctx.fill();   // Gummi-Manschette
+    ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.moveTo(k.bx, k.by - 6); ctx.lineTo(k.gx, k.gy + 40); ctx.stroke();
+    ctx.fillStyle = '#1f2229'; rr(k.gx - 18, k.gy - 6, 36, 62, 12); ctx.fill();          // Griff
+    ctx.fillStyle = seite < 0 ? SLOT_ARTEN.rakete.farbe : '#ef4444'; kreis(k.gx, k.gy, 7); ctx.fill();   // Knopf oben
+    ctx.fillStyle = '#4b505d'; rr(k.gx + seite * 16, k.gy + 10, 10, 18, 4); ctx.fill();   // Abzug
+  }
+  // Die Hände des Piloten
+  for (const seite of [-1, 1]) {
+    const h = handBei(seite, t);
+    zeichneHand(h.x, h.y, seite, h.pose);
+  }
+  // Am Anfang ist es dunkel (nur ein rotes Notlicht)
+  const dunkel = t < 0.7 ? 0.6 : Math.max(0, 0.6 - (t - 0.7) * 1.5);
+  if (dunkel > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${dunkel})`; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = `rgba(255,40,40,${dunkel * 0.15 * (1 + Math.sin(zeit * 4))})`; ctx.fillRect(0, 0, W, H);
+  }
 }
 
 // Das Raumschiff (vorne ist +x, wie beim Mech). Unten hängen zwei Klammern, die den Mech festhalten.
@@ -2812,7 +2990,7 @@ function baueLandeschiff(m) {
 }
 
 function introStarten() {
-  intro = { t: 0, zeile: -1, schiffe: [], gelandet: false, losgelassen: false, rumpel: 0, zeilen: bootZeilen(spieler.typ) };
+  intro = { t: 0, zeile: -1, schiffe: [], gelandet: false, losgelassen: false, rumpel: 0, zeilen: bootAblauf(spieler.typ) };
   for (const m of mechs) {
     const s = baueLandeschiff(m);
     szene.add(s.gruppe);
@@ -2851,15 +3029,22 @@ function updateIntro(dt) {
   const t0 = intro.t;
   intro.t += dt;
   const t = intro.t;
-  // Hochfahren: eine Zeile nach der anderen
-  const zeile = Math.min(intro.zeilen.length - 1, Math.floor(t / (INTRO.hochfahren - 0.3) * intro.zeilen.length));
-  if (zeile !== intro.zeile && t < INTRO.hochfahren) {
-    intro.zeile = zeile;
-    if (zeile === 0) ton(80, 0, 1.2, 'sawtooth', 0.06, 500);   // Wuuuuummm – der Reaktor läuft an
-    else if (zeile === intro.zeilen.length - 1) { ton(660, 0, 0.12, 'square', 0.07); ton(990, 0.13, 0.25, 'square', 0.07); }
-    else ton(880 + zeile * 60, 0, 0.06, 'square', 0.05);
+  // Hochfahren: Was passiert gerade? (Knöpfe, Steuerknüppel, Bordcomputer)
+  const passiert = z => t0 < z && t >= z;
+  intro.zeile = intro.zeilen.filter(e => e.t <= t).length - 1;
+  for (const e of intro.zeilen) if (passiert(e.t)) {
+    if (e.ton === 'schalter') { ton(90, 0, 0.08, 'square', 0.15); ton(60, 0.05, 1.6, 'sawtooth', 0.05, 320); }   // Klack ... Wuuuuumm
+    else if (e.ton === 'knopf') ton(1300, 0, 0.05, 'square', 0.06);
+    else if (e.ton === 'bereit') { ton(660, 0, 0.12, 'square', 0.07); ton(990, 0.13, 0.25, 'square', 0.07); }
+    else ton(880, 0, 0.06, 'square', 0.04);
   }
-  if (t0 < INTRO.hochfahren && t >= INTRO.hochfahren) { rauschen(0, 0.8, 0.08, 1200); ton(200, 0, 0.8, 'sawtooth', 0.04, 90); }   // Sichtschutz fährt hoch
+  for (const k of PILOT_KNOEPFE) if (passiert(k.zeit - 0.02)) ton(180, 0, 0.04, 'square', 0.08);   // Klick!
+  if (passiert(STEUER_TEST.greifen)) ton(140, 0, 0.06, 'square', 0.05);
+  if (passiert(STEUER_TEST.beine[0])) { ton(240, 0, 0.6, 'sawtooth', 0.03, 420); wackeln = 2; }   // Servomotoren surren
+  if (passiert(STEUER_TEST.drehen[0])) { ton(300, 0, 0.6, 'sawtooth', 0.03, 520); wackeln = 2; }
+  if (passiert(STEUER_TEST.abzug[0]) || passiert(STEUER_TEST.abzug[1])) sound.mg(0.5);
+  if (passiert(STEUER_TEST.daumen)) ton(700, 0, 0.08, 'square', 0.06);
+  if (passiert(INTRO.hochfahren)) { rauschen(0, 0.8, 0.08, 1200); ton(200, 0, 0.8, 'sawtooth', 0.04, 90); }   // Sichtschutz fährt hoch
   // Triebwerke brummen
   intro.rumpel -= dt;
   if (intro.rumpel <= 0 && t > INTRO.hochfahren && t < INTRO.ende - 0.5) {
@@ -2927,24 +3112,34 @@ function zeichneIntro() {
     }
     ctx.restore();
     // Der Bildschirm des Bordcomputers
-    const bx = W / 2 - 230, by = y0 + 90, bw = 460, bh = 300;
+    const bx = W / 2 - 220, by = y0 + 34, bw = 440, bh = 272;
     ctx.fillStyle = '#050a07'; rr(bx, by, bw, bh, 12); ctx.fill();
-    ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 3; ctx.stroke();
-    text(`${typ.emoji} ${typ.name} · Bordcomputer`, W / 2, by + 26, 16, '#4ade80', 'center', false);
-    ctx.fillStyle = '#1f3d2a'; ctx.fillRect(bx + 20, by + 44, bw - 40, 2);
-    for (let i = 0; i <= Math.max(-1, intro.zeile); i++) {
-      const fertig = i === intro.zeilen.length - 1;
-      text(intro.zeilen[i], bx + 30, by + 70 + i * 26, 15, fertig ? '#ffd166' : '#4ade80', 'left', false);
+    if (t < 0.7) { ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 3; ctx.stroke(); }   // Ohne Strom bleibt der Bildschirm dunkel
+    else {
+      ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 3; ctx.stroke();
+      text(`${typ.emoji} ${typ.name} · Bordcomputer`, W / 2, by + 26, 16, '#4ade80', 'center', false);
+      ctx.fillStyle = '#1f3d2a'; ctx.fillRect(bx + 20, by + 44, bw - 40, 2);
+      for (let i = 0; i <= Math.max(-1, intro.zeile); i++) {
+        const fertig = i === intro.zeilen.length - 1;
+        text(intro.zeilen[i].text, bx + 30, by + 56 + i * 18, 13, fertig ? '#ffd166' : '#4ade80', 'left', false);
+      }
+      if (Math.sin(t * 12) > 0 && intro.zeile < intro.zeilen.length - 1 && t > 0.7) {   // Blinkender Cursor
+        ctx.fillStyle = '#4ade80'; ctx.fillRect(bx + 30, by + 50 + (intro.zeile + 1) * 18, 9, 12);
+      }
+      const fortschritt = begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1);
+      balken(bx + 30, by + bh - 20, bw - 60, 8, fortschritt, '#4ade80', '#10261a');
     }
-    if (Math.sin(t * 12) > 0 && intro.zeile < intro.zeilen.length - 1) {   // Blinkender Cursor
-      ctx.fillStyle = '#4ade80'; ctx.fillRect(bx + 30, by + 62 + (intro.zeile + 1) * 26, 10, 14);
-    }
-    const fortschritt = begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1);
-    balken(bx + 30, by + bh - 28, bw - 60, 10, fortschritt, '#4ade80', '#10261a');
     if (t > INTRO.hochfahren) text('⚠️ SICHTSCHUTZ ÖFFNET', W / 2, y0 + H - 50, 18, '#ffd166');
   }
   // Das Cockpit drumherum (die Lämpchen gehen nach und nach an)
-  zeichneCockpit(begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1));
+  zeichneCockpit(strombei(t));
+  // Das Steuerpult mit den Händen des Piloten (rutscht nach unten weg, wenn der Sichtschutz aufgeht)
+  if (offen < 1) {
+    ctx.save();
+    ctx.translate(0, offen * offen * 380);
+    zeichneSteuerpult(t, typ);
+    ctx.restore();
+  }
   // Texte während des Abwurfs
   if (t > INTRO.aufgehen) {
     let info;
