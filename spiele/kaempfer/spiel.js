@@ -1257,7 +1257,7 @@ function zerstoert(m, von) {
   killfeedDazu(von, m);
   if (mp.rolle === 'host') mpEreignis(['k', mechs.indexOf(von), mechs.indexOf(m)]);
 }
-function wrackStarten(m, von) {
+function wrackStarten(m, von, mitKnall = true) {
   // 💥 Das Wrack wird durch die Luft geschleudert – weg von dem, der dich zerstört hat!
   const wegRichtung = von ? Math.atan2(m.y - von.y, m.x - von.x) : Math.random() * Math.PI * 2;
   const wucht = KO_WUCHT * (0.8 + Math.random() * 0.4);
@@ -1269,7 +1269,7 @@ function wrackStarten(m, von) {
     zielX: (Math.random() < 0.5 ? -1 : 1) * 1.45,   // so liegt es am Ende auf der Seite
     huepfer: 0, liegt: false, liegtK: 0, rauchT: 0,
   };
-  explosion(m.x, m.y, null, null, 85, 0, m.z + 30);
+  if (mitKnall) explosion(m.x, m.y, null, null, 85, 0, m.z + 30);
   for (let i = 0; i < 8; i++) {   // Schrottteile fliegen weg
     const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 160;
     partikel.push({ x: m.x, y: m.y, h: m.z + 40, vh: 150 + Math.random() * 200, g: 600, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 1.2, max: 1.2, farbe: TEAMS[m.team].dunkel, rauch: true });
