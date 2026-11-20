@@ -2744,17 +2744,19 @@ const INTRO = { hochfahren: 6.6, aufgehen: 7.4, landen: 11.4, loslassen: 12.1, e
 const ABWURF_HOEHE = 650;
 let intro = null;
 
-// ===== Das Steuerpult: Knöpfe, die der Pilot drückt (hand: -1 = linke Hand, 1 = rechte Hand) =====
+// ===== Das Steuerpult: Knöpfe, die der Pilot drückt =====
+// hand: -1 = linke Hand, 1 = rechte Hand.  lx / lz: Wo der Knopf auf dem Pult sitzt (lz größer = näher beim Piloten)
 const PILOT_KNOEPFE = [
-  { id: 'strom',     name: 'HAUPTSCHALTER', x: 480, y: 356, farbe: '#ef4444', hand: 1,  zeit: 0.7, hebel: true },
-  { id: 'reaktor',   name: 'REAKTOR',       x: 265, y: 392, farbe: '#facc15', hand: -1, zeit: 1.4 },
-  { id: 'hydraulik', name: 'HYDRAULIK',     x: 695, y: 392, farbe: '#38bdf8', hand: 1,  zeit: 2.0 },
-  { id: 'waffen',    name: 'WAFFEN',        x: 370, y: 420, farbe: '#a855f7', hand: -1, zeit: 2.6 },
-  { id: 'funk',      name: 'FUNK',          x: 590, y: 420, farbe: '#4ade80', hand: 1,  zeit: 3.2 },
+  { id: 'strom',     name: 'HAUPTSCHALTER', lx: 0,   lz: -4, farbe: '#ef4444', hand: 1,  zeit: 0.7, hebel: true },
+  { id: 'reaktor',   name: 'REAKTOR',       lx: -14, lz: -1, farbe: '#facc15', hand: -1, zeit: 1.4 },
+  { id: 'hydraulik', name: 'HYDRAULIK',     lx: 14,  lz: -1, farbe: '#38bdf8', hand: 1,  zeit: 2.0 },
+  { id: 'waffen',    name: 'WAFFEN',        lx: -8,  lz: 4,  farbe: '#a855f7', hand: -1, zeit: 2.6 },
+  { id: 'funk',      name: 'FUNK',          lx: 8,   lz: 4,  farbe: '#4ade80', hand: 1,  zeit: 3.2 },
 ];
 // Der Steuerungstest: Wann macht der Pilot was mit den Steuerknüppeln?
 const STEUER_TEST = { greifen: 3.7, beine: [3.9, 4.5], drehen: [4.5, 5.1], abzug: [5.25, 5.45], daumen: 5.75 };
 const strombei = t => t < 0.7 ? 0 : Math.min(1, (t - 0.7) / 2.6);   // Wie viel Strom hat das Cockpit schon?
+const glatt = k => k * k * (3 - 2 * k);   // Sanft losfahren und sanft ankommen
 
 function bootAblauf(typ) {   // Was der Bordcomputer beim Hochfahren anzeigt (und wann)
   return [
@@ -2772,167 +2774,323 @@ function bootAblauf(typ) {   // Was der Bordcomputer beim Hochfahren anzeigt (un
   ];
 }
 
-// Wo ist der Steuerknüppel gerade? (seite: -1 = links, 1 = rechts)
-function knueppel(seite, t) {
-  const bx = seite < 0 ? 205 : W - 205;
-  let dx = 0, dy = 0;
-  const [b0, b1] = STEUER_TEST.beine, [d0, d1] = STEUER_TEST.drehen;
-  if (seite < 0 && t > b0 && t < b1) dy = -Math.sin((t - b0) / (b1 - b0) * Math.PI * 2) * 30;   // Links: vor und zurück
-  if (seite > 0 && t > d0 && t < d1) dx = Math.sin((t - d0) / (d1 - d0) * Math.PI * 2) * 30;    // Rechts: links und rechts
-  return { bx, by: 592, gx: bx + dx, gy: 478 + dy, dx, dy };
+// =====================================================================
+// ===== 🎬 Das 3D-Cockpit für das Intro =====
+// =====================================================================
+// Alles hängt an der Kamera (wie die Waffen). Die Kamera schaut nach -z, x ist rechts, y ist oben.
+const kabine = new THREE.Group();
+kamera.add(kabine);
+kabine.visible = false;
+const kMat = {
+  pult: new THREE.MeshStandardMaterial({ color: '#3a404e', roughness: 0.6, metalness: 0.5 }),
+  dunkel: new THREE.MeshStandardMaterial({ color: '#16181e', roughness: 0.7, metalness: 0.3 }),
+  metall: new THREE.MeshStandardMaterial({ color: '#8a90a0', roughness: 0.35, metalness: 0.8 }),
+  gummi: new THREE.MeshStandardMaterial({ color: '#202228', roughness: 1 }),
+  handschuh: new THREE.MeshStandardMaterial({ color: '#2a2c33', roughness: 0.75 }),
+  aermel: new THREE.MeshStandardMaterial({ color: '#ea580c', roughness: 0.9 }),
+  streifen: new THREE.MeshStandardMaterial({ color: '#fde68a', roughness: 0.8 }),
+  bund: new THREE.MeshStandardMaterial({ color: '#d1d5db', roughness: 0.8 }),
+  klappe: new THREE.MeshStandardMaterial({ color: '#ef4444', transparent: true, opacity: 0.45, roughness: 0.2 }),
+};
+function kKlotz(b, h, t, mat, x, y, z) { const k = new THREE.Mesh(new THREE.BoxGeometry(b, h, t), mat); k.position.set(x, y, z); return k; }
+function kZylinder(r1, r2, h, mat, x, y, z) { const k = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 14), mat); k.position.set(x, y, z); return k; }
+// Ein Bildschirm, auf den wir jedes Bild neu malen können
+function bildschirm(b, h, pxB, pxH) {
+  const c = document.createElement('canvas');
+  c.width = pxB; c.height = pxH;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(b, h), new THREE.MeshBasicMaterial({ map: tex }));
+  return { mesh, c, g: c.getContext('2d'), tex };
 }
-// Wo ist die Hand des Piloten gerade, und was macht sie?
-const glatt = k => k * k * (3 - 2 * k);   // Sanft losfahren und sanft ankommen
-function handBei(seite, t) {
-  const ruhe = { x: seite < 0 ? 150 : W - 150, y: H + 40, pose: 'offen' };
-  if (t >= STEUER_TEST.greifen) {   // Hand am Steuerknüppel
-    const k = knueppel(seite, t);
-    let pose = 'greifen';
-    if (seite > 0 && ((t > 5.25 && t < 5.33) || (t > 5.45 && t < 5.53))) pose = 'abzug';
-    if (seite < 0 && t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.25) pose = 'daumen';
-    return { x: k.gx, y: k.gy + 22, pose };
+function schild(t, b) {   // Ein kleines Namensschild unter einem Knopf
+  const tex = malTextur(128, 24, (g, w, h) => {
+    g.fillStyle = '#111318'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#e5e7eb'; g.font = 'bold 15px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(t, w / 2, h / 2 + 1);
+  });
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(b, b * 24 / 128), new THREE.MeshBasicMaterial({ map: tex }));
+  m.rotation.x = -Math.PI / 2;
+  return m;
+}
+
+// ----- Der Sichtschutz (Metallplatten vor dem Fenster) mit dem Bildschirm des Bordcomputers -----
+const sichtschutz = new THREE.Group();
+sichtschutz.position.z = -55;
+kabine.add(sichtschutz);
+const plattenTextur = malTextur(512, 320, (g, b, h) => {
+  const v = g.createLinearGradient(0, 0, 0, h);
+  v.addColorStop(0, '#3a404c'); v.addColorStop(1, '#22262e');
+  g.fillStyle = v; g.fillRect(0, 0, b, h);
+  g.fillStyle = 'rgba(0,0,0,0.4)';
+  for (let y = 64; y < h; y += 64) g.fillRect(0, y, b, 4);   // Fugen
+  g.fillStyle = '#5b6274';
+  for (let y = 64; y < h; y += 64) for (let x = 24; x < b; x += 64) { g.beginPath(); g.arc(x, y - 12, 4, 0, 7); g.fill(); }   // Nieten
+  g.fillStyle = '#1b1b1b'; g.fillRect(0, h - 22, b, 22);   // Warnstreifen unten
+  g.fillStyle = '#ffd166';
+  for (let x = -22; x < b; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 16, h); g.lineTo(x + 38, h - 22); g.lineTo(x + 22, h - 22); g.fill(); }
+});
+plattenTextur.wrapS = plattenTextur.wrapT = THREE.ClampToEdgeWrapping;
+sichtschutz.add(new THREE.Mesh(new THREE.PlaneGeometry(170, 106), new THREE.MeshBasicMaterial({ map: plattenTextur, color: '#cfd4de' })));
+const terminal = bildschirm(58, 36, 580, 360);
+terminal.mesh.position.set(0, 18, 0.5);
+sichtschutz.add(terminal.mesh);
+sichtschutz.add(kKlotz(61, 39, 1, kMat.dunkel, 0, 18, 0));   // Rahmen um den Bildschirm
+
+// ----- Unten: Pult, Steuerknüppel und die Hände (das alles rutscht weg, wenn der Sichtschutz aufgeht) -----
+const unten = new THREE.Group();
+kabine.add(unten);
+const pult = new THREE.Group();
+pult.position.set(0, -9, -29);
+pult.rotation.x = 0.6;   // Schräg, damit der Pilot gut drankommt
+unten.add(pult);
+pult.add(kKlotz(66, 3, 19, kMat.pult, 0, -1.5, 0));
+pult.add(kKlotz(66.4, 0.6, 1, kMat.metall, 0, 0.1, -9.5));   // Metallkante hinten
+pult.add(kKlotz(66.4, 0.6, 1, kMat.metall, 0, 0.1, 9.5));    // und vorne
+for (let x = -30; x <= 30; x += 10) pult.add(kZylinder(0.35, 0.35, 0.3, kMat.metall, x, 0.15, -8.6));   // Nieten
+// Lämpchen-Reihe hinten auf dem Pult
+const pultLampen = [];
+for (let i = 0; i < 14; i++) {
+  const mat = new THREE.MeshBasicMaterial({ color: '#2a2f3a' });
+  const l = kKlotz(1.6, 0.5, 0.8, mat, -26 + i * 4, 0.3, -7.3);
+  pult.add(l); pultLampen.push({ mat, farbe: ['#4ade80', '#ffd166', '#38bdf8'][i % 3] });
+}
+// Die Knöpfe
+const knopf3D = PILOT_KNOEPFE.map(k => {
+  const teil = { k, mat: new THREE.MeshStandardMaterial({ color: '#2b2f38', roughness: 0.4, emissive: '#000000' }) };
+  if (k.hebel) {   // Kippschalter mit Schutzklappe
+    pult.add(kKlotz(5, 1, 4, kMat.dunkel, k.lx, 0.5, k.lz));
+    teil.hebel = new THREE.Group();
+    teil.hebel.position.set(k.lx, 1, k.lz);
+    teil.hebel.add(kZylinder(0.35, 0.35, 3, kMat.metall, 0, 1.5, 0));
+    const knauf = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 8), teil.mat);
+    knauf.position.y = 3;
+    teil.hebel.add(knauf);
+    pult.add(teil.hebel);
+    const klappe = kKlotz(5.4, 0.3, 4.4, kMat.klappe, 0, 0, 0);   // Rote Schutzklappe – hochgeklappt
+    klappe.position.set(k.lx, 3.2, k.lz - 2.6);
+    klappe.rotation.x = -1.2;
+    pult.add(klappe);
+  } else {
+    pult.add(kZylinder(1.9, 1.9, 0.6, kMat.dunkel, k.lx, 0.3, k.lz));   // Fassung
+    teil.kappe = kZylinder(1.35, 1.35, 1, teil.mat, k.lx, 0.9, k.lz);
+    pult.add(teil.kappe);
   }
-  // Wegpunkte: Ruhe -> zum Knopf -> drücken -> zum nächsten Knopf ... -> zum Steuerknüppel
+  const s = schild(k.name, 6.4);
+  s.position.set(k.lx, 0.05, k.lz + (k.hebel ? 3 : 2.6));
+  pult.add(s);
+  return teil;
+});
+// Test-Bildschirm in der Mitte: Der Punkt zeigt, wohin die Steuerknüppel drücken
+const testSchirm = bildschirm(8, 5, 160, 100);
+testSchirm.mesh.rotation.x = -Math.PI / 2;
+testSchirm.mesh.position.set(0, 0.06, 4.6);
+pult.add(testSchirm.mesh);
+// Die zwei Steuerknüppel (links für die Beine, rechts zum Drehen und Schießen)
+const knueppel3D = [-1, 1].map(seite => {
+  const basis = new THREE.Group();
+  basis.position.set(seite * 15, -19, -18);
+  basis.add(kZylinder(3.2, 3.6, 1.2, kMat.dunkel, 0, 0, 0));
+  basis.add(kZylinder(1.2, 2.4, 2.2, kMat.gummi, 0, 1.6, 0));   // Gummi-Manschette
+  const kipp = new THREE.Group();
+  kipp.position.y = 1;
+  basis.add(kipp);
+  kipp.add(kZylinder(0.45, 0.45, 6, kMat.metall, 0, 3, 0));
+  kipp.add(kKlotz(2.2, 3.8, 2.4, kMat.gummi, 0, 7.2, 0));         // Griff
+  const knopfMat = new THREE.MeshStandardMaterial({ color: seite < 0 ? SLOT_ARTEN.rakete.farbe : '#ef4444', emissive: '#000000' });
+  const oben = kZylinder(0.7, 0.7, 0.5, knopfMat, 0, 9.3, 0);
+  kipp.add(oben);
+  const abzug = kKlotz(0.8, 1.4, 0.7, kMat.metall, 0, 7.6, -1.5);   // Abzug vorne
+  kipp.add(abzug);
+  unten.add(basis);
+  return { seite, basis, kipp, knopfMat, oben, abzug };
+});
+// Wohin ist der Steuerknüppel gerade gekippt?
+function knueppelKipp(seite, t) {
+  const [b0, b1] = STEUER_TEST.beine, [d0, d1] = STEUER_TEST.drehen;
+  let vor = 0, quer = 0;
+  if (seite < 0 && t > b0 && t < b1) vor = Math.sin((t - b0) / (b1 - b0) * Math.PI * 2);    // Links: vor und zurück
+  if (seite > 0 && t > d0 && t < d1) quer = Math.sin((t - d0) / (d1 - d0) * Math.PI * 2);   // Rechts: links und rechts
+  return { vor, quer };
+}
+// Wo ist der Griff oben? (im Raum von "unten")
+function griffPunkt(seite, t) {
+  const k = knueppel3D[seite < 0 ? 0 : 1], kp = knueppelKipp(seite, t);
+  const e = new THREE.Euler(-kp.vor * 0.45, 0, -kp.quer * 0.45);
+  return new THREE.Vector3(0, 9.5, 0).applyEuler(e).add(new THREE.Vector3(0, 1, 0)).add(k.basis.position);
+}
+// Ein Punkt auf dem Pult (lx, hoehe, lz) im Raum von "unten"
+const aufPult = (x, y, z) => new THREE.Vector3(x, y, z).applyEuler(pult.rotation).add(pult.position);
+
+// ----- Die Hände des Piloten: Handschuh mit Fingern, die sich einzeln beugen können -----
+// Im Modell zeigen die Finger nach +z, der Handrücken nach +y.
+function baueHand3D(seite) {
+  const hand = new THREE.Group();
+  hand.add(kKlotz(3.6, 1.4, 3.4, kMat.handschuh, 0, 0, 0));                 // Handfläche
+  hand.add(kKlotz(3.0, 0.3, 2.4, kMat.bund, 0, 0.75, -0.3));               // Klettverschluss oben
+  const bund = kZylinder(2.0, 2.1, 1.6, kMat.bund, 0, 0, -2.3);
+  bund.rotation.x = Math.PI / 2;
+  hand.add(bund);
+  const finger = [];
+  for (let i = 0; i < 4; i++) {   // i = 0 ist der Zeigefinger (auf der Daumenseite)
+    const x = -seite * (1.25 - i * 0.82);
+    const glied1 = new THREE.Group(); glied1.position.set(x, 0, 1.6);
+    glied1.add(kKlotz(0.72, 0.75, 1.5, kMat.handschuh, 0, 0, 0.7));
+    const glied2 = new THREE.Group(); glied2.position.z = 1.45;
+    glied2.add(kKlotz(0.68, 0.7, 1.3 - (i === 3 ? 0.3 : 0), kMat.handschuh, 0, 0, 0.6));
+    glied1.add(glied2);
+    hand.add(glied1);
+    finger.push({ glied1, glied2, biege: 0.2 });
+  }
+  const daumenGlied1 = new THREE.Group();
+  daumenGlied1.position.set(-seite * 1.9, -0.2, 0.3);
+  daumenGlied1.rotation.y = -seite * 0.7;
+  daumenGlied1.add(kKlotz(0.85, 0.85, 1.6, kMat.handschuh, 0, 0, 0.75));
+  const daumenGlied2 = new THREE.Group(); daumenGlied2.position.z = 1.5;
+  daumenGlied2.add(kKlotz(0.8, 0.8, 1.2, kMat.handschuh, 0, 0, 0.55));
+  daumenGlied1.add(daumenGlied2);
+  hand.add(daumenGlied1);
+  // Ärmel vom Pilotenanzug (wird jedes Bild zwischen Schulter und Handgelenk gespannt)
+  const aermel = new THREE.Group();
+  aermel.add(new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.6, 1, 12), kMat.aermel));
+  const streifen = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.65, 0.12, 12), kMat.streifen);
+  streifen.position.y = 0.38;
+  aermel.add(streifen);
+  unten.add(hand, aermel);
+  return { seite, hand, finger, daumen: { glied1: daumenGlied1, glied2: daumenGlied2, biege: 0.3 }, aermel };
+}
+const haende3D = [baueHand3D(-1), baueHand3D(1)];
+// Wie stark sind die Finger gebeugt? [Zeigefinger, Mittelfinger, Ringfinger, kleiner Finger, Daumen]
+const HAND_POSEN = {
+  offen:   [0.15, 0.15, 0.2, 0.25, 0.2],
+  zeigen:  [0.05, 1.5, 1.5, 1.5, 0.9],
+  greifen: [1.0, 1.45, 1.45, 1.45, 0.5],
+  abzug:   [1.7, 1.45, 1.45, 1.45, 0.5],
+  daumen:  [1.0, 1.45, 1.45, 1.45, 1.3],
+};
+// Wo will die Hand gerade hin, und was macht sie?
+function handZiel3D(seite, t) {
+  const ruhe = { p: new THREE.Vector3(seite * 15, -32, -10), pose: 'offen' };
+  if (t >= STEUER_TEST.greifen) {
+    let pose = 'greifen';
+    if (seite > 0 && ((t > 5.25 && t < 5.35) || (t > 5.45 && t < 5.55))) pose = 'abzug';
+    if (seite < 0 && t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.3) pose = 'daumen';
+    return { p: griffPunkt(seite, t), pose, griff: true };
+  }
   const punkte = [{ t: 0, ...ruhe }];
   const meine = PILOT_KNOEPFE.filter(k => k.hand === seite);
   punkte.push({ t: meine[0].zeit - 0.55, ...ruhe });
   for (const k of meine) {
-    punkte.push({ t: k.zeit - 0.12, x: k.x, y: k.y - 6, pose: 'zeigen' });
-    punkte.push({ t: k.zeit, x: k.x, y: k.y + 3, pose: 'zeigen' });
-    punkte.push({ t: k.zeit + 0.15, x: k.x, y: k.y - 8, pose: 'zeigen' });
+    const hoch = k.hebel ? 4.2 : 1.4;   // Fingerspitze: über dem Knopf, drücken, wieder hoch
+    punkte.push({ t: k.zeit - 0.12, p: aufPult(k.lx, hoch + 1.2, k.lz + (k.hebel ? 0.8 : 0)), pose: 'zeigen' });
+    punkte.push({ t: k.zeit, p: aufPult(k.lx, hoch - 0.2, k.lz - (k.hebel ? 0.8 : 0)), pose: 'zeigen' });
+    punkte.push({ t: k.zeit + 0.15, p: aufPult(k.lx, hoch + 1.6, k.lz), pose: 'zeigen' });
   }
-  const k = knueppel(seite, STEUER_TEST.greifen);
-  punkte.push({ t: STEUER_TEST.greifen, x: k.gx, y: k.gy + 22, pose: 'greifen' });
+  punkte.push({ t: STEUER_TEST.greifen, p: griffPunkt(seite, STEUER_TEST.greifen), pose: 'greifen', griff: true });
   for (let i = 0; i < punkte.length - 1; i++) {
     const a = punkte[i], b = punkte[i + 1];
     if (t >= a.t && t < b.t) {
       const f = glatt((t - a.t) / Math.max(0.001, b.t - a.t));
-      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, pose: f > 0.5 ? b.pose : a.pose };
+      return { p: a.p.clone().lerp(b.p, f), pose: f > 0.5 ? b.pose : a.pose, griff: f > 0.7 && b.griff };
     }
   }
   return punkte[punkte.length - 1];
 }
-
-// Eine Hand mit Handschuh und Ärmel vom Pilotenanzug
-function zeichneHand(x, y, seite, pose) {
-  const schulter = { x: seite < 0 ? 30 : W - 30, y: H + 170 };
-  const zeigt = pose === 'zeigen' || pose === 'offen';
-  const hand = { x: x + seite * 6, y: y + (zeigt ? 40 : 4) };   // Mitte der Handfläche
-  // Ärmel (orange Pilotenanzug mit Streifen)
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = '#9a3412'; ctx.lineWidth = 58;
-  ctx.beginPath(); ctx.moveTo(schulter.x, schulter.y); ctx.lineTo(hand.x + seite * 8, hand.y + 30); ctx.stroke();
-  ctx.strokeStyle = '#ea580c'; ctx.lineWidth = 48;
-  ctx.beginPath(); ctx.moveTo(schulter.x, schulter.y); ctx.lineTo(hand.x + seite * 8, hand.y + 30); ctx.stroke();
-  ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(schulter.x - seite * 10, schulter.y); ctx.lineTo(hand.x + seite * 2, hand.y + 32); ctx.stroke();
-  ctx.lineCap = 'butt';
-  // Bündchen am Handgelenk
-  ctx.fillStyle = '#d1d5db'; ctx.beginPath(); ctx.ellipse(hand.x + seite * 6, hand.y + 24, 25, 11, 0, 0, Math.PI * 2); ctx.fill();
-  // Handschuh
-  const handschuh = '#2a2c33', licht = '#4b505d';
-  ctx.fillStyle = handschuh; ctx.strokeStyle = '#111318'; ctx.lineWidth = 2;
-  if (pose === 'zeigen') {
-    ctx.beginPath(); ctx.ellipse(hand.x, hand.y, 21, 19, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    rr(x - 6, y, 12, hand.y - y, 6); ctx.fill(); ctx.stroke();                    // Zeigefinger
-    for (let i = 0; i < 3; i++) { kreis(hand.x + seite * (4 + i * 8), hand.y - 14, 6.5); ctx.fill(); ctx.stroke(); }   // eingerollte Finger
-    ctx.beginPath(); ctx.ellipse(hand.x - seite * 20, hand.y + 2, 8, 13, seite * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();   // Daumen
-    ctx.fillStyle = licht; kreis(x, y + 4, 3); ctx.fill();
-  } else if (pose === 'offen') {
-    ctx.beginPath(); ctx.ellipse(hand.x, hand.y, 22, 19, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    for (let i = 0; i < 4; i++) { rr(hand.x - 17 + i * 10, hand.y - 38, 9, 28, 4.5); ctx.fill(); ctx.stroke(); }
-    ctx.beginPath(); ctx.ellipse(hand.x - seite * 22, hand.y, 8, 13, seite * 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  } else {   // Faust am Steuerknüppel: greifen, abzug (Zeigefinger zieht), daumen (Daumen drückt oben)
-    ctx.beginPath(); ctx.ellipse(x, y, 25, 21, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    for (let i = 0; i < 4; i++) { kreis(x - 15 + i * 10, y - 15, 6.5); ctx.fill(); ctx.stroke(); }   // Knöchel
-    ctx.fillStyle = licht;
-    for (let i = 0; i < 4; i++) { kreis(x - 16 + i * 10, y - 17, 2); ctx.fill(); }
-    // Daumen oben auf dem Knüppel
-    ctx.fillStyle = handschuh;
-    const daumenY = pose === 'daumen' ? y - 30 : y - 24;
-    ctx.beginPath(); ctx.ellipse(x - seite * 8, daumenY, 8, 11, -seite * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    if (pose === 'abzug') {   // Zeigefinger zieht den Abzug: Blitz!
-      ctx.fillStyle = '#ffd166'; ctx.globalAlpha = 0.8; kreis(x + seite * 30, y + 4, 9); ctx.fill(); ctx.globalAlpha = 1;
-    }
+const OBEN = new THREE.Vector3(0, 1, 0), drehMatrix = new THREE.Matrix4();
+function stelleHand(h, t) {
+  const ziel = handZiel3D(h.seite, t);
+  const schulter = new THREE.Vector3(h.seite * 18, -30, 4);
+  let mitte, richtung;
+  if (ziel.griff) {   // Die Faust liegt oben auf dem Griff, die Finger umfassen ihn vorne
+    richtung = new THREE.Vector3(0, -0.45, -1).normalize();
+    mitte = ziel.p.clone().add(new THREE.Vector3(0, 1.5, 1.3));
+  } else {            // Der Zeigefinger zeigt auf den Punkt
+    richtung = ziel.p.clone().sub(schulter).normalize();
+    mitte = ziel.p.clone().sub(richtung.clone().multiplyScalar(4.4));
   }
+  drehMatrix.lookAt(mitte.clone().add(richtung), mitte, OBEN);   // Finger (+z) zeigen in die Richtung
+  h.hand.quaternion.setFromRotationMatrix(drehMatrix);
+  if (!ziel.griff) mitte.sub(new THREE.Vector3(-h.seite * 1.25, -0.3, 0).applyQuaternion(h.hand.quaternion));   // Genau der Zeigefinger soll auf den Knopf
+  h.hand.position.copy(mitte);
+  // Finger langsam in die neue Haltung bringen
+  const pose = HAND_POSEN[ziel.pose];
+  h.finger.forEach((f, i) => {
+    f.biege += (pose[i] - f.biege) * 0.3;
+    f.glied1.rotation.x = f.biege * 0.75;
+    f.glied2.rotation.x = f.biege * 0.9;
+  });
+  h.daumen.biege += (pose[4] - h.daumen.biege) * 0.3;
+  h.daumen.glied1.rotation.x = h.daumen.biege * 0.6;
+  h.daumen.glied2.rotation.x = h.daumen.biege * 0.7;
+  // Ärmel von der Schulter bis zum Handgelenk
+  const gelenk = mitte.clone().sub(richtung.clone().multiplyScalar(2.6));
+  const arm = gelenk.clone().sub(schulter);
+  h.aermel.position.copy(schulter).add(gelenk).multiplyScalar(0.5);
+  h.aermel.scale.set(1, arm.length(), 1);
+  h.aermel.quaternion.setFromUnitVectors(OBEN, arm.normalize());
 }
 
-// Das Steuerpult mit den Knöpfen, den Steuerknüppeln und den Händen des Piloten
-function zeichneSteuerpult(t, typ) {
-  const strom = strombei(t);
-  // Pult
-  const g = ctx.createLinearGradient(0, 315, 0, H);
-  g.addColorStop(0, '#3a404e'); g.addColorStop(1, '#1a1d24');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(0, H + 400); ctx.lineTo(0, 405); ctx.lineTo(110, 318); ctx.lineTo(W - 110, 318); ctx.lineTo(W, 405); ctx.lineTo(W, H + 400);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = strom > 0 ? typ.akzent : '#4a5266'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(0, 405); ctx.lineTo(110, 318); ctx.lineTo(W - 110, 318); ctx.lineTo(W, 405); ctx.stroke();
-  for (let x = 140; x < W - 130; x += 70) niete(x, 328);
-  // Kleine Lämpchen oben am Pult gehen nacheinander an
-  for (let i = 0; i < 12; i++) {
-    const x = 170 + i * 56, an = strom > i / 12;
-    ctx.fillStyle = an ? ['#4ade80', '#ffd166', '#38bdf8'][i % 3] : '#2a2f3a';
-    rr(x - 6, 336, 12, 5, 2); ctx.fill();
+// ----- Jedes Bild: Cockpit an die Intro-Zeit anpassen -----
+function zeigeKabine(t) {
+  const offen = begrenzt((t - INTRO.hochfahren) / (INTRO.aufgehen - INTRO.hochfahren), 0, 1);
+  kabine.visible = offen < 1;
+  if (!kabine.visible) return;
+  const strom = strombei(t), typ = spieler.typ;
+  sichtschutz.position.y = offen * offen * 115;   // Sichtschutz fährt hoch ...
+  unten.position.y = -offen * offen * 45;         // ... und das Pult rutscht nach unten weg
+  pultLampen.forEach((l, i) => l.mat.color.set(strom > i / 14 ? l.farbe : '#2a2f3a'));
+  for (const teil of knopf3D) {
+    const an = t >= teil.k.zeit, gedrueckt = t >= teil.k.zeit - 0.03 && t < teil.k.zeit + 0.15;
+    teil.mat.emissive.set(an ? teil.k.farbe : '#000000');
+    teil.mat.emissiveIntensity = an ? 0.9 : 0;
+    teil.mat.color.set(an ? teil.k.farbe : teil.k.hebel ? '#7f1d1d' : '#2b2f38');
+    if (teil.kappe) teil.kappe.position.y = gedrueckt ? 0.45 : 0.9;
+    if (teil.hebel) teil.hebel.rotation.x = an ? -0.6 : t > teil.k.zeit - 0.12 ? 0 : 0.6;   // Klack: Hebel nach vorne
   }
-  // Die Knöpfe
-  for (const k of PILOT_KNOEPFE) {
-    const an = t >= k.zeit, gedrueckt = t >= k.zeit && t < k.zeit + 0.15;
-    if (k.hebel) {   // Hauptschalter: Kippschalter unter einer roten Schutzklappe
-      ctx.fillStyle = '#111318'; rr(k.x - 34, k.y - 26, 68, 52, 8); ctx.fill();
-      ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
-      const hoch = an ? 1 : t > k.zeit - 0.1 ? 0.5 : 0;
-      ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 8; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(k.x, k.y + 6); ctx.lineTo(k.x, k.y + 6 - 26 * (hoch * 2 - 1)); ctx.stroke(); ctx.lineCap = 'butt';
-      ctx.fillStyle = k.farbe; kreis(k.x, k.y + 6 - 26 * (hoch * 2 - 1), 8); ctx.fill();
-      // Die Schutzklappe ist aufgeklappt (rot, durchsichtig)
-      ctx.fillStyle = 'rgba(239,68,68,0.35)'; rr(k.x - 30, k.y - 62, 60, 34, 6); ctx.fill();
-      text(an ? 'AN' : 'AUS', k.x + 48, k.y, 12, an ? '#4ade80' : '#ff6b6b', 'center', false);
-    } else {
-      const r = gedrueckt ? 18 : 21;
-      if (an) { ctx.fillStyle = k.farbe; ctx.globalAlpha = 0.3; kreis(k.x, k.y, 34); ctx.fill(); ctx.globalAlpha = 1; }   // Leuchten
-      ctx.fillStyle = '#111318'; kreis(k.x, k.y, 26); ctx.fill();
-      ctx.fillStyle = an ? k.farbe : strom > 0 ? '#3a3f4c' : '#22252d'; kreis(k.x, k.y, r); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.25)'; kreis(k.x - 6, k.y - 7, r * 0.3); ctx.fill();
+  for (const k of knueppel3D) {
+    const kp = knueppelKipp(k.seite, t);
+    k.kipp.rotation.set(-kp.vor * 0.45, 0, -kp.quer * 0.45);
+    const daumen = k.seite < 0 && t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.3;
+    k.knopfMat.emissive.set(daumen ? SLOT_ARTEN.rakete.farbe : '#000000');
+    k.oben.position.y = daumen ? 9.1 : 9.3;
+    const zieht = k.seite > 0 && ((t > 5.25 && t < 5.35) || (t > 5.45 && t < 5.55));
+    k.abzug.position.z = zieht ? -1.1 : -1.5;
+  }
+  for (const h of haende3D) stelleHand(h, t);
+
+  // Bordcomputer-Bildschirm neu malen
+  const g = terminal.g, b = terminal.c.width, hh = terminal.c.height;
+  g.fillStyle = '#050a07'; g.fillRect(0, 0, b, hh);
+  if (strom > 0) {
+    g.textBaseline = 'middle';
+    g.fillStyle = '#4ade80'; g.font = 'bold 24px system-ui, sans-serif'; g.textAlign = 'center';
+    g.fillText(`${typ.emoji} ${typ.name} · Bordcomputer`, b / 2, 26);
+    g.fillStyle = '#1f3d2a'; g.fillRect(20, 46, b - 40, 3);
+    g.textAlign = 'left'; g.font = 'bold 20px system-ui, sans-serif';
+    for (let i = 0; i <= intro.zeile; i++) {
+      g.fillStyle = i === intro.zeilen.length - 1 ? '#ffd166' : '#4ade80';
+      g.fillText(intro.zeilen[i].text, 26, 66 + i * 24);
     }
-    text(k.name, k.x, k.y + 38, 10, strom > 0 ? '#c9c3ff' : '#5a6070', 'center', false);
+    if (Math.sin(t * 12) > 0 && intro.zeile < intro.zeilen.length - 1) { g.fillStyle = '#4ade80'; g.fillRect(26, 56 + (intro.zeile + 1) * 24, 12, 18); }
+    g.fillStyle = '#10261a'; g.fillRect(26, hh - 20, b - 52, 10);
+    g.fillStyle = '#4ade80'; g.fillRect(26, hh - 20, (b - 52) * begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1), 10);
   }
-  // Kleiner Test-Bildschirm in der Mitte: Der Punkt zeigt, wohin die Steuerknüppel drücken
-  const sx = W / 2, sy = 520;
-  ctx.fillStyle = '#050a07'; rr(sx - 90, sy - 50, 180, 100, 8); ctx.fill();
-  ctx.strokeStyle = '#3d4558'; ctx.lineWidth = 2; ctx.stroke();
-  if (strom > 0.6) {
-    ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(sx - 80, sy); ctx.lineTo(sx + 80, sy); ctx.moveTo(sx, sy - 42); ctx.lineTo(sx, sy + 42); ctx.stroke();
-    const l = knueppel(-1, t), r = knueppel(1, t);
-    ctx.fillStyle = '#4ade80'; kreis(sx + r.dx * 2, sy + l.dy * 1.2, 6); ctx.fill();
-    text(t > STEUER_TEST.greifen ? 'STEUERUNGSTEST' : 'BEREIT FÜR TEST', sx, sy - 38, 9, '#4ade80', 'center', false);
-    if (t > STEUER_TEST.abzug[0] && t < STEUER_TEST.abzug[1] + 0.1) text('🔫 PENG!', sx, sy + 34, 11, '#ffd166', 'center', false);
-    if (t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.35) text('🚀 WUSCH!', sx, sy + 34, 11, '#4ade80', 'center', false);
+  terminal.tex.needsUpdate = true;
+  // Test-Bildschirm neu malen
+  const s = testSchirm.g, sb = testSchirm.c.width, sh = testSchirm.c.height;
+  s.fillStyle = '#050a07'; s.fillRect(0, 0, sb, sh);
+  if (strom > 0.5) {
+    s.strokeStyle = '#1f3d2a'; s.lineWidth = 2;
+    s.beginPath(); s.moveTo(10, sh / 2); s.lineTo(sb - 10, sh / 2); s.moveTo(sb / 2, 8); s.lineTo(sb / 2, sh - 8); s.stroke();
+    const l = knueppelKipp(-1, t), r = knueppelKipp(1, t);
+    s.fillStyle = '#4ade80'; s.beginPath(); s.arc(sb / 2 + r.quer * 55, sh / 2 - l.vor * 35, 7, 0, 7); s.fill();
+    s.textAlign = 'center'; s.font = 'bold 13px system-ui, sans-serif';
+    s.fillText(t > STEUER_TEST.greifen ? 'STEUERUNGSTEST' : 'BEREIT', sb / 2, 14);
+    if (t > STEUER_TEST.abzug[0] && t < STEUER_TEST.abzug[1] + 0.15) { s.fillStyle = '#ffd166'; s.fillText('PENG!', sb / 2, sh - 12); }
+    if (t > STEUER_TEST.daumen && t < STEUER_TEST.daumen + 0.4) { s.fillStyle = '#4ade80'; s.fillText('WUSCH!', sb / 2, sh - 12); }
   }
-  // Die zwei Steuerknüppel
-  for (const seite of [-1, 1]) {
-    const k = knueppel(seite, t);
-    ctx.fillStyle = '#111318'; ctx.beginPath(); ctx.ellipse(k.bx, k.by, 54, 18, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#2a2d36'; ctx.beginPath(); ctx.ellipse(k.bx, k.by - 4, 30, 11, 0, 0, Math.PI * 2); ctx.fill();   // Gummi-Manschette
-    ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 10;
-    ctx.beginPath(); ctx.moveTo(k.bx, k.by - 6); ctx.lineTo(k.gx, k.gy + 40); ctx.stroke();
-    ctx.fillStyle = '#1f2229'; rr(k.gx - 18, k.gy - 6, 36, 62, 12); ctx.fill();          // Griff
-    ctx.fillStyle = seite < 0 ? SLOT_ARTEN.rakete.farbe : '#ef4444'; kreis(k.gx, k.gy, 7); ctx.fill();   // Knopf oben
-    ctx.fillStyle = '#4b505d'; rr(k.gx + seite * 16, k.gy + 10, 10, 18, 4); ctx.fill();   // Abzug
-  }
-  // Die Hände des Piloten
-  for (const seite of [-1, 1]) {
-    const h = handBei(seite, t);
-    zeichneHand(h.x, h.y, seite, h.pose);
-  }
-  // Am Anfang ist es dunkel (nur ein rotes Notlicht)
-  const dunkel = t < 0.7 ? 0.6 : Math.max(0, 0.6 - (t - 0.7) * 1.5);
-  if (dunkel > 0) {
-    ctx.fillStyle = `rgba(0,0,0,${dunkel})`; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = `rgba(255,40,40,${dunkel * 0.15 * (1 + Math.sin(zeit * 4))})`; ctx.fillRect(0, 0, W, H);
-  }
+  testSchirm.tex.needsUpdate = true;
 }
 
 // Das Raumschiff (vorne ist +x, wie beim Mech). Unten hängen zwei Klammern, die den Mech festhalten.
@@ -3094,51 +3252,15 @@ function introBeenden() {
 // Die Anzeige während des Intros (vorne auf dem HUD)
 function zeichneIntro() {
   const t = intro.t, typ = spieler.typ;
-  // Der Sichtschutz: Metallplatten vor dem Fenster, die am Ende nach oben fahren
+  // Der Sichtschutz, das Pult und die Hände sind jetzt 3D (siehe zeigeKabine)
   const offen = begrenzt((t - INTRO.hochfahren) / (INTRO.aufgehen - INTRO.hochfahren), 0, 1);
-  if (offen < 1) {
-    const y0 = -H * offen * offen;
-    const g = ctx.createLinearGradient(0, y0, 0, y0 + H);
-    g.addColorStop(0, '#2b303b'); g.addColorStop(1, '#1a1d24');
-    ctx.fillStyle = g; ctx.fillRect(0, y0, W, H);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    for (let y = 60; y < H; y += 80) ctx.fillRect(0, y0 + y, W, 3);   // Fugen zwischen den Platten
-    for (let y = 60; y < H; y += 80) for (let x = 40; x < W; x += 120) niete(x, y0 + y - 10);
-    // Warnstreifen unten am Sichtschutz
-    ctx.save(); ctx.beginPath(); ctx.rect(0, y0 + H - 22, W, 22); ctx.clip();
-    for (let x = -40; x < W + 40; x += 40) {
-      ctx.fillStyle = '#ffd166'; ctx.beginPath();
-      ctx.moveTo(x, y0 + H); ctx.lineTo(x + 20, y0 + H); ctx.lineTo(x + 42, y0 + H - 22); ctx.lineTo(x + 22, y0 + H - 22); ctx.fill();
-    }
-    ctx.restore();
-    // Der Bildschirm des Bordcomputers
-    const bx = W / 2 - 220, by = y0 + 34, bw = 440, bh = 272;
-    ctx.fillStyle = '#050a07'; rr(bx, by, bw, bh, 12); ctx.fill();
-    if (t < 0.7) { ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 3; ctx.stroke(); }   // Ohne Strom bleibt der Bildschirm dunkel
-    else {
-      ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 3; ctx.stroke();
-      text(`${typ.emoji} ${typ.name} · Bordcomputer`, W / 2, by + 26, 16, '#4ade80', 'center', false);
-      ctx.fillStyle = '#1f3d2a'; ctx.fillRect(bx + 20, by + 44, bw - 40, 2);
-      for (let i = 0; i <= Math.max(-1, intro.zeile); i++) {
-        const fertig = i === intro.zeilen.length - 1;
-        text(intro.zeilen[i].text, bx + 30, by + 56 + i * 18, 13, fertig ? '#ffd166' : '#4ade80', 'left', false);
-      }
-      if (Math.sin(t * 12) > 0 && intro.zeile < intro.zeilen.length - 1 && t > 0.7) {   // Blinkender Cursor
-        ctx.fillStyle = '#4ade80'; ctx.fillRect(bx + 30, by + 50 + (intro.zeile + 1) * 18, 9, 12);
-      }
-      const fortschritt = begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1);
-      balken(bx + 30, by + bh - 20, bw - 60, 8, fortschritt, '#4ade80', '#10261a');
-    }
-    if (t > INTRO.hochfahren) text('⚠️ SICHTSCHUTZ ÖFFNET', W / 2, y0 + H - 50, 18, '#ffd166');
-  }
-  // Das Cockpit drumherum (die Lämpchen gehen nach und nach an)
-  zeichneCockpit(strombei(t));
-  // Das Steuerpult mit den Händen des Piloten (rutscht nach unten weg, wenn der Sichtschutz aufgeht)
-  if (offen < 1) {
-    ctx.save();
-    ctx.translate(0, offen * offen * 380);
-    zeichneSteuerpult(t, typ);
-    ctx.restore();
+  if (offen >= 1) zeichneCockpit(strombei(t));   // Danach: das normale Cockpit
+  else if (t > INTRO.hochfahren) text('⚠️ SICHTSCHUTZ ÖFFNET', W / 2, 60, 20, '#ffd166');
+  // Am Anfang ist es dunkel (nur ein rotes Notlicht blinkt)
+  const dunkel = t < 0.7 ? 0.65 : Math.max(0, 0.65 - (t - 0.7) * 1.5);
+  if (dunkel > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${dunkel})`; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = `rgba(255,40,40,${dunkel * 0.15 * (1 + Math.sin(zeit * 4))})`; ctx.fillRect(0, 0, W, H);
   }
   // Texte während des Abwurfs
   if (t > INTRO.aufgehen) {
@@ -3233,6 +3355,8 @@ function zeichne3D() {
     waffen.visible = false;
   }
   kamera.updateMatrixWorld();
+  if (intro) zeigeKabine(intro.t); else kabine.visible = false;   // 🎬 3D-Cockpit im Intro
+  if (intro && intro.t < INTRO.aufgehen) waffen.visible = false;   // Beim Hochfahren sieht man die Waffen noch nicht
   if (renderer) renderer.render(szene, kamera);
 }
 
