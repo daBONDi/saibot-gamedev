@@ -350,6 +350,7 @@ const KARTEN = [
       { x: 1760, y: 480, w: 80, h: 200, art: 'kristall', auchUnten: true },
       { x: 1780, y: 980, w: 40, h: 40, art: 'stein' },
     ],
+  },
   {
     id: 'eis', name: 'Eisplanet Frostheim', emoji: '❄️',
     links: [
@@ -845,8 +846,10 @@ function neuesSpiel(id) {
   for (const m of mechs) { spawnen(m); m.g3 = baueMech(m); szene.add(m.g3.gruppe); }
   baueZiele();
   baueWaffen(meinMech);
-  countdown = 3.99;
+  countdown = 0;
   zustand = 'spiel';
+  if (intro) for (const s of intro.schiffe) szene.remove(s.gruppe);   // Altes Intro wegräumen
+  introStarten();   // 🎬 Erst das Intro, danach der Countdown
   mausFangen();
 }
 
@@ -1536,6 +1539,7 @@ function update(dt) {
   for (const t of trefferRichtungen) t.t -= dt;
   trefferRichtungen = trefferRichtungen.filter(t => t.t > 0);
   if (zustand !== 'spiel' || pause) return;
+  if (intro) { updateIntro(dt); return; }   // 🎬 Intro läuft
 
   if (countdown > 0) {   // 3 ... 2 ... 1 ... LOS!
     const vorher = Math.ceil(countdown);
@@ -2046,12 +2050,12 @@ function eisZacken(g, r, z, nr) {   // Spitze Eiskristalle
   }
   schneeHaufen(g, cx, cz, r.w * 0.7, 14, r.h * 0.7);
 }
-function tanne(g, x, z, groesse) {   // Tannenbaum mit Schnee
+function tanne(g, x, z, groesse, boden = 0) {   // Tannenbaum mit Schnee (boden: steht er auf einem Hügel?)
   const stamm = new THREE.Mesh(new THREE.CylinderGeometry(4 * groesse, 5 * groesse, 20 * groesse, 6), new THREE.MeshStandardMaterial({ color: '#5b3a24' }));
-  stamm.position.set(x, 10 * groesse, z);
+  stamm.position.set(x, boden + 10 * groesse, z);
   g.add(stamm);
   for (let i = 0; i < 3; i++) {
-    const r = (34 - i * 9) * groesse, h = 40 * groesse, y = (26 + i * 26) * groesse;
+    const r = (34 - i * 9) * groesse, h = 40 * groesse, y = boden + (26 + i * 26) * groesse;
     const ast = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), tanneMat);
     ast.position.set(x, y + h / 2, z);
     ast.castShadow = true;
@@ -2139,8 +2143,6 @@ function baueEis(g) {
       g.add(m);
     }
   });
-  // Tannen auf dem Hügel stehen oben drauf
-  g.children.forEach(o => { if (o.userData.aufHuegel) o.position.y += o.userData.aufHuegel; });
 
   // Rand der Arena: Schneewall
   for (let x = 0; x <= WELT_B; x += 90) for (const y of [-40, WELT_H + 40]) schneeHaufen(g, x, y, 60 + z() * 20, 40 + z() * 30, 40);
@@ -2728,6 +2730,235 @@ function baueWaffen(typ) {
 }
 baueWaffen(meinMech);
 
+// =====================================================================
+// ===== 🎬 Das Intro: Mech hochfahren und Abwurf aus dem Raumschiff =====
+// =====================================================================
+// Ablauf (in Sekunden):
+//   0   bis 3.8   Der Pilot fährt den Mech hoch (der Sichtschutz vor dem Fenster ist noch zu)
+//   3.8 bis 4.6   Der Sichtschutz geht auf – du hängst unter einem Raumschiff hoch in der Luft!
+//   4.6 bis 8.6   Das Raumschiff fliegt runter
+//   8.6           RUMMS! Gelandet. Kurz danach gehen die Klammern auf
+//   9.3 bis 12    Das Raumschiff fliegt weg
+// Mit Klick oder Leertaste kann man das Intro überspringen.
+const INTRO = { hochfahren: 3.8, aufgehen: 4.6, landen: 8.6, loslassen: 9.3, ende: 12 };
+const ABWURF_HOEHE = 650;
+let intro = null;
+
+function bootZeilen(typ) {   // Was der Bordcomputer beim Hochfahren anzeigt
+  return [
+    '⏻  Hauptschalter ............ AN',
+    '⚡  Reaktor startet .......... OK',
+    '🔧  Hydraulik ................ OK',
+    '🦿  Beine und Arme ........... OK',
+    `🎯  Waffen-Slots ${typ.slots.map(s => SLOT_ARTEN[s.art].punkt).join('')} ..... OK`,
+    '📡  Funk zum Team ............ OK',
+    '🛡️  Panzerung ............... 100%',
+    `✅  ${typ.name.toUpperCase()} IST BEREIT!`,
+  ];
+}
+
+// Das Raumschiff (vorne ist +x, wie beim Mech). Unten hängen zwei Klammern, die den Mech festhalten.
+const flammenMat = new THREE.MeshBasicMaterial({ color: '#ff9f43', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+const glasMat = new THREE.MeshStandardMaterial({ color: '#7dd3fc', emissive: '#0ea5e9', emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.3 });
+function baueLandeschiff(m) {
+  const T = TEAMS[m.team];
+  const rumpfMat = metall('#9aa3b5'), teamMat = metall(T.farbe), dunkel = metall(T.dunkel);
+  const g = new THREE.Group();
+  // Rumpf, Nase und Cockpit-Fenster
+  g.add(klotz(140, 26, 54, rumpfMat, 0, 13, 0));
+  g.add(klotz(141, 5, 55, teamMat, 0, 18, 0));                        // Streifen in der Team-Farbe
+  g.add(schraeg(klotz(46, 20, 44, rumpfMat, 84, 10, 0), 0.25));      // Nase
+  g.add(schraeg(klotz(28, 6, 34, glasMat, 64, 26, 0), -0.15));       // Cockpit-Fenster
+  g.add(klotz(70, 12, 36, dunkel, -14, 32, 0));                      // Buckel oben
+  g.add(klotz(32, 34, 4, teamMat, -56, 44, 0));                      // Heckflosse
+  // Flügel mit Lichtern an den Spitzen (links rot, rechts grün – wie bei echten Flugzeugen)
+  const lichter = [];
+  for (const s of [-1, 1]) {
+    g.add(klotz(60, 5, 72, rumpfMat, -12, 14, s * 62));
+    g.add(klotz(61, 2, 30, teamMat, -12, 17, s * 80));
+    const l = klotz(7, 5, 7, leucht(s < 0 ? '#ff3b3b' : '#4ade80'), -12, 14, s * 99);
+    g.add(l); lichter.push(l);
+  }
+  // Düsen: zwei zeigen nach unten (zum Schweben), zwei nach hinten (zum Wegfliegen)
+  const flammenUnten = [], flammenHinten = [];
+  for (const s of [-1, 1]) {
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(9, 11, 14, 12), dunkel);
+    d.position.set(-12, 5, s * 62);
+    g.add(d);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(8, 36, 10), flammenMat);
+    f.rotation.x = Math.PI;   // Spitze zeigt nach unten
+    f.position.set(-12, -20, s * 62);
+    g.add(f); flammenUnten.push(f);
+    g.add(rohr(9, 18, dunkel, -78, 14, s * 16));
+    const fh = new THREE.Mesh(new THREE.ConeGeometry(8, 40, 10), flammenMat);
+    fh.rotation.z = Math.PI / 2;   // Spitze zeigt nach hinten
+    fh.position.set(-107, 14, s * 16);
+    g.add(fh); flammenHinten.push(fh);
+  }
+  // Die Klammern, die den Mech halten
+  const klammern = [];
+  for (const s of [-1, 1]) {
+    const k = new THREE.Group();
+    k.position.set(0, 0, s * 20);
+    k.add(klotz(7, 36, 7, dunkel, 0, -18, 0));
+    k.add(klotz(18, 6, 12, teamMat, 0, -36, -s * 3));
+    k.add(klotz(4, 4, 4, leucht('#ffd166'), 0, -8, s * 4));
+    g.add(k); klammern.push({ k, s });
+  }
+  g.traverse(o => { if (o.isMesh && o.material !== flammenMat) o.castShadow = true; });
+  g.scale.setScalar(m.typ.groesse);
+  g.rotation.y = -m.zielWinkel;
+  return { gruppe: g, klammern, flammenUnten, flammenHinten, lichter };
+}
+
+function introStarten() {
+  intro = { t: 0, zeile: -1, schiffe: [], gelandet: false, losgelassen: false, rumpel: 0, zeilen: bootZeilen(spieler.typ) };
+  for (const m of mechs) {
+    const s = baueLandeschiff(m);
+    szene.add(s.gruppe);
+    intro.schiffe.push({ m, ...s, weg: { x: 0, h: 0, v: 0 } });
+  }
+  blick.hoch = 0;
+  introPositionen();
+}
+// Wo sind Mechs und Raumschiffe gerade?
+function introPositionen() {
+  const t = intro.t;
+  const k = begrenzt((t - INTRO.aufgehen) / (INTRO.landen - INTRO.aufgehen), 0, 1);
+  const runter = 1 - Math.pow(1 - k, 3);   // Am Anfang schnell, zum Schluss ganz sanft
+  for (const s of intro.schiffe) {
+    const m = s.m, gr = m.typ.groesse;
+    const boden = standHoehe(m.x, m.y, 0);
+    const schwanken = (1 - k) * Math.sin(t * 1.3 + m.nr) * 6;
+    m.z = boden + ABWURF_HOEHE * (1 - runter);
+    m.vz = 0;
+    // Das Raumschiff: erst direkt über dem Mech, dann fliegt es nach vorne oben weg
+    const vx = Math.cos(m.zielWinkel), vy = Math.sin(m.zielWinkel);
+    const ueber = m.z + 125 * gr + s.weg.h;
+    s.gruppe.position.set(m.x + vx * s.weg.x + schwanken, ueber, m.y + vy * s.weg.x);
+    s.gruppe.rotation.z = Math.min(0.35, s.weg.h / 300);   // Nase hoch beim Wegfliegen
+    // Flammen flackern
+    const flacker = 0.8 + Math.random() * 0.4;
+    for (const f of s.flammenUnten) f.scale.set(1, flacker * (s.weg.v > 0 ? 0.6 : 1.2), 1);
+    for (const f of s.flammenHinten) f.scale.set(1, flacker * (s.weg.v > 0 ? 1.6 : 0.3), 1);
+    for (const l of s.lichter) l.visible = Math.sin(zeit * 6 + m.nr) > 0;
+    // Klammern gehen auf
+    const auf = begrenzt((t - INTRO.landen - 0.3) / 0.4, 0, 1);
+    for (const { k: kl, s: seite } of s.klammern) kl.rotation.x = -seite * auf * 0.9;
+  }
+}
+function updateIntro(dt) {
+  const t0 = intro.t;
+  intro.t += dt;
+  const t = intro.t;
+  // Hochfahren: eine Zeile nach der anderen
+  const zeile = Math.min(intro.zeilen.length - 1, Math.floor(t / (INTRO.hochfahren - 0.3) * intro.zeilen.length));
+  if (zeile !== intro.zeile && t < INTRO.hochfahren) {
+    intro.zeile = zeile;
+    if (zeile === 0) ton(80, 0, 1.2, 'sawtooth', 0.06, 500);   // Wuuuuummm – der Reaktor läuft an
+    else if (zeile === intro.zeilen.length - 1) { ton(660, 0, 0.12, 'square', 0.07); ton(990, 0.13, 0.25, 'square', 0.07); }
+    else ton(880 + zeile * 60, 0, 0.06, 'square', 0.05);
+  }
+  if (t0 < INTRO.hochfahren && t >= INTRO.hochfahren) { rauschen(0, 0.8, 0.08, 1200); ton(200, 0, 0.8, 'sawtooth', 0.04, 90); }   // Sichtschutz fährt hoch
+  // Triebwerke brummen
+  intro.rumpel -= dt;
+  if (intro.rumpel <= 0 && t > INTRO.hochfahren && t < INTRO.ende - 0.5) {
+    intro.rumpel = 0.4;
+    rauschen(0, 0.5, t < INTRO.loslassen ? 0.06 : 0.1, 500);
+  }
+  // Gelandet: RUMMS!
+  if (!intro.gelandet && t >= INTRO.landen) {
+    intro.gelandet = true;
+    wackeln = 9;
+    sound.boom(0.6); sound.schritt(2);
+    const staub = karte.id === 'eis' ? '#ffffff' : karte.id === 'planet' ? '#b9a7d6' : '#9a9a9a';
+    for (const m of mechs) for (let i = 0; i < 14; i++) {
+      const a = i / 14 * Math.PI * 2;
+      partikel.push({ x: m.x + Math.cos(a) * 20, y: m.y + Math.sin(a) * 20, h: m.z + 5, vh: 30 + Math.random() * 40, vx: Math.cos(a) * 160, vy: Math.sin(a) * 160, t: 1.2, max: 1.2, farbe: staub, rauch: true });
+    }
+  }
+  if (!intro.losgelassen && t >= INTRO.landen + 0.3) {   // Klack-klack: die Klammern gehen auf
+    intro.losgelassen = true;
+    ton(300, 0, 0.05, 'square', 0.08); ton(220, 0.12, 0.05, 'square', 0.08);
+  }
+  // Das Raumschiff fliegt weg
+  if (t >= INTRO.loslassen) {
+    if (intro.schiffe[0] && intro.schiffe[0].weg.v === 0) { ton(120, 0, 1.6, 'sawtooth', 0.06, 600); rauschen(0, 1.5, 0.12, 2500); }
+    for (const s of intro.schiffe) {
+      s.weg.v += 500 * dt;
+      s.weg.h += s.weg.v * 0.7 * dt;
+      s.weg.x += s.weg.v * dt;
+    }
+  }
+  // Wohin schaut der Pilot? Erst geradeaus, beim Runterfliegen etwas nach unten, dann dem Raumschiff hinterher
+  const zielHoch = t < INTRO.aufgehen ? 0 : t < INTRO.landen ? -0.22 : t < INTRO.ende - 0.8 ? 0.32 : 0;
+  blick.hoch += (zielHoch - blick.hoch) * Math.min(1, dt * 2.5);
+  blick.links = spieler.zielWinkel;
+  introPositionen();
+  if (t >= INTRO.ende) introBeenden();
+}
+function introBeenden() {
+  if (!intro) return;
+  for (const s of intro.schiffe) szene.remove(s.gruppe);
+  for (const m of mechs) { m.z = standHoehe(m.x, m.y, 0); m.vz = 0; }
+  intro = null;
+  blick.hoch = 0;
+  countdown = 3.99;
+}
+
+// Die Anzeige während des Intros (vorne auf dem HUD)
+function zeichneIntro() {
+  const t = intro.t, typ = spieler.typ;
+  // Der Sichtschutz: Metallplatten vor dem Fenster, die am Ende nach oben fahren
+  const offen = begrenzt((t - INTRO.hochfahren) / (INTRO.aufgehen - INTRO.hochfahren), 0, 1);
+  if (offen < 1) {
+    const y0 = -H * offen * offen;
+    const g = ctx.createLinearGradient(0, y0, 0, y0 + H);
+    g.addColorStop(0, '#2b303b'); g.addColorStop(1, '#1a1d24');
+    ctx.fillStyle = g; ctx.fillRect(0, y0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let y = 60; y < H; y += 80) ctx.fillRect(0, y0 + y, W, 3);   // Fugen zwischen den Platten
+    for (let y = 60; y < H; y += 80) for (let x = 40; x < W; x += 120) niete(x, y0 + y - 10);
+    // Warnstreifen unten am Sichtschutz
+    ctx.save(); ctx.beginPath(); ctx.rect(0, y0 + H - 22, W, 22); ctx.clip();
+    for (let x = -40; x < W + 40; x += 40) {
+      ctx.fillStyle = '#ffd166'; ctx.beginPath();
+      ctx.moveTo(x, y0 + H); ctx.lineTo(x + 20, y0 + H); ctx.lineTo(x + 42, y0 + H - 22); ctx.lineTo(x + 22, y0 + H - 22); ctx.fill();
+    }
+    ctx.restore();
+    // Der Bildschirm des Bordcomputers
+    const bx = W / 2 - 230, by = y0 + 90, bw = 460, bh = 300;
+    ctx.fillStyle = '#050a07'; rr(bx, by, bw, bh, 12); ctx.fill();
+    ctx.strokeStyle = '#1f3d2a'; ctx.lineWidth = 3; ctx.stroke();
+    text(`${typ.emoji} ${typ.name} · Bordcomputer`, W / 2, by + 26, 16, '#4ade80', 'center', false);
+    ctx.fillStyle = '#1f3d2a'; ctx.fillRect(bx + 20, by + 44, bw - 40, 2);
+    for (let i = 0; i <= Math.max(-1, intro.zeile); i++) {
+      const fertig = i === intro.zeilen.length - 1;
+      text(intro.zeilen[i], bx + 30, by + 70 + i * 26, 15, fertig ? '#ffd166' : '#4ade80', 'left', false);
+    }
+    if (Math.sin(t * 12) > 0 && intro.zeile < intro.zeilen.length - 1) {   // Blinkender Cursor
+      ctx.fillStyle = '#4ade80'; ctx.fillRect(bx + 30, by + 62 + (intro.zeile + 1) * 26, 10, 14);
+    }
+    const fortschritt = begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1);
+    balken(bx + 30, by + bh - 28, bw - 60, 10, fortschritt, '#4ade80', '#10261a');
+    if (t > INTRO.hochfahren) text('⚠️ SICHTSCHUTZ ÖFFNET', W / 2, y0 + H - 50, 18, '#ffd166');
+  }
+  // Das Cockpit drumherum (die Lämpchen gehen nach und nach an)
+  zeichneCockpit(begrenzt(t / (INTRO.hochfahren - 0.3), 0, 1));
+  // Texte während des Abwurfs
+  if (t > INTRO.aufgehen) {
+    let info;
+    if (t < INTRO.landen) info = `🚀 Landeanflug ...  Höhe: ${Math.round((spieler.z - standHoehe(spieler.x, spieler.y, 0)) / 10)} m`;
+    else if (t < INTRO.loslassen) info = '🦶 Gelandet! Klammern lösen ...';
+    else info = '👋 Das Raumschiff fliegt weg. Viel Glück, Pilot!';
+    ctx.fillStyle = 'rgba(15,17,24,0.8)'; rr(W / 2 - 230, 40, 460, 58, 12); ctx.fill();
+    text(info, W / 2, 60, 18, '#ffd166', 'center', false);
+    const modusInfo = MODI.find(x => x.id === modus);
+    text(`${karte.emoji} ${karte.name}  ·  ${modusInfo.emoji} ${modusInfo.name}`, W / 2, 84, 13, '#c9c3ff', 'center', false);
+  }
+  text(touchModus ? 'Tippen: Intro überspringen' : 'Klick oder Leertaste: Intro überspringen', W / 2, H - 100, 13, 'rgba(255,255,255,0.7)', 'center', false);
+}
+
 // ----- Zielkreise der Artillerie -----
 // Dein Zielring (zum Anvisieren) und die Kreise, wo gerade Raketen runterkommen
 const zielRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: '#c084fc', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
@@ -2886,7 +3117,7 @@ function niete(x, y) {
   ctx.fillStyle = '#5b6274'; kreis(x, y, 2.6); ctx.fill();
   ctx.fillStyle = '#9aa3b8'; kreis(x - 0.8, y - 0.8, 1); ctx.fill();
 }
-function zeichneCockpit() {
+function zeichneCockpit(strom = 1) {   // strom: beim Hochfahren gehen die Lämpchen nach und nach an (0 bis 1)
   const m = spieler, typ = m.typ, k = RAHMEN_DICKE[typ.klasse] || 1;
   const wipp = m.laeuft && !m.tot ? Math.abs(Math.sin(m.phase)) * 3 : 0;   // Beim Laufen wackelt alles ein bisschen
   const rahmen = '#232833', rahmenHell = '#353c4b';
@@ -2973,6 +3204,7 @@ function zeichneCockpit() {
   ctx.strokeStyle = '#3d4558'; ctx.lineWidth = 2; ctx.stroke();
   ctx.save();
   ctx.beginPath(); ctx.rect(bx0 + 4, by0 + 2, bw - 8, 18); ctx.clip();
+  if (strom < 0.3) ctx.globalAlpha = 0;   // Kompass geht erst später an
   const richtungen = ['O', 'SO', 'S', 'SW', 'W', 'NW', 'N', 'NO'];
   for (let i = -12; i <= 12; i++) {   // Striche alle 15 Grad, Buchstaben alle 45 Grad
     const grad = Math.round(blick.links / (Math.PI / 12)) + i;
@@ -2983,7 +3215,7 @@ function zeichneCockpit() {
     if (gross) text(richtungen[(((grad / 3) % 8) + 8) % 8], x, by0 + 8, 10, '#4ade80', 'center', false);
   }
   ctx.restore();
-  ctx.fillStyle = '#ffd166'; ctx.fillRect(W / 2 - 1, by0 + 2, 2, 18);
+  if (strom >= 0.3) { ctx.fillStyle = '#ffd166'; ctx.fillRect(W / 2 - 1, by0 + 2, 2, 18); }
   // Ein Lämpchen pro Waffen-Slot: hell = bereit, dunkel = lädt, X = Arm ab
   const n = m.waffen.length, abstand = Math.min(44, (bw - 20) / n);
   m.waffen.forEach((s, i) => {
@@ -2991,6 +3223,7 @@ function zeichneCockpit() {
     const farbe = SLOT_ARTEN[s.art];
     const geht = slotGeht(m, s), bereit = geht && s.pause <= 0;
     ctx.fillStyle = '#1a1f2b'; kreis(x, y, 12); ctx.fill();
+    if (strom < (i + 1) / (n + 2)) return;   // Beim Hochfahren: noch aus
     if (geht) {
       const fertig = bereit ? 1 : 1 - Math.max(0, s.pause) / (s.w.pause * (m.istSpieler ? 1 : BOT_FEUER_LANGSAMER));
       ctx.strokeStyle = farbe.farbe; ctx.lineWidth = 3;
@@ -3010,14 +3243,14 @@ function zeichneCockpit() {
     ctx.strokeStyle = i >= 5 ? '#ff6b6b' : '#8a8f9e'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * (tr - 7), ty + Math.sin(a) * (tr - 7)); ctx.lineTo(tx + Math.cos(a) * (tr - 2), ty + Math.sin(a) * (tr - 2)); ctx.stroke();
   }
-  const za = Math.PI + tempo * Math.PI;
+  const za = Math.PI + tempo * Math.PI * Math.min(1, strom * 1.5);
   ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + Math.cos(za) * (tr - 6), ty + Math.sin(za) * (tr - 6)); ctx.stroke();
   text('TEMPO', tx, ty + 10, 8, '#8a8f9e', 'center', false);
   // Links daneben: kleine Knöpfe, die blinken
   for (let i = 0; i < 6; i++) {
     const x = W / 2 - 200 + (i % 3) * 16, y = H - 36 + Math.floor(i / 3) * 16;
-    const an = Math.sin(zeit * (1.5 + i * 0.7) + i * 2) > 0.2;
+    const an = strom > 0.1 + i * 0.12 && Math.sin(zeit * (1.5 + i * 0.7) + i * 2) > 0.2;
     ctx.fillStyle = ['#4ade80', '#ffd166', '#38bdf8', '#f472b6', '#4ade80', '#fb923c'][i];
     ctx.globalAlpha = an ? 1 : 0.2; rr(x - 5, y - 5, 10, 10, 2); ctx.fill(); ctx.globalAlpha = 1;
   }
@@ -3063,6 +3296,7 @@ function zeichneMechTeile(m, x, y, s) {
   }
 }
 function zeichneHUD() {
+  if (intro) { zeichneIntro(); return; }   // 🎬 Während des Intros nur das Cockpit
   zeichneCockpit();
   zeichneNamen();
   zeichneZielZeichen();
@@ -3615,6 +3849,7 @@ addEventListener('keydown', e => {
   if (k === 'm') tonAn = !tonAn;
   if (zustand === 'spiel' && k === 'escape' && !pause) { pause = true; if (document.pointerLockElement) document.exitPointerLock(); }
   else if (zustand === 'spiel' && pause && k === 'enter') { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); }
+  else if (zustand === 'spiel' && intro && !pause && (k === ' ' || k === 'enter')) introBeenden();   // Intro überspringen
   else if (zustand === 'ende' && k === 'enter' && zeit - ende.seit > 1) neuesSpiel(modus);
   else if (zustand === 'auswahl' && k === 'escape') zustand = 'titel';
   else if (zustand === 'werkstatt' && k === 'escape') zustand = 'auswahl';
@@ -3635,6 +3870,7 @@ canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') touchModus = true;
   if (!mausGefangen) { const p = punkt(e); maus.x = p.x; maus.y = p.y; }
   if (zustand === 'spiel' && pause && imRechteck(punkt(e), MENUE_KNOPF)) { zustand = 'titel'; pause = false; if (document.pointerLockElement) document.exitPointerLock(); return; }
+  if (zustand === 'spiel' && intro && !pause) { introBeenden(); if (!mausGefangen && e.pointerType !== 'touch') mausFangen(); return; }   // Intro überspringen
   if (e.pointerType === 'touch' && zustand === 'spiel') { touchRunter(e); return; }
   if (zustand === 'titel') {
     for (const k of modusKarten()) if (imRechteck(maus, k)) { gewaehlterModus = k.m.id; zustand = 'auswahl'; return; }
@@ -3663,7 +3899,7 @@ canvas.addEventListener('pointerdown', e => {
 });
 addEventListener('pointermove', e => {
   if (e.pointerType === 'touch') { touchBewegt(e); return; }
-  if (zustand === 'spiel' && !pause && (mausGefangen || e.buttons)) {
+  if (zustand === 'spiel' && !pause && !intro && (mausGefangen || e.buttons)) {
     blick.links += (e.movementX || 0) * MAUS_EMPFINDLICH;
     blick.hoch = begrenzt(blick.hoch - (e.movementY || 0) * MAUS_EMPFINDLICH, -0.5, 0.4);
   }
@@ -3724,7 +3960,7 @@ function touchBewegt(e) {
     const tot = l < 12;   // Ein bisschen Spielraum in der Mitte
     touch.seite = tot ? 0 : dx / STICK_RADIUS;
     touch.vor = tot ? 0 : -dy / STICK_RADIUS;
-  } else if (f.art === 'blick' || f.art === 'feuer') {
+  } else if ((f.art === 'blick' || f.art === 'feuer') && !intro) {
     blick.links += (p.x - f.lx) * TOUCH_EMPFINDLICH;
     blick.hoch = begrenzt(blick.hoch - (p.y - f.ly) * TOUCH_EMPFINDLICH, -0.5, 0.4);
     f.lx = p.x; f.ly = p.y;
