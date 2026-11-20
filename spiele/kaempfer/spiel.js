@@ -1538,6 +1538,14 @@ function updateModus(dt) {
     storyMission.skript(storyMission.skriptZeit, dt);
   }
   if (funk) { funk.t -= dt; if (funk.t <= 0) funk = null; }
+  // ☠️ Nur ein Leben: Wird dein Mech zerstört, ist die Karriere vorbei
+  if (storyMission && storyMission.kampagne === 'rache' && !storyMission.prolog && NUR_EIN_LEBEN && spieler.tot && spieler.totZeit > 2.5) {
+    beende(anderes(spieler.team), '☠️ Dein Mech wurde zerstört!');
+    ende.gameOver = true;
+    karriere = neueKarriere();   // Alles weg – gleich speichern, damit man nicht schummeln kann
+    karriereSpeichern();
+    return;
+  }
   if (modus === 'punkt') {
     const z = ziele[0];
     const b = zaehleIn('blau', z), r = zaehleIn('rot', z);
@@ -4193,7 +4201,8 @@ function zeichneHUD() {
     else if (m.koGrund) text(m.koGrund, W / 2, H / 2 + 5, 20, '#fff');
     if (modus === 'knockout') {
       text(zuschauen ? `👀 Du schaust ${zuschauen.name} zu` : 'Warte auf die nächste Runde ...', W / 2, H / 2 + 45, 22, '#fff');
-    } else text(`Neustart in ${Math.ceil(m.neustart)} ...`, W / 2, H / 2 + 45, 22, '#fff');
+    } else if (m.neustart === Infinity) text(storyMission && storyMission.kampagne === 'rache' && NUR_EIN_LEBEN ? '☠️ Du hattest nur ein Leben ...' : '', W / 2, H / 2 + 45, 22, '#ff6b6b');
+    else text(`Neustart in ${Math.ceil(m.neustart)} ...`, W / 2, H / 2 + 45, 22, '#fff');
   }
 
   // ----- Countdown -----
@@ -4637,6 +4646,7 @@ const MECH_PREISE = { blitz: 1500, hornisse: 1800, adler: 2200, waechter: 4000, 
 const WAFFEN_PREISE = { laserK: 400, puls: 900, laserG: 1800, mg: 300, minigun: 800, schrot: 700, kanone: 1500, railgun: 2200, rak1: 500, rak2: 1000, rak4: 2000, hagel: 3000 };
 const VERKAUF_ANTEIL = 0.5;    // Beim Verkaufen bekommt man die Hälfte zurück
 const ABSCHUSS_BONUS = 150;    // So viele Credits gibt es extra für jeden Abschuss
+const NUR_EIN_LEBEN = true;    // ☠️ true = Wird dein Mech zerstört, ist alles weg und du fängst von vorne an (false = ausschalten)
 const geldText = n => `${Math.round(n).toLocaleString('de-DE')} 💰`;
 
 // ----- Dein Spielstand (wird im Browser gespeichert) -----
@@ -4693,7 +4703,8 @@ const RACHE = [
       ['du', 'Kragan wird dafür bezahlen. Ich will mich rächen!'],
       ['mila', 'Dann brauchst du bessere Mechs. Und die kosten Geld. Viel Geld.'],
       ['mila', 'Nimm Söldner-Aufträge an und verdiene Credits. Neue Mechs bekommst du OHNE Waffen – die musst du extra kaufen und im Hangar einbauen.'],
-      ['mila', 'Behalte den alten Blitzschlag von deinem Papa. Hier sind 1.000 Credits für den Anfang. Viel Glück!'],
+      ['mila', 'Behalte den alten Blitzschlag von deinem Papa. Hier sind 1.000 Credits für den Anfang.'],
+      ['mila', 'Und pass gut auf dich auf: Wenn dein Mech zerstört wird, ist ALLES weg. Dann musst du ganz von vorne anfangen!'],
     ],
     startGeld: 1000 },
   { id: 'spur', name: 'Die Spur der Legion', karte: 'planet', modus: 'team', abschussZiel: 8, ungenau: 0.2, belohnung: 2500, empfohlen: 'Medium',
@@ -4795,7 +4806,7 @@ function racheStarten(mission) {
     teamNamen(false);
     TEAMS.blau.name = 'Deine Truppe'; TEAMS.rot.name = 'Schwarze Legion';
     const ichTyp = mission.prolog ? karriereTyp({ typ: mission.spielerTyp, slots: mission.spielerSlots }) : karriereTyp(aktiverMech());
-    const aufstellung = [{ team: 'blau', typ: ichTyp, ich: true, keinNeustart: mission.modus === 'flucht', unverwundbar: !!mission.prolog }];   // Im Prolog beschützt dich Papa
+    const aufstellung = [{ team: 'blau', typ: ichTyp, ich: true, keinNeustart: mission.modus === 'flucht' || NUR_EIN_LEBEN, unverwundbar: !!mission.prolog }];   // Im Prolog beschützt dich Papa
     for (const f of mission.freunde) aufstellung.push(aufstellungEintrag('blau', f));
     for (const g of mission.gegner) aufstellung.push(aufstellungEintrag('rot', g));
     neuesSpiel(mission.modus, aufstellung);
@@ -4809,6 +4820,15 @@ function racheBelohnung(gewonnen) {   // Wie viele Credits gibt es?
 }
 function racheNachMission() {
   const m = storyMission, gewonnen = ende && ende.sieger === spieler.team;
+  if (ende && ende.gameOver) {   // ☠️ Alles weg
+    normalesSpiel();
+    dialogStarten([
+      ['mila', 'Oh nein ... Dein Mech ist komplett zerstört. Und mein Hangar ist auch weg.'],
+      ['mila', 'Alles ist verloren: Geld, Mechs und Waffen. Du musst ganz von vorne anfangen.'],
+      ['du', 'Ich gebe nicht auf. Ich fange nochmal an – und diesmal schaffe ich es!'],
+    ], () => { zustand = 'kampagnen'; });
+    return;
+  }
   const b = racheBelohnung(gewonnen);
   normalesSpiel();
   try { karte = KARTEN.find(k => k.id === localStorage.getItem('kaempfer-karte')) || KARTEN[0]; } catch (e) { karte = KARTEN[0]; }
@@ -4918,6 +4938,7 @@ function zeichneAuftraege() {
     text('🏆 Kragan ist besiegt!', k.x + k.w / 2, k.y + 120, 26, '#ffd166');
     umbrechen('Du hast deinen Papa gerächt. Aber Söldner-Aufträge gibt es immer – verdiene weiter Credits und sammle alle Mechs!', k.x + 30, k.y + 170, k.w - 60, 22, 16, '#c9c3ff');
   }
+  if (NUR_EIN_LEBEN) text('☠️ Du hast nur ein Leben: Wird dein Mech zerstört, ist alles weg!', W / 2, 532, 14, '#ff6b6b', 'center', false);
   // Rechts: Nebenaufträge
   text('💼 Nebenaufträge (zum Geld verdienen)', 490, 116, 13, '#8a8fb0', 'left', false);
   karriere.auftraege.forEach((a, i) => {
@@ -5767,7 +5788,10 @@ function zeichneEnde() {
       text(String(m.tode), x + 265, y, 16, '#fff', 'center', false);
     });
   });
-  if (storyMission && storyMission.kampagne === 'rache' && !storyMission.prolog) {   // 💰 Wie viel Geld gibt es?
+  if (ende.gameOver) {   // ☠️ Nur ein Leben
+    text('☠️ GAME OVER', W / 2, 432, 40, '#ff6b6b');
+    text('Alles ist weg – Geld, Mechs und Waffen. Du musst ganz von vorne anfangen!', W / 2, 470, 16, '#fca5a5', 'center', false);
+  } else if (storyMission && storyMission.kampagne === 'rache' && !storyMission.prolog) {   // 💰 Wie viel Geld gibt es?
     const b = racheBelohnung(ende.sieger === spieler.team);
     text(`💰 +${geldText(b.summe)}`, W / 2, 440, 30, '#ffd166');
     text(`${ende.sieger === spieler.team ? 'Belohnung' : 'Trostgeld'} ${b.basis} + ${b.kills} Abschüsse × ${ABSCHUSS_BONUS}`, W / 2, 470, 14, '#c9c3ff', 'center', false);
