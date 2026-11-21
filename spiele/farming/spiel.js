@@ -1065,7 +1065,7 @@ const FAHRZEUGE = {
   },
   haecksler: {
     name: 'Häcksler', emoji: '🌽', preis: 160000, farbe: 0x2f9a4a, art: 'haecksler', groesse: 1, tempo: 8.3, arbeit: 1.5, breite: 1.4,
-    dieselMax: 500, tankMax: 0, saatMax: 0, geraete: ['maisgebiss'], motorTon: 0.8, allrad: true,
+    dieselMax: 500, tankMax: 0, saatMax: 0, geraete: ['maisgebiss'], motorTon: 0.8, allrad: true, kupplung: 3.7,
     faehigkeit: 'Häckselt Mais! Bläst das Häckselgut in einen Anhänger (hinten mit H ankuppeln – oder ein Freund fährt daneben)',
   },
 };
@@ -1296,6 +1296,37 @@ function baueHarvester(typ, K) {
   kasten(kopf, 0, -0.45, -0.55, 0.06, 0.1, 0.9, 0xb5b9bf, false);        // Sägeschwert unten
   return { raeder, auspuff: [0.85, 4.05, 3.2], sitz: [0, 2.95, -0.65], radstand: 4.2, kran: { turm, armG, arm, kopf, phi: 0, d: 2.6, h: -0.2 } };
 }
+// Der Häcksler (Feldhäcksler): großer Motor hinten, Kabine vorne – und oben das drehbare Auswurfrohr (der "Krümmer")
+function baueHaecksler(typ, K) {
+  const farbe = typ.farbe, dunkel = new THREE.Color(farbe).multiplyScalar(0.6).getHex();
+  kasten(K, 0, 1.7, 0.6, 2.7, 1.9, 5.6, farbe);                   // Körper
+  kasten(K, 0, 2.9, 1.8, 2.5, 0.6, 3.0, dunkel);                  // Motorhaube hinten
+  for (let k = 0; k < 6; k++) kasten(K, 0, 3.22, 0.7 + k * 0.4, 2.2, 0.04, 0.12, 0x222222, false);   // Lüftungsschlitze
+  kasten(K, 0, 1.2, -2.3, 2.3, 1.1, 1.0, 0x444444);               // Einzug (da kommt der Mais rein)
+  kasten(K, 0, 2.7, -1.9, 2.0, 0.1, 1.8, farbe);                  // Kabine: Boden
+  for (const [x, z] of [[-0.95, -2.75], [0.95, -2.75], [-0.95, -1.05], [0.95, -1.05]]) kasten(K, x, 3.4, z, 0.09, 1.3, 0.09, 0x222222);
+  kasten(K, 0, 3.4, -1.9, 1.85, 1.25, 1.65, glasMat, false);      // Glas rundherum
+  kasten(K, 0, 4.1, -1.9, 2.15, 0.14, 1.95, farbe);               // Dach
+  const licht = new THREE.MeshBasicMaterial({ color: 0xfff6c0 });
+  for (const x of [-0.7, -0.25, 0.25, 0.7]) kasten(K, x, 4.22, -2.82, 0.22, 0.12, 0.1, licht, false);
+  kasten(K, 0, 3.0, -1.6, 0.55, 0.12, 0.55, 0x222222, false);     // Sitz
+  kasten(K, 0, 3.35, -1.32, 0.5, 0.6, 0.1, 0x222222, false);      // Lehne
+  kasten(K, 0.9, 3.9, 2.9, 0.16, 1.2, 0.16, 0x222222);            // Auspuff
+  const raeder = [];
+  for (const x of [-1.5, 1.5]) {
+    raeder.push(baueRad(K, x, 0.95, -1.2, 0.95, 0.75, 0));        // Vorne: groß
+    raeder.push(baueRad(K, x * 0.92, 0.7, 2.5, 0.7, 0.55, -1));   // Hinten: lenkt
+  }
+  // Der Krümmer: dreht sich um sich selbst (g), geht hoch und dann weit nach außen
+  const g = new THREE.Group(); g.position.set(0, 3.25, 0.4); K.add(g);
+  const rohrMat = mat(farbe, { metalness: 0.3, roughness: 0.5 });
+  const fuss = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 1.0, 12), rohrMat); fuss.position.y = 0.5; fuss.castShadow = true; g.add(fuss);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.5, 0.55), rohrMat); arm.position.set(1.8, 1.25, 0); arm.rotation.z = 0.18; arm.castShadow = true; g.add(arm);
+  const klappe = kasten(g, 3.65, 1.45, 0, 0.6, 0.35, 0.5, dunkel); klappe.rotation.z = -0.5;   // Auswurfklappe vorne am Rohr
+  const spitze = new THREE.Object3D(); spitze.position.set(3.9, 1.3, 0); g.add(spitze);
+  g.rotation.y = -Math.PI / 2 - 0.6;
+  return { raeder, auspuff: [0.9, 4.55, 2.9], sitz: [0, 3.65, -1.45], radstand: 3.7, kruemmer: { g, spitze } };
+}
 function kranStellen(fz, phi, d, h, dt) {   // Den Kran langsam zum Ziel bewegen (phi = Drehung, d = Weite, h = Höhe)
   const k = fz.kran, f = Math.min(1, dt * 4);
   let dp = phi - k.phi;
@@ -1319,6 +1350,16 @@ function baueGeraet(art) {
     kasten(g, 0, 0.35, 0.3, 3.5, 0.2, 0.3, 0x333333);
     for (let k = 0; k < 8; k++) kasten(g, -1.6 + k * 0.46, 0.2, 0.55, 0.06, 0.4, 0.06, 0xb0b0b0);
     kasten(g, 0, 0.6, -0.7, 0.25, 0.2, 1.2, 0x2457a6);
+  } else if (art === 'maisgebiss') {   // Maisgebiss: viele grüne Spitzen, die zwischen die Maisreihen fahren
+    kasten(g, 0, 0.55, 0.1, 4.5, 0.6, 1.1, 0x2f9a4a);
+    kasten(g, 0, 0.3, -0.2, 4.5, 0.12, 1.2, 0x555555, false);
+    for (let k = 0; k < 8; k++) {
+      const spitze = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.2, 4), mat(k % 2 ? 0xf0c020 : 0x2f9a4a));
+      spitze.rotation.x = -Math.PI / 2; spitze.position.set(-1.97 + k * 0.563, 0.45, -1.1); spitze.castShadow = true; g.add(spitze);
+    }
+    const trommel = new THREE.Group(); trommel.position.set(0, 0.75, -0.45); g.add(trommel);   // Dreht sich beim Häckseln (wie die Haspel)
+    for (let k = 0; k < 4; k++) { const l = kasten(trommel, 0, 0, 0, 4.3, 0.07, 0.07, 0x222222, false); l.position.set(0, Math.sin(k / 4 * Math.PI * 2) * 0.22, Math.cos(k / 4 * Math.PI * 2) * 0.22); }
+    g.userData.haspel = trommel;
   } else {
     kasten(g, 0, 0.5, 0, 4.5, 0.5, 1.0, 0xe0b000);
     kasten(g, 0, 0.2, -0.45, 4.5, 0.1, 0.3, 0x777777);
@@ -1335,11 +1376,11 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   const typ = FAHRZEUGE[typName];
   const g = new THREE.Group(); scene.add(g);
   const K = new THREE.Group(); K.scale.setScalar(typ.groesse); g.add(K);   // Der Körper (größer oder kleiner je nach Fahrzeug)
-  const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : typ.art === 'harvester' ? baueHarvester(typ, K) : baueTraktor(typ, K);
+  const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : typ.art === 'harvester' ? baueHarvester(typ, K) : typ.art === 'haecksler' ? baueHaecksler(typ, K) : baueTraktor(typ, K);
   const fz = {
     typName, typ, g, K, ...teile, speed: 0, lenkWinkel: 0, arbeitet: false, geraete: {},
     id: daten.id || `${mp.ich}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, fahrer: null, fahrerZeit: 0, ziel: null,
-    radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' ? 2.4 : 1.8) * typ.groesse,
+    radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' || typ.art === 'haecksler' ? 2.4 : 1.8) * typ.groesse,
     werkzeug: typ.geraete.includes(daten.werkzeug) ? daten.werkzeug : typ.geraete[typ.geraete.length - 1],
     diesel: daten.diesel ?? typ.dieselMax, tank: daten.tank ?? 0, saat: daten.saat ?? typ.saatMax,
     gut: GUETER[daten.gut] ? daten.gut : 'korn', saatArt: daten.saatArt === 'mais' ? 'mais' : 'weizen',
@@ -1347,13 +1388,13 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   for (const art of typ.geraete) {
     const m = baueGeraet(art), G = GERAETE[art];
     m.scale.set(typ.breite, typ.groesse, typ.groesse);
-    m.position.z = typ.art === 'drescher' ? -3.9 : (G.hinten ? 3.0 : -2.9) * typ.groesse;
+    m.position.z = typ.art === 'drescher' ? -3.9 : typ.art === 'haecksler' ? -3.4 : (G.hinten ? 3.0 : -2.9) * typ.groesse;
     g.add(m);
     fz.geraete[art] = m;
   }
   fz.schild = schild(`${typ.emoji} ${typ.name}`, '#ffffff', 5);
   if (fz.kran) kranStellen(fz, 0, 2.6, -0.2, 1);
-  fz.schild.position.y = (typ.art === 'drescher' ? 6.8 : 4.2) * typ.groesse;
+  fz.schild.position.y = (typ.art === 'drescher' ? 6.8 : typ.art === 'haecksler' ? 5.6 : 4.2) * typ.groesse;
   g.add(fz.schild);
   g.position.set(x, 0, z); g.rotation.y = rot;
   fahrzeuge.push(fz);
@@ -1409,7 +1450,7 @@ function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
   anhaenger.push(a);
   return a;
 }
-const anhKupplung = (fz, ziel) => { fz.g.updateMatrixWorld(); return ziel.set(0, 0, KUPPLUNG * fz.typ.groesse).applyMatrix4(fz.g.matrixWorld); };
+const anhKupplung = (fz, ziel) => { fz.g.updateMatrixWorld(); return ziel.set(0, 0, (fz.typ.kupplung || KUPPLUNG) * fz.typ.groesse).applyMatrix4(fz.g.matrixWorld); };
 const anhOese = (a, ziel) => ziel.set(-Math.sin(a.g.rotation.y) * a.deichsel, 0, -Math.cos(a.g.rotation.y) * a.deichsel).add(a.g.position);
 function ankuppeln(fz, a) {
   if (a.an) a.an.anh = null;
