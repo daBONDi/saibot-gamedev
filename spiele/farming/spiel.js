@@ -2076,6 +2076,127 @@ function honigErnten(b) {
   sound.korn(); speichern();
 }
 
+// ===== 🐕🐈 Hofhunde und Hofkatzen (P = streicheln!) =====
+const HUNDE_NAMEN = ['Bello', 'Rex', 'Luna', 'Balu', 'Sammy', 'Bruno', 'Nala', 'Rocky'];
+const KATZEN_NAMEN = ['Mimi', 'Felix', 'Minka', 'Tiger', 'Lilly', 'Garfield', 'Mohrle', 'Kitty'];
+const HUND_FARBEN = [0x8a5a2a, 0x2a2420, 0xd8b07a, 0xf2efe8], KATZEN_FARBEN = [0xe08a30, 0x6a6a6a, 0x1e1e1e, 0xf2efe8];
+const haustiere = [];
+function haustierNeu(art, x, z, rot, name) {
+  const hund = art === 'hund', nr = haustiere.length;
+  const fell = mat((hund ? HUND_FARBEN : KATZEN_FARBEN)[(Math.floor(x * 7 + z * 3) % 4 + 4) % 4]), dunkel = mat(0x222222), rosa = mat(0xf2a0b0);
+  const S = hund ? 1 : 0.62;   // Katzen sind kleiner
+  const g = new THREE.Group(); scene.add(g);
+  const k = new THREE.Group(); k.scale.setScalar(S); g.add(k);
+  kasten(k, 0, 0.55, 0, 0.42, 0.38, 0.95, fell);                            // Körper (vorne = -z)
+  const kopf = new THREE.Group(); kopf.position.set(0, 0.85, -0.5); k.add(kopf);
+  kasten(kopf, 0, 0, 0, 0.36, 0.34, 0.34, fell);
+  if (hund) {
+    kasten(kopf, 0, -0.06, -0.24, 0.22, 0.18, 0.2, fell);                   // Schnauze
+    kasten(kopf, 0, -0.01, -0.35, 0.08, 0.07, 0.04, dunkel, false);         // Nase
+    for (const sx of [-1, 1]) { const o = kasten(kopf, sx * 0.2, 0.05, 0.02, 0.06, 0.26, 0.16, dunkel); o.rotation.z = sx * 0.25; }   // Schlappohren
+    kasten(kopf, 0, -0.17, -0.3, 0.07, 0.03, 0.08, rosa, false);            // Zunge
+  } else {
+    for (const sx of [-1, 1]) { const o = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.17, 4), fell); o.position.set(sx * 0.11, 0.24, 0); kopf.add(o); }   // Spitze Ohren
+    kasten(kopf, 0, -0.06, -0.18, 0.06, 0.04, 0.02, rosa, false);           // Näschen
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) { const b = kasten(kopf, sx * 0.24, -0.06 + sy * 0.03, -0.16, 0.18, 0.008, 0.008, mat(0xffffff), false); b.rotation.z = sx * sy * 0.15; }   // Schnurrhaare
+  }
+  for (const sx of [-1, 1]) kasten(kopf, sx * 0.09, 0.06, -0.175, 0.06, 0.06, 0.02, hund ? dunkel : mat(0x7cd84a), false);   // Augen
+  const beine = [];
+  for (const [bx, bz] of [[-0.14, -0.35], [0.14, -0.35], [-0.14, 0.35], [0.14, 0.35]]) {
+    const b = new THREE.Group(); b.position.set(bx, 0.4, bz); k.add(b);
+    kasten(b, 0, -0.2, 0, 0.11, 0.4, 0.11, fell); beine.push(b);
+  }
+  const schwanz = new THREE.Group(); schwanz.position.set(0, 0.68, 0.47); k.add(schwanz);
+  const sl = hund ? 0.4 : 0.6;
+  kasten(schwanz, 0, sl / 2, 0, 0.07, sl, 0.07, fell); schwanz.rotation.x = hund ? 0.6 : 0.3;
+  const namen = hund ? HUNDE_NAMEN : KATZEN_NAMEN;
+  const t = { art, hund, name: name || namen[(nr + Math.floor(Math.abs(x + z))) % namen.length], g, kopf, beine, schwanz, k,
+    hx: x, hz: z, ziel: null, warte: Math.random() * 3, speed: 0, streichel: 0, liebe: 0, phase: Math.random() * 6 };
+  g.position.set(x + Math.sin(rot) * 1.6, 0, z + Math.cos(rot) * 1.6);
+  t.schild = schild(`${hund ? '🐕' : '🐈'} ${t.name}`, '#ffd166', 2.8); scene.add(t.schild);
+  haustiere.push(t);
+  return t;
+}
+// Die zwei Haustiere, die von Anfang an auf dem Hof wohnen: Hund Bello (mit Hütte) und Katze Mimi (Körbchen vor der Haustür)
+{
+  const huette = baueGebaeudeMesh('hundehuette'); huette.position.set(-5.5, 0, 37); huette.rotation.y = Math.PI / 2; scene.add(huette);
+  hindernisse.push({ x: -5.5, z: 37, r: 0.8 });
+  haustierNeu('hund', -5.5, 37, Math.PI / 2, 'Bello');
+  const korb = baueGebaeudeMesh('katzenkorb'); korb.position.set(-7, 0, 31.5); scene.add(korb);
+  haustierNeu('katze', -7, 31.5, 0, 'Mimi');
+}
+const herzMat = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'); g.font = '52px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('💕', 32, 36);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.SpriteMaterial({ map: tx, depthWrite: false });
+})();
+const herzen = [];
+function herzchen(x, y, z) {
+  const h = new THREE.Sprite(herzMat); h.scale.setScalar(0.5); h.position.set(x + zufall(-0.3, 0.3), y, z + zufall(-0.3, 0.3)); scene.add(h);
+  herzen.push({ h, t: 1.5 });
+}
+function naechstesHaustier(weite = 2.6) {
+  if (aktiv) return null;
+  let bestes = null, bestD = weite;
+  for (const t of haustiere) { const d = Math.hypot(t.g.position.x - player.position.x, t.g.position.z - player.position.z); if (d < bestD) { bestD = d; bestes = t; } }
+  return bestes;
+}
+function streicheln(t) {
+  t.streichel = 3; t.liebe = Math.min(100, t.liebe + 10); t.ziel = null; t.speed = 0;
+  for (let k = 0; k < 4; k++) herzchen(t.g.position.x, 1.1 + k * 0.15, t.g.position.z);
+  if (t.hund) { tonGleiten(420, 300, 0, 0.12, 'square', 0.05); tonGleiten(460, 320, 0.2, 0.14, 'square', 0.05); }   // Wuff wuff!
+  else { tonGleiten(650, 900, 0, 0.25, 'sine', 0.05); tonGleiten(900, 600, 0.25, 0.35, 'sine', 0.05); for (let k = 0; k < 8; k++) ton(70, 0.7 + k * 0.12, 0.08, 'sawtooth', 0.02); }   // Miau ... schnurr
+  const texte = t.hund ? ['wedelt mit dem Schwanz!', 'leckt deine Hand ab! 👅', 'rollt sich auf den Rücken – Bauch kraulen!', 'bellt fröhlich: Wuff!'] : ['schnurrt ganz laut!', 'reibt den Kopf an deiner Hand.', 'macht einen Buckel und miaut.', 'blinzelt dich zufrieden an.'];
+  meldung(`💕 ${t.name} ${texte[Math.floor(Math.random() * texte.length)]} (Liebe: ${'❤️'.repeat(Math.ceil(t.liebe / 20))})`, 3);
+}
+function haustierUpdate(dt) {
+  for (let k = herzen.length - 1; k >= 0; k--) {
+    const H = herzen[k]; H.t -= dt; H.h.position.y += dt * 0.8; H.h.material.opacity = Math.min(1, H.t);
+    if (H.t <= 0) { scene.remove(H.h); herzen.splice(k, 1); }
+  }
+  const p = player.position, zuFuss = !aktiv;
+  for (const t of haustiere) {
+    const g = t.g, pos = g.position;
+    const dSpieler = Math.hypot(p.x - pos.x, p.z - pos.z);
+    if (t.streichel > 0) {   // Wird gestreichelt: sitzen bleiben und zu dir schauen
+      t.streichel -= dt; t.speed = 0;
+      g.rotation.y = Math.atan2(-(p.x - pos.x), -(p.z - pos.z));
+      if (t.hund && t.streichel > 1.5) t.k.rotation.z = Math.sin(spielZeit * 3) * 0.05 + 0.15;
+    } else {
+      t.k.rotation.z = 0;
+      // Der Hund kommt zu dir gelaufen, wenn du in der Nähe bist (Katzen manchmal auch)
+      const folgt = zuFuss && dSpieler < (t.hund ? 14 : 6) && Math.hypot(p.x - t.hx, p.z - t.hz) < 30 && (t.hund || t.liebe > 20);
+      if (folgt && dSpieler > 2.2) t.ziel = { x: p.x, z: p.z };
+      else if (folgt) t.ziel = null;
+      else if (!t.ziel) { t.warte -= dt; if (t.warte <= 0) { const w = Math.random() * 6.28, r = 1.5 + Math.random() * (t.hund ? 8 : 5); t.ziel = { x: t.hx + Math.cos(w) * r, z: t.hz + Math.sin(w) * r }; } }
+      if (t.ziel) {
+        const dx = t.ziel.x - pos.x, dz = t.ziel.z - pos.z, d = Math.hypot(dx, dz);
+        const tempo = folgt ? (t.hund ? 5 : 3) : (t.hund ? 1.8 : 1.2);
+        if (d < 0.3) { t.ziel = null; t.warte = 2 + Math.random() * 5; t.speed = 0; }
+        else {
+          t.speed = tempo;
+          const zielW = Math.atan2(-dx, -dz);
+          let dw = zielW - g.rotation.y; while (dw > Math.PI) dw -= Math.PI * 2; while (dw < -Math.PI) dw += Math.PI * 2;
+          g.rotation.y += dw * Math.min(1, dt * 6);
+          const nx = pos.x - Math.sin(g.rotation.y) * tempo * dt, nz = pos.z - Math.cos(g.rotation.y) * tempo * dt;
+          if (!kollidiert(nx, nz, 0.3)) { pos.x = nx; pos.z = nz; } else { t.ziel = null; t.warte = 1; }
+        }
+      } else t.speed = 0;
+    }
+    // Beine laufen, Schwanz wedelt, Kopf wackelt
+    t.phase += dt * t.speed * 4;
+    t.beine.forEach((b, i) => { b.rotation.x = t.speed > 0 ? Math.sin(t.phase + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.6 : 0; });
+    const freude = t.streichel > 0 || (t.hund && dSpieler < 4 && zuFuss);
+    if (t.hund) t.schwanz.rotation.z = Math.sin(spielZeit * (freude ? 22 : 5)) * (freude ? 0.7 : 0.25);
+    else t.schwanz.rotation.z = Math.sin(spielZeit * 1.5 + t.phase) * 0.35;
+    t.kopf.rotation.x = t.speed > 0 ? Math.sin(t.phase * 2) * 0.05 : (t.streichel > 0 ? -0.25 : 0);
+    if (!t.hund && t.speed === 0 && t.streichel <= 0) t.k.position.y = -0.03; else t.k.position.y = 0;
+    t.schild.position.set(pos.x, t.hund ? 1.8 : 1.25, pos.z);
+    t.schild.visible = dSpieler < 12;
+  }
+}
+
 // ===== Silagesilo: Häckselgut abladen (L) → festfahren → abdecken (P) → gären lassen → Silage! =====
 function fahrsiloEinrichten(b) {
   b.fs = { inhalt: 0, fest: 0, zu: false, gaer: 0, fertig: false, takt: 0, geaendert: false };
@@ -3059,6 +3180,7 @@ function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächs
   if (inHaus(wo().x, wo().z) && !aktiv && Math.hypot(player.position.x - HAUS.bett.x, player.position.z - HAUS.bett.z) < 2.6) return `🛏️ Z = Schlafen (bis morgen ${AUFSTEH_ZEIT}:00 Uhr)`;
   if (beiDerMine()) return saegeAn ? '⛏️ Pack erst die Motorsäge weg (Q)!' : `⛏️ Salzmine: X oder Maus halten = Salzstein abbauen (${salzsteine} von ${SALZ_MAX}${hackt ? ` · ${Math.round(hackFort * 100)} %` : ''})`;
   if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText(true)} = ${euro(vorratWert())})`;
+  { const t = naechstesHaustier(); if (t) return `${t.hund ? '🐕' : '🐈'} P = ${t.name} streicheln 💕`; }
   const wp = naherWaldPlot();
   if (wp) { const H = HOLZARTEN[wp.wald.holz]; return `🪓 ${GEBAEUDE_ARTEN[wp.art].name}: X oder Maus halten = Holz hacken (${Math.floor(vorrat['holz_' + wp.wald.holz] || 0)} Scheite ${H.name}${hackt ? ` · ${Math.round(waldHackFort * 100)} %` : ''})`; }
   const b = nahesHofGebaeude();
@@ -4055,6 +4177,7 @@ document.addEventListener('keydown', e => {
   if (building && (k === '.' || k === ',')) { const arten = Object.keys(GEBAEUDE_ARTEN), n = arten.length; bauArt = arten[(arten.indexOf(bauArt) + (k === '.' ? 1 : n - 1)) % n]; updateHUD(); }
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
   if (k === 'p' && werkbankOffen) werkbankZeigen(false);
+  else if (k === 'p' && naechstesHaustier()) streicheln(naechstesHaustier());
   else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (nb && nb.fs) fahrsiloP(nb); else if (nb && nb.biene) honigErnten(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
@@ -4347,6 +4470,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
     scene.remove(b.mesh);
     const k = hindernisse.indexOf(b.h); if (k >= 0) hindernisse.splice(k, 1);
     for (const h of b.hx || []) { const n = hindernisse.indexOf(h); if (n >= 0) hindernisse.splice(n, 1); }
+    if (b.tier) { const n = haustiere.indexOf(b.tier); if (n >= 0) haustiere.splice(n, 1); }
     if (b.silo) { scene.remove(b.silo.schild); silos.splice(silos.indexOf(b.silo), 1); }
     for (const o of b.extra || []) scene.remove(o);   // Schilder und Tiere
   }
