@@ -1206,9 +1206,9 @@ function malBildschirm(fz) {   // Der Bildschirm in der Kabine
     g.fillStyle = '#ffffff'; g.font = '12px Arial'; g.fillText(text, 110, y + 14);
   };
   balkenMalen(36, fz.diesel / fz.typ.dieselMax, fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0', `⛽ ${Math.round(fz.diesel)} l`);
-  balkenMalen(70, kornDrin(fz) / kornPlatz(fz), '#e3b341', `🌾 ${kg(kornDrin(fz))}`);
+  balkenMalen(70, kornPlatz(fz) ? kornDrin(fz) / kornPlatz(fz) : 0, '#' + (GUETER[gutVon(fz)] || GUETER.korn).farbe.toString(16).padStart(6, '0'), gutText(fz));
   g.fillStyle = '#ffffff'; g.font = '13px Arial';
-  if (fz.typ.saatMax) g.fillText(`🌱 ${kg(fz.saat)}`, 10, 80);
+  if (fz.typ.saatMax) g.fillText(`${fz.saatArt === 'mais' ? '🌽' : '🌱'} ${kg(fz.saat)}`, 10, 80);
   g.fillStyle = '#7cf5a0'; g.fillText(fz.typ.name, 10, 104);
   fz.bildTex.needsUpdate = true;
 }
@@ -2744,9 +2744,10 @@ function futterAbladen(b) {   // Korn vom Fahrzeug als Futter in den Trog
   const menge = Math.min(kornDrin(aktiv), FUTTER_MAX - b.geh.futter);
   if (kornDrin(aktiv) <= 0) { meldung('🌾 Du hast kein Korn dabei! Ernte erst ein Feld – oder kauf Futter im Menü (P).'); sound.nein(); return; }
   if (menge <= 0) { meldung('🌾 Der Futtertrog ist schon voll!'); sound.nein(); return; }
+  const G = GUETER[gutVon(aktiv)];
   kornWeg(aktiv, menge); b.geh.futter += menge;
   gebSenden(b);
-  meldung(`🌾 ${kg(menge)} Korn als Futter abgeladen! (${kg(b.geh.futter)} im Trog)`, 3);
+  meldung(`${G.emoji} ${kg(menge)} ${G.name} als Futter abgeladen! (${kg(b.geh.futter)} im Trog)${G === GUETER.silage ? ' Lecker! 😋' : ''}`, 3);
   sound.korn(); speichern();
 }
 function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächshaus und Gehege
@@ -2760,7 +2761,8 @@ function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächs
   if (b.werkbank) return werkbankOffen ? '' : aktiv ? '🛠️ Steig aus (E), dann P = Werkbank' : '🛠️ P = Werkbank öffnen (Wurst machen, Grillen, Pökeln)';
   if (b.teich) return angel ? (angel.phase === 'warten' ? '🎣 Warte auf einen Biss ...' : '') : aktiv ? '🎣 Zum Angeln aussteigen (E)' : `🎣 P = Angeln (${Math.floor(b.teich.fische)} Fische im Teich)`;
   if (b.obst) { const O = OBST[b.art]; return b.obst.w >= 1 ? `${O.emoji} P = ${O.menge} kg ${O.name} pflücken` : `${O.emoji} ${GEBAEUDE_ARTEN[b.art].name}: ${b.obst.w < 0.25 ? 'blüht' : 'Früchte wachsen'} (${Math.floor(b.obst.w * 100)} %)`; }
-  if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `🌾 L = Korn als Futter abladen (${kg(kornDrin(aktiv))})` : '';
+  if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `${GUETER[gutVon(aktiv)].emoji} L = ${GUETER[gutVon(aktiv)].name} als Futter abladen (${kg(kornDrin(aktiv))})` : '';
+  if (b.fs) return fahrsiloHinweis(b);
   return panelGeb ? '' : `${GEBAEUDE_ARTEN[b.art].emoji} P = ${GEBAEUDE_ARTEN[b.art].name}-Menü öffnen`;
 }
 // Das Hof-Silo: gehört dir von Anfang an
@@ -2920,8 +2922,9 @@ function updateHUD() {
     $('tempo').textContent = Math.round(Math.abs(fz.speed) * 3.6);
     balken('diesel', fz.diesel, fz.typ.dieselMax, `${Math.round(fz.diesel)} Liter`);
     $('diesel').style.background = fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0';
-    balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? kg(fz.saat) : '– (kann nicht säen)');
-    balken('tank', kornDrin(fz), kornPlatz(fz), kornAnh(fz) ? `${kg(kornDrin(fz))} (mit ${fz.anh.typ.name})` : fz.typ.tankMax ? kg(fz.tank) : '– (kein Korntank)');
+    balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? `${fz.saatArt === 'mais' ? '🌽' : '🌾'} ${kg(fz.saat)}` : '– (kann nicht säen)');
+    balken('tank', kornDrin(fz), kornPlatz(fz), kornPlatz(fz) ? `${gutText(fz)}${kornAnh(fz) ? ` (mit ${fz.anh.typ.name})` : ''}` : fz.typ.art === 'haecksler' ? '– Anhänger ankuppeln (H)!' : '– (kein Korntank)');
+    $('tank').style.background = '#' + (GUETER[gutVon(fz)] || GUETER.korn).farbe.toString(16).padStart(6, '0');
   }
   const steigt = Math.cos(spielZeit / 45) > 0;
   $('preis').textContent = `${kornPreis().toFixed(2).replace('.', ',')} €/kg ${steigt ? '📈' : '📉'}`;
@@ -2956,13 +2959,86 @@ function bearbeite(fz, x, z) {
   } else if (fz.werkzeug === 'saat') {
     if (c.z === 'gepfluegt') {
       if (fz.saat < SAAT_PRO_ZELLE) { meldungSelten('🌱 Die Saat ist leer! Fahr zum Landhandel 🏪 und drück G.'); return; }
-      fz.saat -= SAAT_PRO_ZELLE; c.z = 'gesaet'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j);
+      fz.saat -= SAAT_PRO_ZELLE; c.z = 'gesaet'; c.w = 0;
+      if (fz.saatArt === 'mais') c.a = 'mais'; else delete c.a;
+      malBoden(f, i, j); mpZelle(f, i, j);
     } else if (c.z === 'wiese' || c.z === 'stoppeln') meldungSelten('🟫 Erst pflügen (Taste 1), dann säen!');
+  } else if (fz.werkzeug === 'maisgebiss') {   // Der Häcksler: Mais klein häckseln und in den Anhänger blasen
+    if (c.z === 'gesaet' && c.a === 'mais' && c.w >= 1) {
+      const ziel = haeckselZiel(fz);
+      if (!ziel) { meldungSelten(gutPasst(fz, 'haeckselgut') || !kornAnh(fz) ? '🚛 Wohin mit dem Häckselgut? Kuppel einen Kipper an (H) – oder ein Freund fährt mit Anhänger neben dir!' : '🚛 Im Anhänger ist noch was anderes drin – erst leer machen!'); return; }
+      if (ziel.a) { ziel.a.inhalt += MAIS_ERTRAG; ziel.a.gut = 'haeckselgut'; }
+      else { kornDazu(ziel.fz, MAIS_ERTRAG, 'haeckselgut'); if (ziel.fz !== fz) mpEvent({ t: 'korn', id: ziel.fz.id, m: MAIS_ERTRAG, g: 'haeckselgut' }); }
+      c.z = 'stoppeln'; c.w = 0; delete c.a; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0x7fae3a);
+      haeckselStrahl(fz, ziel);
+    } else if (c.z === 'gesaet' && c.a === 'mais') meldungSelten('⏳ Der Mais ist noch nicht reif – warte, bis er groß und gelblich ist!');
+    else if (c.z === 'gesaet' && c.w >= 1) meldungSelten('🌾 Getreide erntest du mit dem Erntevorsatz (Traktor) oder dem Mähdrescher – der Häcksler ist für Mais!');
   } else if (fz.werkzeug === 'ernte') {
+    if (c.z === 'gesaet' && c.a === 'mais') { if (c.w >= 1) meldungSelten('🌽 Der Mais ist zu groß für das Schneidwerk – dafür brauchst du den Häcksler! (N = Händler)'); return; }
+    if (c.z === 'gesaet' && c.w >= 1 && !gutPasst(fz, 'korn')) { meldungSelten(`🚛 Da ist schon ${GUETER[gutVon(fz)].name} drin – Korn passt da nicht dazu!`); return; }
     if (c.z === 'gesaet' && c.w >= 1) {
       if (kornDrin(fz) + ERTRAG_PRO_ZELLE > kornPlatz(fz)) { meldungSelten(fz.typ.art === 'drescher' ? '🚛 Der Korntank ist voll! Lade mit O in einen Anhänger über – oder ab zum Silo (L)!' : '🚛 Alles voll! Ab zum Silo 🛢️ (L) oder zum Landhandel 🏪 (V).'); return; }
       kornDazu(fz, ERTRAG_PRO_ZELLE); c.z = 'stoppeln'; c.w = 0; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0xe3c46a);
     } else if (c.z === 'gesaet') meldungSelten('⏳ Das Getreide ist noch nicht reif – warte, bis es golden ist!');
+  }
+}
+// Wohin bläst der Häcksler? 1. in den eigenen Anhänger, 2. in ein Fahrzeug/einen Anhänger daneben (bis 12 m)
+function haeckselZiel(fz) {
+  if (kornAnh(fz)) return gutPasst(fz, 'haeckselgut') && kornDrin(fz) + MAIS_ERTRAG <= kornPlatz(fz) ? { fz } : null;
+  const p = fz.g.position;
+  let bestes = null, bestD = 12;
+  for (const o of fahrzeuge) {
+    if (o === fz || o.typ.art === 'drescher' || o.typ.art === 'haecksler' || !kornPlatz(o)) continue;
+    const d = Math.hypot(o.g.position.x - p.x, o.g.position.z - p.z);
+    if (d < bestD && gutPasst(o, 'haeckselgut') && kornDrin(o) + MAIS_ERTRAG <= kornPlatz(o)) { bestD = d; bestes = { fz: o, ...(kornAnh(o) ? { zielA: o.anh } : {}) }; }
+  }
+  for (const a of anhaenger) {
+    if (a.an || a.typ.art === 'holz') continue;
+    const d = Math.hypot(a.g.position.x - p.x, a.g.position.z - p.z);
+    if (d < bestD && a.inhalt + MAIS_ERTRAG <= a.typ.max && (a.inhalt <= 0 || a.gut === 'haeckselgut')) { bestD = d; bestes = { a }; }
+  }
+  return bestes;
+}
+// Häckselgut fliegt im Bogen aus dem Auswurfrohr in den Anhänger
+const haeckselTeile = [];
+const haeckselGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12), haeckselMat = new THREE.MeshBasicMaterial({ color: 0x8fbf3a });
+function zielPunkt(ziel, v) {   // Wo genau soll es hin? (Mitte vom Anhänger oder vom Fahrzeug)
+  const o = ziel.a || ziel.zielA || (ziel.fz && ziel.fz.anh) || ziel.fz;
+  return v.set(o.g.position.x, 2.2, o.g.position.z);
+}
+function kruemmerSpitze(fz, v) { return fz.kruemmer ? fz.kruemmer.spitze.getWorldPosition(v) : v.copy(fz.g.position).setY(4); }
+function haeckselStrahl(fz, ziel) {
+  const von = kruemmerSpitze(fz, new THREE.Vector3()), nach = zielPunkt(ziel, new THREE.Vector3());
+  for (let k = 0; k < 6; k++) {
+    let m = haeckselTeile.find(t => !t.visible);
+    if (!m) { if (haeckselTeile.length > 200) return; m = new THREE.Mesh(haeckselGeo, haeckselMat); scene.add(m); haeckselTeile.push(m); }
+    const T = 0.45 + Math.random() * 0.15;
+    m.visible = true; m.position.copy(von);
+    m.userData.v = new THREE.Vector3((nach.x - von.x) / T + zufall(-0.8, 0.8), (nach.y - von.y) / T + 9.81 * T / 2, (nach.z - von.z) / T + zufall(-0.8, 0.8));
+    m.userData.t = T; m.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+  }
+}
+function haeckselUpdate(dt) {
+  for (const m of haeckselTeile) {
+    if (!m.visible) continue;
+    m.userData.t -= dt;
+    if (m.userData.t <= 0) { m.visible = false; continue; }
+    m.userData.v.y -= 9.81 * dt;
+    m.position.addScaledVector(m.userData.v, dt);
+    m.rotation.x += dt * 8;
+  }
+  // Das Auswurfrohr dreht sich zum Anhänger
+  for (const fz of fahrzeuge) {
+    if (!fz.kruemmer) continue;
+    let ziel = -Math.PI / 2 - 0.6;   // In Ruhe: schräg nach hinten links
+    if (fz === aktiv) {
+      const z = haeckselZiel(fz);
+      if (z) { zielPunkt(z, tmpA); fz.g.worldToLocal(tmpA); ziel = Math.atan2(-tmpA.z, tmpA.x); }
+    }
+    let d = ziel - fz.kruemmer.g.rotation.y;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    fz.kruemmer.g.rotation.y += d * Math.min(1, dt * 3);
   }
 }
 // Wachsen: alle halbe Sekunde wachsen alle gesäten Felder ein Stück
@@ -3001,24 +3077,31 @@ function verkaufen() {
   if (holzAnh(aktiv) && anhBeimSaegewerk(aktiv)) { holzVomAnhaengerVerkaufen(); return; }
   if (brauchtFahrzeug('Korn zu verkaufen')) return;
   if (!imLaden()) { meldung('🏪 Fahr auf den gelben Platz beim Landhandel!'); sound.nein(); return; }
-  const drin = kornDrin(aktiv);
+  const drin = kornDrin(aktiv), gut = gutVon(aktiv);
   if (drin <= 0) { meldung('Der Korntank ist leer. Ernte zuerst etwas – oder hol Korn aus dem Silo! 🌾'); sound.nein(); return; }
-  const erloes = Math.round(drin * kornPreis());
+  if (gut === 'haeckselgut') { meldung('🌽 Frisches Häckselgut kauft keiner! Fahr es ins Silagesilo 🟩 (L) und mach Silage daraus.', 4); sound.nein(); return; }
+  const erloes = Math.round(drin * (gut === 'silage' ? SILAGE_PREIS : kornPreis()));
   money += erloes;
-  meldung(`💶 ${kg(drin)} Korn verkauft für ${euro(erloes)}!`, 3.5);
+  meldung(`💶 ${kg(drin)} ${GUETER[gut].name} verkauft für ${euro(erloes)}!`, 3.5);
   kornWeg(aktiv, drin);
   sound.kasse();
   speichern();
 }
-function saatKaufen() {
+function saatKaufen(art = 'weizen') {   // G = Getreide-Saat, Y = Mais-Saat
   if (brauchtFahrzeug('Saat zu laden')) return;
   if (!imLaden()) { meldung('🏪 Fahr auf den gelben Platz beim Landhandel!'); sound.nein(); return; }
   if (!aktiv.typ.saatMax) { meldung(`🌱 Der ${aktiv.typ.name} kann nicht säen!`); sound.nein(); return; }
-  const menge = aktiv.typ.saatMax - aktiv.saat, kosten = Math.round(menge * SAAT_PREIS);
-  if (menge <= 0) { meldung('🌱 Die Saat ist schon voll!'); return; }
+  const preis = art === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS, name = art === 'mais' ? '🌽 Mais-Saat' : '🌾 Getreide-Saat';
+  let rueck = 0;
+  if (aktiv.saatArt !== art) {   // Andere Saat? Die alte gibst du zurück und bekommst das Geld wieder
+    rueck = Math.round(aktiv.saat * (aktiv.saatArt === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS));
+    money += rueck; aktiv.saat = 0; aktiv.saatArt = art;
+  }
+  const menge = aktiv.typ.saatMax - aktiv.saat, kosten = Math.round(menge * preis);
+  if (menge <= 0) { meldung(`${name} ist schon voll!`); return; }
   if (money < kosten) { meldung('💸 Nicht genug Geld!'); sound.nein(); return; }
   money -= kosten; aktiv.saat = aktiv.typ.saatMax;
-  meldung(`🌱 ${kg(menge)} Saat gekauft für ${euro(kosten)}`);
+  meldung(`${name}: ${kg(menge)} gekauft für ${euro(kosten)}${rueck ? ` (alte Saat zurückgegeben: +${euro(rueck)})` : ''}`, 3);
   sound.kasse();
   speichern();
 }
@@ -3038,10 +3121,12 @@ function einlagern() {   // Korn vom Fahrzeug ins Silo
   if (!aktiv) { holzAufAnhaenger(); return; }               // Zu Fuß: Holz auf den Holzanhänger legen
   if (holzAnh(aktiv) && !nahesSilo()) { holzKran(); return; }   // Mit Holzanhänger: Kran lädt Holz auf
   { const b = nahesHofGebaeude(); if (b && b.geh && !nahesSilo()) { futterAbladen(b); return; } }   // Beim Gehege: Korn als Futter
+  { const b = nahesFahrsilo(); if (b && !nahesSilo()) { fahrsiloAbladen(b); return; } }        // Beim Silagesilo: Häckselgut abladen
   if (brauchtFahrzeug('Korn einzulagern')) return;
   const s = nahesSilo();
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
   if (kornDrin(aktiv) <= 0) { meldung('Der Korntank ist leer!'); sound.nein(); return; }
+  if (gutVon(aktiv) !== 'korn') { meldung(`🛢️ Ins Korn-Silo kommt nur Korn! ${gutVon(aktiv) === 'haeckselgut' ? 'Häckselgut gehört ins Silagesilo 🟩.' : 'Silage kannst du beim Landhandel verkaufen oder verfüttern.'}`, 3.5); sound.nein(); return; }
   const menge = Math.min(kornDrin(aktiv), SILO_MAX - s.inhalt);
   if (menge <= 0) { meldung('🛢️ Das Silo ist voll! Bau noch eins (Baumodus).'); sound.nein(); return; }
   kornWeg(aktiv, menge); s.inhalt += menge;
@@ -3054,7 +3139,9 @@ function einlagern() {   // Korn vom Fahrzeug ins Silo
 function ausSiloHolen() {   // Korn aus dem Silo aufs Fahrzeug (zum Verkaufen, wenn der Preis gut ist!)
   if (brauchtFahrzeug('Korn zu holen')) return;
   const s = nahesSilo();
+  { const b = nahesFahrsilo(); if (b && !s) { silageHolen(b); return; } }
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
+  if (!gutPasst(aktiv, 'korn')) { meldung(`🚛 Da ist noch ${GUETER[gutVon(aktiv)].name} drin – erst leer machen!`); sound.nein(); return; }
   const menge = Math.min(s.inhalt, kornPlatz(aktiv) - kornDrin(aktiv));
   if (s.inhalt <= 0) { meldung('🛢️ Das Silo ist leer!'); sound.nein(); return; }
   if (menge <= 0) { meldung('Der Korntank ist schon voll!'); sound.nein(); return; }
@@ -3547,7 +3634,7 @@ function neuesSpiel() {
 function geraetWaehlen(art) {
   if (!aktiv || aktiv.werkzeug === art) return;
   if (aktiv.kran) { meldung('🦾 Der Harvester hat einen Kran mit Fällkopf – fahr an eine Fichte und halt X!'); sound.nein(); return; }
-  if (!aktiv.typ.geraete.includes(art)) { meldung(`🌾 Der ${aktiv.typ.name} kann nur ernten!`); sound.nein(); return; }
+  if (!aktiv.typ.geraete.includes(art)) { meldung(aktiv.typ.art === 'haecksler' ? '🌽 Der Häcksler hat nur das Maisgebiss!' : `🌾 Der ${aktiv.typ.name} kann nur ernten!`); sound.nein(); return; }
   if (aktiv.anh && GERAETE[art].hinten) { meldung('🔗 Hinten hängt der Anhänger! Erst abkuppeln (H), dann geht der Pflug/die Sämaschine.'); sound.nein(); return; }
   aktiv.werkzeug = art;
   sound.klick();
@@ -3646,7 +3733,8 @@ document.addEventListener('keydown', e => {
   if (k === 'm') tonAn = !tonAn;
   if (k === 'j') { musikAn = !musikAn; meldung(musikAn ? '🎵 Musik an' : '🔇 Musik aus', 1.5); }
   if (k === 'v') verkaufen();
-  if (k === 'g') saatKaufen();
+  if (k === 'g') saatKaufen('weizen');
+  if (k === 'y') saatKaufen('mais');
   if (k === 't') tanken();
   if (k === 'l') einlagern();
   if (k === 'u') ausSiloHolen();
@@ -4389,6 +4477,8 @@ function animate() {
   mpTick(dt);
   wachsen(dt);
   staubUpdate(dt);
+  haeckselUpdate(dt);
+  fahrsiloUpdate(dt);
   windZeit.value = spielZeit;
   for (const w of wolken) { w.position.x += dt * 1.5; if (w.position.x > 260) w.position.x = -260; }   // Wolken ziehen vorbei
   geistAktualisieren(mausPunkt);
@@ -4399,8 +4489,9 @@ function animate() {
   else if (wh) zeigeHinweis(wh);
   else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
-  else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = Korn verkaufen (${kg(kornDrin(aktiv))}) · G = Saat · T = Tanken · N = Fahrzeug-Händler`);
+  else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = verkaufen (${gutText(aktiv)}) · G = Getreide-Saat · Y = Mais-Saat · T = Tanken · N = Händler`);
   else if (silo) zeigeHinweis(`🛢️ Silo (${kg(silo.inhalt)} drin): L = Korn einlagern · U = Korn holen`);
+  else if (aktiv && aktiv.typ.art === 'haecksler' && !aktiv.anh && naheAnhaengerZumKuppeln(aktiv)) zeigeHinweis('🔗 H = Anhänger ankuppeln (dann bläst der Häcksler hinein)');
   else if (aktiv && aktiv.typ.art === 'drescher' && aktiv.tank > 0 && ueberladenZiel()) zeigeHinweis('🌾➡️🚛 O = Korn überladen');
   else if (aktiv && !aktiv.anh && aktiv.typ.art !== 'drescher' && naheAnhaengerZumKuppeln(aktiv)) zeigeHinweis('🔗 H = Anhänger ankuppeln');
   else if (fn) zeigeHinweis(`🌾 Feld ${fn.nr + 1} kaufen für ${euro(fn.preis)}? Drück K!`);
