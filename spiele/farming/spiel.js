@@ -882,6 +882,138 @@ function dorfUpdate(dt) {
   }
 }
 
+// =====================================================================
+// ===== 🏙️ Die Stadt "Großfeld" mit dem Großmarkt (der Filiale) =====
+// =====================================================================
+// Fahr auf dem großen Weg ganz nach Westen (links). Der Großmarkt zahlt mehr als der Dorfladen!
+const STADT_NAME = 'Großfeld';
+const FILIALE = { x: -150, z: 9, r: 10 };   // Der Parkplatz vor dem Großmarkt: Hier verkaufst du (V)
+const FILIALE_BONUS = 1.3;                  // Der Großmarkt zahlt 30 % mehr als der Dorfladen
+const FILIALE_KORN_BONUS = 1.15;            // ... und für Korn und Silage 15 % mehr als der Landhandel
+// Hohe Stadthäuser: [x, z, Breite, Tiefe, Stockwerke, Farbe, Schild]
+const STADT_HAEUSER = [
+  [-118, -24, 11, 10, 3, '#e8d8c0'], [-132, -26, 12, 12, 5, '#c8d8e8', '🏦 Bank'], [-147, -24, 11, 10, 4, '#f0c8b0'], [-161, -27, 12, 14, 7, '#d0d0d8', '🏢 Rathaus'],
+  [-176, -24, 11, 10, 3, '#e8e0b0', '🍕 Pizzeria'], [-122, 24, 12, 12, 4, '#d8c8e8', '💊 Apotheke'], [-178, 22, 11, 10, 5, '#c8e8d0', '🏨 Hotel'],
+];
+weg(-140, -8, 82, 5);   // Die große Straße in die Stadt
+kasten(scene, -147, 0.02, -8, 74, 0.04, 9, mat(0x6a6a70, { roughness: 0.9 }), false);   // Asphalt in der Stadt (breiter)
+for (let x = -182; x <= -112; x += 6) kasten(scene, x, 0.045, -8, 2.5, 0.01, 0.18, 0xf2f2f2, false);   // Mittelstreifen
+for (const z of [-14, -2]) kasten(scene, -147, 0.1, z, 74, 0.2, 2.6, mat(0xb8b4ac), false);   // Gehwege
+const fassadeTex = (() => {   // Ein Stück Hauswand mit einem Fenster (wird für jedes Stockwerk wiederholt)
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#d8d8d8'; g.fillRect(0, 60, 64, 4);
+  const v = g.createLinearGradient(0, 14, 0, 50); v.addColorStop(0, '#9cc8e8'); v.addColorStop(1, '#3a5a7a');
+  g.fillStyle = '#555555'; g.fillRect(14, 12, 36, 40);
+  g.fillStyle = v; g.fillRect(17, 15, 30, 34);
+  g.fillStyle = '#555555'; g.fillRect(31, 15, 2, 34);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+})();
+function stadtHaus([x, z, B, T, stock, farbe, name]) {
+  const H = stock * 3.2;
+  const tx = fassadeTex.clone(); tx.repeat.set(Math.round(B / 3), stock); tx.needsUpdate = true;
+  const tz = fassadeTex.clone(); tz.repeat.set(Math.round(T / 3), stock); tz.needsUpdate = true;
+  const mx = new THREE.MeshStandardMaterial({ color: farbe, map: tx, roughness: 0.9 }), mz = new THREE.MeshStandardMaterial({ color: farbe, map: tz, roughness: 0.9 });
+  const dach = mat(0x5a5a5e);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(B, H, T), [mz, mz, dach, dach, mx, mx]);
+  m.position.set(x, H / 2, z); m.castShadow = m.receiveShadow = true; scene.add(m);
+  kasten(scene, x, H + 0.3, z, B + 0.3, 0.6, T + 0.3, 0x77777c);                  // Dachkante
+  kasten(scene, x + B / 4, H + 1.2, z, 2, 1.6, 2, 0x8a8a90);                      // Aufzug-Häuschen auf dem Dach
+  const vorne = z < -8 ? 1 : -1;                                                   // Die Tür zeigt zur Straße
+  kasten(scene, x, 1.2, z + vorne * (T / 2 + 0.05), 2.2, 2.4, 0.1, 0x3a2a1e, false);
+  kasten(scene, x, 2.7, z + vorne * (T / 2 + 0.6), 3.4, 0.12, 1.2, 0xc23b22, false);   // Vordach
+  hindernisse.push({ x, z, hb: B / 2 + 0.2, ht: T / 2 + 0.2 });
+  if (name) { const sch = schild(name, '#ffd166', 7); sch.position.set(x, H + 3.2, z); scene.add(sch); }
+}
+STADT_HAEUSER.forEach(stadtHaus);
+// Der Großmarkt (die Filiale): großer flacher Bau mit Glas-Eingang, Schild und Parkplatz
+const filialeSchild = schild('', '#ffd166', 14);
+{
+  const F = FILIALE, gx = F.x, gz = F.z + 15, B = 32, T = 16, H = 7;
+  kasten(scene, gx, H / 2, gz, B, H, T, mat(0xf2f2ee));                            // Halle
+  kasten(scene, gx, H - 0.6, gz - T / 2 - 0.05, B, 1.2, 0.1, 0x2457a6, false);      // Blauer Streifen
+  kasten(scene, gx, H + 0.25, gz, B + 0.4, 0.5, T + 0.4, 0x2457a6);                 // Dach
+  const glas = new THREE.MeshStandardMaterial({ color: 0x9fd4e6, transparent: true, opacity: 0.5, roughness: 0.05, metalness: 0.3 });
+  kasten(scene, gx, 1.8, gz - T / 2 - 0.08, 10, 3.6, 0.1, glas, false);             // Glas-Front
+  for (const sx of [-1, 1]) kasten(scene, gx + sx * 1.2, 1.5, gz - T / 2 - 0.15, 2.2, 3, 0.06, glas, false);   // Schiebetüren
+  kasten(scene, gx, 4.2, gz - T / 2 - 1.5, 12, 0.2, 3, 0x2457a6);                  // Vordach über dem Eingang
+  for (const sx of [-1, 1]) kasten(scene, gx + sx * 5.8, 2.1, gz - T / 2 - 2.8, 0.2, 4.2, 0.2, 0x888888);
+  // Großes Schild an der Wand
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+  const g = c.getContext('2d'); g.fillStyle = '#ffd166'; g.fillRect(0, 0, 512, 96);
+  g.fillStyle = '#c23b22'; g.font = 'bold 60px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🏬 GROSSMARKT', 256, 52);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const tafel = new THREE.Mesh(new THREE.PlaneGeometry(14, 2.6), new THREE.MeshBasicMaterial({ map: tex }));
+  tafel.position.set(gx, 5.6, gz - T / 2 - 0.12); tafel.rotation.y = Math.PI; scene.add(tafel);
+  hindernisse.push({ x: gx, z: gz, hb: B / 2 + 0.2, ht: T / 2 + 0.2 });
+  // Parkplatz mit weißen Linien, ein paar Autos und Einkaufswagen
+  kasten(scene, F.x, 0.04, F.z, 34, 0.05, 11, mat(0x5a5a60), false);
+  for (let k = -5; k <= 5; k++) kasten(scene, F.x + k * 3, 0.075, F.z + 2.5, 0.12, 0.01, 4.5, 0xf2f2f2, false);
+  const platz = new THREE.Mesh(new THREE.CircleGeometry(4, 32), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.35 }));
+  platz.rotation.x = -Math.PI / 2; platz.position.set(F.x, 0.09, F.z - 1); scene.add(platz);
+  for (const [ax, farbe] of [[-13.5, 0xd23c2a], [-7.5, 0x2a6fb0], [10.5, 0xf2f2f2], [13.5, 0x2a2a2a]]) {   // Geparkte Autos
+    const ag = new THREE.Group(); ag.position.set(F.x + ax, 0, F.z + 2.5); scene.add(ag);
+    kasten(ag, 0, 0.6, 0, 1.7, 0.7, 4, farbe); kasten(ag, 0, 1.2, 0.3, 1.5, 0.55, 2.2, glas, false); kasten(ag, 0, 1.5, 0.3, 1.5, 0.06, 2.2, farbe);
+    for (const sx of [-0.85, 0.85]) for (const sz of [-1.3, 1.3]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.25, 12), mat(0x111111)); r.rotation.z = Math.PI / 2; r.position.set(sx, 0.33, sz); ag.add(r); }
+    hindernisse.push({ x: F.x + ax, z: F.z + 2.5, hb: 0.9, ht: 2.1 });
+  }
+  for (let k = 0; k < 3; k++) {   // Einkaufswagen
+    const w = new THREE.Group(); w.position.set(F.x - 3.2 + k * 0.5, 0, F.z + 4.6); scene.add(w);
+    kasten(w, 0, 0.75, 0, 0.55, 0.45, 0.85, mat(0xc0c4c8, { metalness: 0.6, roughness: 0.3 }), false);
+    kasten(w, 0, 0.15, 0, 0.5, 0.05, 0.8, 0x333333, false);
+  }
+  filialeSchild.position.set(gx, H + 3.2, gz); scene.add(filialeSchild);
+  const ss = schild(`🏙️ ${STADT_NAME}`, '#ffffff', 9); ss.position.set(-108, 3.5, -12.5); scene.add(ss);   // Ortsschild
+  kasten(scene, -108, 1.2, -12.5, 0.12, 2.4, 0.12, 0x777777);
+}
+// Laternen an der Straße und Bäume
+for (let x = -116; x >= -180; x -= 16) for (const z of [-14.5, -1.5]) {
+  kasten(scene, x, 2.5, z, 0.15, 5, 0.15, 0x444448);
+  kasten(scene, x, 5, z + (z < -8 ? 0.6 : -0.6), 0.2, 0.15, 1.3, 0x444448, false);
+  kasten(scene, x, 4.88, z + (z < -8 ? 1.1 : -1.1), 0.45, 0.12, 0.35, new THREE.MeshBasicMaterial({ color: 0xfff2c0 }), false);
+  hindernisse.push({ x, z, r: 0.3 });
+}
+// Leute, die in der Stadt spazieren gehen
+const stadtLeute = [];
+[['#3a7fd8', -120, -14], ['#d83a7f', -170, -2], ['#7fd83a', -140, -14], ['#d8a03a', -155, -2], ['#8a3ad8', -130, -2]].forEach(([farbe, x, z], k) => {
+  const f = baueFarmer(farbe); f.g.position.set(x, 0.2, z); scene.add(f.g);
+  stadtLeute.push({ f, z, x, richtung: k % 2 ? 1 : -1, tempo: 1.2 + Math.random() * 0.6 });
+});
+function stadtUpdate(dt) {
+  if (Math.hypot(wo().x - FILIALE.x, wo().z - FILIALE.z) > 140) return;   // Weit weg: Leute müssen nicht laufen
+  for (const L of stadtLeute) {
+    L.x += L.richtung * L.tempo * dt;
+    if (L.x < -182 || L.x > -112) L.richtung *= -1;
+    L.f.g.position.x = L.x; L.f.g.rotation.y = L.richtung > 0 ? -Math.PI / 2 : Math.PI / 2;
+    farmerPose(L.f.t, false, true, dt);
+  }
+}
+// ⭐ Angebot des Tages: Jeden Tag will der Großmarkt etwas anderes ganz dringend – und zahlt das Doppelte!
+const ANGEBOT_LISTE = ['honig', 'milch', 'eier', 'wolle', 'apfel', 'birne', 'kirsche', 'salat', 'karotte', 'gurke', 'tomate', 'erdbeere', 'kuerbis', 'trueffel'];
+const angebotHeute = () => ANGEBOT_LISTE[(tagNr * 5 + 3) % ANGEBOT_LISTE.length];
+function angebotNeu() { const P = PRODUKTE[angebotHeute()]; filialeSchild.userData.malen(`⭐ Heute: ${P.emoji} ${P.name} ×2`, '#ffd166'); }
+const beiDerFiliale = () => Math.hypot(wo().x - FILIALE.x, wo().z - FILIALE.z) < FILIALE.r;
+const filialePreis = k => PRODUKTE[k].preis * FILIALE_BONUS * (k === angebotHeute() ? 2 : 1);
+const filialeWert = () => Object.entries(vorrat).reduce((s, [k, m]) => s + (verkaufbar(k) ? Math.floor(m) * filialePreis(k) : 0), 0);
+function filialeVerkaufen() {
+  let wert = Math.round(filialeWert()), text = [];
+  if (wert > 0) {
+    text.push(vorratText(true));
+    for (const k of Object.keys(vorrat)) if (verkaufbar(k)) { vorrat[k] -= Math.floor(vorrat[k]); if (vorrat[k] <= 0.001) delete vorrat[k]; }
+  }
+  const gut = aktiv ? gutVon(aktiv) : null;
+  if (gut === 'korn' || gut === 'silage') {   // Korn oder Silage vom Anhänger
+    const m = kornDrin(aktiv), e = Math.round(m * (gut === 'korn' ? kornPreis() : SILAGE_PREIS) * FILIALE_KORN_BONUS);
+    kornWeg(aktiv, m); wert += e; text.push(`${GUETER[gut].emoji} ${kg(m)} ${GUETER[gut].name}`);
+  }
+  if (wert <= 0) { meldung(`🏬 Du hast nichts zum Verkaufen! Der Großmarkt kauft Honig, Milch, Eier, Gemüse, Obst, Wurst … und Korn oder Silage vom Anhänger. ⭐ Heute besonders gesucht: ${PRODUKTE[angebotHeute()].emoji} ${PRODUKTE[angebotHeute()].name}!`, 5); sound.nein(); return; }
+  money += wert;
+  meldung(`🏬💶 Im Großmarkt verkauft: ${text.join(' · ')} für ${euro(wert)}!`, 4.5);
+  sound.kasse(); speichern();
+}
+
 // ===== Die Felder =====
 // Jedes Feld besteht aus vielen kleinen Stücken (Zellen). Jede Zelle hat einen Zustand:
 //   'wiese' -> pflügen -> 'gepfluegt' -> säen -> 'gesaet' (wächst, w geht von 0 bis 1) -> ernten -> 'stoppeln'
@@ -3180,6 +3312,7 @@ function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächs
   if (inHaus(wo().x, wo().z) && !aktiv && Math.hypot(player.position.x - HAUS.bett.x, player.position.z - HAUS.bett.z) < 2.6) return `🛏️ Z = Schlafen (bis morgen ${AUFSTEH_ZEIT}:00 Uhr)`;
   if (beiDerMine()) return saegeAn ? '⛏️ Pack erst die Motorsäge weg (Q)!' : `⛏️ Salzmine: X oder Maus halten = Salzstein abbauen (${salzsteine} von ${SALZ_MAX}${hackt ? ` · ${Math.round(hackFort * 100)} %` : ''})`;
   if (beimDorfladen()) return `🛒 Dorfladen: V = alles verkaufen (${vorratText(true)} = ${euro(vorratWert())})`;
+  if (beiDerFiliale()) { const P = PRODUKTE[angebotHeute()]; return `🏬 Großmarkt: V = verkaufen (${euro(filialeWert())}${aktiv && ['korn', 'silage'].includes(gutVon(aktiv)) ? ` + ${gutText(aktiv)}` : ''}) · 30 % mehr als im Dorf! · ⭐ Heute ${P.emoji} ${P.name} ×2`; }
   { const t = naechstesHaustier(); if (t) return `${t.hund ? '🐕' : '🐈'} P = ${t.name} streicheln 💕`; }
   const wp = naherWaldPlot();
   if (wp) { const H = HOLZARTEN[wp.wald.holz]; return `🪓 ${GEBAEUDE_ARTEN[wp.art].name}: X oder Maus halten = Holz hacken (${Math.floor(vorrat['holz_' + wp.wald.holz] || 0)} Scheite ${H.name}${hackt ? ` · ${Math.round(waldHackFort * 100)} %` : ''})`; }
@@ -3501,6 +3634,7 @@ function brauchtFahrzeug(text) {
   return true;
 }
 function verkaufen() {
+  if (beiDerFiliale()) { filialeVerkaufen(); return; }
   if (beimDorfladen()) { vorratVerkaufen(); return; }
   if (beimSaegewerk()) { holzVerkaufen(); return; }
   if (holzAnh(aktiv) && anhBeimSaegewerk(aktiv)) { holzVomAnhaengerVerkaufen(); return; }
@@ -5071,6 +5205,7 @@ function animate() {
 // ===== Los geht's! =====
 const geladen = laden();
 jahreszeitZeigen();
+angebotNeu();
 if (!geladen) {
   einsteigen(neuesFahrzeug('fendt', 0, 10, 0, { werkzeug: 'ernte' }));
 }
