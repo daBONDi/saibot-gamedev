@@ -172,7 +172,22 @@ function ellipse(x, y, rx, ry) {
   ctx.beginPath();
   ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
 }
+// 🚀 Manche Karten sagen andere Wörter (Raumschiff: 'Grube' → 'Schacht', 'Gatter' → 'Luftschleuse' ...)
+const kwSpeicher = new Map();
+function kw(t) {
+  if (typeof t !== 'string' || !KARTE || !KARTE.woerter) return t;
+  const schluessel = KARTE.name + '|' + t;
+  let neu = kwSpeicher.get(schluessel);
+  if (neu === undefined) {
+    neu = t;
+    for (const [alt, ersatz] of KARTE.woerter) neu = neu.split(alt).join(ersatz);
+    if (kwSpeicher.size > 3000) kwSpeicher.clear();
+    kwSpeicher.set(schluessel, neu);
+  }
+  return neu;
+}
 function text(t, x, y, groesse, farbe = '#fff', ausrichtung = 'center', rand = true) {
+  t = kw(t);
   ctx.font = `bold ${groesse}px system-ui, sans-serif`;
   ctx.textAlign = ausrichtung;
   ctx.textBaseline = 'middle';
@@ -186,6 +201,7 @@ function text(t, x, y, groesse, farbe = '#fff', ausrichtung = 'center', rand = t
   ctx.fillText(t, x, y);
 }
 function umbrechen(t, x, y, maxB, zeilenH, groesse, farbe) {
+  t = kw(t);
   ctx.font = `${groesse}px system-ui, sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
@@ -488,6 +504,16 @@ function macheDeko() {
   if (KARTE.deko === 'blumen') punkte(220, ['#fff', '#ffe066', '#ff9ecf', '#c9a0ff']);
   if (KARTE.deko === 'tannen') punkte(80, ['#cfe0ee', '#b9cfe2']);
   if (KARTE.deko === 'palmen') punkte(100, ['#fff5e6', '#f7c6c6', '#fde2b8']);
+  if (KARTE.deko === 'raumschiff') {   // 🚀 Nieten im Metallboden und ein paar Kisten
+    for (let x = 30; x < WELT_B; x += 60) for (let y = 30; y < WELT_H; y += 60) d.push({ art: 'punkt', x: x - 1, y: y - 1, f: '#8a93a3' });
+    const kisten = [];
+    for (let v = 0; v < 3000 && kisten.length < 16; v++) {
+      const p = { x: 120 + Math.random() * (WELT_B - 240), y: 160 + Math.random() * (WELT_H - 260) };
+      if (freierPlatz(p) && kisten.every(b => dist(b, p) > 90)) kisten.push({ art: 'kiste', x: p.x, y: p.y, g: 0.8 + Math.random() * 0.4, f: zufall(['#e0a030', '#4a90d9', '#9b59b6', '#3fb37f']) });
+    }
+    kisten.sort((a, b) => a.y - b.y);
+    d.push(...kisten);
+  }
   if (KARTE.deko === 'tannen' || KARTE.deko === 'palmen') {
     const baeume = [];
     for (let v = 0; v < 3000 && baeume.length < (KARTE.deko === 'tannen' ? 40 : 26); v++) {
@@ -3070,6 +3096,70 @@ function zeichneOrt(o) {
       ctx.strokeStyle = '#444'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + 90, y - 180); ctx.lineTo(x + 90, y - 235); ctx.stroke();
       ctx.fillStyle = '#fff'; dreieck(x + 92, y - 232, x + 92, y - 185, x + 125, y - 190);
       break;
+    // ===== 🚀 Raumschiff-Orte =====
+    case 'kantine':
+      ctx.fillStyle = '#9aa4b5'; rundesRechteck(x - 100, y - 170, 200, 115, 12); ctx.fill();
+      ctx.fillStyle = '#2b3242'; rundesRechteck(x - 85, y - 158, 170, 40, 8); ctx.fill();
+      text('🍽️ HEU-O-MAT', x, y - 138, 15, '#7df9ff', 'center', false);
+      ctx.fillStyle = '#c9d2df'; ctx.fillRect(x - 95, y - 70, 190, 14);   // Theke
+      ctx.fillStyle = '#f4d03f'; for (let i = 0; i < 3; i++) { ellipse(x - 50 + i * 50, y - 85, 18, 10); ctx.fill(); }   // Heu-Teller
+      ctx.fillStyle = '#5b6474'; for (const s of [-1, 1]) { ctx.fillRect(x + s * 70 - 3, y - 56, 6, 16); ellipse(x + s * 70, y - 38, 14, 6); ctx.fill(); }
+      break;
+    case 'reaktor': {
+      ctx.fillStyle = '#3a4150'; ctx.fillRect(x - 60, y - 70, 120, 20);
+      ctx.fillStyle = '#9aa4b5'; ctx.fillRect(x - 40, y - 200, 80, 135);
+      const puls = 0.6 + Math.sin(zeit * 4) * 0.4;
+      const g = ctx.createRadialGradient(x, y - 135, 5, x, y - 135, 60);
+      g.addColorStop(0, `rgba(120,255,200,${0.9 * puls})`); g.addColorStop(1, 'rgba(120,255,200,0)');
+      ctx.fillStyle = g; ellipse(x, y - 135, 60, 60); ctx.fill();
+      ctx.fillStyle = '#4dffb5'; ctx.fillRect(x - 22, y - 185, 44, 100);
+      ctx.strokeStyle = '#5b6474'; ctx.lineWidth = 4;
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(x - 40, y - 180 + i * 28); ctx.lineTo(x + 40, y - 180 + i * 28); ctx.stroke(); }
+      ctx.fillStyle = '#c0392b'; dreieck(x - 50, y - 200, x + 50, y - 200, x, y - 228);
+      break;
+    }
+    case 'tank':
+      ctx.fillStyle = '#9aa4b5'; rundesRechteck(x - 70, y - 210, 140, 160, 30); ctx.fill();
+      ctx.fillStyle = '#1b4f7a'; rundesRechteck(x - 55, y - 195, 110, 130, 22); ctx.fill();
+      ctx.fillStyle = '#3ba3ff'; rundesRechteck(x - 55, y - 150 + Math.sin(zeit * 2) * 4, 110, 85, 22); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      for (let i = 0; i < 4; i++) { ellipse(x - 30 + i * 20, y - 80 - ((zeit * 40 + i * 37) % 70), 4, 4); ctx.fill(); }   // Blubberblasen
+      ctx.fillStyle = '#5b6474'; ctx.fillRect(x + 60, y - 90, 50, 10); ctx.fillRect(x + 100, y - 90, 10, 40);   // Rohr
+      break;
+    case 'fracht':
+      ctx.fillStyle = '#2b3242'; ctx.fillRect(x - 115, y - 190, 230, 140);
+      ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 6; ctx.setLineDash([14, 10]);
+      ctx.strokeRect(x - 112, y - 187, 224, 134); ctx.setLineDash([]);
+      for (const [dx, dy, f] of [[-70, -95, '#e0a030'], [-20, -95, '#4a90d9'], [-45, -140, '#9b59b6'], [45, -95, '#3fb37f']]) {
+        ctx.fillStyle = f; ctx.fillRect(x + dx - 22, y + dy - 22, 44, 44);
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3; ctx.strokeRect(x + dx - 22, y + dy - 22, 44, 44);
+      }
+      ctx.fillStyle = '#fff'; ellipse(x + 75, y - 140, 16, 13); ctx.fill(); ellipse(x + 92, y - 130, 12, 10); ctx.fill();   // Wollknäuel
+      break;
+    case 'kuppel':
+      ctx.fillStyle = '#3d8b37'; ellipse(x, y - 70, 120, 26); ctx.fill();
+      for (let i = 0; i < 12; i++) {
+        ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 3;
+        const px = x - 90 + i * 16, ph = 30 + (i * 23) % 40;
+        ctx.beginPath(); ctx.moveTo(px, y - 70); ctx.lineTo(px, y - 70 - ph); ctx.stroke();
+        ctx.fillStyle = ['#ff6fb5', '#ffd166', '#c9a0ff', '#7df9ff'][i % 4]; ellipse(px, y - 72 - ph, 7, 7); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(160,230,255,0.28)';
+      ctx.beginPath(); ctx.arc(x, y - 70, 125, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = '#b8e8ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y - 70, 125, Math.PI, 0); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y - 70, 125, Math.PI * 1.25, Math.PI * 1.75); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ellipse(x - 60, y - 150, 14, 6); ctx.fill();   // Glanz
+      break;
+    case 'cockpit': {
+      ctx.fillStyle = '#05060f'; ctx.beginPath(); ctx.moveTo(x - 110, y - 120); ctx.lineTo(x - 80, y - 195); ctx.lineTo(x + 80, y - 195); ctx.lineTo(x + 110, y - 120); ctx.fill();   // Fenster ins All
+      ctx.fillStyle = '#fff'; for (let i = 0; i < 14; i++) ctx.fillRect(x - 80 + ((i * 53 + zeit * 30) % 160), y - 185 + (i * 29) % 60, 2, 2);
+      ctx.strokeStyle = '#9aa4b5'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(x - 110, y - 120); ctx.lineTo(x - 80, y - 195); ctx.lineTo(x + 80, y - 195); ctx.lineTo(x + 110, y - 120); ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = '#3a4150'; ctx.fillRect(x - 110, y - 118, 220, 60);   // Steuerpult
+      for (let i = 0; i < 8; i++) { ctx.fillStyle = ['#ff6b6b', '#4ade80', '#ffd166', '#7df9ff'][i % 4]; if ((Math.floor(zeit * 3) + i) % 3) { ellipse(x - 90 + i * 26, y - 100, 6, 6); ctx.fill(); } }
+      ctx.strokeStyle = '#ddd'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 72, 14, Math.PI, 0); ctx.stroke();   // Steuerrad
+      break;
+    }
   }
   // Etwas Schnee auf Dächern im Winter
   if (KARTE.schnee && (o.bild === 'muehle')) { ctx.fillStyle = '#fff'; ctx.fillRect(x - 27, y - 194, 54, 8); }
@@ -3767,7 +3857,7 @@ function zeichneIntro() {
 }
 
 function titelKarten() {
-  const b = 250, h = 120, abstand = 25;
+  const abstand = 25, b = Math.min(250, (W - 40 - (KARTEN.length - 1) * abstand) / KARTEN.length), h = 120;
   const x0 = (W - KARTEN.length * b - (KARTEN.length - 1) * abstand) / 2;
   return KARTEN.map((k, i) => ({ nr: i, x: x0 + i * (b + abstand), y: 400, w: b, h }));
 }
@@ -4064,6 +4154,7 @@ function d3Schild(text, farbe = '#ffffff', breite = 2.4, groesse = 44, imDunkeln
   const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false, fog: !imDunkeln }));
   sp.scale.set(breite, breite * 96 / 512, 1);
   sp.userData.malen = (t, f, g2 = groesse) => {
+    t = kw(t);
     const g = c.getContext('2d'); g.clearRect(0, 0, 512, 96);
     g.font = `bold ${g2}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(t, 256, 50, 500); g.fillStyle = f; g.fillText(t, 256, 50, 500);

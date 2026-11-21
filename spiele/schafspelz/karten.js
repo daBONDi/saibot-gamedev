@@ -10,12 +10,16 @@
 //
 // "bild" sagt, wie der Ort aussieht:
 //   'stall', 'muehle', 'teich', 'scheune', 'wiese', 'garten',
-//   'krippe', 'iglu', 'glashaus', 'brunnen', 'leuchtturm', 'boot'
+//   'krippe', 'iglu', 'glashaus', 'brunnen', 'leuchtturm', 'boot',
+//   Raumschiff: 'kantine', 'reaktor', 'tank', 'fracht', 'kuppel', 'cockpit'
 // Mit "farben" kannst du bei manchen Bildern die Farben ändern.
 //
 // "gruben" sind die Löcher, durch die nur Wölfe schleichen können.
 // Sie sind der Reihe nach verbunden (die letzte führt wieder zur ersten).
 // "himmel" sind die Farben vom Himmel in der Cutscene (oben, unten).
+// "weltall: true" = Raumschiff! Gruben sind dann Lüftungsschächte und
+// wer rausgewählt wird, fliegt durch die Luftschleuse ins All.
+// "woerter" tauscht Wörter im Spiel aus (z. B. 'Grube' → 'Schacht').
 //
 // Die Welt ist 1800 breit und 1300 hoch.
 
@@ -66,6 +70,33 @@ const KARTEN = [
       { name: 'Muschelmarkt', bei: 'auf dem Muschelmarkt', x: 330,  y: 1060, aufgabe: 'Wolle abgeben',   labelY: -255, spiel: 'wolle',  bild: 'scheune', farben: ['#e67e22', '#c0392b'] },
       { name: 'Palmengarten', bei: 'im Palmengarten',      x: 900,  y: 1100, aufgabe: 'Blumen gießen',   labelY: -145, spiel: 'blumen', bild: 'wiese' },
       { name: 'Bootssteg',    bei: 'am Bootssteg',         x: 1480, y: 1060, aufgabe: 'Boot reparieren', labelY: -245, spiel: 'zaun',   bild: 'boot' },
+    ],
+  },
+  {
+    name: 'Spaceship Mäh', himmel: ['#05060f', '#1b2350'], emoji: '🚀',
+    boden: '#5b6474', weg: '#3a4150', platz: '#7c8798', rand: 'all', deko: 'raumschiff', weltall: true,
+    treffpunkt: { x: 900, y: 660 },
+    laterne: { x: 1560, y: 660 },
+    gatter: { x: 240, y: 660 },
+    gruben: [{ x: 600, y: 470 }, { x: 1220, y: 470 }, { x: 1220, y: 880 }, { x: 600, y: 880 }],
+    woerter: [
+      ['Die Herde ist durchs offene Gatter weggelaufen!', 'Die Herde ist durch die offene Luftschleuse ins All geflogen!'],
+      ['vom Hof gejagt', 'aus dem Raumschiff geworfen'], ['den Hof verlassen', 'das Raumschiff verlassen'], ['Der Hof ist sicher', 'Das Raumschiff ist sicher'],
+      ['in die Grube', 'in den Schacht'], ['In die Grube', 'In den Schacht'], ['in eine Grube', 'in einen Schacht'],
+      ['in der Grube', 'im Schacht'], ['In der Grube', 'Im Schacht'], ['In Gruben', 'In Schächte'], ['in die 🕳️ Gruben', 'in die 🕳️ Schächte'],
+      ['Grubensprünge', 'Schachtsprünge'], ['Gruben', 'Schächte'], ['Grube', 'Schacht'],
+      ['die Laterne', 'das Licht'], ['Laterne', 'Licht'],
+      ['Das Gatter ist offen', 'Die Luftschleuse ist offen'], ['das Gatter', 'die Luftschleuse'], ['Gatter', 'Luftschleuse'],
+      ['Der Nebel', 'Der Rauch'], ['Nebel', 'Rauch'],
+      ['PLUMPS!', 'KLONK!'],
+    ],
+    orte: [
+      { name: 'Kantine',         bei: 'in der Kantine',       x: 320,  y: 300,  aufgabe: 'Weltraum-Heu fressen', labelY: -215, spiel: 'heu',    bild: 'kantine' },
+      { name: 'Reaktor',         bei: 'beim Reaktor',         x: 900,  y: 300,  aufgabe: 'Reaktor ankurbeln',    labelY: -255, spiel: 'kurbel', bild: 'reaktor' },
+      { name: 'Wassertank',      bei: 'beim Wassertank',      x: 1480, y: 320,  aufgabe: 'Wasser tanken',        labelY: -225, spiel: 'eimer',  bild: 'tank' },
+      { name: 'Frachtraum',      bei: 'im Frachtraum',        x: 320,  y: 1080, aufgabe: 'Wolle verladen',       labelY: -215, spiel: 'wolle',  bild: 'fracht' },
+      { name: 'Weltraumgarten',  bei: 'im Weltraumgarten',    x: 900,  y: 1110, aufgabe: 'Blumen gießen',        labelY: -205, spiel: 'blumen', bild: 'kuppel' },
+      { name: 'Cockpit',         bei: 'im Cockpit',           x: 1480, y: 1080, aufgabe: 'Steuerpult reparieren', labelY: -215, spiel: 'zaun',  bild: 'cockpit' },
     ],
   },
 ];
