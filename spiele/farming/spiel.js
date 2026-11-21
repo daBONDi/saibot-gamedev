@@ -63,7 +63,7 @@ const GERAETE = {
 // Was du im Baumodus bauen kannst (Taste 1, 2, 3)
 const GEBAEUDE_ARTEN = {
   schuppen: { name: 'Schuppen', emoji: '🏠', preis: 10000, r: 5.5 },
-  silo: { name: 'Silo', emoji: '🛢️', preis: 25000, r: 3 },
+  silo: { name: 'Silo', emoji: '🛢️', preis: 25000, r: 3, silo: { max: 50000, gut: 'korn', hoch: 13.5 } },
   baum: { name: 'Baum', emoji: '🌳', preis: 500, r: 1.5 },
   gewaechshaus: { name: 'Gewächshaus', emoji: '🪴', preis: 15000, r: 5.6 },
   kuhweide: { name: 'Kuhweide', emoji: '🐄', preis: 8000, r: 10, tier: 'kuh' },
@@ -81,6 +81,11 @@ const GEBAEUDE_ARTEN = {
   werkbank: { name: 'Werkbank', emoji: '🛠️', preis: 2500, r: 2.2 },
   fahrsilo: { name: 'Silagesilo', emoji: '🟩', preis: 20000, r: 10 },
   bienenstock: { name: 'Bienenstock', emoji: '🐝', preis: 1500, r: 1.3 },
+  // 🛢️ Verschiedene Silos: max = so viel passt rein · gut = was reinkommt · hoch = wo das Schild hängt
+  kleinsilo: { name: 'Kleines Silo', emoji: '🥫', preis: 12000, r: 2, silo: { max: 20000, gut: 'korn', hoch: 9 } },
+  grosssilo: { name: 'Großsilo', emoji: '🏭', preis: 60000, r: 5, silo: { max: 150000, gut: 'korn', hoch: 19 } },
+  hochsilo: { name: 'Silage-Hochsilo', emoji: '🗼', preis: 35000, r: 3.3, silo: { max: 40000, gut: 'silage', hoch: 20 } },
+  futtersilo: { name: 'Futtersilo', emoji: '🐄', preis: 8000, r: 1.8, silo: { max: 15000, gut: 'futter', hoch: 9 } },
   hundehuette: { name: 'Hundehütte', emoji: '🐕', preis: 300, r: 1.2, haustier: 'hund' },
   katzenkorb: { name: 'Katzenkorb', emoji: '🐈', preis: 200, r: 0.8, haustier: 'katze' },
 };
@@ -88,6 +93,8 @@ const GEBAEUDE_ARTEN = {
 const HONIG_PRO_MIN = 0.5;
 const HONIG_MAX = 15;            // So viel Honig passt in einen Bienenstock
 const BIENEN_BLUETEN_WEITE = 30; // So weit fliegen die Bienen zu den Obstbäumen
+const HOCHSILO_GAER = 90;        // So ungefähr viele Sekunden gärt das Häckselgut im Hochsilo (ganz von allein, ohne Folie!)
+const FUTTERSILO_WEITE = 30;     // Bis zu so weit weg füllt das Futtersilo die Futtertröge automatisch auf
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
 // (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
 const GEMUESE = {
@@ -1945,7 +1952,6 @@ let saegeAn = false, saegt = false, saegeSprit = 100, getragen = 0;   // Motors�
 const keys = {};
 const gebaute = [];   // Was du gebaut hast: { art, x, z, rot, mesh, h, silo }
 const silos = [];     // Alle Silos: { x, z, inhalt, schild }
-const SILO_MAX = 50000;   // So viel Korn passt in ein Silo
 
 // ===== Gebäude bauen =====
 function baueGebaeudeMesh(art) {
@@ -1966,6 +1972,38 @@ function baueGebaeudeMesh(art) {
     const kuppel = new THREE.Mesh(new THREE.ConeGeometry(2.7, 2, 24), mat(0x8a8f96));
     kuppel.position.y = 11; kuppel.castShadow = true; g.add(kuppel);
     kasten(g, 0, 5.5, 2.55, 0.5, 11, 0.08, 0x555555, false);   // Leiter
+  } else if (art === 'kleinsilo') {   // Kleines Silo: schmal und silbern
+    const blech = mat(0xd6d9de, { metalness: 0.55, roughness: 0.35 });
+    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 6.5, 20), blech); rohr.position.y = 3.25; rohr.castShadow = true; g.add(rohr);
+    for (let k = 1; k < 4; k++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.72, 0.04, 6, 24), mat(0x9a9ea5)); ring.rotation.x = Math.PI / 2; ring.position.y = k * 1.6; g.add(ring); }
+    const kuppel = new THREE.Mesh(new THREE.ConeGeometry(1.85, 1.3, 20), mat(0x8a8f96)); kuppel.position.y = 7.15; kuppel.castShadow = true; g.add(kuppel);
+    kasten(g, 0, 3.6, 1.75, 0.4, 7, 0.06, 0x555555, false);                       // Leiter
+  } else if (art === 'grosssilo') {   // Großsilo: riesig und breit, mit Wendeltreppe außen herum
+    const blech = mat(0xc4c8ce, { metalness: 0.6, roughness: 0.3 });
+    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 4.8, 14, 32), blech); rohr.position.y = 7; rohr.castShadow = true; g.add(rohr);
+    for (let k = 1; k < 7; k++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(4.83, 0.07, 6, 40), mat(0x8f949b)); ring.rotation.x = Math.PI / 2; ring.position.y = k * 2; g.add(ring); }
+    const kuppel = new THREE.Mesh(new THREE.ConeGeometry(5.1, 3, 32), mat(0x7f858c)); kuppel.position.y = 15.5; kuppel.castShadow = true; g.add(kuppel);
+    for (let k = 0; k < 28; k++) {   // Wendeltreppe
+      const w = k * 0.42, st = kasten(g, Math.cos(w) * 5.25, 0.5 + k * 0.5, Math.sin(w) * 5.25, 0.9, 0.08, 0.5, 0x555555, false); st.rotation.y = -w;
+    }
+    kasten(g, 0, 17.2, 0, 1.4, 1, 1.4, 0x666a70);                                 // Häuschen oben
+    kasten(g, 0, 1.6, 4.85, 2.6, 3.2, 0.1, 0x3a3f45, false);                       // Tor unten
+  } else if (art === 'hochsilo') {   // Silage-Hochsilo: hoch, dunkelblau, mit runder Kuppel und Rohr an der Seite
+    const blau = mat(0x1f3f8a, { metalness: 0.35, roughness: 0.3 });
+    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 16, 28), blau); rohr.position.y = 8; rohr.castShadow = true; g.add(rohr);
+    const kuppel = new THREE.Mesh(new THREE.SphereGeometry(3.05, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xd8d8d8, { metalness: 0.4, roughness: 0.4 }));
+    kuppel.position.y = 16; kuppel.castShadow = true; g.add(kuppel);
+    const fuell = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 19, 10), mat(0xb0b4ba, { metalness: 0.5 })); fuell.position.set(3.25, 9.5, 0); g.add(fuell);   // Füllrohr
+    const bogen = new THREE.Mesh(new THREE.TorusGeometry(1, 0.25, 8, 12, Math.PI / 2), mat(0xb0b4ba)); bogen.position.set(2.25, 19, 0); g.add(bogen);
+    kasten(g, 3.25, 0.8, 0, 1.2, 1.6, 1.2, 0x5a5f66);                              // Gebläse unten
+    for (let k = 0; k < 6; k++) kasten(g, 0, 1.5 + k * 2.5, 3.02, 0.7, 0.6, 0.06, 0xf2c200, false);   // Gelbe Luken
+  } else if (art === 'futtersilo') {   // Futtersilo: steht auf 4 Beinen, unten spitz (ein Trichter)
+    const gruen = mat(0x3f8f4a, { metalness: 0.3, roughness: 0.5 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kasten(g, sx * 1.05, 1.6, sz * 1.05, 0.15, 3.2, 0.15, 0x666666);
+    const trichter = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.6, 16), gruen); trichter.rotation.x = Math.PI; trichter.position.y = 2.6; trichter.castShadow = true; g.add(trichter);
+    const rohr = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 4, 16), gruen); rohr.position.y = 5.4; rohr.castShadow = true; g.add(rohr);
+    const deckel = new THREE.Mesh(new THREE.ConeGeometry(1.6, 0.9, 16), mat(0xd8d8d8)); deckel.position.y = 7.85; g.add(deckel);
+    const schnecke = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3, 8), mat(0x999999)); schnecke.position.set(0, 1.2, 1.4); schnecke.rotation.x = 1.0; g.add(schnecke);   // Förderschnecke
   } else if (art === 'gewaechshaus') {   // Ein Glashaus mit weißem Rahmen und zwei Beeten drin
     const W = 7, L = 10, H = 2.6;
     const glas = new THREE.MeshStandardMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.22, roughness: 0.05, side: THREE.DoubleSide, depthWrite: false });
@@ -2120,22 +2158,50 @@ function baueGebaeudeMesh(art) {
   }
   return g;
 }
-function neuesSilo(x, z, inhalt = 0) {
-  const s = { x, z, inhalt, basis: inhalt, schild: schild('', '#fff', 7) };
-  s.schild.position.set(x, 13.5, z);
+function neuesSilo(x, z, inhalt = 0, art = 'silo') {
+  const A = GEBAEUDE_ARTEN[art];
+  const s = { x, z, inhalt, basis: inhalt, art, max: A.silo.max, gut: A.silo.gut, r: A.r, roh: 0, rohBasis: 0, takt: 0, schild: schild('', '#fff', 7) };
+  s.schild.position.set(x, A.silo.hoch, z);
   scene.add(s.schild);
   silos.push(s);
   siloSchild(s);
   return s;
 }
-function siloSchild(s) { s.schild.userData.malen(`🛢️ ${kg(s.inhalt)}`, s.inhalt >= SILO_MAX ? '#ff9a6b' : '#ffd166'); }
+function siloSchild(s) {
+  const voll = s.inhalt >= s.max ? '#ff9a6b' : '#ffd166';
+  if (s.gut === 'silage') s.schild.userData.malen(`🟫 ${kg(s.inhalt - s.roh)}${s.roh > 0 ? ` · ⏳ ${kg(s.roh)}` : ''}`, voll);
+  else if (s.gut === 'futter') s.schild.userData.malen(`🐄 Futter ${kg(s.inhalt)}`, voll);
+  else s.schild.userData.malen(`${GEBAEUDE_ARTEN[s.art].emoji} ${kg(s.inhalt)}`, voll);
+}
+const siloName = s => GEBAEUDE_ARTEN[s.art].name;
+function siloUpdate(dt) {   // Hochsilo: Häckselgut gärt von allein · Futtersilo: füllt die Futtertröge in der Nähe
+  for (const s of silos) {
+    s.takt -= dt;
+    if (s.gut === 'silage' && s.roh > 0) {
+      s.roh = Math.max(0, s.roh - Math.max(60, s.roh / HOCHSILO_GAER) * dt);
+      if (s.takt <= 0 || s.roh <= 0) { s.takt = 1; siloSchild(s); }
+    }
+    if (s.gut === 'futter' && s.takt <= 0) {
+      s.takt = 2;
+      if (mp.aktiv && mp.rolle !== 'host') continue;   // Das macht nur der Gastgeber
+      for (const b of gebaute) {
+        if (!b.geh || !b.geh.tiere.length || s.inhalt <= 0 || Math.hypot(b.x - s.x, b.z - s.z) > FUTTERSILO_WEITE) continue;
+        const m = Math.min(s.inhalt, FUTTER_MAX - b.geh.futter);
+        if (m < 50) continue;
+        s.inhalt -= m; b.geh.futter += m; gebSenden(b); siloSchild(s);
+      }
+    }
+  }
+}
+// Was passt in welches Silo?
+const siloNimmt = (s, gut) => s.gut === 'korn' ? gut === 'korn' : s.gut === 'silage' ? gut === 'haeckselgut' || gut === 'silage' : true;
 function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   const mesh = baueGebaeudeMesh(art);
   mesh.position.set(x, 0, z); mesh.rotation.y = rot;
   scene.add(mesh);
   const h = { x, z, r: GEBAEUDE_ARTEN[art].r };
   hindernisse.push(h);
-  const b = { art, x, z, rot, mesh, h, silo: art === 'silo' ? neuesSilo(x, z, inhalt) : null, extra: [] };
+  const b = { art, x, z, rot, mesh, h, silo: GEBAEUDE_ARTEN[art].silo ? neuesSilo(x, z, inhalt, art) : null, extra: [] };
   if (art === 'gewaechshaus') ghEinrichten(b);
   if (GEBAEUDE_ARTEN[art].tier) gehegeEinrichten(b);
   if (OBST[art]) obstEinrichten(b);
@@ -3150,6 +3216,7 @@ function gebDaten(b) {
   if (b.teich) return { t: Math.round(b.teich.fische * 100) / 100 };
   if (b.wald) return { wa: b.wald.w.map(w => Math.round(w * 100) / 100) };
   if (b.biene) return { hn: Math.round(b.biene.lager * 10) / 10 };
+  if (b.silo) return b.silo.roh > 0 ? { roh: Math.round(b.silo.roh) } : null;
   if (b.fs) { const F = b.fs; return { fs: [Math.round(F.inhalt), Math.round(F.fest * 1000) / 1000, F.zu ? 1 : 0, Math.round(F.gaer * 1000) / 1000, F.fertig ? 1 : 0] }; }
   return null;
 }
@@ -3159,6 +3226,7 @@ function gebDatenSetzen(b, d) {
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
   if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0; gehegeSchild(b); }
   if (b.teich) { b.teich.fische = d.t ?? TEICH_FISCHE_MAX; teichSchild(b); }
+  if (b.silo && typeof d.roh === 'number') { b.silo.roh = Math.min(d.roh, b.silo.inhalt); b.silo.rohBasis = b.silo.roh; siloSchild(b.silo); }
   if (b.biene && typeof d.hn === 'number') { b.biene.lager = d.hn; bienenSchild(b); }
   if (b.fs && Array.isArray(d.fs)) { const F = b.fs; F.inhalt = d.fs[0] || 0; F.fest = d.fs[1] || 0; F.zu = !!d.fs[2]; F.gaer = d.fs[3] || 0; F.fertig = !!d.fs[4]; fahrsiloMalen(b); }
   if (b.wald && Array.isArray(d.wa)) { d.wa.forEach((w, k) => { if (k < b.wald.w.length) b.wald.w[k] = w; }); waldPlotMalen(b); }
@@ -3630,7 +3698,7 @@ function beimHaendler() { const p = wo(); return Math.hypot(p.x - LADEN.x, p.z -
 function nahesSilo() {
   if (!aktiv) return null;
   const p = aktiv.g.position;
-  return silos.find(s => Math.hypot(p.x - s.x, p.z - s.z) < 7 + aktiv.radius) || null;
+  return silos.find(s => Math.hypot(p.x - s.x, p.z - s.z) < s.r + 4.5 + aktiv.radius) || null;
 }
 function brauchtFahrzeug(text) {
   if (aktiv) return false;
@@ -3693,14 +3761,21 @@ function einlagern() {   // Korn vom Fahrzeug ins Silo
   const s = nahesSilo();
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
   if (kornDrin(aktiv) <= 0) { meldung('Der Korntank ist leer!'); sound.nein(); return; }
-  if (gutVon(aktiv) !== 'korn') { meldung(`🛢️ Ins Korn-Silo kommt nur Korn! ${gutVon(aktiv) === 'haeckselgut' ? 'Häckselgut gehört ins Silagesilo 🟩.' : 'Silage kannst du beim Landhandel verkaufen oder verfüttern.'}`, 3.5); sound.nein(); return; }
-  const menge = Math.min(kornDrin(aktiv), SILO_MAX - s.inhalt);
-  if (menge <= 0) { meldung('🛢️ Das Silo ist voll! Bau noch eins (Baumodus).'); sound.nein(); return; }
+  const gut = gutVon(aktiv), G = GUETER[gut];
+  if (!siloNimmt(s, gut)) {
+    meldung(s.gut === 'korn' ? `🛢️ Ins ${siloName(s)} kommt nur Korn! ${gut === 'haeckselgut' ? 'Häckselgut gehört ins Silagesilo 🟩 oder ins Silage-Hochsilo 🗼.' : 'Silage gehört ins Silage-Hochsilo 🗼 – oder verkaufen/verfüttern.'}` : `🗼 Ins Silage-Hochsilo kommt nur Häckselgut oder Silage!`, 4);
+    sound.nein(); return;
+  }
+  const menge = Math.min(kornDrin(aktiv), s.max - s.inhalt);
+  if (menge <= 0) { meldung(`${GEBAEUDE_ARTEN[s.art].emoji} Das ${siloName(s)} ist voll! Bau noch eins (Baumodus).`); sound.nein(); return; }
   kornWeg(aktiv, menge); s.inhalt += menge;
+  if (s.gut === 'silage' && gut === 'haeckselgut') s.roh += menge;   // Gärt jetzt von allein zu Silage
   siloSchild(s);
-  meldung(`🛢️ ${kg(menge)} Korn eingelagert. Im Silo: ${kg(s.inhalt)}`);
+  meldung(s.gut === 'futter' ? `🐄 ${kg(menge)} ${G.name} ins Futtersilo! Es füllt die Futtertröge in der Nähe (bis ${FUTTERSILO_WEITE} m) ganz von allein.`
+    : s.gut === 'silage' && gut === 'haeckselgut' ? `🗼 ${kg(menge)} Häckselgut eingefüllt! Im Hochsilo gärt es ganz von allein zu Silage ⏳ – dann mit U abholen.`
+    : `${GEBAEUDE_ARTEN[s.art].emoji} ${kg(menge)} ${G.name} eingelagert. Im ${siloName(s)}: ${kg(s.inhalt)}`, 4);
   sound.korn();
-  for (let k = 0; k < 10; k++) staub(s.x + zufall(-1, 1), s.z + zufall(-1, 1), 0xe3c46a, 10, -0.5);
+  for (let k = 0; k < 10; k++) staub(s.x + zufall(-1, 1), s.z + zufall(-1, 1), G.farbe, GEBAEUDE_ARTEN[s.art].silo.hoch - 3, -0.5);
   speichern();
 }
 function ausSiloHolen() {   // Korn aus dem Silo aufs Fahrzeug (zum Verkaufen, wenn der Preis gut ist!)
@@ -3708,13 +3783,17 @@ function ausSiloHolen() {   // Korn aus dem Silo aufs Fahrzeug (zum Verkaufen, w
   const s = nahesSilo();
   { const b = nahesFahrsilo(); if (b && !s) { silageHolen(b); return; } }
   if (!s) { meldung('🛢️ Fahr näher an ein Silo!'); sound.nein(); return; }
-  if (!gutPasst(aktiv, 'korn')) { meldung(`🚛 Da ist noch ${GUETER[gutVon(aktiv)].name} drin – erst leer machen!`); sound.nein(); return; }
-  const menge = Math.min(s.inhalt, kornPlatz(aktiv) - kornDrin(aktiv));
-  if (s.inhalt <= 0) { meldung('🛢️ Das Silo ist leer!'); sound.nein(); return; }
-  if (menge <= 0) { meldung('Der Korntank ist schon voll!'); sound.nein(); return; }
-  kornDazu(aktiv, menge); s.inhalt -= menge;
+  if (s.gut === 'futter') { meldung('🐄 Das Futtersilo füttert die Tiere in der Nähe von allein – da holst du nichts raus.'); sound.nein(); return; }
+  const gut = s.gut === 'silage' ? 'silage' : 'korn', da = s.inhalt - s.roh;
+  if (!gutPasst(aktiv, gut)) { meldung(`🚛 Da ist noch ${GUETER[gutVon(aktiv)].name} drin – erst leer machen!`); sound.nein(); return; }
+  if (!kornPlatz(aktiv)) { meldung('🚛 Da passt nichts rein – kuppel einen Kipper an (H)!'); sound.nein(); return; }
+  const menge = Math.min(da, kornPlatz(aktiv) - kornDrin(aktiv));
+  if (s.inhalt <= 0) { meldung(`${GEBAEUDE_ARTEN[s.art].emoji} Das ${siloName(s)} ist leer!`); sound.nein(); return; }
+  if (da <= 0) { meldung(`⏳ Die Silage gärt noch! Noch ${kg(s.roh)} – gleich fertig.`); sound.nein(); return; }
+  if (menge <= 0) { meldung('Der Tank ist schon voll!'); sound.nein(); return; }
+  kornDazu(aktiv, menge, gut); s.inhalt -= menge;
   siloSchild(s);
-  meldung(`🚜 ${kg(menge)} Korn aus dem Silo geholt. Ab zum Landhandel! 🏪`);
+  meldung(`🚜 ${kg(menge)} ${GUETER[gut].name} aus dem ${siloName(s)} geholt. Verkaufen beim Landhandel 🏪 oder im Großmarkt 🏬!`, 3.5);
   sound.korn();
   speichern();
 }
@@ -4367,7 +4446,9 @@ renderer.domElement.addEventListener('click', () => {
   mpEvent({ t: 'bau', art: bauArt, x: bx, z: bz, rot: rotation });
   money -= A.preis;
   sound.bauen();
-  if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
+  if (bauArt === 'silo' || bauArt === 'kleinsilo' || bauArt === 'grosssilo') meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} Neues ${GEBAEUDE_ARTEN[bauArt].name} für ${kg(GEBAEUDE_ARTEN[bauArt].silo.max)} Korn! Fahr mit vollem Korntank hin und drück L zum Einlagern.`, 4);
+  if (bauArt === 'hochsilo') meldung('🗼 Neues Silage-Hochsilo! Bring Häckselgut vom Häcksler (L) – es gärt ganz von allein zu Silage. Ohne Festfahren und ohne Folie! U = Silage holen.', 5);
+  if (bauArt === 'futtersilo') meldung(`🐄 Neues Futtersilo! Füll Korn oder Silage ein (L) – es füllt die Futtertröge aller Gehege in der Nähe (${FUTTERSILO_WEITE} m) automatisch auf.`, 5);
   if (OBST[bauArt]) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gepflanzt! Erst blüht er, dann wachsen die ${OBST[bauArt].name}. Wenn sie reif sind: P = pflücken.`, 4);
   if (bauArt === 'bienenstock') meldung('🐝 Neuer Bienenstock! Die Bienen machen Honig – mit Obstbäumen in der Nähe doppelt so viel. P = Honig ernten.', 4.5);
   if (GEBAEUDE_ARTEN[bauArt].haustier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} Ein neues Haustier ist eingezogen! Geh hin und drück P zum Streicheln. 💕`, 4.5);
@@ -4658,8 +4739,8 @@ function mpEmpfangen(d, vonGast) {
     // Geld und Silos rechnet der Gastgeber: Gäste schicken nur, wie viel sich geändert hat
     case 'geldStand': money = d.m; mp.geldBasis = d.m; return;
     case 'geld': if (host) money += d.d; return;
-    case 'siloStand': { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = d.i; s.basis = d.i; siloSchild(s); } return; }
-    case 'silo': if (host) { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = begrenzt(s.inhalt + d.d, 0, SILO_MAX); siloSchild(s); } } return;
+    case 'siloStand': { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = d.i; s.basis = d.i; if (typeof d.r === 'number') { s.roh = d.r; s.rohBasis = d.r; } siloSchild(s); } return; }
+    case 'silo': if (host) { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = begrenzt(s.inhalt + d.d, 0, s.max); if (d.dr) s.roh = begrenzt(s.roh + d.dr, 0, s.inhalt); siloSchild(s); } } return;
     case 'felder':   // Alle 15 Sekunden: Felder abgleichen (falls etwas verloren ging)
       d.felder.forEach((codes, k) => {
         const f = felder[k];
@@ -4739,8 +4820,9 @@ function mpTick(dt) {
   else if (mp.geldBasis !== null && money !== mp.geldBasis) { mpEvent({ t: 'geld', d: money - mp.geldBasis }); mp.geldBasis = money; }
   for (const s of silos) {
     if (s.inhalt === s.basis) continue;
-    if (host) mpAnAlle({ t: 'siloStand', s: siloSchluessel(s), i: s.inhalt });
-    else mpEvent({ t: 'silo', s: siloSchluessel(s), d: s.inhalt - (s.basis || 0) });
+    if (host) mpAnAlle({ t: 'siloStand', s: siloSchluessel(s), i: s.inhalt, r: Math.round(s.roh) });
+    else mpEvent({ t: 'silo', s: siloSchluessel(s), d: s.inhalt - (s.basis || 0), dr: Math.max(0, s.roh - (s.rohBasis || 0)) });
+    s.rohBasis = s.roh;
     s.basis = s.inhalt;
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt, g: a.gut }); }
@@ -4925,6 +5007,7 @@ function zeitVorspulen(sek) {
     if (b.obst) { b.obst.w = Math.min(1, b.obst.w + sek / OBST[b.art].zeit); obstMalen(b); }
     if (b.gh && GEMUESE[b.gh.art]) { b.gh.w = Math.min(1, b.gh.w + sek / GEMUESE[b.gh.art].zeit); ghMalen(b); }
     if (b.teich) { b.teich.fische = Math.min(TEICH_FISCHE_MAX, b.teich.fische + sek / 30); teichSchild(b); }
+    if (b.silo && b.silo.roh > 0) { b.silo.roh = 0; siloSchild(b.silo); }   // Über Nacht ist alles fertig gegoren
     if (b.biene) { b.biene.lager = Math.min(HONIG_MAX, b.biene.lager + honigProMin(b) * sek / 60); bienenSchild(b); }
     if (b.fs && b.fs.zu) { b.fs.gaer = Math.min(1, b.fs.gaer + sek / GAER_ZEIT); fahrsiloMalen(b); }
     if (b.geh) {
@@ -5109,6 +5192,7 @@ function animate() {
   haeckselUpdate(dt);
   fahrsiloUpdate(dt);
   bienenUpdate(dt);
+  siloUpdate(dt);
   haustierUpdate(dt);
   stadtUpdate(dt);
   helferUpdate(dt);
@@ -5123,7 +5207,9 @@ function animate() {
   else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
   else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = verkaufen (${gutText(aktiv)}) · G = Getreide-Saat · Y = Mais-Saat · T = Tanken · N = Händler`);
-  else if (silo) zeigeHinweis(`🛢️ Silo (${kg(silo.inhalt)} drin): L = Korn einlagern · U = Korn holen`);
+  else if (silo) zeigeHinweis(silo.gut === 'futter' ? `🐄 Futtersilo (${kg(silo.inhalt)}): L = Korn oder Silage einfüllen – füttert die Tiere in der Nähe automatisch`
+    : silo.gut === 'silage' ? `🗼 Silage-Hochsilo (${kg(silo.inhalt - silo.roh)} fertig${silo.roh > 0 ? `, ${kg(silo.roh)} gärt noch` : ''}): L = Häckselgut einfüllen · U = Silage holen`
+    : `${GEBAEUDE_ARTEN[silo.art].emoji} ${siloName(silo)} (${kg(silo.inhalt)} von ${kg(silo.max)}): L = Korn einlagern · U = Korn holen`);
   else if (aktiv && aktiv.typ.art === 'haecksler' && !aktiv.anh && naheAnhaengerZumKuppeln(aktiv)) zeigeHinweis('🔗 H = Anhänger ankuppeln (dann bläst der Häcksler hinein)');
   else if (aktiv && aktiv.typ.art === 'drescher' && aktiv.tank > 0 && ueberladenZiel()) zeigeHinweis('🌾➡️🚛 O = Korn überladen');
   else if (aktiv && !aktiv.anh && aktiv.typ.art !== 'drescher' && naheAnhaengerZumKuppeln(aktiv)) zeigeHinweis('🔗 H = Anhänger ankuppeln');
@@ -5304,7 +5390,7 @@ function feldJobStarten(h, feldNr, aufgabe) {
 }
 function helferAbliefern(h, fz) {   // Tank voll: Der Helfer bringt das Korn ins Silo (oder verkauft es, wenn alle Silos voll sind)
   let m = kornDrin(fz);
-  for (const s of silos) { const rein = Math.min(m, SILO_MAX - s.inhalt); if (rein > 0) { s.inhalt += rein; m -= rein; siloSchild(s); } }
+  for (const s of silos) { if (s.gut !== 'korn') continue; const rein = Math.min(m, s.max - s.inhalt); if (rein > 0) { s.inhalt += rein; m -= rein; siloSchild(s); } }
   let text = `${kg(kornDrin(fz) - m)} Korn ins Silo gebracht`;
   if (m > 0) { const e = Math.round(m * kornPreis()); money += e; text = `${kg(m)} Korn verkauft (${euro(e)}) – die Silos sind voll`; }
   kornWeg(fz, kornDrin(fz));
