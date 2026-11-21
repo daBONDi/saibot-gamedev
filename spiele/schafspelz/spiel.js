@@ -506,7 +506,7 @@ function inWand(x, y, r = WAND_RADIUS) {
   for (const w of WD) if (x > w.x - r && x < w.x + w.b + r && y > w.y - r && y < w.y + w.h + r) return true;
   return false;
 }
-function sichtFrei(a, b, r = WAND_RADIUS - 4) {   // Kann man von a gerade nach b laufen (ohne Wand dazwischen)?
+function sichtFrei(a, b, r = WAND_RADIUS + 1) {   // Kann man von a gerade nach b laufen (ohne Wand dazwischen)?
   if (!KARTE.waende) return true;
   const n = Math.ceil(dist(a, b) / 12);
   for (let i = 1; i < n; i++) { const k = i / n; if (inWand(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, r)) return false; }
