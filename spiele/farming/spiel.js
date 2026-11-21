@@ -80,7 +80,14 @@ const GEBAEUDE_ARTEN = {
   ahornwald: { name: 'Ahornwald', emoji: '🍁', preis: 4000, r: 6, holz: 'ahorn' },
   werkbank: { name: 'Werkbank', emoji: '🛠️', preis: 2500, r: 2.2 },
   fahrsilo: { name: 'Silagesilo', emoji: '🟩', preis: 20000, r: 10 },
+  bienenstock: { name: 'Bienenstock', emoji: '🐝', preis: 1500, r: 1.3 },
+  hundehuette: { name: 'Hundehütte', emoji: '🐕', preis: 300, r: 1.2, haustier: 'hund' },
+  katzenkorb: { name: 'Katzenkorb', emoji: '🐈', preis: 200, r: 0.8, haustier: 'katze' },
 };
+// 🐝 Bienen: So viel Honig (kg) macht ein Bienenstock pro Minute – doppelt so viel mit Obstbäumen oder Blumen in der Nähe!
+const HONIG_PRO_MIN = 0.5;
+const HONIG_MAX = 15;            // So viel Honig passt in einen Bienenstock
+const BIENEN_BLUETEN_WEITE = 30; // So weit fliegen die Bienen zu den Obstbäumen
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
 // (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
 const GEMUESE = {
@@ -143,6 +150,7 @@ const PRODUKTE = {
   wolle: { name: 'Wolle', emoji: '🧶', einheit: 'kg', preis: 15 },
   eier: { name: 'Eier', emoji: '🥚', einheit: 'Stück', preis: 2 },
   trueffel: { name: 'Trüffel', emoji: '🍄', einheit: 'Stück', preis: 60 },
+  honig: { name: 'Honig', emoji: '🍯', einheit: 'kg', preis: 10 },
 };
 for (const [k, G] of Object.entries(GEMUESE)) PRODUKTE[k] = { name: G.name, emoji: G.emoji, einheit: G.einheit, preis: G.preis };
 // Obstbäume: zeit = Sekunden bis die Früchte reif sind, menge = so viel pflückst du, preis = so viel bringt 1 kg im Dorfladen
@@ -156,6 +164,20 @@ for (const O of Object.values(OBST)) PRODUKTE[O.frucht] = { name: O.name, emoji:
 // Tag und Nacht
 const TAG_DAUER = 720;           // So viele Sekunden dauert ein ganzer Tag (24 Stunden) im Spiel = 12 Minuten
 const AUFSTEH_ZEIT = 7;          // Um diese Uhrzeit wachst du nach dem Schlafen auf
+// 📅 Monate: Nach so vielen Tagen kommt der nächste Monat. wachsen = so schnell wachsen die Felder (im Winter langsam!)
+const TAGE_PRO_MONAT = 2;
+const MONATE = [
+  { name: 'Januar', emoji: '❄️', zeit: 'winter' }, { name: 'Februar', emoji: '❄️', zeit: 'winter' }, { name: 'März', emoji: '🌱', zeit: 'fruehling' },
+  { name: 'April', emoji: '🌷', zeit: 'fruehling' }, { name: 'Mai', emoji: '🌸', zeit: 'fruehling' }, { name: 'Juni', emoji: '☀️', zeit: 'sommer' },
+  { name: 'Juli', emoji: '☀️', zeit: 'sommer' }, { name: 'August', emoji: '🌻', zeit: 'sommer' }, { name: 'September', emoji: '🍂', zeit: 'herbst' },
+  { name: 'Oktober', emoji: '🍁', zeit: 'herbst' }, { name: 'November', emoji: '🌫️', zeit: 'herbst' }, { name: 'Dezember', emoji: '⛄', zeit: 'winter' },
+];
+const JAHRESZEITEN = {
+  fruehling: { name: 'Frühling', wachsen: 1.2, honig: 1.5, gras: 0xffffff },
+  sommer: { name: 'Sommer', wachsen: 1, honig: 1, gras: 0xf4f0c8 },
+  herbst: { name: 'Herbst', wachsen: 0.8, honig: 0.5, gras: 0xe8c890 },
+  winter: { name: 'Winter', wachsen: 0.4, honig: 0, gras: 0xffffff },
+};
 // Fischteich: Welche Fische gibt es? chance = wie oft (größer = öfter), schwer = wie wild der Fisch zappelt
 // kg = so leicht/schwer kann er sein (von, bis) · cm = so kurz/lang kann er sein (von, bis)
 const FISCHE = {
@@ -1889,6 +1911,26 @@ function baueGebaeudeMesh(art) {
     for (let k = 0; k < 4; k++) {   // Würste hängen zum Räuchern
       const w = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.35, 4, 8), mat(0x9a3a24)); w.position.set(1.0, 1.82, -0.3 + k * 0.2); w.castShadow = true; g.add(w);
     }
+  } else if (art === 'bienenstock') {   // Bienenstock: weiße Kisten übereinander auf einem Holzgestell, mit Flugloch
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kasten(g, sx * 0.35, 0.2, sz * 0.3, 0.08, 0.4, 0.08, 0x6b4423);   // Beine
+    kasten(g, 0, 0.42, 0, 0.9, 0.06, 0.75, 0x8a5a32);                               // Brett
+    const farben = [0xf6f1e0, 0xf2d36b, 0xf6f1e0];
+    for (let k = 0; k < 3; k++) kasten(g, 0, 0.66 + k * 0.42, 0, 0.8, 0.4, 0.65, farben[k]);   // Drei Kisten (Zargen)
+    kasten(g, 0, 1.94, 0, 0.92, 0.1, 0.77, 0x8a8f96);                               // Blechdeckel
+    kasten(g, 0, 0.5, 0.33, 0.4, 0.06, 0.03, 0x222222, false);                       // Flugloch
+    kasten(g, 0, 0.47, 0.42, 0.5, 0.03, 0.18, 0xd8b07a, false);                       // Landebrett
+  } else if (GEBAEUDE_ARTEN[art].haustier) {   // Hundehütte oder Katzenkorb
+    if (GEBAEUDE_ARTEN[art].haustier === 'hund') {
+      kasten(g, 0, 0.55, 0, 1.3, 1.1, 1.5, new THREE.MeshStandardMaterial({ map: bretterTextur('#b5743a'), roughness: 0.95 }));
+      for (const s of [-1, 1]) { const d = kasten(g, s * 0.42, 1.3, 0, 0.95, 0.08, 1.7, 0xa8322a); d.rotation.z = -s * 0.65; }
+      kasten(g, 0, 0.45, 0.76, 0.6, 0.7, 0.03, 0x1a1a1a, false);                    // Eingang
+      kasten(g, 0.9, 0.08, 0.6, 0.4, 0.12, 0.4, 0xc23b22);                           // Napf
+    } else {
+      const korb = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 0.25, 16, 1, true), mat(0xc8a060, { side: THREE.DoubleSide }));
+      korb.position.y = 0.13; korb.castShadow = true; g.add(korb);
+      const kissen = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 16), mat(0xd85a8a)); kissen.position.y = 0.06; g.add(kissen);
+      kasten(g, 0.7, 0.05, 0.2, 0.3, 0.08, 0.3, 0x4a8fd8);                            // Napf
+    }
   } else if (art === 'fahrsilo') {   // Silagesilo: Betonboden, zwei hohe Wände, vorne und hinten offen (zum Durchfahren!)
     const beton = mat(0xa8a49a, { roughness: 1 });
     kasten(g, 0, 0.08, 0, 10.6, 0.16, 18, beton);                                   // Boden
@@ -1968,10 +2010,70 @@ function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   if (art === 'teich') teichEinrichten(b);
   if (GEBAEUDE_ARTEN[art].holz) waldPlotEinrichten(b);
   if (art === 'fahrsilo') fahrsiloEinrichten(b);
+  if (art === 'bienenstock') bienenEinrichten(b);
+  if (GEBAEUDE_ARTEN[art].haustier) { b.h.r = 0.5; b.tier = haustierNeu(GEBAEUDE_ARTEN[art].haustier, x, z, rot, null); b.extra.push(b.tier.g, b.tier.schild); }
   if (art === 'werkbank') { b.werkbank = true; b.schild = schild('🛠️ Werkbank · P', '#ffd166', 5); b.schild.position.set(x, 2.9, z); scene.add(b.schild); b.extra.push(b.schild); }
   if (art === 'teich' || art === 'gewaechshaus') grasWeg(x, z, GEBAEUDE_ARTEN[art].r + 0.3);
   if (daten) gebDatenSetzen(b, daten);
   gebaute.push(b);
+}
+
+// ===== 🐝 Bienen und Honig =====
+const bienenGeo = new THREE.SphereGeometry(0.06, 6, 4), bienenMat = new THREE.MeshBasicMaterial({ color: 0xf2c200 });
+const fluegelMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+function bienenEinrichten(b) {
+  b.biene = { lager: 0, takt: 0, g: new THREE.Group(), summTakt: 0 };
+  for (let k = 0; k < 14; k++) {   // Kleine Bienen, die um den Stock fliegen (gelb mit schwarzem Streifen und Flügeln)
+    const biene = new THREE.Group();
+    const koerper = new THREE.Mesh(bienenGeo, bienenMat); koerper.scale.set(1, 0.8, 1.5); biene.add(koerper);
+    kasten(biene, 0, 0, 0, 0.125, 0.1, 0.04, 0x111111, false);
+    for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.06), fluegelMat); f.position.set(s * 0.06, 0.05, 0); f.rotation.x = -Math.PI / 2; biene.add(f); }
+    biene.userData = { ph: Math.random() * 6.28, r: 1 + Math.random() * 3.5, h: 0.6 + Math.random() * 1.8, v: 0.6 + Math.random() * 0.9 };
+    b.biene.g.add(biene);
+  }
+  b.biene.g.position.set(b.x, 0, b.z); scene.add(b.biene.g); b.extra.push(b.biene.g);
+  b.schild = schild('', '#fff', 5); b.schild.position.set(b.x, 3, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  bienenSchild(b);
+}
+const bluetenNah = b => gebaute.some(o => (OBST[o.art] || o.gh) && Math.hypot(o.x - b.x, o.z - b.z) < BIENEN_BLUETEN_WEITE);
+const honigProMin = b => HONIG_PRO_MIN * (bluetenNah(b) ? 2 : 1) * jahreszeit().honig;
+function bienenSchild(b) {
+  const B = b.biene, J = jahreszeit();
+  b.schild.userData.malen(J.honig <= 0 ? '🐝 Winterruhe 💤' : B.lager >= HONIG_MAX ? `🍯 Voll! ${HONIG_MAX} kg · P` : `🍯 ${B.lager.toFixed(1).replace('.', ',')} kg Honig`, B.lager >= 1 ? '#ffd166' : '#ffffff');
+}
+function bienenUpdate(dt) {
+  const nacht = tagHell < 0.3, winter = jahreszeit().honig <= 0;
+  for (const b of gebaute) {
+    if (!b.biene) continue;
+    const B = b.biene;
+    B.lager = Math.min(HONIG_MAX, B.lager + honigProMin(b) * dt / 60);
+    B.takt -= dt;
+    if (B.takt <= 0) { B.takt = 1; bienenSchild(b); }
+    // Bienen fliegen (nachts und im Winter bleiben sie im Stock)
+    B.g.visible = !nacht && !winter;
+    if (B.g.visible && Math.hypot(wo().x - b.x, wo().z - b.z) < 60) {
+      B.g.children.forEach((biene, k) => {
+        const u = biene.userData, t = spielZeit * u.v + u.ph;
+        biene.position.set(Math.cos(t) * u.r + Math.sin(t * 2.3) * 0.4, u.h + Math.sin(t * 3.1) * 0.3, Math.sin(t * 1.3) * u.r);
+        biene.rotation.y = -t + Math.PI / 2;
+        biene.children[2].rotation.y = biene.children[3].rotation.y = Math.sin(spielZeit * 60 + k) * 0.6;   // Flügel schlagen
+      });
+      // Summ-summ, wenn du nah dran bist
+      B.summTakt -= dt;
+      if (B.summTakt <= 0 && Math.hypot(wo().x - b.x, wo().z - b.z) < 6) { B.summTakt = 1.2; tonGleiten(210, 230, 0, 1, 'sawtooth', 0.012); }
+    }
+  }
+}
+function honigErnten(b) {
+  const B = b.biene, m = Math.floor(B.lager * 10) / 10;
+  if (aktiv) { meldung('🐝 Steig aus (E), um Honig zu ernten!'); sound.nein(); return; }
+  if (m < 1) { meldung(jahreszeit().honig <= 0 ? '🐝 Im Winter schlafen die Bienen – kein neuer Honig!' : `🐝 Noch zu wenig Honig (${m.toFixed(1).replace('.', ',')} kg) – die Bienen arbeiten noch!`); sound.nein(); return; }
+  vorrat.honig = (vorrat.honig || 0) + m; B.lager -= m;
+  bienenSchild(b); gebSenden(b);
+  const stich = Math.random() < 0.15;
+  meldung(`🍯 ${m.toFixed(1).replace('.', ',')} kg Honig geerntet!${stich ? ' 🐝 Autsch! Eine Biene hat dich gestochen! 😖' : ''} Verkaufen im Dorfladen oder in der Stadt.`, 4);
+  if (stich) tonGleiten(900, 300, 0, 0.3, 'square', 0.05);
+  sound.korn(); speichern();
 }
 
 // ===== Silagesilo: Häckselgut abladen (L) → festfahren → abdecken (P) → gären lassen → Silage! =====
@@ -2794,6 +2896,7 @@ function gebDaten(b) {
   if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10, s: Math.round(b.geh.salz) };
   if (b.teich) return { t: Math.round(b.teich.fische * 100) / 100 };
   if (b.wald) return { wa: b.wald.w.map(w => Math.round(w * 100) / 100) };
+  if (b.biene) return { hn: Math.round(b.biene.lager * 10) / 10 };
   if (b.fs) { const F = b.fs; return { fs: [Math.round(F.inhalt), Math.round(F.fest * 1000) / 1000, F.zu ? 1 : 0, Math.round(F.gaer * 1000) / 1000, F.fertig ? 1 : 0] }; }
   return null;
 }
@@ -2803,6 +2906,7 @@ function gebDatenSetzen(b, d) {
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
   if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0; gehegeSchild(b); }
   if (b.teich) { b.teich.fische = d.t ?? TEICH_FISCHE_MAX; teichSchild(b); }
+  if (b.biene && typeof d.hn === 'number') { b.biene.lager = d.hn; bienenSchild(b); }
   if (b.fs && Array.isArray(d.fs)) { const F = b.fs; F.inhalt = d.fs[0] || 0; F.fest = d.fs[1] || 0; F.zu = !!d.fs[2]; F.gaer = d.fs[3] || 0; F.fertig = !!d.fs[4]; fahrsiloMalen(b); }
   if (b.wald && Array.isArray(d.wa)) { d.wa.forEach((w, k) => { if (k < b.wald.w.length) b.wald.w[k] = w; }); waldPlotMalen(b); }
 }
@@ -2828,7 +2932,7 @@ function nahesHofGebaeude() {
   const p = wo();
   let bestes = null, bestD = Infinity;
   for (const b of gebaute) {
-    if (!b.gh && !b.geh && !b.obst && !b.teich && !b.werkbank && !b.fs) continue;
+    if (!b.gh && !b.geh && !b.obst && !b.teich && !b.werkbank && !b.fs && !b.biene) continue;
     const d = Math.hypot(p.x - b.x, p.z - b.z) - GEBAEUDE_ARTEN[b.art].r;
     if (d < 3.5 && d < bestD) { bestD = d; bestes = b; }
   }
@@ -2964,6 +3068,7 @@ function hofHinweis() {   // Hinweis unten in der Mitte beim Dorfladen, Gewächs
   if (b.obst) { const O = OBST[b.art]; return b.obst.w >= 1 ? `${O.emoji} P = ${O.menge} kg ${O.name} pflücken` : `${O.emoji} ${GEBAEUDE_ARTEN[b.art].name}: ${b.obst.w < 0.25 ? 'blüht' : 'Früchte wachsen'} (${Math.floor(b.obst.w * 100)} %)`; }
   if (aktiv && b.geh) return kornDrin(aktiv) > 0 ? `${GUETER[gutVon(aktiv)].emoji} L = ${GUETER[gutVon(aktiv)].name} als Futter abladen (${kg(kornDrin(aktiv))})` : '';
   if (b.fs) return fahrsiloHinweis(b);
+  if (b.biene) return jahreszeit().honig <= 0 ? `🐝 Die Bienen halten Winterruhe 💤 (${Math.floor(b.biene.lager)} kg Honig drin)` : `🐝 Bienenstock: ${b.biene.lager >= 1 ? 'P = Honig ernten' : 'Die Bienen sammeln Honig …'} (${b.biene.lager.toFixed(1).replace('.', ',')} kg · ${bluetenNah(b) ? '🌸 Blüten in der Nähe: doppelt so schnell!' : 'Tipp: Obstbäume in der Nähe = doppelt so viel Honig'})`;
   return panelGeb ? '' : `${GEBAEUDE_ARTEN[b.art].emoji} P = ${GEBAEUDE_ARTEN[b.art].name}-Menü öffnen`;
 }
 // Das Hof-Silo: gehört dir von Anfang an
@@ -3112,6 +3217,7 @@ function updateHUD() {
   $('mode').textContent = building ? '🏗️ Baumodus' : aktiv ? '🚜 Fahren' : saegeAn ? '🪚 Motorsäge' : '🚶 Zu Fuß';
   $('vorrat').textContent = vorratText() + (salzsteine ? ` · 🧂 ${salzsteine}` : '');
   $('uhr').textContent = uhrText();
+  $('datum').textContent = datumText();
   const ha = holzAnh(aktiv);
   $('holz').textContent = `${getragen} von ${HOLZ_TRAGEN_MAX} Stämmen${ha ? ` · Anhänger ${ha.inhalt}/${ha.typ.max}` : ''} · 🪚 Sprit ${Math.round(saegeSprit)} %`;
   $('ansicht').textContent = ansicht === 'ego' ? '👁️ First Person' : '🎥 Von hinten';
@@ -3252,7 +3358,7 @@ function wachsen(dt) {
     for (let j = 0; j < f.nz; j++) for (let i = 0; i < f.nx; i++) {
       const c = f.zellen[j * f.nx + i];
       if (c.z !== 'gesaet' || c.w >= 1) continue;
-      c.w = Math.min(1, c.w + 0.5 / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
+      c.w = Math.min(1, c.w + 0.5 * jahreszeit().wachsen / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
       malZelle(f, i, j);
     }
   }
@@ -3778,7 +3884,7 @@ function speichern() {
       anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, gut: a.gut, an: a.an ? a.an.id : null })),
       spieler: { x: player.position.x, z: player.position.z, yaw },
       felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
-      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat, tageszeit, salzsteine, fischRekorde,
+      gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat, tageszeit, salzsteine, fischRekorde, tagNr, helfer: helferDaten(),
       wald: waldDaten(), holz: holzDaten(), saege: { sprit: saegeSprit, getragen },
     }));
   } catch (e) { /* egal – dann eben nicht gespeichert */ }
@@ -3797,6 +3903,8 @@ function laden() {
   for (const b of d.gebaeude || []) if (GEBAEUDE_ARTEN[b.art]) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0, b.d);
   if (d.vorrat) vorrat = d.vorrat;
   if (typeof d.tageszeit === 'number') tageszeit = d.tageszeit;
+  if (typeof d.tagNr === 'number') tagNr = d.tagNr;
+  if (Array.isArray(d.helfer)) helferLaden(d.helfer);
   salzsteine = d.salzsteine || 0;
   fischRekorde = d.fischRekorde || {};
   if (d.v === 1) {   // Alter Spielstand (nur ein Traktor)
@@ -3947,7 +4055,7 @@ document.addEventListener('keydown', e => {
   if (building && (k === '.' || k === ',')) { const arten = Object.keys(GEBAEUDE_ARTEN), n = arten.length; bauArt = arten[(arten.indexOf(bauArt) + (k === '.' ? 1 : n - 1)) % n]; updateHUD(); }
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
   if (k === 'p' && werkbankOffen) werkbankZeigen(false);
-  else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (nb && nb.fs) fahrsiloP(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
+  else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (nb && nb.fs) fahrsiloP(nb); else if (nb && nb.biene) honigErnten(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
   if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
@@ -3998,6 +4106,8 @@ renderer.domElement.addEventListener('click', () => {
   sound.bauen();
   if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
   if (OBST[bauArt]) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gepflanzt! Erst blüht er, dann wachsen die ${OBST[bauArt].name}. Wenn sie reif sind: P = pflücken.`, 4);
+  if (bauArt === 'bienenstock') meldung('🐝 Neuer Bienenstock! Die Bienen machen Honig – mit Obstbäumen in der Nähe doppelt so viel. P = Honig ernten.', 4.5);
+  if (GEBAEUDE_ARTEN[bauArt].haustier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} Ein neues Haustier ist eingezogen! Geh hin und drück P zum Streicheln. 💕`, 4.5);
   if (bauArt === 'fahrsilo') meldung('🟩 Neues Silagesilo! Häcksel Mais 🌽, kipp das Häckselgut hier ab (L), fahr drüber, deck es zu (P) – dann wird Silage daraus.', 5);
   if (bauArt === 'teich') meldung('🎣 Neuer Fischteich! Geh ans Ufer und drück P zum Angeln.', 4);
   if (bauArt === 'gewaechshaus') meldung('🪴 Neues Gewächshaus! Geh hin und drück P, um Gemüse zu pflanzen.', 4);
@@ -4143,7 +4253,7 @@ function mpSpielerWeg(id, verbreiten) {
 }
 function weltSchnappschuss() {
   return {
-    t: 'welt', money, spielZeit, tageszeit, hofSilo: hofSilo.inhalt, fischRekorde,
+    t: 'welt', money, spielZeit, tageszeit, tagNr, hofSilo: hofSilo.inhalt, fischRekorde,
     felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
     gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })),
     fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, gut: f.gut, saatArt: f.saatArt,
@@ -4244,6 +4354,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
   gebaute.length = 0;
   money = d.money; mp.geldBasis = money; spielZeit = d.spielZeit;
   if (typeof d.tageszeit === 'number') tageszeit = d.tageszeit;
+  if (typeof d.tagNr === 'number') { tagNr = d.tagNr; jahreszeitZeigen(); }
   hofSilo.inhalt = d.hofSilo; hofSilo.basis = d.hofSilo; siloSchild(hofSilo);
   d.felder.forEach((df, k) => {
     const f = felder[k];
@@ -4341,8 +4452,8 @@ function mpEmpfangen(d, vonGast) {
       }
       break;
     }
-    case 'zeit': if (Math.abs(tageszeit - d.z) > 0.1) tageszeit = d.z; return;
-    case 'schlaf': zeitVorspulen(d.s); tageszeit = d.z; meldung(`💤 Jemand hat geschlafen – es ist jetzt ${d.z}:00 Uhr morgens! ☀️`, 4); break;
+    case 'zeit': if (Math.abs(tageszeit - d.z) > 0.1) tageszeit = d.z; if (typeof d.tag === 'number' && d.tag !== tagNr) { tagNr = d.tag; jahreszeitZeigen(); } return;
+    case 'schlaf': zeitVorspulen(d.s); tageszeit = d.z; if (typeof d.tag === 'number') { tagNr = d.tag; jahreszeitZeigen(); } meldung(`💤 Jemand hat geschlafen – es ist jetzt ${d.z}:00 Uhr morgens! ☀️`, 4); break;
     case 'geb': { const b = gebaute.find(x => gebSchluessel(x) === d.k); if (b) gebDatenSetzen(b, d.d); break; }
     case 'gebStand': for (const e of d.l || []) { const b = gebaute.find(x => gebSchluessel(x) === e.k); if (b) gebDatenSetzen(b, e.d); } return;
     case 'neuesFz': if (!fahrzeuge.some(f => f.id === d.id) && FAHRZEUGE[d.typ]) { neuesFahrzeug(d.typ, d.x, d.z, d.r, { id: d.id }); meldung(`🚜 Neues Fahrzeug auf dem Hof: ${FAHRZEUGE[d.typ].name}!`); } break;
@@ -4374,7 +4485,7 @@ function mpTick(dt) {
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
-    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'zeit', z: tageszeit }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich || b.fs).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'zeit', z: tageszeit, tag: tagNr }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich || b.fs || b.biene).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
   }
 }
 const weltDa = () => mp.geldBasis !== null;
@@ -4437,8 +4548,55 @@ const sonnenRichtung = new THREE.Vector3(), lichtRichtung = new THREE.Vector3();
 const nachtFarbe = new THREE.Color(0x101a3a), abendFarbe = new THREE.Color(0xffa070), weiss = new THREE.Color(0xffffff), himmelMal = new THREE.Color();
 const glatt = (a, b, x) => { const t = begrenzt((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 let tagHell = 1;   // 1 = heller Tag, 0 = dunkle Nacht
+// ===== 📅 Kalender: Tage, Monate und Jahreszeiten =====
+let tagNr = 0;   // Tag 0 = 1. März im Jahr 1
+const monatNr = () => (2 + Math.floor(tagNr / TAGE_PRO_MONAT)) % 12;
+const jahrNr = () => 1 + Math.floor((2 + Math.floor(tagNr / TAGE_PRO_MONAT)) / 12);
+const jahreszeit = () => JAHRESZEITEN[MONATE[monatNr()].zeit];
+const datumText = () => { const M = MONATE[monatNr()]; return `${M.emoji} ${1 + tagNr % TAGE_PRO_MONAT}. Tag im ${M.name} · Jahr ${jahrNr()}`; };
+function neuerTag() {
+  const alterMonat = monatNr();
+  tagNr++;
+  angebotNeu();
+  if (monatNr() !== alterMonat) {
+    const M = MONATE[monatNr()], J = jahreszeit();
+    meldung(`📅 Ein neuer Monat: ${M.emoji} ${M.name}! (${J.name}${J.wachsen < 1 ? ' – die Felder wachsen langsamer' : J.wachsen > 1 ? ' – alles wächst schneller!' : ''})`, 5);
+    jahreszeitZeigen();
+  }
+  speichern();
+}
+// Schnee im Winter: eine weiße Schicht auf der Wiese und Schneeflocken um dich herum
+const schneeDecke = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0xf4f8ff, transparent: true, opacity: 0.72, roughness: 1, depthWrite: false }));
+schneeDecke.rotation.x = -Math.PI / 2; schneeDecke.position.y = 0.015; schneeDecke.visible = false; scene.add(schneeDecke);
+const schneeFlocken = (() => {
+  const pos = [];
+  for (let k = 0; k < 1500; k++) pos.push(zufall(-40, 40), zufall(0, 30), zufall(-40, 40));
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const p = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.18, transparent: true, opacity: 0.9, depthWrite: false }));
+  p.visible = false; p.frustumCulled = false; scene.add(p);
+  return p;
+})();
+function jahreszeitZeigen() {   // Wiese, Schnee und Bäume passend zur Jahreszeit
+  const z = MONATE[monatNr()].zeit, J = JAHRESZEITEN[z];
+  schneeDecke.visible = schneeFlocken.visible = z === 'winter';
+  if (grasMesh) { grasMesh.visible = z !== 'winter'; grasMesh.material.color.setHex(J.gras); }
+  ground.material.color.setHex(J.gras);
+}
+function schneeUpdate(dt, ziel) {
+  if (!schneeFlocken.visible) return;
+  schneeFlocken.position.set(ziel.x, 0, ziel.z);
+  const a = schneeFlocken.geometry.attributes.position;
+  for (let k = 0; k < a.count; k++) {
+    let y = a.getY(k) - dt * (1.2 + (k % 5) * 0.2);
+    if (y < 0) y += 30;
+    a.setY(k, y); a.setX(k, a.getX(k) + Math.sin(spielZeit + k) * dt * 0.3);
+  }
+  a.needsUpdate = true;
+}
 function tagNachtUpdate(dt, ziel) {
+  const vorher = tageszeit;
   tageszeit = (tageszeit + dt * 24 / TAG_DAUER) % 24;
+  if (tageszeit < vorher) neuerTag();   // Mitternacht!
   const w = (tageszeit - 6) / 12 * Math.PI;   // 6 Uhr = Sonnenaufgang (Osten), 12 Uhr = oben, 18 Uhr = Untergang (Westen)
   sonnenRichtung.set(Math.cos(w), Math.sin(w), 0.35).normalize();
   const hoch = sonnenRichtung.y;
@@ -4495,13 +4653,14 @@ const uhrText = () => `${String(Math.floor(tageszeit)).padStart(2, '0')}:${Strin
 let schlaeft = false;
 function zeitVorspulen(sek) {
   for (const f of felder) {
-    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
+    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek * jahreszeit().wachsen / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
     malFeld(f);
   }
   for (const b of gebaute) {
     if (b.obst) { b.obst.w = Math.min(1, b.obst.w + sek / OBST[b.art].zeit); obstMalen(b); }
     if (b.gh && GEMUESE[b.gh.art]) { b.gh.w = Math.min(1, b.gh.w + sek / GEMUESE[b.gh.art].zeit); ghMalen(b); }
     if (b.teich) { b.teich.fische = Math.min(TEICH_FISCHE_MAX, b.teich.fische + sek / 30); teichSchild(b); }
+    if (b.biene) { b.biene.lager = Math.min(HONIG_MAX, b.biene.lager + honigProMin(b) * sek / 60); bienenSchild(b); }
     if (b.fs && b.fs.zu) { b.fs.gaer = Math.min(1, b.fs.gaer + sek / GAER_ZEIT); fahrsiloMalen(b); }
     if (b.geh) {
       const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length;
@@ -4531,8 +4690,9 @@ function schlafen() {
   for (let k = 0; k < 3; k++) ton(400 - k * 60, k * 0.5, 0.6, 'sine', 0.05);   // Gute-Nacht-Melodie
   setTimeout(() => {
     zeitVorspulen(sek);
+    if (tageszeit > AUFSTEH_ZEIT) neuerTag();   // Über Mitternacht geschlafen
     tageszeit = AUFSTEH_ZEIT;
-    mpEvent({ t: 'schlaf', s: sek, z: AUFSTEH_ZEIT });
+    mpEvent({ t: 'schlaf', s: sek, z: AUFSTEH_ZEIT, tag: tagNr });
     speichern();
     setTimeout(() => {
       $('schlaf').style.opacity = '0';
@@ -4683,6 +4843,10 @@ function animate() {
   staubUpdate(dt);
   haeckselUpdate(dt);
   fahrsiloUpdate(dt);
+  bienenUpdate(dt);
+  haustierUpdate(dt);
+  stadtUpdate(dt);
+  helferUpdate(dt);
   windZeit.value = spielZeit;
   for (const w of wolken) { w.position.x += dt * 1.5; if (w.position.x > 260) w.position.x = -260; }   // Wolken ziehen vorbei
   geistAktualisieren(mausPunkt);
@@ -4772,6 +4936,7 @@ function animate() {
   }
   // Die Sonne (und ihr Schatten) wandert mit dir mit
   tagNachtUpdate(dt, target);
+  schneeUpdate(dt, target);
   egoSaegeUpdate(dt);
   egoAngelUpdate(dt);
   himmel.position.copy(camera.position);   // Der Himmel ist immer gleich weit weg
@@ -4781,6 +4946,7 @@ function animate() {
 
 // ===== Los geht's! =====
 const geladen = laden();
+jahreszeitZeigen();
 if (!geladen) {
   einsteigen(neuesFahrzeug('fendt', 0, 10, 0, { werkzeug: 'ernte' }));
 }
