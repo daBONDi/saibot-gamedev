@@ -3409,6 +3409,18 @@ function zeichnePalme(p) {
   ellipse(x + 12 * g, y - 92 * g, 6 * g, 6 * g); ctx.fill();
 }
 
+// ----- 🧱 Wände (von oben gesehen, mit Vorderseite – damit sie dick aussehen) -----
+function zeichneWaende() {
+  for (const w of KARTE.waende) {
+    ctx.fillStyle = '#262c3a'; ctx.fillRect(w.x, w.y, w.b, w.h);
+    ctx.fillStyle = '#3a4150'; ctx.fillRect(w.x + 6, w.y + 6, w.b - 12, w.h - 38);   // Oben drauf
+    ctx.fillStyle = '#4a5262'; ctx.fillRect(w.x, w.y + w.h - 26, w.b, 26);            // Vorderseite
+    ctx.fillStyle = `rgba(125,249,255,${0.55 + Math.sin(zeit * 2 + w.x * 0.01) * 0.25})`;
+    ctx.fillRect(w.x + 4, w.y + w.h - 15, w.b - 8, 3);                                // Leuchtstreifen
+    ctx.strokeStyle = '#161a24'; ctx.lineWidth = 3; ctx.strokeRect(w.x, w.y, w.b, w.h);
+  }
+}
+
 // ----- 🚀 Raumschiff-Sachen -----
 function zeichneBullauge(x, y) {
   ctx.fillStyle = '#9aa4b5'; ellipse(x, y, 22, 22); ctx.fill();
@@ -3489,10 +3501,18 @@ function zeichneWelt() {
   ctx.fillStyle = KARTE.boden;
   ctx.fillRect(0, 0, WELT_B, WELT_H);
   for (const d of deko) if (d.art === 'punkt') { ctx.fillStyle = d.f; ctx.fillRect(d.x, d.y, 3, 3); }
-  // Wege
-  ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 34; ctx.lineCap = 'round';
-  for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(GLOCKE.x, GLOCKE.y); ctx.lineTo(o.x, o.y); ctx.stroke(); }
-  ctx.fillStyle = KARTE.platz; ellipse(GLOCKE.x, GLOCKE.y, 150, 110); ctx.fill();
+  // Wege (mit Wänden gibt es stattdessen Bodenplatten)
+  if (KARTE.waende) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x <= WELT_B; x += 120) { ctx.moveTo(x, 0); ctx.lineTo(x, WELT_H); }
+    for (let y = 0; y <= WELT_H; y += 120) { ctx.moveTo(0, y); ctx.lineTo(WELT_B, y); }
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 34; ctx.lineCap = 'round';
+    for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(GLOCKE.x, GLOCKE.y); ctx.lineTo(o.x, o.y); ctx.stroke(); }
+  }
+  ctx.fillStyle = KARTE.platz; ellipse(GLOCKE.x, GLOCKE.y, 150, KARTE.waende ? 90 : 110); ctx.fill();
   // Rand: Zaun, Meer oder Raumschiff-Wand
   if (KARTE.rand === 'all') {
     ctx.strokeStyle = '#2b3242'; ctx.lineWidth = 70;
@@ -3527,6 +3547,7 @@ function zeichneWelt() {
     ctx.fillStyle = '#8a8a8a';
     ellipse(g.x - 38, g.y + 6, 7, 5); ctx.fill(); ellipse(g.x + 36, g.y - 6, 6, 4); ctx.fill();
   }
+  if (KARTE.waende) zeichneWaende();
   // Orte
   for (const o of ORTE) zeichneOrt(o);
   zeichneLaterneUndGatter();
@@ -4458,9 +4479,16 @@ function d3WeltBauen() {
   const g = bc.getContext('2d'); g.scale(bc.width / WELT_B, bc.height / WELT_H);
   g.fillStyle = KARTE.boden; g.fillRect(0, 0, WELT_B, WELT_H);
   for (const d of deko) if (d.art === 'punkt') { g.fillStyle = d.f; g.fillRect(d.x, d.y, 5, 5); }
-  g.strokeStyle = KARTE.weg; g.lineWidth = 34; g.lineCap = 'round';
-  for (const o of ORTE) { g.beginPath(); g.moveTo(GLOCKE.x, GLOCKE.y); g.lineTo(o.x, o.y); g.stroke(); }
-  g.fillStyle = KARTE.platz; g.beginPath(); g.ellipse(GLOCKE.x, GLOCKE.y, 150, 110, 0, 0, 7); g.fill();
+  if (KARTE.waende) {   // Bodenplatten statt Wege
+    g.strokeStyle = 'rgba(0,0,0,0.15)'; g.lineWidth = 3; g.beginPath();
+    for (let x = 0; x <= WELT_B; x += 120) { g.moveTo(x, 0); g.lineTo(x, WELT_H); }
+    for (let y = 0; y <= WELT_H; y += 120) { g.moveTo(0, y); g.lineTo(WELT_B, y); }
+    g.stroke();
+  } else {
+    g.strokeStyle = KARTE.weg; g.lineWidth = 34; g.lineCap = 'round';
+    for (const o of ORTE) { g.beginPath(); g.moveTo(GLOCKE.x, GLOCKE.y); g.lineTo(o.x, o.y); g.stroke(); }
+  }
+  g.fillStyle = KARTE.platz; g.beginPath(); g.ellipse(GLOCKE.x, GLOCKE.y, 150, KARTE.waende ? 90 : 110, 0, 0, 7); g.fill();
   if (KARTE.weltall) {   // 🚀 Lüftungsschächte mit Gitter und Warnstreifen am Rand
     for (const gr of KARTE.gruben) {
       g.fillStyle = '#9aa4b5'; g.fillRect(gr.x - 42, gr.y - 30, 84, 60);
@@ -4498,6 +4526,16 @@ function d3WeltBauen() {
     pf.forEach(([x, z], k) => { hilf.position.set(x, 0.55, z); hilf.updateMatrix(); im.setMatrixAt(k, hilf.matrix); });
     G.add(im);
     for (const y of [0.45, 0.85]) for (const [x, z, b, t] of [[B / 2, r, B - 2 * r, 0.06], [B / 2, Hh - r, B - 2 * r, 0.06], [r, Hh / 2, 0.06, Hh - 2 * r], [B - r, Hh / 2, 0.06, Hh - 2 * r]]) d3Teil(G, new T.BoxGeometry(b, 0.1, t), holz, x, y, z);
+  }
+  // 🧱 Wände (so hoch wie die Außenwand, mit Leuchtstreifen)
+  if (KARTE.waende) {
+    const wandMat = d3Mat('#4a5262'), deckel = d3Mat('#2b3242'), leucht = new T.MeshBasicMaterial({ color: '#7df9ff' });
+    for (const w of KARTE.waende) {
+      const b = w.b * METER, t = w.h * METER, x = (w.x + w.b / 2) * METER, z = (w.y + w.h / 2) * METER;
+      d3Teil(G, new T.BoxGeometry(b, 3.2, t), wandMat, x, 1.6, z);
+      d3Teil(G, new T.BoxGeometry(b + 0.02, 0.1, t + 0.02), deckel, x, 3.2, z);
+      d3Teil(G, new T.BoxGeometry(b + 0.04, 0.07, t + 0.04), leucht, x, 1.6, z);
+    }
   }
   // Bäume
   for (const d of deko) {
@@ -4893,8 +4931,11 @@ function d3Minikarte() {
   const M = MINIKARTE, sx = M.w / WELT_B, sy = M.h / WELT_H, P = p => [M.x + p.x * sx, M.y + p.y * sy];
   ctx.fillStyle = 'rgba(20,20,50,0.8)'; rundesRechteck(M.x - 5, M.y - 5, M.w + 10, M.h + 10, 8); ctx.fill();
   ctx.fillStyle = KARTE.boden; ctx.fillRect(M.x, M.y, M.w, M.h);
-  ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 3;
-  for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(...P(GLOCKE)); ctx.lineTo(...P(o)); ctx.stroke(); }
+  if (KARTE.waende) { ctx.fillStyle = '#1b2030'; for (const w of KARTE.waende) { const [x, y] = P(w); ctx.fillRect(x, y, w.b * sx, w.h * sy); } }
+  else {
+    ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 3;
+    for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(...P(GLOCKE)); ctx.lineTo(...P(o)); ctx.stroke(); }
+  }
   ORTE.forEach((o, i) => {
     const [x, y] = P(o), aufgabe = spieler.aufgaben.includes(i) && spieler.lebt;
     ctx.fillStyle = aufgabe ? '#ffd166' : '#6b5b4a'; ctx.beginPath(); ctx.arc(x, y, aufgabe ? 5 : 3.5, 0, 7); ctx.fill();
