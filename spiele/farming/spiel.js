@@ -1639,32 +1639,80 @@ function baueLKW(typ, K) {
   kasten(K, 0, 0.95, 0.2, 1.1, 0.35, 8.0, dunkel);
   kasten(K, -1.0, 1.05, -1.3, 0.5, 0.55, 1.1, chrom);                     // Tank (glänzt)
   kasten(K, 1.0, 1.05, -1.3, 0.5, 0.45, 0.8, dunkel);                     // Batteriekasten
-  // Fahrerhaus
-  kasten(K, 0, 2.05, -3.15, 2.5, 2.1, 1.9, lack);                         // Kabine
-  kasten(K, 0, 3.25, -3.0, 2.4, 0.3, 1.6, lack);                          // Dach-Spoiler
-  kasten(K, 0, 2.45, -4.11, 2.2, 1.0, 0.04, glasMat, false);              // Frontscheibe
-  for (const sx of [-1, 1]) kasten(K, sx * 1.26, 2.45, -3.4, 0.04, 0.9, 1.0, glasMat, false);   // Seitenfenster
-  kasten(K, 0, 1.45, -4.12, 1.7, 0.7, 0.05, dunkel, false);               // Kühlergrill
-  for (let k = 0; k < 5; k++) kasten(K, 0, 1.2 + k * 0.13, -4.15, 1.6, 0.04, 0.03, chrom, false);
-  kasten(K, 0, 0.75, -4.15, 2.5, 0.35, 0.25, grau);                       // Stoßstange
+  // ===== Fahrerhaus: unten Blech, oben rundherum Fenster vorne, hinten die Schlafkabine, oben ein Windabweiser =====
+  const CZ1 = -4.3, CZ2 = -1.95, CY1 = 1.35, BR = 2.15, CY2 = 3.45, CB = 2.5, GL = 1.25;   // vorne, hinten, unten, Fensterkante, Dach, Breite, Länge vom Glas-Teil
+  const lackDunkel = mat(new THREE.Color(typ.farbe).multiplyScalar(0.6).getHex(), { roughness: 0.35, metalness: 0.3 });
+  kasten(K, 0, (CY1 + BR) / 2, (CZ1 + CZ2) / 2, CB, BR - CY1, CZ2 - CZ1, lack);          // Unterteil
+  kasten(K, 0, (BR + CY2) / 2, (CZ1 + GL + CZ2) / 2, CB, CY2 - BR, CZ2 - CZ1 - GL, lack); // Schlafkabine hinten (oben)
+  kasten(K, 0, CY2 - 0.06, CZ1 + GL / 2, CB, 0.12, GL, lack);                            // Dach über den Fenstern
   for (const sx of [-1, 1]) {
-    kasten(K, sx * 0.95, 0.85, -4.29, 0.4, 0.14, 0.02, licht, false);     // Scheinwerfer
-    kasten(K, sx * 1.2, 0.85, -4.29, 0.1, 0.14, 0.02, orange, false);     // Blinker
-    kasten(K, sx * 1.42, 2.6, -3.9, 0.06, 0.06, 0.4, dunkel, false);      // Spiegel-Arm
-    kasten(K, sx * 1.62, 2.45, -3.75, 0.08, 0.5, 0.25, dunkel, false);    // Spiegel
-    kasten(K, sx * 1.26, 1.4, -2.7, 0.06, 0.15, 0.5, dunkel, false);      // Trittstufe
+    kasten(K, sx * (CB / 2 - 0.07), (BR + CY2) / 2, CZ1 + 0.08, 0.14, CY2 - BR, 0.16, lack);   // A-Säule vorne
+    kasten(K, sx * (CB / 2 - 0.05), (BR + CY2) / 2, CZ1 + GL - 0.05, 0.1, CY2 - BR, 0.1, lack); // B-Säule
+    kasten(K, sx * (CB / 2 - 0.01), (BR + CY2) / 2 - 0.05, CZ1 + GL / 2 + 0.03, 0.02, CY2 - BR - 0.2, GL - 0.2, glasMat, false);   // Seitenfenster
+    // Tür: Fugen, Griff, Haltegriff und zwei Trittstufen
+    kasten(K, sx * (CB / 2 + 0.005), (CY1 + CY2) / 2, CZ1 + GL + 0.02, 0.01, CY2 - CY1 - 0.1, 0.025, dunkel, false);
+    kasten(K, sx * (CB / 2 + 0.005), CY1 + 0.08, CZ1 + GL / 2, 0.01, 0.025, GL, dunkel, false);
+    kasten(K, sx * (CB / 2 + 0.03), BR - 0.1, CZ1 + GL - 0.25, 0.04, 0.05, 0.22, chrom, false);
+    kasten(K, sx * (CB / 2 + 0.06), 2.0, CZ1 + GL + 0.12, 0.04, 0.9, 0.04, chrom, false);
+    for (const [y, t] of [[0.75, 0.35], [1.15, 0.3]]) kasten(K, sx * (CB / 2 - 0.1), y, CZ1 + 0.35, 0.45, 0.05, t, mat(0x3a3a3a, { metalness: 0.5 }), false);
+    kasten(K, sx * (CB / 2 + 0.005), 1.72, (CZ1 + GL + CZ2) / 2, 0.01, 0.12, CZ2 - CZ1 - GL - 0.2, mat(0xffffff), false);   // Zierstreifen
+    // Windabweiser an den Ecken vorne
+    const ecke = kasten(K, sx * (CB / 2 + 0.03), 2.45, CZ1 + 0.22, 0.06, 1.7, 0.45, lackDunkel); ecke.rotation.y = sx * 0.35;
+    // Großer Spiegel + kleiner Rampenspiegel
+    kasten(K, sx * (CB / 2 + 0.25), 3.15, CZ1 + 0.2, 0.5, 0.05, 0.05, dunkel, false);
+    kasten(K, sx * (CB / 2 + 0.5), 2.75, CZ1 + 0.25, 0.08, 0.75, 0.3, dunkel);
+    kasten(K, sx * (CB / 2 + 0.5), 2.75, CZ1 + 0.4, 0.06, 0.68, 0.01, mat(0xbfd8e8, { metalness: 0.9, roughness: 0.05 }), false);
+    kasten(K, sx * (CB / 2 + 0.42), 2.2, CZ1 + 0.25, 0.07, 0.28, 0.24, dunkel, false);
   }
-  for (const x of [-0.75, -0.25, 0.25, 0.75]) kasten(K, x, 3.45, -3.7, 0.25, 0.15, 0.12, licht, false);   // Lampen auf dem Dach
+  // Frontscheibe (leicht schräg) mit zwei Scheibenwischern und Sonnenblende
+  const scheibe = kasten(K, 0, (BR + CY2) / 2 - 0.05, CZ1 + 0.06, CB - 0.25, CY2 - BR - 0.15, 0.03, glasMat, false); scheibe.rotation.x = -0.06;
+  for (const sx of [-0.55, 0.3]) { const w = kasten(K, sx, BR + 0.35, CZ1 - 0.01, 0.03, 0.75, 0.02, dunkel, false); w.rotation.z = 1.1; }
+  kasten(K, 0, CY2 + 0.02, CZ1 - 0.15, CB + 0.05, 0.08, 0.4, lackDunkel);
+  for (let k = 0; k < 5; k++) kasten(K, -0.6 + k * 0.3, CY2 - 0.02, CZ1 - 0.36, 0.12, 0.05, 0.02, orange, false);   // Positionslichter
+  // Windabweiser auf dem Dach (von der Seite schräg)
+  const sp = new THREE.Shape([new THREE.Vector2(-(CZ1 + 0.5), 0), new THREE.Vector2(-CZ2, 0), new THREE.Vector2(-CZ2, 0.75), new THREE.Vector2(-(CZ1 + 1.5), 0.75)]);
+  const spGeo = new THREE.ExtrudeGeometry(sp, { depth: CB - 0.1, bevelEnabled: false }); spGeo.translate(0, 0, -(CB - 0.1) / 2); spGeo.rotateY(Math.PI / 2);
+  const spoiler = new THREE.Mesh(spGeo, lack); spoiler.position.y = CY2; spoiler.castShadow = true; K.add(spoiler);
+  for (const sx of [-0.35, 0.35]) { const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.09, 0.6, 10), chrom); horn.rotation.x = Math.PI / 2; horn.position.set(sx, CY2 + 0.1, CZ1 + 0.6); K.add(horn); }   // Drucklufthörner
   const rundum = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.2, 12), new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff6a00, emissiveIntensity: 0.6 }));
-  rundum.position.set(0, 3.52, -2.5); K.add(rundum);
-  kasten(K, 0, 2.0, -3.4, 0.5, 0.12, 0.5, 0x2a2a2a, false);               // Sitz innen
-  const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 8, 20), dunkel); lenkrad.position.set(0, 2.35, -3.85); lenkrad.rotation.x = -1.0; K.add(lenkrad);
+  rundum.position.set(0, CY2 + 0.85, CZ2 - 0.3); K.add(rundum);
+  for (const x of [-0.75, -0.25, 0.25, 0.75]) kasten(K, x, CY2 + 0.82, CZ1 + 1.55, 0.25, 0.15, 0.12, licht, false);   // Lampen auf dem Spoiler
+  // Front: Kühlergrill mit Chrom und Wappen, Stoßstange mit Scheinwerfern, Nebelleuchten und Nummernschild
+  kasten(K, 0, 1.8, CZ1 - 0.02, 1.9, 0.62, 0.04, dunkel, false);
+  for (let k = 0; k < 5; k++) kasten(K, 0, 1.56 + k * 0.12, CZ1 - 0.05, 1.8, 0.04, 0.03, chrom, false);
+  const wappen = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 20), chrom); wappen.rotation.x = Math.PI / 2; wappen.position.set(0, 1.8, CZ1 - 0.07); K.add(wappen);
+  kasten(K, 0, 1.08, CZ1 - 0.08, CB + 0.05, 0.5, 0.3, grau);                             // Stoßstange
+  for (const sx of [-1, 1]) {
+    kasten(K, sx * 0.88, 1.18, CZ1 - 0.235, 0.5, 0.2, 0.02, licht, false);               // Scheinwerfer
+    kasten(K, sx * 0.88, 1.18, CZ1 - 0.225, 0.56, 0.26, 0.02, dunkel, false);
+    kasten(K, sx * 1.17, 1.18, CZ1 - 0.235, 0.1, 0.2, 0.02, orange, false);              // Blinker
+    const nebel = new THREE.Mesh(new THREE.CircleGeometry(0.07, 12), licht); nebel.rotation.y = Math.PI; nebel.position.set(sx * 0.7, 0.93, CZ1 - 0.236); K.add(nebel);
+  }
+  kasten(K, 0, 0.95, CZ1 - 0.235, 0.52, 0.12, 0.01, mat(0xf2f2f2), false);              // Nummernschild
+  kasten(K, -0.24, 0.95, CZ1 - 0.24, 0.04, 0.12, 0.01, new THREE.MeshBasicMaterial({ color: 0x2457a6 }), false);
+  // Kotflügel über den Vorderrädern (lenken mit, wie beim Traktor) – kommen gleich bei den Rädern dazu
+  // Innen: Armaturenbrett, Lenkrad links (der Fahrer sitzt links!), zwei Sitze, Schalthebel und Vorhang zur Schlafkabine
+  const innen = mat(0x2a2c30, { roughness: 0.7 });
+  kasten(K, 0, BR + 0.12, CZ1 + 0.35, CB - 0.3, 0.3, 0.45, innen);                       // Armaturenbrett
+  kasten(K, -0.55, BR + 0.3, CZ1 + 0.4, 0.5, 0.12, 0.05, new THREE.MeshBasicMaterial({ color: 0x2a6fd8 }), false);   // Bildschirm
+  const saeule = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.5, 8), innen); saeule.position.set(-0.55, BR + 0.25, CZ1 + 0.6); saeule.rotation.x = -0.9; K.add(saeule);
+  const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.03, 8, 22), innen); lenkrad.position.set(-0.55, BR + 0.45, CZ1 + 0.75); lenkrad.rotation.x = -1.0; K.add(lenkrad);
+  for (const sx of [-0.55, 0.55]) {
+    kasten(K, sx, BR + 0.05, CZ1 + 1.05, 0.55, 0.14, 0.5, mat(0x3a3a40));                 // Sitzfläche
+    kasten(K, sx, BR + 0.45, CZ1 + 1.28, 0.55, 0.75, 0.12, mat(0x3a3a40));                // Lehne
+    kasten(K, sx, BR + 0.95, CZ1 + 1.3, 0.3, 0.2, 0.1, mat(0x3a3a40));                    // Kopfstütze
+  }
+  kasten(K, 0, BR + 0.15, CZ1 + 0.9, 0.04, 0.3, 0.04, innen); const knauf = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(0x111111)); knauf.position.set(0, BR + 0.32, CZ1 + 0.9); K.add(knauf);
+  kasten(K, 0, (BR + CY2) / 2 + 0.1, CZ1 + GL + 0.04, CB - 0.3, CY2 - BR - 0.3, 0.03, mat(0x8a2a2a, { roughness: 1 }), false);   // Vorhang
   // Auspuff hinter dem Fahrerhaus
-  const ap = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.4, 10), chrom); ap.position.set(1.05, 2.4, -2.1); K.add(ap);
+  const ap = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.4, 10), chrom); ap.position.set(1.05, 2.4, -1.72); K.add(ap);
   // Räder: vorne lenken, hinten zwei Achsen – mit Kotflügeln
   const raeder = [];
   for (const sx of [-1, 1]) {
-    raeder.push(baueRad(K, sx * 1.1, 0.6, -3.0, 0.6, 0.45, 1, mat(0xd8d8d8, { metalness: 0.5 })));
+    const vr = baueRad(K, sx * 1.1, 0.6, -3.0, 0.6, 0.45, 1, mat(0xd8d8d8, { metalness: 0.5 }));
+    raeder.push(vr);
+    const kg2 = new THREE.CylinderGeometry(0.74, 0.74, 0.55, 18, 1, true, Math.PI / 2 - 1.0, 2.0); kg2.rotateZ(Math.PI / 2);
+    const kf = new THREE.Mesh(kg2, mat(0x1e1f22, { side: THREE.DoubleSide })); kf.castShadow = true; vr.lenker.add(kf);   // Kotflügel vorne (lenkt mit)
     for (const z of [1.5, 2.8]) raeder.push(baueRad(K, sx * 1.1, 0.6, z, 0.6, 0.55, 0, mat(0xd8d8d8, { metalness: 0.5 })));
     kasten(K, sx * 1.1, 1.3, 2.15, 0.65, 0.08, 2.9, dunkel);               // Kotflügel hinten
     kasten(K, sx * 1.1, 0.6, 3.6, 0.6, 0.7, 0.04, dunkel, false);          // Schmutzfänger
@@ -1680,7 +1728,7 @@ function baueLKW(typ, K) {
   for (let k = 1; k < 6; k++) for (const sx of [-1, 1]) kasten(mulde, sx * (B / 2 + 0.05), 0.2 + H / 2, -k * L / 6, 0.05, H, 0.1, mat(0xb88010), false);   // Rippen
   const ladung = kasten(mulde, 0, 0.25, -L / 2, B - 0.15, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);
   const zylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2, 10), chrom); zylinder.position.set(0, 1.2, -1.9); K.add(zylinder);   // Kipp-Zylinder
-  return { raeder, auspuff: [1.05, 3.65, -2.1], sitz: [0, 2.85, -3.4], radstand: 4.8, mulde: { g: mulde, ladung, zylinder, H } };
+  return { raeder, auspuff: [1.05, 3.65, -1.72], sitz: [-0.55, 3.05, -3.3], radstand: 4.8, mulde: { g: mulde, ladung, zylinder, H } };
 }
 function lkwUpdate(fz, dt) {   // Ladung zeigen und beim Abladen die Mulde kippen
   const M = fz.mulde, voll = fz.typ.tankMax ? fz.tank / fz.typ.tankMax : 0;
