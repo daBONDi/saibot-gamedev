@@ -885,9 +885,74 @@ const dorfLeute = [];
   });
 }
 let glockenTakt = 20;
+// ===== 💥 Leute im Dorf und in der Stadt fliegen auch weg, wenn man sie anfährt (und schimpfen dann!) =====
+const NPC_RUFE = ['😠 He! Pass doch auf!', '🙃 Huiiiii!', '😵 Mein Hut! Wo ist mein Hut?', '😤 Das sag ich dem Bürgermeister!', '🤕 Aua! Hast du keinen Führerschein?', '😲 Hilfe, ein Traktor!'];
+function npcAnfahren(n, boden = 0) {   // Fährt gerade ein Fahrzeug in diese Person?
+  const g = n.f.g;
+  for (const fz of fahrzeuge) {
+    const v = Math.abs(fz.speed);
+    if (v < 2.5 || !(fz === aktiv || fremdGefahren(fz) || fz.helfer)) continue;
+    const dx = g.position.x - fz.g.position.x, dz = g.position.z - fz.g.position.z, d = Math.hypot(dx, dz) || 0.01;
+    if (d > fz.radius + 0.6) continue;
+    const vor = Math.sign(fz.speed), kraft = v * 1.3;
+    n.rd = { vx: -Math.sin(fz.g.rotation.y) * vor * kraft * 0.7 + dx / d * kraft * 0.6, vy: 4 + v * 0.45, vz: -Math.cos(fz.g.rotation.y) * vor * kraft * 0.7 + dz / d * kraft * 0.6,
+      drehX: zufall(6, 11) * (Math.random() < 0.5 ? -1 : 1), drehZ: zufall(-5, 5), t: 0, liegt: false, huepfer: 0, boden };
+    g.position.y = boden + 0.05;
+    const laut = lautstaerkeBei(g.position.x, g.position.z);
+    if (laut > 0.05) { ton(70, 0, 0.25, 'sine', 0.3 * laut); tonGleiten(900, 400, 0.05, 0.35, 'square', 0.05 * laut); }
+    if (fz === aktiv) meldung(NPC_RUFE[Math.floor(Math.random() * NPC_RUFE.length)], 2.5);
+    for (let k = 0; k < 8; k++) staub(g.position.x + zufall(-0.5, 0.5), g.position.z + zufall(-0.5, 0.5), 0xb8a37a, 0.6, 1, 1);
+    return true;
+  }
+  return false;
+}
+function npcRagdollUpdate(n, dt) {   // Fliegen, purzeln, liegen, aufstehen (wie beim Bauern)
+  const R = n.rd, g = n.f.g, t = n.f.t, p = g.position;
+  R.t += dt;
+  if (!R.liegt) {
+    R.vy -= SCHWERKRAFT * dt;
+    const nx = p.x + R.vx * dt, nz = p.z + R.vz * dt;
+    if (!kollidiert(nx, nz, 0.35)) { p.x = nx; p.z = nz; } else { R.vx *= -0.4; R.vz *= -0.4; }
+    p.y += R.vy * dt;
+    g.rotation.x += R.drehX * dt; g.rotation.z += R.drehZ * dt;
+    armeUndBeineFlattern(t, R.t + n.f.g.id);
+    if (p.y <= R.boden) {
+      p.y = R.boden;
+      if (R.vy < -3 && R.huepfer < 2) { R.vy *= -0.45; R.vx *= 0.6; R.vz *= 0.6; R.drehX *= 0.6; R.huepfer++; }
+      else {
+        R.liegt = true; R.t = 0;
+        const voll = Math.PI * 2;
+        g.rotation.x = ((g.rotation.x % voll) + voll) % voll;
+        g.rotation.z = ((g.rotation.z % voll) + voll) % voll; if (g.rotation.z > Math.PI) g.rotation.z -= voll;
+      }
+    }
+  } else if (R.t < 2.5) {
+    const f = Math.min(1, dt * 8);
+    g.rotation.x += (Math.PI / 2 - g.rotation.x) * f; g.rotation.z *= 1 - f; p.y += (R.boden + 0.16 - p.y) * f;
+    t.armL.rotation.set(0, 0, 1.3); t.armR.rotation.set(0, 0, -1.3); t.beinL.rotation.set(0, 0, 0.35); t.beinR.rotation.set(0, 0, -0.35);
+    t.kopf.rotation.set(0, Math.sin(R.t * 4) * 0.4, 0);
+  } else {
+    const f = Math.min(1, dt * 4);
+    g.rotation.x *= 1 - f; g.rotation.z *= 1 - f; p.y += (R.boden - p.y) * f;
+    gliederGerade(t);
+    if (Math.abs(g.rotation.x) < 0.03) { g.rotation.x = 0; g.rotation.z = 0; p.y = R.boden; n.rd = null; n.zurueck = true; }
+  }
+}
+function npcZurueck(n, zx, zz, dt) {   // Nach dem Aufstehen zurück zum Weg laufen (etwas beleidigt)
+  const g = n.f.g, dx = zx - g.position.x, dz = zz - g.position.z, d = Math.hypot(dx, dz);
+  if (d < 0.2) { n.zurueck = false; return false; }
+  const v = Math.min(d, 2.2 * dt);
+  g.position.x += dx / d * v; g.position.z += dz / d * v;
+  g.rotation.y = Math.atan2(-dx, -dz);
+  farmerPose(n.f.t, false, true, dt);
+  return true;
+}
 function dorfUpdate(dt) {
   for (const d of dorfLeute) {
     const [x1, z1, x2, z2] = d.w, L = Math.hypot(x2 - x1, z2 - z1);
+    if (d.rd) { npcRagdollUpdate(d, dt); continue; }
+    if (d.zurueck && npcZurueck(d, x1 + (x2 - x1) * d.s, z1 + (z2 - z1) * d.s, dt)) continue;
+    if (npcAnfahren(d)) continue;
     d.s += d.dir * d.v * dt / L;
     if (d.s > 1) { d.s = 1; d.dir = -1; }
     if (d.s < 0) { d.s = 0; d.dir = 1; }
@@ -1006,6 +1071,9 @@ const stadtLeute = [];
 function stadtUpdate(dt) {
   if (Math.hypot(wo().x - FILIALE.x, wo().z - FILIALE.z) > 140) return;   // Weit weg: Leute müssen nicht laufen
   for (const L of stadtLeute) {
+    if (L.rd) { npcRagdollUpdate(L, dt); continue; }
+    if (L.zurueck && npcZurueck(L, L.x, L.z, dt)) continue;
+    if (npcAnfahren(L, 0.2)) continue;
     L.x += L.richtung * L.tempo * dt;
     if (L.x < -182 || L.x > -112) L.richtung *= -1;
     L.f.g.position.x = L.x; L.f.g.rotation.y = L.richtung > 0 ? -Math.PI / 2 : Math.PI / 2;
