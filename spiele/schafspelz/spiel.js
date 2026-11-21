@@ -19,7 +19,7 @@ const ZIEGE_CHANCE = 0.2;             // Wie oft DU die Ziege bist, wenn du kein
 
 // 🛠️ Entwickler-Modus: Funktioniert NUR auf deinem Computer (localhost), nie auf der Webseite!
 // Rolle aussuchen mit der Adresse:  http://localhost:8080/spiele/schafspelz/?rolle=ziege
-// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, angsthase, schaefer, maehneur, schleicher, verkleider, turbo, schlange
+// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, angsthase, schaefer, maehneur, beweiser, schleicher, verkleider, turbo, schlange, luegner
 const ENTWICKLER = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
 function entwicklerRolle() {
   if (!ENTWICKLER) return null;
@@ -71,21 +71,41 @@ const ROLLEN = {
   schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
   verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
   maehneur:    { name: 'Mäh-negeur',        emoji: '🪛', text: 'Du darfst durch die Gruben schleichen – wie ein Wolf! Aber pass auf: Wer dich dabei sieht, hält DICH für den Wolf ...' },
+  beweiser:    { name: 'Beweiser',          emoji: '📦', text: 'Wenn dich ein Wolf frisst, schickst du der Herde einen Beweis, wer es war!' },
   angsthase:   { name: 'Angsthase',         emoji: '😱', text: 'Wenn dich ein Wolf frisst, mähst du 8-mal ganz laut – und alle sehen, wo!' },
   schaefer:    { name: 'Schäfer',           emoji: '🧑‍🌾', knopf: 'Hirtenstab', pause: 30, text: 'Keine Aufgaben! Hau den Wolf mit dem Hirtenstab raus. Triffst du ein Schaf, musst DU gehen!' },
   ziege:       { name: 'Ziege',             emoji: '🐐', knopf: 'Meckern',    pause: 25, text: 'Lass dich beim Herden-Treffen verjagen, dann gewinnst DU!' },
   schlange:    { name: 'Schlangenwolf',     emoji: '🐍', text: 'Die Wolle deiner Opfer löst sich nach ein paar Sekunden auf!' },
   turbo:       { name: 'Turbo-Wolf',        emoji: '⚡', text: 'Du kannst viel öfter fressen als andere Wölfe!' },
+  luegner:     { name: 'Lügenbaron',        emoji: '🤥', text: 'Beim Herden-Treffen darfst du LÜGEN: Schwärze ein Schaf an – viele glauben dir!' },
   werwolf:     { name: 'Schafs-Werwolf',    emoji: '🌕', text: 'Zähl bis 15, dann fang alle Schafe! In die Gruben kommst du nicht rein.' },
 };
-const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'angsthase', 'schaefer', 'maehneur'];
+const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'angsthase', 'schaefer', 'maehneur', 'beweiser'];
+// 📦 Beweiser: Wenn er gefressen wird, schickt er EIN Beweis-Item (Idee von Tobias). Es verrät den Wolf nicht ganz – aber fast!
+const BEWEIS_ITEMS = [
+  { art: 'wolle', emoji: '🧶', name: 'Halbe Wolle',    info: 'Halb in 2 Farben gefärbt – eine ist vom Wolf' },
+  { art: 'tinte', emoji: '🪶', name: 'Feder & Tinte',  info: 'Ein Buchstabe vom Wolf-Namen' },
+];
+const BEWEIS_FOLGEN = 0.65;   // Wählst DU jemanden aus dem Beweis? Dann machen so viele Bot-Schafe mit
+const FARB_NAMEN = {
+  '#ff9ecf': 'Rosa', '#8fd3ff': 'Hellblau', '#ffe066': 'Gelb', '#9be89b': 'Hellgrün', '#c9a0ff': 'Lila', '#ffb36b': 'Orange',
+  '#d9b38c': 'Braun', '#7fe0d0': 'Türkis', '#ff7b7b': 'Rot', '#b0c4ff': 'Blau', '#e0e0a0': 'Beige', '#f5b0ff': 'Pink',
+  '#a0d080': 'Grün', '#ffffff': 'Weiß',
+};
+let beweisPakete = [];    // Verschickte Beweise – sie kommen beim nächsten Herden-Treffen an
+let beweisWahl = false;   // true = DU bist der gefressene Beweiser und suchst ein Item aus
 const MAEHNEUR_ZEIT = 10;    // So lange darf der Mäh-negeur in den Gruben bleiben
 const MAEHNEUR_PAUSE = 8;    // So lange muss er warten, bis er wieder rein darf
 // Darf s in die Gruben? (Wölfe und der Mäh-negeur)
 const darfInGrube = s => s.istWolf || s.rolle === 'maehneur';
 function maehneurWarte(s) { return s.rolle === 'maehneur' && !s.istWolf ? Math.max(0, MAEHNEUR_PAUSE - (zeit - (s.rausZeit ?? -99))) : 0; }
 const SCHAEFER_REICHWEITE = 150;   // So weit reicht der Hirtenstab
-const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo', 'schlange'];
+const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo', 'schlange', 'luegner'];
+// 🤥 Lügenbaron: erzählt beim Herden-Treffen eine Lüge über ein Schaf
+const LUEGE_GLAUBEN = 0.4;      // So oft glaubt ein Bot-Schaf die Lüge (0.4 = 4 von 10)
+const LUEGE_ENTLARVT = 0.5;     // Hat jemand "Quatsch!" gerufen? Dann stimmen so viele gegen den Lügner
+const LUEGE_BOT_CHANCE = 0.75;  // So oft lügt ein Computer-Lügenbaron bei einem Treffen
+let luegeWahl = false;          // true = Du suchst gerade aus, wen du anschwärzt
 const AUFLOESE_ZEIT = 7;   // So viele Sekunden bleibt die Wolle beim Schlangenwolf liegen
 
 const NAMEN  = ['Wolke', 'Flocke', 'Krümel', 'Bolle', 'Lotte', 'Muffin', 'Socke', 'Puschel', 'Wuschel', 'Kiki', 'Zottel', 'Fluffi', 'Hanni'];
@@ -697,6 +717,7 @@ function neuesSpiel() {
   schafe = []; wolle = []; effekte = [];
   treffen = null; ende = null; klickZiel = null; miniSpiel = null;
   glockeGenutzt = false;
+  beweisPakete = []; beweisWahl = false;
 
   // Bist du diesmal ein Schaf oder ein Wolf? (Bei mehr Wölfen öfter!)
   const test = entwicklerRolle();
@@ -1362,6 +1383,11 @@ function fressen(opfer, w) {
   }
   if (opfer.mensch) mpGefressen(opfer, w);   // Multiplayer: Der Mitspieler sieht seine Fress-Animation
 
+  if (opfer.rolle === 'beweiser' && !jagdZ) {   // 📦 Der Beweiser weiß, wer ihn gefressen hat!
+    opfer.beweisWolf = w;
+    if (opfer.istSpieler) beweisWahl = true;   // Du suchst gleich aus (nach der Fress-Animation)
+    else if (!opfer.mensch) paketMachen(opfer, zufall(BEWEIS_ITEMS).art);   // Ein Bot sucht sofort aus
+  }
   if (opfer.rolle === 'angsthase') angsthaseSchreit(opfer, haufen);   // Zuletzt, damit man die Nachricht sieht!
   if (opfer.istSpieler) {   // 🎬 Lustige Fress-Animation, danach bist du ein Geist!
     miniSpiel = null; zielModus = false; klickZiel = null;
@@ -1386,6 +1412,41 @@ function angsthaseSchreit(opfer, haufen) {
     .sort((a, b) => dist(a, haufen) - dist(b, haufen))
     .slice(0, 2)
     .forEach(h => { h.ziel = { x: haufen.x, y: haufen.y, ort: null }; h.warte = 0; h.amOrt = null; });
+}
+
+// 📦 Der Beweiser "von" schickt ein Beweis-Item über den Wolf, der ihn gefressen hat
+function paketMachen(von, art) {
+  const w = von.beweisWolf;
+  if (!w || !BEWEIS_ITEMS.some(i => i.art === art)) return false;
+  von.beweisWolf = null;
+  const lebende = schafe.filter(s => s.lebt && s !== von);
+  const unschuldige = mischen(lebende.filter(s => !s.istWolf));   // (Nur echte Schafe als "falsche Spur")
+  const nameVon = s => s.istSpieler && !mp.aktiv ? 'DU' : s.name;
+  let text, kandidaten, farben = [];
+  if (art === 'wolle') {   // 🧶 Halb eingefärbte Wolle: halb Wolf-Farbe, halb die Farbe von einem Unschuldigen
+    kandidaten = mischen([w, ...unschuldige.slice(0, 1)]);
+    farben = kandidaten.map(s => s.farbe);
+    const f = kandidaten.map(s => FARB_NAMEN[s.farbe] || 'Komisch');
+    text = kandidaten.length > 1 ? `🧶 Halb eingefärbte Wolle: halb ${f[0]}, halb ${f[1]}! Eine Farbe ist vom Wolf.` : `🧶 Eingefärbte Wolle: ganz ${f[0]}!`;
+  } else {   // 🪶 Feder und Tinte: ein Buchstabe vom Wolf-Namen, den auch 1–2 andere haben (sonst wäre es zu einfach)
+    const hat = (s, b) => s.name.toLowerCase().includes(b);
+    const buchstaben = [...new Set(w.name.toLowerCase().replace(/[^a-zäöüß]/g, ''))];
+    const gut = buchstaben.filter(b => { const n = unschuldige.filter(s => hat(s, b)).length; return n >= 1 && n <= 2; });
+    const b = zufall(gut.length ? gut : buchstaben);
+    kandidaten = lebende.filter(s => s === w || (!s.istWolf && hat(s, b)));
+    text = `🪶 Mit Feder und Tinte gekritzelt: „…${b.toUpperCase()}…“ – der Rest vom Wolf-Namen ist verschmiert!`;
+  }
+  beweisPakete.push({ text: `📦 ${nameVon(von)}: ${text}`, art, farben, kandidaten });
+  return true;
+}
+// DU hast ein Item ausgesucht
+function beweisSchicken(art) {
+  if (!beweisWahl) return;
+  beweisWahl = false;
+  if (mp.rolle === 'gast') mpSende({ t: 'beweisItem', art });
+  else paketMachen(spieler, art);
+  sound.beweis();
+  zeigeNachricht('📦 Dein Beweis ist unterwegs! Beim nächsten Herden-Treffen sehen ihn alle.', 4);
 }
 
 // Gewinnen die Wölfe? (Wenn es nicht mehr Schafe als Wölfe gibt)
@@ -1700,8 +1761,102 @@ function starteTreffen(melder, fund) {
   else grund = `${melder.name} hat Wolle von ${fund.opfer.name} gefunden!`;
 
   wolle = [];
-  treffen = { grund, lebende, aussagen, anklaeger, phase: 'waehlen', stimmen: null, raus: null, skip: 0, ergebnis: '' };
+  treffen = { grund, lebende, aussagen, anklaeger, phase: 'waehlen', stimmen: null, raus: null, skip: 0, ergebnis: '', luege: null,
+    pakete: beweisPakete.map(p => ({ text: p.text, art: p.art, farben: p.farben })), hinweise: beweisPakete.map(p => p.kandidaten) };   // 📦 Beweise kommen an!
+  beweisPakete = [];
+  if (treffen.hinweise.length) {   // 🕵️ Wer kann aus dem Beweis etwas schließen?
+    const liste = treffen.hinweise[treffen.hinweise.length - 1];
+    for (const s of lebende) {
+      if (s.istSpieler || s.mensch || liste.length < 2) continue;
+      const nameV = o => o.istSpieler && !mp.aktiv ? 'DU' : o.name;
+      if (s.istWolf) { if (liste.includes(s)) aussagen.set(s, 'Ich steh im Beweis?! Das ist eine FALLE! Ich war\'s nicht! 😤'); continue; }
+      const k = beweisRest(s, treffen);
+      if (k.length !== 1 || (s.verdacht && s.verdacht.wer.lebt)) continue;
+      const grund2 = liste.includes(s) ? 'Ich steh im Beweis, aber ICH war\'s nicht!' : 'Die anderen hab ich leuchten sehen!';
+      aussagen.set(s, `${grund2} Also war es ${nameV(k[0])}! 🕵️`);
+    }
+  }
+  if (beweisWahl) { beweisWahl = false; zeigeNachricht('📦 Zu spät – dein Beweis ist nicht mehr angekommen!', 3); }
+  luegeWahl = false;
+
+  // 🤥 Ein Computer-Lügenbaron schwindelt die Herde an
+  for (const w of lebende) {
+    if (treffen.luege || !w.istWolf || w.rolle !== 'luegner' || w.istSpieler || w.mensch || Math.random() > LUEGE_BOT_CHANCE) continue;
+    const opfer = lebende.filter(o => !o.istWolf && o.rolle !== 'ziege');
+    const raecher = anklaeger.filter(a => a.verdacht.wer.istWolf && a.lebt);   // Wer einen Wolf verpetzt, wird zurück angeschwärzt!
+    const ziel = raecher.length ? zufall(raecher) : zufall(opfer);
+    if (ziel) luegen(w, ziel, (w === melder && fund) || anklaeger.some(a => a.verdacht.wer === w));
+  }
   if (mp.rolle === 'host') mpTreffenGestartet(melder, fund);
+}
+
+// 🤥 Der Lügenbaron "von" erzählt eine Lüge über "wer"
+// behalten = true: Was er vorher gesagt hat, bleibt stehen (z. B. "Ich hab Wolle gefunden!")
+function luegen(von, wer, behalten) {
+  const t = treffen;
+  if (!t || t.luege || !von.lebt || !wer || !wer.lebt || wer === von || wer.istWolf) return false;
+  const ort = zufall(ORTE);
+  const du = wer.istSpieler && !mp.aktiv;   // Lügt er über DICH?
+  const name = du ? 'DU' : wer.name;
+  const satz = zufall(du ? [
+    `Ich hab gesehen, wie DU ${ort.bei} in eine Grube gesprungen bist! Das können nur Wölfe! 🕳️`,
+    `Ich hab gesehen, wie DU dich ${ort.bei} an jemanden rangeschlichen hast! 😨`,
+    `DU hattest ${ort.bei} lauter Wolle im Maul! Ich hab's genau gesehen! 😱`,
+  ] : [
+    `Ich hab gesehen, wie ${name} ${ort.bei} in eine Grube gesprungen ist! Das können nur Wölfe! 🕳️`,
+    `Ich hab gesehen, wie ${name} sich ${ort.bei} an jemanden rangeschlichen hat! 😨`,
+    `${name} hatte ${ort.bei} lauter Wolle im Maul! Ich hab's genau gesehen! 😱`,
+  ]);
+  t.luege = { von, wer, satz };
+
+  // Was steht auf der Karte vom Lügner?
+  if (von.istSpieler) t.aussagen.set(von, `🤥 Du hast gelogen: „${satz}“`);
+  else t.aussagen.set(von, (behalten && !von.mensch ? t.aussagen.get(von) + ' ' : '') + satz);
+
+  const vonName = von.istSpieler && !mp.aktiv ? 'DU' : von.name;
+  const luegt = vonName === 'DU' ? 'DU lügst' : `${vonName} lügt`;
+  // Das angeschwärzte Schaf wehrt sich
+  if (!wer.istSpieler && !wer.mensch) {
+    if (wer.rolle === 'ziege') t.aussagen.set(wer, 'Hihi ... vielleicht war ich\'s ja wirklich! 😏');
+    else t.aussagen.set(wer, `Was?! ${luegt}! 😢 Ich war ${wer.letzterOrt.bei}, ehrlich!`);
+  }
+  // ✨ Wer "wer" bei einer Beweis-Aufgabe gesehen hat, weiß: Das ist gelogen!
+  for (const s of t.lebende) {
+    if (s.istSpieler || s.mensch || s.istWolf || s === wer || s === von || !s.sicher.has(wer)) continue;
+    t.luege.entlarvt = true;
+    const o = ORTE[s.sicher.get(wer)];
+    t.aussagen.set(s, du
+      ? `Quatsch! Ich hab DICH ${o.bei} leuchten sehen – ${luegt}! 🤨`
+      : `Quatsch! Ich hab ${wer.name} ${o.bei} leuchten sehen – ${luegt}! 🤨`);
+  }
+  return true;
+}
+// Was macht die Lüge mit einem Bot-Schaf? (Gibt zurück, wen es wählt – oder undefined)
+function luegenStimme(s, t) {
+  const l = t.luege;
+  if (!l || s === l.von || !l.wer.lebt || !l.von.lebt) return undefined;
+  if (s === l.wer || s.sicher.has(l.wer)) return l.von;   // "Der lügt doch!"
+  if (l.entlarvt) return Math.random() < LUEGE_ENTLARVT ? l.von : undefined;   // Jemand hat "Quatsch!" gerufen – aufgeflogen!
+  if (Math.random() < LUEGE_GLAUBEN) return l.wer;        // Reingefallen ...
+  return undefined;
+}
+
+// 📦 Wer aus dem Beweis kann es noch sein – aus Sicht von Schaf s?
+// (Sich selbst und Schafe, die es leuchten gesehen hat, streicht es durch – wie ein Detektiv!)
+function beweisRest(s, t) {
+  if (!t.hinweise || !t.hinweise.length) return [];
+  return t.hinweise[t.hinweise.length - 1].filter(o => o.lebt && o !== s && !s.sicher.has(o));
+}
+// Wen aus dem Beweis wählt ein Bot-Schaf? (undefined = der Beweis hilft ihm nicht)
+function beweisStimme(s, t, wahl) {
+  const k = beweisRest(s, t);
+  if (k.length === 1) return k[0];   // Nur einer bleibt übrig: Der war's!
+  if (wahl && k.includes(wahl) && Math.random() < BEWEIS_FOLGEN) return wahl;   // Du bist der Detektiv – die Herde folgt dir
+  return undefined;
+}
+// Echte Schafe, die in einem Beweis stehen (auf die zeigen die Wölfe gern!)
+function beweisUnschuldige(t) {
+  return (t.hinweise || []).flat().filter(o => o.lebt && !o.istWolf);
 }
 
 function abstimmen(wahl) {
@@ -1720,11 +1875,17 @@ function abstimmen(wahl) {
       const gegenUns = t.anklaeger.filter(a => a.verdacht.wer.istWolf);   // Wer verpetzt einen Wolf?
       const beschuldigt = t.anklaeger.map(a => a.verdacht.wer).filter(b => !b.istWolf && b.lebt);
       if (gegenUns.length) ziel = zufall(gegenUns);
+      else if (t.luege && t.luege.wer.lebt) ziel = t.luege.wer;   // 🤥 Wölfe halten zusammen
+      else if (beweisUnschuldige(t).length) ziel = zufall(beweisUnschuldige(t));   // 📦 Auf die falsche Spur zeigen!
       else if (beschuldigt.length) ziel = zufall(beschuldigt);
       else if (wahl && !wahl.istWolf) ziel = wahl;
       else ziel = zufall(andere.filter(o => !o.istWolf));
     } else if (s.verdacht && s.verdacht.wer.lebt) {
       ziel = s.verdacht.wer;
+    } else if ((ziel = beweisStimme(s, t, wahl)) !== undefined) {
+      // 📦 Der Beweis hat entschieden
+    } else if ((ziel = luegenStimme(s, t)) !== undefined) {
+      // 🤥 Die Lüge hat entschieden
     } else {
       const r = Math.random();
       if (wahl && wahl !== s && r < (spielerIstWolf ? 0.4 : 0.55)) ziel = wahl;   // Folgt deiner Stimme
@@ -1788,24 +1949,48 @@ function kartenRechtecke() {
   const reihen = Math.ceil(n / spalten);
   const abstand = reihen > 2 ? 8 : 12;
   const breite = spalten === 4 ? 205 : 166;
-  const hoehe = reihen > 2 ? 98 : 150;
+  const extra = Math.min(2, (treffen.pakete || []).length) * 20;   // 📦 Platz für die Beweise
+  const hoehe = (reihen > 2 ? 98 : 150) - extra / reihen;
   const x0 = 30 + (900 - spalten * breite - (spalten - 1) * abstand) / 2;
   return treffen.lebende.map((s, i) => ({
     s,
     x: x0 + (i % spalten) * (breite + abstand),
-    y: 115 + Math.floor(i / spalten) * (hoehe + abstand),
+    y: 115 + extra + Math.floor(i / spalten) * (hoehe + abstand),
     w: breite, h: hoehe,
   }));
 }
 const SKIP_KNOPF = { x: W / 2 - 100, y: 450, w: 200, h: 44 };
 const WEITER_KNOPF = { x: W / 2 - 80, y: 510, w: 160, h: 44 };
 const imRechteck = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+const LUEGE_KNOPF = { x: 80, y: 450, w: 230, h: 44 };
+// 🤥 Darfst du gerade lügen?
+function kannLuegen() {
+  return treffen && treffen.phase === 'waehlen' && !treffen.luege && spieler.lebt && spieler.istWolf
+    && spieler.rolle === 'luegner' && !(mp.aktiv && mp.gewaehlt);
+}
+// Klicks für den Lügenbaron. true = Klick wurde benutzt
+function luegeKlick(p) {
+  if (!kannLuegen()) { luegeWahl = false; return false; }
+  if (imRechteck(p, LUEGE_KNOPF)) { luegeWahl = !luegeWahl; ton(luegeWahl ? 520 : 380, 0, 0.08, 'triangle', 0.1); return true; }
+  if (!luegeWahl) return false;
+  for (const k of kartenRechtecke()) {
+    if (!imRechteck(p, k)) continue;
+    if (k.s.istSpieler || k.s.istWolf) { ton(200, 0, 0.15, 'square', 0.06); return true; }   // (Nicht dich selbst und keinen Wolf!)
+    luegeWahl = false;
+    sound.hmm();
+    if (mp.rolle === 'gast') { mpSende({ t: 'luege', z: schafe.indexOf(k.s) }); treffen.luege = { von: spieler, wer: k.s, satz: '' }; }
+    else { luegen(spieler, k.s, false); if (mp.rolle === 'host') mpTreffenSenden(); }
+    return true;
+  }
+  return true;   // Daneben geklickt: Lügen-Modus bleibt an
+}
 
 function klickTreffen(p) {
   if (mp.aktiv) { mpKlickTreffen(p); return; }   // Multiplayer: Stimme an den Gastgeber
   if (treffen.phase === 'waehlen' && !spieler.lebt) {   // Geist: nur zuschauen
     if (imRechteck(p, SKIP_KNOPF)) abstimmen(null);
   } else if (treffen.phase === 'waehlen') {
+    if (luegeKlick(p)) return;
     for (const k of kartenRechtecke()) {
       if (!k.s.istSpieler && imRechteck(p, k)) { abstimmen(k.s); return; }
     }
@@ -4540,6 +4725,44 @@ function zeichneKnopf(r, beschriftung, farbe) {
   text(beschriftung, r.x + r.w / 2, r.y + r.h / 2, 18, '#1b1f3a', 'center', false);
 }
 
+// 📦 Du bist der gefressene Beweiser: Welches Item schickst du?
+const BEWEIS_FENSTER = { x: W / 2 - 320, y: 64, w: 640, h: 150 };
+function beweisKnopf(i) { return { x: BEWEIS_FENSTER.x + 20 + i * 310, y: BEWEIS_FENSTER.y + 50, w: 290, h: 50 }; }
+function zeichneBeweisWahl() {
+  if (!beweisWahl) return;
+  if (typeof document !== 'undefined' && document.pointerLockElement) document.exitPointerLock();   // (3D: Maus freigeben)
+  const f = BEWEIS_FENSTER;
+  ctx.fillStyle = 'rgba(20,40,30,0.92)';
+  rundesRechteck(f.x, f.y, f.w, f.h, 16); ctx.fill();
+  ctx.strokeStyle = '#7fffb0'; ctx.lineWidth = 3; ctx.stroke();
+  text('📦 Du warst der Beweiser! Schick der Herde EINEN Beweis:', W / 2, f.y + 26, 18, '#7fffb0', 'center', false);
+  BEWEIS_ITEMS.forEach((it, i) => {
+    const k = beweisKnopf(i);
+    zeichneKnopf(k, `${it.emoji} ${it.name}  [Taste ${i + 1}]`, '#bff5d6');
+    text(it.info, k.x + k.w / 2, k.y + k.h + 18, 12, '#ddd', 'center', false);
+  });
+}
+// 📦 Ein Beweis-Item beim Herden-Treffen (eine Zeile)
+function zeichnePaket(p, y) {
+  if (p.art === 'wolle' && p.farben.length) {   // 🧶 Wollknäuel – links die eine Farbe, rechts die andere
+    const x = 62, r = 9;
+    p.farben.slice(0, 2).forEach((f, i) => {
+      ctx.fillStyle = f;
+      ctx.beginPath(); ctx.arc(x, y, r, Math.PI / 2 + i * Math.PI, Math.PI * 1.5 + i * Math.PI); ctx.fill();
+    });
+    if (p.farben.length < 2) { ctx.fillStyle = p.farben[0]; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1;
+    for (const k of [0.4, 0.75]) { ctx.beginPath(); ctx.arc(x, y, r * k, 0.3, 2.6); ctx.stroke(); }   // Woll-Fäden
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+  text(p.text, 78, y, 14, '#7fffb0', 'left', false);
+}
+function beweisKlick(p) {
+  if (!beweisWahl) return false;
+  for (let i = 0; i < BEWEIS_ITEMS.length; i++) if (imRechteck(p, beweisKnopf(i))) { beweisSchicken(BEWEIS_ITEMS[i].art); return true; }
+  return imRechteck(p, BEWEIS_FENSTER);   // (Klick ins Fenster = nichts passiert)
+}
+
 function zeichneTreffen() {
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(0, 0, W, H);
@@ -4549,6 +4772,7 @@ function zeichneTreffen() {
 
   text('🔔 Herden-Treffen!', W / 2, 55, 30, '#ffd166');
   text(treffen.grund, W / 2, 92, 17, '#fff', 'center', false);
+  (treffen.pakete || []).slice(-2).forEach((p, i) => zeichnePaket(p, 120 + i * 20));   // 📦
 
   for (const k of kartenRechtecke()) {
     const s = k.s;
@@ -4590,7 +4814,11 @@ function zeichneTreffen() {
   } else if (treffen.phase === 'waehlen' && !spieler.lebt) {
     text('👻 Du bist ein Geist und darfst nicht abstimmen.', W / 2, 432, 15, '#c9c3ff', 'center', false);
     zeichneKnopf(SKIP_KNOPF, 'Zuschauen ▶', '#c9c3ff');
+  } else if (treffen.phase === 'waehlen' && luegeWahl && kannLuegen()) {
+    text('🤥 Wen willst du anschwärzen? Klick auf ein Schaf!', W / 2, 432, 16, '#ff9ecf', 'center', false);
+    zeichneKnopf(LUEGE_KNOPF, 'Doch nicht ✖', '#ff9ecf');
   } else if (treffen.phase === 'waehlen') {
+    if (kannLuegen()) zeichneKnopf(LUEGE_KNOPF, '🤥 Lügen!', '#ff9ecf');
     text(mp.aktiv ? `Wähle, wer der Wolf ist! (⏳ ${Math.max(0, Math.ceil(60 - (zeit - mp.treffenStart)))} s · 💬 Chat mit T)` : 'Wähle das Schaf, das du für den Wolf hältst!', W / 2, 432, 15, '#ffd166', 'center', false);
     zeichneKnopf(SKIP_KNOPF, 'Überspringen ⏭', '#c9c3ff');
   } else {
@@ -4892,6 +5120,7 @@ function zeichne() {
   if (in3d) {   // 🎮 In 3D: Welt in 3D – darüber die normalen Anzeigen
     d3Zeichnen(); d3Overlay(); zeichneHUD();
     if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
+  if (zustand === 'spiel') zeichneBeweisWahl();
     if (zustand === 'treffen') zeichneTreffen();
     if (zustand === 'ende') zeichneEnde();
     zeichneTonKnopf();
@@ -4945,6 +5174,7 @@ function zeichne() {
   zeichneExtras();
   zeichneHUD();
   if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
+  if (zustand === 'spiel') zeichneBeweisWahl();
   if (zustand === 'treffen') zeichneTreffen();
   if (zustand === 'ende') zeichneEnde();
   zeichneTonKnopf();
@@ -5577,6 +5807,7 @@ addEventListener('keydown', e => {
   else if (zustand === 'titel' && (k === 'enter' || k === ' ')) starteMitKarte(kartenNr);
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'cutscene' && (k === 'enter' || k === ' ') && cutscene.t > 1) endeCutscene();
+  else if (zustand === 'spiel' && beweisWahl && ['1', '2'].includes(k)) beweisSchicken(BEWEIS_ITEMS[Number(k) - 1].art);   // 📦
   else if (zustand === 'spiel' && !miniSpiel && k === 'q') nutzeFaehigkeit();
   else if (zustand === 'spiel' && zielModus && k === 'escape') zielModus = false;
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
@@ -5632,6 +5863,7 @@ canvas.addEventListener('pointerdown', e => {
   if (zustand === 'cutscene') { if (cutscene.t > 1) endeCutscene(); return; }
   if (zustand === 'treffen') { klickTreffen(p); return; }
   if (zustand === 'spiel' && miniSpiel) { miniDruck(p); return; }
+  if (zustand === 'spiel' && beweisKlick(p)) return;   // 📦
   if (zustand === 'spiel') {
     if (touchModus && dist(p, FAEHIGKEIT_RUND) < FAEHIGKEIT_RUND.r + 8 && rollenAktion()) { nutzeFaehigkeit(); return; }
     if (!touchModus && imRechteck(p, ROLLE_KNOPF)) { nutzeFaehigkeit(); return; }
@@ -5832,7 +6064,9 @@ function mpTreffenSenden() {
     if (!g.schaf) continue;
     const ich = g.schaf;
     const aus = treffen.lebende.map(s => {
+      if (s === ich && treffen.luege && treffen.luege.von === ich) return `🤥 Du hast gelogen: „${treffen.luege.satz}“`;
       if (s === ich) return ich.istWolf ? 'Das bist du (der Wolf 🤫). Wen willst du verdächtigen?' : 'Das bist du! Wen hältst du für den Wolf?';
+      if (s.istSpieler && treffen.luege && treffen.luege.von === s) return treffen.luege.satz;   // Der Gastgeber hat gelogen
       if (s.istSpieler) return '💬 Echter Mitspieler – lies den Chat!';
       return treffen.aussagen.get(s) || '';
     });
@@ -5840,6 +6074,7 @@ function mpTreffenSenden() {
       t: 'treffen', grund: treffen.grund, leb: treffen.lebende.map(s => schafe.indexOf(s)), aus, phase: treffen.phase,
       st: treffen.stimmen ? [...treffen.stimmen].map(([w, z]) => [schafe.indexOf(w), z ? schafe.indexOf(z) : -1]) : null,
       raus: treffen.raus ? schafe.indexOf(treffen.raus) : -1, skip: treffen.skip, erg: treffen.ergebnis, start: zeit - mp.treffenStart,
+      lg: treffen.luege ? schafe.indexOf(treffen.luege.von) : -1, pk: treffen.pakete || [],
     });
   }
 }
@@ -5847,6 +6082,7 @@ function mpErgebnis() { mp.ergebnisZeit = zeit; mpTreffenSenden(); }
 function mpKlickTreffen(p) {
   if (treffen.phase === 'waehlen') {
     if (!spieler.lebt || mp.gewaehlt) return;
+    if (luegeKlick(p)) return;
     let wahl;
     for (const k of kartenRechtecke()) if (!k.s.istSpieler && imRechteck(p, k)) wahl = k.s;
     if (wahl === undefined && imRechteck(p, SKIP_KNOPF)) wahl = null;
@@ -5877,6 +6113,15 @@ function mpVomGast(g, d) {
     case 'melden': { const w = wolle[d.w]; if (zustand === 'spiel' && s.lebt && w && dist(s, w) < 130) starteTreffen(s, w); break; }
     case 'glocke': if (zustand === 'spiel' && s.lebt && !glockeGenutzt && dist(s, GLOCKE) < 120) { glockeGenutzt = true; starteTreffen(s, null); } break;
     case 'fressen': { const o = schafe[d.z]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.cooldown <= 0 && o && o.lebt && !o.istWolf && dist(s, o) < 80) fressen(o, s); break; }
+    case 'beweisItem':   // 📦 Ein gefressener Gast-Beweiser schickt sein Item
+      if (!s.lebt && s.rolle === 'beweiser' && typeof d.art === 'string') paketMachen(s, d.art);
+      break;
+    case 'luege': {   // 🤥 Ein Gast-Lügenbaron lügt
+      const o = schafe[d.z];
+      if (zustand === 'treffen' && treffen && treffen.phase === 'waehlen' && s.lebt && s.istWolf && s.rolle === 'luegner'
+        && o && treffen.lebende.includes(o) && luegen(s, o, false)) mpTreffenSenden();
+      break;
+    }
     case 'reparieren': if (sabotage && s.lebt && !s.istWolf && dist(s, sabotagePunkt()) < 100) repariert(s); break;
     case 'sabotage': if (s.istWolf && s.lebt && zustand === 'spiel') {
       if (sabotage) mpNachrichtAn(s, 'Es läuft schon eine Sabotage!');
@@ -6007,6 +6252,7 @@ function mpVomHost(d) {
     case 'gefressen':
       miniSpiel = null; zielModus = false; klickZiel = null; joystickLos();
       spieler.lebt = false;
+      beweisWahl = spieler.rolle === 'beweiser' && !jagdZ;   // 📦 Gleich darfst du einen Beweis schicken
       zustand = 'cutscene';
       cutscene = { t: 0, art: 'gefressen', wolf: schafe[d.wolf] || spieler, variante: FRESS_ARTEN.includes(d.variante) ? d.variante : zufall(FRESS_ARTEN) };
       break;
@@ -6020,9 +6266,13 @@ function mpVomHost(d) {
         grund: d.grund, lebende, aussagen, anklaeger: [], phase: d.phase,
         stimmen: d.st ? new Map(d.st.map(([w, z]) => [schafe[w], z >= 0 ? schafe[z] : null])) : null,
         raus: d.raus >= 0 ? schafe[d.raus] : null, skip: d.skip, ergebnis: d.erg,
+        luege: d.lg >= 0 && schafe[d.lg] ? { von: schafe[d.lg], wer: null, satz: '' } : null,   // (Hat schon jemand gelogen?)
+        pakete: Array.isArray(d.pk) ? d.pk.map(p => ({ text: String(p && p.text || ''), art: String(p && p.art || ''),
+          farben: Array.isArray(p && p.farben) ? p.farben.slice(0, 2).map(String) : [] })) : [],   // 📦
       };
       if (neu) {
-        mp.gewaehlt = false; mp.treffenStart = zeit - (d.start || 0);
+        mp.gewaehlt = false; luegeWahl = false;
+        if (beweisWahl) { beweisWahl = false; zeigeNachricht('📦 Zu spät – dein Beweis ist nicht mehr angekommen!', 3); } mp.treffenStart = zeit - (d.start || 0);
         miniSpiel = null; zielModus = false;
         if (zustand !== 'cutscene') zustand = 'treffen';
         sound.glocke();

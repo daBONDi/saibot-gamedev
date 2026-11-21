@@ -1,0 +1,36 @@
+# ⏰ Hält den Supabase-Briefkasten wach
+#
+# Kostenlose Supabase-Projekte schlafen ein (werden pausiert), wenn sie
+# 7 Tage lang nichts zu tun haben. Diese Action klopft deshalb 2x pro Woche an.
+#
+# Der Weckruf LIEST nur (und darf gar nichts sehen) – es wird also KEINE
+# Bewertung in den Briefkasten geworfen.
+# Der Schlüssel unten ist derselbe öffentliche anon-Key wie in feedback.js.
+# Der geheime service_role-Key kommt NIEMALS hier rein!
+
+name: Supabase wachhalten
+
+on:
+  schedule:
+    - cron: '17 6 * * 1,4'   # Jeden Montag und Donnerstag um ca. 6:17 Uhr (UTC)
+  workflow_dispatch:         # Knopf "Run workflow" zum Selbst-Ausprobieren
+
+jobs:
+  wecken:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bei Supabase anklopfen
+        env:
+          SUPABASE_URL: https://awuuproqhbehkezaydxr.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3dXVwcm9xaGJlaGtlemF5ZHhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUyNjE5MzIsImV4cCI6MjExMDgzNzkzMn0.ymBriST5weLSyJwo7_D4ram2zrkMTh6_FYaizyQ8Gl0
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            "$SUPABASE_URL/rest/v1/feedback?select=game&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "Supabase hat geantwortet: $code"
+          if [ "$code" != "200" ]; then
+            echo "❌ Supabase antwortet nicht richtig – vielleicht schläft es schon? Im Dashboard nachschauen!"
+            exit 1
+          fi
+          echo "✅ Supabase ist wach!"
