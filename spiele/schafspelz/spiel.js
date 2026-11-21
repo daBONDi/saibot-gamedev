@@ -71,7 +71,7 @@ const ROLLEN = {
   schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
   verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
   maehneur:    { name: 'Mäh-negeur',        emoji: '🪛', text: 'Du darfst durch die Gruben schleichen – wie ein Wolf! Aber pass auf: Wer dich dabei sieht, hält DICH für den Wolf ...' },
-  beweiser:    { name: 'Beweiser',          emoji: '📦', text: 'Wenn dich ein Wolf frisst, schickst du der Herde einen Beweis, wer es war!' },
+  beweiser:    { name: 'Beweiser',          emoji: '📦', text: 'Wirst du gefressen, fliegst du als Geist herum und schickst EINEM Schaf heimlich einen Beweis!' },
   angsthase:   { name: 'Angsthase',         emoji: '😱', text: 'Wenn dich ein Wolf frisst, mähst du 8-mal ganz laut – und alle sehen, wo!' },
   schaefer:    { name: 'Schäfer',           emoji: '🧑‍🌾', knopf: 'Hirtenstab', pause: 30, text: 'Keine Aufgaben! Hau den Wolf mit dem Hirtenstab raus. Triffst du ein Schaf, musst DU gehen!' },
   ziege:       { name: 'Ziege',             emoji: '🐐', knopf: 'Meckern',    pause: 25, text: 'Lass dich beim Herden-Treffen verjagen, dann gewinnst DU!' },
@@ -81,19 +81,25 @@ const ROLLEN = {
   werwolf:     { name: 'Schafs-Werwolf',    emoji: '🌕', text: 'Zähl bis 15, dann fang alle Schafe! In die Gruben kommst du nicht rein.' },
 };
 const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'angsthase', 'schaefer', 'maehneur', 'beweiser'];
-// 📦 Beweiser: Wenn er gefressen wird, schickt er EIN Beweis-Item (Idee von Tobias). Es verrät den Wolf nicht ganz – aber fast!
+// 📦 Beweiser (Idee von Tobias): Wenn er gefressen wird, fliegt er als Geist herum und schickt EINEM Schaf heimlich ein Item.
+// Es verrät den Wolf nicht ganz – aber fast!
 const BEWEIS_ITEMS = [
-  { art: 'wolle', emoji: '🧶', name: 'Halbe Wolle',    info: 'Halb in 2 Farben gefärbt – eine ist vom Wolf' },
-  { art: 'tinte', emoji: '🪶', name: 'Feder & Tinte',  info: 'Ein Buchstabe vom Wolf-Namen' },
+  { art: 'wolle', emoji: '🧶', name: 'Halbe Wolle',   info: 'Halb in 2 Farben – eine ist vom Wolf' },
+  { art: 'tinte', emoji: '🪶', name: 'Feder & Tinte', info: 'Ein Bild: Wo ist der Wolf gerade?' },
+  { art: 'pfote', emoji: '🐾', name: 'Pfotenspur',    info: 'Spuren führen 15 s lang zum Wolf' },
 ];
+const BEWEIS_REICHWEITE = 90;   // So nah muss der Beweiser-Geist an ein Schaf heranfliegen
+const PFOTEN_ZEIT = 15;         // So lange sieht man die Pfotenspur
+const GEIST_FLUG = 1.3;         // So viel schneller fliegt der Beweiser-Geist (und durch Wände!)
 const BEWEIS_FOLGEN = 0.65;   // Wählst DU jemanden aus dem Beweis? Dann machen so viele Bot-Schafe mit
 const FARB_NAMEN = {
   '#ff9ecf': 'Rosa', '#8fd3ff': 'Hellblau', '#ffe066': 'Gelb', '#9be89b': 'Hellgrün', '#c9a0ff': 'Lila', '#ffb36b': 'Orange',
   '#d9b38c': 'Braun', '#7fe0d0': 'Türkis', '#ff7b7b': 'Rot', '#b0c4ff': 'Blau', '#e0e0a0': 'Beige', '#f5b0ff': 'Pink',
   '#a0d080': 'Grün', '#ffffff': 'Weiß',
 };
-let beweisPakete = [];    // Verschickte Beweise – sie kommen beim nächsten Herden-Treffen an
-let beweisWahl = false;   // true = DU bist der gefressene Beweiser und suchst ein Item aus
+let beweisWahl = null;       // { an: Schaf } = Du suchst gerade aus, was du diesem Schaf schickst
+let geschenkAnzeige = null;  // { g, bis } = Ein Geist hat DIR gerade etwas geschickt
+let meinTreffenPaket = null; // Dein Geheim-Geschenk – beim Treffen siehst nur DU es
 const MAEHNEUR_ZEIT = 10;    // So lange darf der Mäh-negeur in den Gruben bleiben
 const MAEHNEUR_PAUSE = 8;    // So lange muss er warten, bis er wieder rein darf
 // Darf s in die Gruben? (Wölfe und der Mäh-negeur)
@@ -717,7 +723,7 @@ function neuesSpiel() {
   schafe = []; wolle = []; effekte = [];
   treffen = null; ende = null; klickZiel = null; miniSpiel = null;
   glockeGenutzt = false;
-  beweisPakete = []; beweisWahl = false;
+  beweisWahl = null; geschenkAnzeige = null; meinTreffenPaket = null;
 
   // Bist du diesmal ein Schaf oder ein Wolf? (Bei mehr Wölfen öfter!)
   const test = entwicklerRolle();
@@ -1174,7 +1180,9 @@ function bewegeSpieler(dt) {
   spieler.laeuft = laenge > 0;
   if (laenge > 0) {
     const tempo = (jagdZ && spielerIstWolf ? JAGD_TEMPO_WERWOLF * (jagdZ.finale ? JAGD_FINALE_TEMPO : 1) : TEMPO_SPIELER) * (spieler.sprint > 0 ? 1.8 : 1);
-    schiebe(spieler, dx / laenge * tempo * dt, dy / laenge * tempo * dt);
+    if (!spieler.lebt && spieler.rolle === 'beweiser') {   // 👻📦 Der Beweiser-Geist fliegt – sogar durch Wände!
+      spieler.x += dx / laenge * tempo * GEIST_FLUG * dt; spieler.y += dy / laenge * tempo * GEIST_FLUG * dt;
+    } else schiebe(spieler, dx / laenge * tempo * dt, dy / laenge * tempo * dt);
     if (dx) spieler.richtung = Math.sign(dx);
     spieler.phase += dt * 12;
   }
@@ -1385,8 +1393,8 @@ function fressen(opfer, w) {
 
   if (opfer.rolle === 'beweiser' && !jagdZ) {   // 📦 Der Beweiser weiß, wer ihn gefressen hat!
     opfer.beweisWolf = w;
-    if (opfer.istSpieler) beweisWahl = true;   // Du suchst gleich aus (nach der Fress-Animation)
-    else if (!opfer.mensch) paketMachen(opfer, zufall(BEWEIS_ITEMS).art);   // Ein Bot sucht sofort aus
+    if (opfer.istSpieler) opfer.beweisBereit = true;   // Du fliegst gleich als Geist los
+    else if (!opfer.mensch) opfer.beweisFlug = 3 + Math.random() * 6;   // Ein Bot-Geist fliegt ein paar Sekunden herum
   }
   if (opfer.rolle === 'angsthase') angsthaseSchreit(opfer, haufen);   // Zuletzt, damit man die Nachricht sieht!
   if (opfer.istSpieler) {   // 🎬 Lustige Fress-Animation, danach bist du ein Geist!
@@ -1414,39 +1422,79 @@ function angsthaseSchreit(opfer, haufen) {
     .forEach(h => { h.ziel = { x: haufen.x, y: haufen.y, ort: null }; h.warte = 0; h.amOrt = null; });
 }
 
-// 📦 Der Beweiser "von" schickt ein Beweis-Item über den Wolf, der ihn gefressen hat
-function paketMachen(von, art) {
+// 📦 Der Beweiser-Geist "von" schickt dem Schaf "an" heimlich ein Item über den Wolf, der ihn gefressen hat
+function geschenkMachen(von, an, art) {
   const w = von.beweisWolf;
-  if (!w || !BEWEIS_ITEMS.some(i => i.art === art)) return false;
-  von.beweisWolf = null;
-  const lebende = schafe.filter(s => s.lebt && s !== von);
-  const unschuldige = mischen(lebende.filter(s => !s.istWolf));   // (Nur echte Schafe als "falsche Spur")
-  const nameVon = s => s.istSpieler && !mp.aktiv ? 'DU' : s.name;
-  let text, kandidaten, farben = [];
-  if (art === 'wolle') {   // 🧶 Halb eingefärbte Wolle: halb Wolf-Farbe, halb die Farbe von einem Unschuldigen
-    kandidaten = mischen([w, ...unschuldige.slice(0, 1)]);
-    farben = kandidaten.map(s => s.farbe);
-    const f = kandidaten.map(s => FARB_NAMEN[s.farbe] || 'Komisch');
-    text = kandidaten.length > 1 ? `🧶 Halb eingefärbte Wolle: halb ${f[0]}, halb ${f[1]}! Eine Farbe ist vom Wolf.` : `🧶 Eingefärbte Wolle: ganz ${f[0]}!`;
-  } else {   // 🪶 Feder und Tinte: ein Buchstabe vom Wolf-Namen, den auch 1–2 andere haben (sonst wäre es zu einfach)
-    const hat = (s, b) => s.name.toLowerCase().includes(b);
-    const buchstaben = [...new Set(w.name.toLowerCase().replace(/[^a-zäöüß]/g, ''))];
-    const gut = buchstaben.filter(b => { const n = unschuldige.filter(s => hat(s, b)).length; return n >= 1 && n <= 2; });
-    const b = zufall(gut.length ? gut : buchstaben);
-    kandidaten = lebende.filter(s => s === w || (!s.istWolf && hat(s, b)));
-    text = `🪶 Mit Feder und Tinte gekritzelt: „…${b.toUpperCase()}…“ – der Rest vom Wolf-Namen ist verschmiert!`;
+  if (!w || !an || !an.lebt || an === von || !BEWEIS_ITEMS.some(i => i.art === art)) return false;
+  von.beweisWolf = null; von.beweisBereit = false;
+  const lebende = schafe.filter(s => s.lebt);
+  const unschuldige = mischen(lebende.filter(s => !s.istWolf && s !== an));   // (Nur echte Schafe als "falsche Spur")
+  const g = { art, von: von.name, vonDu: von.istSpieler && !mp.aktiv, farben: [], ortNr: -1, wolfNr: schafe.indexOf(w), kandidaten: [] };
+  if (art === 'wolle') {   // 🧶 halb Wolf-Farbe, halb die Farbe von einem Unschuldigen
+    g.kandidaten = mischen([w, ...unschuldige.slice(0, 1)]);
+    g.farben = g.kandidaten.map(s => s.farbe);
+  } else if (art === 'tinte') {   // 🪶 Ein Tinten-Bild von dem Ort, wo der Wolf gerade ist
+    const ort = naechsterOrt(w);
+    g.ortNr = ORTE.indexOf(ort);
+    const dabei = unschuldige.filter(s => dist(s, ort) < 320).sort((a, b) => dist(a, ort) - dist(b, ort));
+    g.kandidaten = mischen([w, ...dabei.slice(0, 2)]);   // (Höchstens 3 – sonst hilft das Bild nicht)
+  } else {   // 🐾 Pfotenspur: Wer der Spur folgt, findet den Wolf – und wer gerade bei ihm ist
+    const nah = unschuldige.filter(s => dist(s, w) < 400).sort((a, b) => dist(a, w) - dist(b, w));
+    g.kandidaten = mischen([w, ...nah.slice(0, 1)]);
   }
-  beweisPakete.push({ text: `📦 ${nameVon(von)}: ${text}`, art, farben, kandidaten });
+  if (an.istSpieler) geschenkEmpfangen(g);
+  else if (an.mensch) mpSendeAn(mpGastVon(an), { t: 'geschenk', art, von: g.von, farben: g.farben, ort: g.ortNr, wolf: g.wolfNr });
+  else an.geschenk = g;   // Ein Bot-Schaf erzählt es beim nächsten Treffen
   return true;
 }
-// DU hast ein Item ausgesucht
+const ortVon = nr => ORTE[nr] || GLOCKE;
+// Was ist in dem Geschenk? (Text für DICH)
+function geschenkText(g) {
+  if (g.art === 'wolle') {
+    const f = g.farben.map(x => FARB_NAMEN[x] || 'Komisch');
+    return f.length > 1 ? `🧶 Halb eingefärbte Wolle: halb ${f[0]}, halb ${f[1]}! Eine Farbe ist vom Wolf.` : `🧶 Eingefärbte Wolle: ganz ${f[0]}!`;
+  }
+  if (g.art === 'tinte') return `🪶 Ein Tinten-Bild: Der Wolf war gerade ${ortVon(g.ortNr).bei}!`;
+  return `🐾 Pfotenspuren! Folge ihnen – sie führen ${PFOTEN_ZEIT} Sekunden lang zum Wolf!`;
+}
+// Ein Geist hat DIR etwas geschickt!
+function geschenkEmpfangen(g) {
+  spieler.geschenk = g;
+  geschenkAnzeige = { g, bis: zeit + 8 };
+  if (g.art === 'pfote') spieler.pfoten = { wolf: schafe[g.wolfNr], bis: zeit + PFOTEN_ZEIT };
+  sound.beweis();
+}
+// DU (als Beweiser-Geist) hast ein Item ausgesucht
 function beweisSchicken(art) {
   if (!beweisWahl) return;
-  beweisWahl = false;
-  if (mp.rolle === 'gast') mpSende({ t: 'beweisItem', art });
-  else paketMachen(spieler, art);
+  const an = beweisWahl.an;
+  beweisWahl = null;
+  if (!an.lebt) return;
+  spieler.beweisBereit = false;
+  if (mp.rolle === 'gast') mpSende({ t: 'beweisItem', art, an: schafe.indexOf(an) });
+  else geschenkMachen(spieler, an, art);
   sound.beweis();
-  zeigeNachricht('📦 Dein Beweis ist unterwegs! Beim nächsten Herden-Treffen sehen ihn alle.', 4);
+  zeigeNachricht(`📦 Heimlich verschickt! Nur ${an.name} weiß jetzt davon. 🤫`, 4);
+}
+// Was DU als Beweiser-Geist gerade tun kannst
+function beweisGeistAktion() {
+  if (spieler.lebt || spieler.rolle !== 'beweiser' || !spieler.beweisBereit || beweisWahl || jagdZ) return null;
+  const z = schafe.filter(s => s.lebt && s !== spieler).sort((a, b) => dist(a, spieler) - dist(b, spieler))[0];
+  if (!z || dist(z, spieler) > BEWEIS_REICHWEITE) return null;
+  return { text: `📦 ${z.name} beschenken`, tun: () => { beweisWahl = { an: z }; } };
+}
+// Computer-Beweiser-Geister fliegen kurz herum und schicken dann etwas
+function beweisBotsUpdate(dt) {
+  for (const s of schafe) {
+    if (s.lebt || s.beweisFlug == null || !s.beweisWolf) continue;
+    s.beweisFlug -= dt;
+    if (s.beweisFlug > 0) continue;
+    s.beweisFlug = null;
+    const echte = schafe.filter(o => o.lebt && !o.istWolf);   // (Der Geist weiß ja, wer der Wolf ist)
+    const duDa = echte.includes(spieler) && Math.random() < 0.5;   // Oft bekommst DU das Geschenk!
+    const an = duDa ? spieler : zufall(echte.filter(o => o !== spieler)) || zufall(echte);
+    if (an) geschenkMachen(s, an, zufall(BEWEIS_ITEMS).art);
+  }
 }
 
 // Gewinnen die Wölfe? (Wenn es nicht mehr Schafe als Wölfe gibt)
@@ -1635,7 +1683,7 @@ function grubenKlick(p) {
 // ===== Aktion (E / Leertaste / Knopf) =====
 function moeglicheAktion() {
   if (mp.rolle === 'gast') return moeglicheAktionGast();
-  if (!spieler.lebt) return null;   // Geister können nichts anfassen
+  if (!spieler.lebt) return beweisGeistAktion();   // Geister können nichts anfassen (außer der Beweiser 📦)
   if (spieler.inGrube != null) return null;
   if (jagdZ) return jagdAktion(springeInGrube);
   if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
@@ -1762,12 +1810,26 @@ function starteTreffen(melder, fund) {
 
   wolle = [];
   treffen = { grund, lebende, aussagen, anklaeger, phase: 'waehlen', stimmen: null, raus: null, skip: 0, ergebnis: '', luege: null,
-    pakete: beweisPakete.map(p => ({ text: p.text, art: p.art, farben: p.farben })), hinweise: beweisPakete.map(p => p.kandidaten) };   // 📦 Beweise kommen an!
-  beweisPakete = [];
+    pakete: [], hinweise: [] };
+  treffenGeschenke();   // 📦 Wer hat ein Geheim-Geschenk bekommen?
+  for (const s of lebende) {   // Bot-Schafe erzählen von ihrem Geschenk
+    const g = s.geschenk;
+    if (!g || s.istSpieler || s.mensch) continue;
+    s.geschenk = null;
+    if (s.istWolf) continue;   // (Ein Wolf behält das lieber für sich ...)
+    const k = g.kandidaten.filter(o => o.lebt);
+    const namen = du => k.map(o => o.istSpieler && !mp.aktiv ? du : o.name).join(' und ');
+    const was = g.art === 'wolle' ? `Wolle, halb ${g.farben.map(x => FARB_NAMEN[x] || '?').join(' und halb ')} gefärbt!`
+      : g.art === 'tinte' ? `ein Tinten-Bild: Der Wolf war ${ortVon(g.ortNr).bei}! Da waren ${namen('DU')}.`
+      : `Pfotenspuren! Sie führten zu ${namen('DIR')}!`;
+    aussagen.set(s, `👻 ${g.vonDu ? 'DEIN Geist' : 'Der Geist von ' + g.von} hat mir heimlich was geschickt: ${was}`);
+    s.erzaehlt = true;
+    if (k.length) treffen.hinweise.push(k);
+  }
   if (treffen.hinweise.length) {   // 🕵️ Wer kann aus dem Beweis etwas schließen?
     const liste = treffen.hinweise[treffen.hinweise.length - 1];
     for (const s of lebende) {
-      if (s.istSpieler || s.mensch || liste.length < 2) continue;
+      if (s.istSpieler || s.mensch || liste.length < 2 || s.erzaehlt) continue;
       const nameV = o => o.istSpieler && !mp.aktiv ? 'DU' : o.name;
       if (s.istWolf) { if (liste.includes(s)) aussagen.set(s, 'Ich steh im Beweis?! Das ist eine FALLE! Ich war\'s nicht! 😤'); continue; }
       const k = beweisRest(s, treffen);
@@ -1776,7 +1838,7 @@ function starteTreffen(melder, fund) {
       aussagen.set(s, `${grund2} Also war es ${nameV(k[0])}! 🕵️`);
     }
   }
-  if (beweisWahl) { beweisWahl = false; zeigeNachricht('📦 Zu spät – dein Beweis ist nicht mehr angekommen!', 3); }
+  for (const s of lebende) s.erzaehlt = false;
   luegeWahl = false;
 
   // 🤥 Ein Computer-Lügenbaron schwindelt die Herde an
@@ -1818,6 +1880,7 @@ function luegen(von, wer, behalten) {
   // Das angeschwärzte Schaf wehrt sich
   if (!wer.istSpieler && !wer.mensch) {
     if (wer.rolle === 'ziege') t.aussagen.set(wer, 'Hihi ... vielleicht war ich\'s ja wirklich! 😏');
+    else if ((t.aussagen.get(wer) || '').startsWith('👻')) t.aussagen.set(wer, `${t.aussagen.get(wer)} Und: ${luegt}! 😢`);   // (Geschenk nicht vergessen!)
     else t.aussagen.set(wer, `Was?! ${luegt}! 😢 Ich war ${wer.letzterOrt.bei}, ehrlich!`);
   }
   // ✨ Wer "wer" bei einer Beweis-Aufgabe gesehen hat, weiß: Das ist gelogen!
@@ -1841,6 +1904,13 @@ function luegenStimme(s, t) {
   return undefined;
 }
 
+// 📦 Treffen fängt an: Dein Geheim-Geschenk siehst nur DU
+function treffenGeschenke() {
+  beweisWahl = null; geschenkAnzeige = null;
+  meinTreffenPaket = spieler.geschenk ? { text: `👻 Nur für dich – ${geschenkText(spieler.geschenk)}`, art: spieler.geschenk.art, farben: spieler.geschenk.farben } : null;
+  spieler.geschenk = null;
+  if (treffen) treffen.pakete = meinTreffenPaket ? [meinTreffenPaket] : [];
+}
 // 📦 Wer aus dem Beweis kann es noch sein – aus Sicht von Schaf s?
 // (Sich selbst und Schafe, die es leuchten gesehen hat, streicht es durch – wie ein Detektiv!)
 function beweisRest(s, t) {
@@ -2264,13 +2334,13 @@ function endeCutscene() {
   cutscene = null;
   if (mp.rolle === 'gast') {   // Gast: Danach einfach weiterspielen (das Spiel rechnet der Gastgeber)
     zustand = 'spiel';
-    if (c.art === 'gefressen') zeigeNachricht('👻 Jetzt bist du ein Geist. Schau zu – und red im Geister-Chat!', 4);
+    if (c.art === 'gefressen') zeigeNachricht(spieler.beweisBereit ? '👻📦 Du bist ein Geist! Flieg zu einem Schaf und schick ihm heimlich einen Beweis!' : '👻 Jetzt bist du ein Geist. Schau zu – und red im Geister-Chat!', 4);
     if (c.art === 'hirte' && c.raus === spieler) zeigeNachricht('🧑‍🌾 Der Schäfer hat dich erwischt! Jetzt bist du ein Geist ...', 4);
     return;
   }
   if (c.art === 'gefressen') {   // Weiter geht's als Geist!
     zustand = 'spiel';
-    if (!pruefeWolfSieg()) zeigeNachricht('👻 Jetzt bist du ein Geist. Schau zu, ob die Herde den Wolf findet!', 4);
+    if (!pruefeWolfSieg()) zeigeNachricht(spieler.beweisBereit ? '👻📦 Du bist ein Geist! Flieg zu einem Schaf und schick ihm heimlich einen Beweis!' : '👻 Jetzt bist du ein Geist. Schau zu, ob die Herde den Wolf findet!', 4);
     return;
   }
   if (c.art === 'hirte') {
@@ -3586,6 +3656,7 @@ function update(dt) {
   if (jagdZ) { jagdUpdate(dt); blickeAktualisieren(); return; }   // 🌕 Werwolf-Jagd
 
   updateFaehigkeiten(dt);
+  beweisBotsUpdate(dt);   // 📦
   if (!simLaeuft()) return;   // z. B. Schäfer-Cutscene hat angefangen
   for (const s of schafe) {   // 🪛 Der Mäh-negeur darf nicht ewig im Schacht bleiben
     if (s.rolle !== 'maehneur' || s.istWolf || !s.lebt || s.inGrube == null || zeit - (s.grubeStart ?? zeit) <= MAEHNEUR_ZEIT) continue;
@@ -4725,42 +4796,109 @@ function zeichneKnopf(r, beschriftung, farbe) {
   text(beschriftung, r.x + r.w / 2, r.y + r.h / 2, 18, '#1b1f3a', 'center', false);
 }
 
-// 📦 Du bist der gefressene Beweiser: Welches Item schickst du?
-const BEWEIS_FENSTER = { x: W / 2 - 320, y: 64, w: 640, h: 150 };
-function beweisKnopf(i) { return { x: BEWEIS_FENSTER.x + 20 + i * 310, y: BEWEIS_FENSTER.y + 50, w: 290, h: 50 }; }
+// 📦 Du bist der Beweiser-Geist: Welches Item schickst du heimlich?
+const BEWEIS_FENSTER = { x: W / 2 - 330, y: 64, w: 660, h: 150 };
+function beweisKnopf(i) { return { x: BEWEIS_FENSTER.x + 15 + i * 215, y: BEWEIS_FENSTER.y + 50, w: 200, h: 50 }; }
 function zeichneBeweisWahl() {
-  if (!beweisWahl) return;
+  zeichneGeschenkAnzeige();
+  if (!beweisWahl) {
+    if (!spieler.lebt && spieler.beweisBereit && !geschenkAnzeige)   // Kleiner Hinweis oben
+      text('👻📦 Flieg zu einem Schaf und schick ihm heimlich einen Beweis! (Aktion / E)', W / 2, 78, 15, '#7fffb0', 'center', false);
+    return;
+  }
   if (typeof document !== 'undefined' && document.pointerLockElement) document.exitPointerLock();   // (3D: Maus freigeben)
   const f = BEWEIS_FENSTER;
   ctx.fillStyle = 'rgba(20,40,30,0.92)';
   rundesRechteck(f.x, f.y, f.w, f.h, 16); ctx.fill();
   ctx.strokeStyle = '#7fffb0'; ctx.lineWidth = 3; ctx.stroke();
-  text('📦 Du warst der Beweiser! Schick der Herde EINEN Beweis:', W / 2, f.y + 26, 18, '#7fffb0', 'center', false);
+  text(`📦 Was schickst du ${beweisWahl.an.name} heimlich?`, W / 2, f.y + 26, 18, '#7fffb0', 'center', false);
   BEWEIS_ITEMS.forEach((it, i) => {
     const k = beweisKnopf(i);
-    zeichneKnopf(k, `${it.emoji} ${it.name}  [Taste ${i + 1}]`, '#bff5d6');
-    text(it.info, k.x + k.w / 2, k.y + k.h + 18, 12, '#ddd', 'center', false);
+    zeichneKnopf(k, `${it.emoji} ${it.name} [${i + 1}]`, '#bff5d6');
+    text(it.info, k.x + k.w / 2, k.y + k.h + 18, 11, '#ddd', 'center', false);
   });
+  text('(Daneben klicken oder Esc = doch nicht)', W / 2, f.y + f.h - 10, 11, '#9fbfae', 'center', false);
+}
+// 🎁 Ein Geist hat DIR etwas geschickt – mit Bild!
+function zeichneGeschenkAnzeige() {
+  if (!geschenkAnzeige) return;
+  if (zeit > geschenkAnzeige.bis) { geschenkAnzeige = null; return; }
+  const g = geschenkAnzeige.g, f = { x: W / 2 - 330, y: 64, w: 660, h: 130 };
+  ctx.globalAlpha = Math.min(1, (geschenkAnzeige.bis - zeit) / 0.6);
+  ctx.fillStyle = 'rgba(25,20,50,0.93)';
+  rundesRechteck(f.x, f.y, f.w, f.h, 16); ctx.fill();
+  ctx.strokeStyle = '#c9a0ff'; ctx.lineWidth = 3; ctx.stroke();
+  zeichneItemBild(g, f.x + 70, f.y + 65, 1);
+  text(`👻 Der Geist von ${g.von} schickt dir heimlich etwas:`, f.x + 140, f.y + 30, 16, '#c9a0ff', 'left', false);
+  umbrechen(geschenkText(g), f.x + 140, f.y + 52, f.w - 160, 18, 15, '#fff');
+  text('🤫 Nur DU weißt davon!', f.x + 140, f.y + f.h - 16, 12, '#9f9fcf', 'left', false);
+  ctx.globalAlpha = 1;
+}
+// Das Bild vom Item (x, y = Mitte, gr = Größe)
+function zeichneItemBild(g, x, y, gr) {
+  if (g.art === 'wolle') {   // 🧶 Wollknäuel – links die eine Farbe, rechts die andere
+    const r = 38 * gr, fa = g.farben.length ? g.farben : ['#fff'];
+    for (let i = 0; i < 2; i++) {
+      ctx.fillStyle = fa[i] || fa[0];
+      ctx.beginPath(); ctx.arc(x, y, r, Math.PI / 2 + i * Math.PI, Math.PI * 1.5 + i * Math.PI); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = Math.max(1, 2 * gr);
+    for (const k of [0.3, 0.55, 0.8]) { ctx.beginPath(); ctx.arc(x - 4 * gr, y + 2 * gr, r * k, 0.2, 2.8); ctx.stroke(); }   // Woll-Fäden
+    ctx.beginPath(); ctx.moveTo(x + r * 0.7, y + r * 0.7); ctx.quadraticCurveTo(x + r * 1.3, y + r, x + r * 1.1, y + r * 1.3); ctx.stroke();   // loser Faden
+    ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(1, 2 * gr);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  } else if (g.art === 'tinte') {   // 🪶 Pergament mit einer Tinten-Zeichnung vom Ort
+    const bw = 110 * gr, bh = 100 * gr;
+    ctx.fillStyle = '#f3e3bc';
+    rundesRechteck(x - bw / 2, y - bh / 2, bw, bh, 6 * gr); ctx.fill();
+    ctx.strokeStyle = '#a8865a'; ctx.lineWidth = 2; ctx.stroke();
+    const o = ortVon(g.ortNr);
+    ctx.save();
+    rundesRechteck(x - bw / 2 + 4, y - bh / 2 + 4, bw - 8, bh - 8, 4); ctx.clip();
+    ctx.translate(x, y + 18 * gr); ctx.scale(0.22 * gr, 0.22 * gr); ctx.translate(-o.x, -o.y);
+    try { ctx.filter = 'grayscale(1) sepia(1) contrast(1.6) brightness(0.7)'; } catch (e) { /* egal */ }
+    if (o === GLOCKE) { ctx.font = '200px serif'; ctx.textAlign = 'center'; ctx.fillText('🔔', o.x, o.y); } else zeichneOrt(o);
+    ctx.restore();
+    text('🪶', x + bw / 2 - 6, y - bh / 2 + 6, 26 * gr, '#000', 'center', false);
+  } else {   // 🐾 Pfotenabdrücke
+    for (let i = 0; i < 4; i++) text('🐾', x - 30 * gr + i * 20 * gr, y + 26 * gr - i * 18 * gr, 26 * gr, '#000', 'center', false);
+  }
 }
 // 📦 Ein Beweis-Item beim Herden-Treffen (eine Zeile)
 function zeichnePaket(p, y) {
-  if (p.art === 'wolle' && p.farben.length) {   // 🧶 Wollknäuel – links die eine Farbe, rechts die andere
-    const x = 62, r = 9;
-    p.farben.slice(0, 2).forEach((f, i) => {
-      ctx.fillStyle = f;
-      ctx.beginPath(); ctx.arc(x, y, r, Math.PI / 2 + i * Math.PI, Math.PI * 1.5 + i * Math.PI); ctx.fill();
-    });
-    if (p.farben.length < 2) { ctx.fillStyle = p.farben[0]; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1;
-    for (const k of [0.4, 0.75]) { ctx.beginPath(); ctx.arc(x, y, r * k, 0.3, 2.6); ctx.stroke(); }   // Woll-Fäden
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
-  }
-  text(p.text, 78, y, 14, '#7fffb0', 'left', false);
+  if (p.art === 'wolle') zeichneItemBild(p, 62, y, 0.24);   // 🧶 kleines Wollknäuel
+  text(p.text, 78, y, 14, '#c9a0ff', 'left', false);
 }
 function beweisKlick(p) {
   if (!beweisWahl) return false;
   for (let i = 0; i < BEWEIS_ITEMS.length; i++) if (imRechteck(p, beweisKnopf(i))) { beweisSchicken(BEWEIS_ITEMS[i].art); return true; }
-  return imRechteck(p, BEWEIS_FENSTER);   // (Klick ins Fenster = nichts passiert)
+  if (!imRechteck(p, BEWEIS_FENSTER)) beweisWahl = null;   // Daneben = doch nicht
+  return true;
+}
+// 🐾 Die Pfotenspur (nur für dich): Pfoten führen vom Spieler zum Wolf
+function zeichnePfoten() {
+  const pf = spieler.pfoten;
+  if (!pf || zustand !== 'spiel') return;
+  if (zeit > pf.bis || !pf.wolf || !pf.wolf.lebt) { spieler.pfoten = null; return; }
+  const w = pf.wolf, rest = pf.bis - zeit;
+  ctx.globalAlpha = Math.min(1, rest / 2);
+  if (d3Aktiv()) { d3Pfeil(w, '#c9a0ff', `🐾 Die Spur führt da lang! (${Math.ceil(rest)} s)`); ctx.globalAlpha = 1; return; }
+  const d = dist(spieler, w);
+  if (d > 30) {
+    const ux = (w.x - spieler.x) / d, uy = (w.y - spieler.y) / d, n = Math.min(8, Math.floor(d / 45));
+    const a = Math.atan2(uy, ux);
+    for (let i = 1; i <= n; i++) {
+      const seite = i % 2 ? 9 : -9;
+      const x = spieler.x + ux * i * 45 - uy * seite - kamera.x, y = spieler.y + uy * i * 45 + ux * seite - kamera.y;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a + Math.PI / 2);
+      ctx.fillStyle = `rgba(90,50,140,${0.85 - i * 0.07})`;
+      ellipse(0, 3, 6, 7); ctx.fill();   // Ballen
+      for (const [zx, zy] of [[-6, -6], [-2, -9], [2, -9], [6, -6]]) { ellipse(zx, zy, 2.3, 2.8); ctx.fill(); }   // Zehen
+      ctx.restore();
+    }
+  }
+  text(`🐾 Folge der Spur! (${Math.ceil(rest)} s)`, W / 2, H - 30, 15, '#c9a0ff', 'center', false);
+  ctx.globalAlpha = 1;
 }
 
 function zeichneTreffen() {
@@ -5120,7 +5258,7 @@ function zeichne() {
   if (in3d) {   // 🎮 In 3D: Welt in 3D – darüber die normalen Anzeigen
     d3Zeichnen(); d3Overlay(); zeichneHUD();
     if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
-  if (zustand === 'spiel') zeichneBeweisWahl();
+  if (zustand === 'spiel') { zeichnePfoten(); zeichneBeweisWahl(); }
     if (zustand === 'treffen') zeichneTreffen();
     if (zustand === 'ende') zeichneEnde();
     zeichneTonKnopf();
@@ -5174,7 +5312,7 @@ function zeichne() {
   zeichneExtras();
   zeichneHUD();
   if (zustand === 'spiel' && miniSpiel) zeichneMiniSpiel();
-  if (zustand === 'spiel') zeichneBeweisWahl();
+  if (zustand === 'spiel') { zeichnePfoten(); zeichneBeweisWahl(); }
   if (zustand === 'treffen') zeichneTreffen();
   if (zustand === 'ende') zeichneEnde();
   zeichneTonKnopf();
@@ -5807,7 +5945,8 @@ addEventListener('keydown', e => {
   else if (zustand === 'titel' && (k === 'enter' || k === ' ')) starteMitKarte(kartenNr);
   else if (zustand === 'intro' && (k === 'enter' || k === ' ') && intro > 1.5) introFertig();
   else if (zustand === 'cutscene' && (k === 'enter' || k === ' ') && cutscene.t > 1) endeCutscene();
-  else if (zustand === 'spiel' && beweisWahl && ['1', '2'].includes(k)) beweisSchicken(BEWEIS_ITEMS[Number(k) - 1].art);   // 📦
+  else if (zustand === 'spiel' && beweisWahl && ['1', '2', '3'].includes(k)) beweisSchicken(BEWEIS_ITEMS[Number(k) - 1].art);   // 📦
+  else if (zustand === 'spiel' && beweisWahl && k === 'escape') beweisWahl = null;
   else if (zustand === 'spiel' && !miniSpiel && k === 'q') nutzeFaehigkeit();
   else if (zustand === 'spiel' && zielModus && k === 'escape') zielModus = false;
   else if (zustand === 'ende' && (k === 'enter' || k === ' ') && zeit - ende.seit > 1) neuesSpiel();
@@ -6074,7 +6213,7 @@ function mpTreffenSenden() {
       t: 'treffen', grund: treffen.grund, leb: treffen.lebende.map(s => schafe.indexOf(s)), aus, phase: treffen.phase,
       st: treffen.stimmen ? [...treffen.stimmen].map(([w, z]) => [schafe.indexOf(w), z ? schafe.indexOf(z) : -1]) : null,
       raus: treffen.raus ? schafe.indexOf(treffen.raus) : -1, skip: treffen.skip, erg: treffen.ergebnis, start: zeit - mp.treffenStart,
-      lg: treffen.luege ? schafe.indexOf(treffen.luege.von) : -1, pk: treffen.pakete || [],
+      lg: treffen.luege ? schafe.indexOf(treffen.luege.von) : -1,
     });
   }
 }
@@ -6114,7 +6253,7 @@ function mpVomGast(g, d) {
     case 'glocke': if (zustand === 'spiel' && s.lebt && !glockeGenutzt && dist(s, GLOCKE) < 120) { glockeGenutzt = true; starteTreffen(s, null); } break;
     case 'fressen': { const o = schafe[d.z]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.cooldown <= 0 && o && o.lebt && !o.istWolf && dist(s, o) < 80) fressen(o, s); break; }
     case 'beweisItem':   // 📦 Ein gefressener Gast-Beweiser schickt sein Item
-      if (!s.lebt && s.rolle === 'beweiser' && typeof d.art === 'string') paketMachen(s, d.art);
+      if (!s.lebt && s.rolle === 'beweiser' && typeof d.art === 'string') geschenkMachen(s, schafe[d.an], d.art);
       break;
     case 'luege': {   // 🤥 Ein Gast-Lügenbaron lügt
       const o = schafe[d.z];
@@ -6252,11 +6391,16 @@ function mpVomHost(d) {
     case 'gefressen':
       miniSpiel = null; zielModus = false; klickZiel = null; joystickLos();
       spieler.lebt = false;
-      beweisWahl = spieler.rolle === 'beweiser' && !jagdZ;   // 📦 Gleich darfst du einen Beweis schicken
+      spieler.beweisBereit = spieler.rolle === 'beweiser' && !jagdZ;   // 📦 Gleich fliegst du als Geist los
       zustand = 'cutscene';
       cutscene = { t: 0, art: 'gefressen', wolf: schafe[d.wolf] || spieler, variante: FRESS_ARTEN.includes(d.variante) ? d.variante : zufall(FRESS_ARTEN) };
       break;
     case 'beweis': if (schafe[d.s] && ORTE[d.nr]) beweisZeigen(schafe[d.s], d.nr); break;   // ✨
+    case 'geschenk':   // 📦 Ein Geist schickt DIR heimlich etwas
+      if (BEWEIS_ITEMS.some(i => i.art === d.art)) geschenkEmpfangen({
+        art: d.art, von: String(d.von || '?'), farben: Array.isArray(d.farben) ? d.farben.slice(0, 2).map(String) : [],
+        ortNr: Number(d.ort) | 0, wolfNr: Number(d.wolf) | 0, kandidaten: [] });
+      break;
     case 'treffen': {
       const neu = !treffen || zustand !== 'treffen';
       const lebende = d.leb.map(i => schafe[i]).filter(Boolean);
@@ -6267,12 +6411,11 @@ function mpVomHost(d) {
         stimmen: d.st ? new Map(d.st.map(([w, z]) => [schafe[w], z >= 0 ? schafe[z] : null])) : null,
         raus: d.raus >= 0 ? schafe[d.raus] : null, skip: d.skip, ergebnis: d.erg,
         luege: d.lg >= 0 && schafe[d.lg] ? { von: schafe[d.lg], wer: null, satz: '' } : null,   // (Hat schon jemand gelogen?)
-        pakete: Array.isArray(d.pk) ? d.pk.map(p => ({ text: String(p && p.text || ''), art: String(p && p.art || ''),
-          farben: Array.isArray(p && p.farben) ? p.farben.slice(0, 2).map(String) : [] })) : [],   // 📦
+        pakete: meinTreffenPaket ? [meinTreffenPaket] : [],   // 📦 (nur deins)
       };
       if (neu) {
         mp.gewaehlt = false; luegeWahl = false;
-        if (beweisWahl) { beweisWahl = false; zeigeNachricht('📦 Zu spät – dein Beweis ist nicht mehr angekommen!', 3); } mp.treffenStart = zeit - (d.start || 0);
+        treffenGeschenke(); mp.treffenStart = zeit - (d.start || 0);
         miniSpiel = null; zielModus = false;
         if (zustand !== 'cutscene') zustand = 'treffen';
         sound.glocke();
@@ -6331,7 +6474,8 @@ function mpSchnappschuss(d) {
   if (d.z === 'treffen' && zustand === 'spiel' && treffen) zustand = 'treffen';   // (z. B. nach der eigenen Fress-Animation)
 }
 function moeglicheAktionGast() {
-  if (!spieler.lebt || spieler.inGrube != null) return null;
+  if (!spieler.lebt) return beweisGeistAktion();   // 📦
+  if (spieler.inGrube != null) return null;
   if (jagdZ) return jagdAktion(springeInGrube);
   if (sabotage && !spielerIstWolf && dist(spieler, sabotagePunkt()) < 60) {
     return { text: sabotage.art === 'nebel' ? 'Laterne anmachen' : 'Gatter schließen', tun: () => mpSende({ t: 'reparieren' }) };
