@@ -1218,6 +1218,31 @@ const FAHRZEUGE = {
     dieselMax: 600, tankMax: 12000, saatMax: 4000, geraete: ['pflug', 'saat', 'ernte'], motorTon: 0.75, allrad: true,
     faehigkeit: 'Allrad: wird nie träge · extra breite Geräte · schnell auf dem Feld',
   },
+  oldtimer: {
+    name: 'Oldtimer', emoji: '🧓', preis: 15000, farbe: 0xc8321e, felge: 0xf2f2f2, groesse: 0.85, tempo: 7, arbeit: 0.8, breite: 0.8,
+    dieselMax: 120, tankMax: 3000, saatMax: 800, geraete: ['pflug', 'saat', 'ernte'], motorTon: 0.6, oldtimer: true, sparsam: 0.35,
+    faehigkeit: 'Superbillig und sparsam: braucht nur ein Drittel Diesel! Ohne Kabine – der Wind weht dir um die Nase',
+  },
+  elektro: {
+    name: 'E-Traktor', emoji: '⚡', preis: 90000, farbe: 0x1e9aa8, felge: 0xf2f2f2, groesse: 1, tempo: 12.5, arbeit: 1.1, breite: 1,
+    dieselMax: 100, tankMax: 8000, saatMax: 2500, geraete: ['pflug', 'saat', 'ernte'], motorTon: 3.2, elektro: true,
+    faehigkeit: 'Fährt mit Strom: Das Solardach lädt den Akku in der Sonne von allein! Aufladen (T) kostet fast nichts – und kein Rauch',
+  },
+  gps: {
+    name: 'GPS-Profi', emoji: '🛰️', preis: 140000, farbe: 0xe8741e, felge: 0x2a2a2a, groesse: 1.15, tempo: 11.1, arbeit: 1.3, breite: 1.3,
+    dieselMax: 450, tankMax: 14000, saatMax: 6000, geraete: ['pflug', 'saat', 'ernte'], motorTon: 0.9, gps: true,
+    faehigkeit: 'Autopilot: Auf dem Feld lenkt er von allein schnurgerade, wenn du nicht lenkst! Riesiger Saattank',
+  },
+  raupe: {
+    name: 'Raupe', emoji: '🐛', preis: 200000, farbe: 0x6b8f2a, felge: 0xd9b400, groesse: 1.3, tempo: 8.3, arbeit: 1.4, breite: 2,
+    dieselMax: 700, tankMax: 10000, saatMax: 6000, geraete: ['pflug', 'saat', 'ernte'], motorTon: 0.65, raupe: true, allrad: true,
+    faehigkeit: 'Kettenfahrzeug: dreht sich auf der Stelle und hat die breitesten Geräte (fast 7 m)! Wird nie träge',
+  },
+  monster: {
+    name: 'Monster-Traktor', emoji: '🦖', preis: 100000, farbe: 0x7a2ad8, felge: 0x9aff3a, groesse: 1, tempo: 15.3, arbeit: 0.9, breite: 1,
+    dieselMax: 300, tankMax: 6000, saatMax: 1500, geraete: ['pflug', 'saat', 'ernte'], motorTon: 0.55, monster: true, allrad: true,
+    faehigkeit: 'Riesenräder und 55 km/h! Shift = SPRINGEN – sogar über Zäune und Bäume!',
+  },
   drescher: {
     name: 'Mähdrescher', emoji: '🌾', preis: 180000, farbe: 0xe0b000, art: 'drescher', groesse: 1, tempo: 6.9, arbeit: 1.8, breite: 1.5,
     dieselMax: 500, tankMax: 20000, saatMax: 0, geraete: ['ernte'], motorTon: 0.85,
@@ -1371,7 +1396,7 @@ function malBildschirm(fz) {   // Der Bildschirm in der Kabine
     g.fillStyle = farbe; g.fillRect(110, y, 136 * Math.max(0, Math.min(1, anteil)), 12);
     g.fillStyle = '#ffffff'; g.font = '12px Arial'; g.fillText(text, 110, y + 14);
   };
-  balkenMalen(36, fz.diesel / fz.typ.dieselMax, fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0', `⛽ ${Math.round(fz.diesel)} l`);
+  balkenMalen(36, fz.diesel / fz.typ.dieselMax, fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0', fz.typ.elektro ? `⚡ ${Math.round(fz.diesel)} %` : `⛽ ${Math.round(fz.diesel)} l`);
   balkenMalen(70, kornPlatz(fz) ? kornDrin(fz) / kornPlatz(fz) : 0, '#' + (GUETER[gutVon(fz)] || GUETER.korn).farbe.toString(16).padStart(6, '0'), gutText(fz));
   g.fillStyle = '#ffffff'; g.font = '13px Arial';
   if (fz.typ.saatMax) g.fillText(`${fz.saatArt === 'mais' ? '🌽' : '🌱'} ${kg(fz.saat)}`, 10, 80);
@@ -1412,7 +1437,7 @@ function baueTraktor(typ, K) {
     kasten(K, sx * 0.48, 1.42, -2.245, 0.14, 0.06, 0.01, orange, false); // Blinker
   }
   // Vorderachse und Frontgewicht
-  kasten(K, 0, 0.55, -1.15, 2.0, 0.22, 0.28, schwarz);
+  kasten(K, 0, 0.55, typ.oldtimer ? -1.3 : -1.15, typ.oldtimer ? 1.4 : 2.0, 0.22, 0.28, schwarz);   // Vorderachse
   const gewichtB = typ.allrad ? 1.6 : 1.3;
   kasten(K, 0, 0.75, -2.35, 0.5, 0.3, 0.3, grau);                        // Fronthydraulik
   const front = new THREE.Group(); K.add(front);   // Frontgewicht (wird abgenommen, wenn vorne ein Gerät dran ist)
@@ -1424,19 +1449,57 @@ function baueTraktor(typ, K) {
   // Auspuff: steht rechts vorne an der Kabine, mit Hitzeschutz und Klappe
   const ax = typ.turbo ? 0.42 : 0.5;
   const auspuffRohr = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 1.7, 10), typ.turbo ? chrom : schwarz);
-  auspuffRohr.position.set(ax, 2.7, -0.62); auspuffRohr.castShadow = true; K.add(auspuffRohr);
-  kasten(K, ax, 2.5, -0.62, 0.2, 0.7, 0.2, chrom, false);                // Hitzeschutz (glänzt)
-  kasten(K, ax, 3.58, -0.62, 0.16, 0.05, 0.16, schwarz, false);          // Klappe
+  auspuffRohr.position.set(ax, 2.7, -0.62); auspuffRohr.castShadow = true;
+  if (typ.oldtimer) {   // Oldtimer: Auspuff vorne auf der Haube, mit rundem Scheinwerfer davor
+    auspuffRohr.position.set(0.3, 2.4, -1.75); auspuffRohr.scale.y = 0.6; K.add(auspuffRohr);
+    const kappe = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.09, 0.12, 10), chrom); kappe.position.set(0.3, 2.95, -1.75); K.add(kappe);
+  } else if (!typ.elektro) {   // (Der E-Traktor hat keinen Auspuff!)
+    K.add(auspuffRohr);
+    kasten(K, ax, 2.5, -0.62, 0.2, 0.7, 0.2, chrom, false);              // Hitzeschutz (glänzt)
+    kasten(K, ax, 3.58, -0.62, 0.16, 0.05, 0.16, schwarz, false);        // Klappe
+  }
   if (typ.turbo) {   // Flitzer: zweites Rohr, beide verchromt
     const zwei = auspuffRohr.clone(); zwei.position.x = -ax; K.add(zwei);
     kasten(K, -ax, 2.5, -0.62, 0.2, 0.7, 0.2, chrom, false);
   }
-  const kabine = baueKabine(K, farbe, dunkler);
+  let kabine = {};
+  if (typ.oldtimer) {   // Oldtimer: offener Sitz mit Lenkrad und Überrollbügel (keine Kabine)
+    kasten(K, 0, 1.65, 0.6, 1.3, 0.1, 1.5, lackDunkel);                    // Plattform
+    kasten(K, 0, 2.0, 0.85, 0.55, 0.12, 0.5, mat(0x5a3a22));                // Sitz (Leder)
+    kasten(K, 0, 2.35, 1.1, 0.5, 0.6, 0.1, mat(0x5a3a22));                  // Lehne
+    const saeule = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 8), schwarz); saeule.position.set(0, 2.15, 0.05); saeule.rotation.x = -0.6; K.add(saeule);
+    const rad = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.025, 8, 20), schwarz); rad.position.set(0, 2.45, 0.28); rad.rotation.x = -0.95; K.add(rad);
+    for (const sx of [-1, 1]) kasten(K, sx * 0.7, 2.6, 1.35, 0.08, 2.0, 0.08, schwarz);   // Überrollbügel
+    kasten(K, 0, 3.6, 1.35, 1.48, 0.08, 0.08, schwarz);
+    const lampe = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.1, 16), chrom); lampe.rotation.x = Math.PI / 2; lampe.position.set(0, 1.55, -2.3); K.add(lampe);   // Runder Scheinwerfer
+    const glasRund = new THREE.Mesh(new THREE.CircleGeometry(0.13, 16), licht); glasRund.rotation.y = Math.PI; glasRund.position.set(0, 1.55, -2.36); K.add(glasRund);
+  } else kabine = baueKabine(K, farbe, dunkler);
   // Räder mit Kotflügeln (vorne hängen die Kotflügel am Rad und lenken mit)
   const raeder = [];
   const bogen = (r, b, w) => { const geo = new THREE.CylinderGeometry(r, r, b, 18, 1, true, Math.PI / 2 - w, w * 2); geo.rotateZ(Math.PI / 2); return geo; };
   const fluegelMat = mat(farbe, { roughness: 0.35, metalness: 0.25, side: THREE.DoubleSide });
-  for (const x of [-1.2, 1.2]) {
+  if (typ.raupe) {   // Raupe: Gummiketten statt Rädern (die Rollen drinnen drehen sich)
+    for (const sx of [-1, 1]) {
+      const kette = mat(0x1c1c1c, { roughness: 0.9 });
+      kasten(K, sx * 1.25, 0.55, 0, 0.62, 0.8, 3.0, kette);
+      for (const z of [-1.5, 1.5]) { const ende = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.62, 16), kette); ende.rotation.z = Math.PI / 2; ende.position.set(sx * 1.25, 0.55, z); ende.castShadow = true; K.add(ende); }
+      for (let k = 0; k < 14; k++) kasten(K, sx * 1.25, 0.97, -1.4 + k * 0.215, 0.64, 0.05, 0.07, mat(0x2a2a2a), false);   // Stollen oben
+      kasten(K, sx * 1.25, 1.05, 0, 0.7, 0.08, 3.4, lack);                  // Abdeckung über der Kette
+      for (const z of [-1.5, -0.5, 0.5, 1.5]) raeder.push(baueRad(K, sx * 1.25, 0.55, z, 0.38, 0.66, 0, felge));
+    }
+  } else if (typ.monster) {   // Monster: riesige Räder mit Federbeinen – alle vier lenken
+    for (const sx of [-1, 1]) for (const [z, lenkt] of [[-1.3, 1], [1.2, -1]]) {
+      raeder.push(baueRad(K, sx * 1.8, 1.25, z, 1.25, 0.9, lenkt, felge));
+      for (const dz of [-0.25, 0.25]) { const feder = kasten(K, sx * 1.05, 1.5, z + dz, 0.1, 1.0, 0.1, chrom); feder.rotation.z = sx * 0.6; }
+    }
+    for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) { const flamme = kasten(K, sx * 0.73, 1.2 + k * 0.08, -1.9 + k * 0.25, 0.02, 0.12, 0.5 - k * 0.08, new THREE.MeshBasicMaterial({ color: [0xffe03a, 0xffa01e, 0xff5a1e, 0xd8201e][k] }), false); flamme.rotation.x = 0.3; }   // Flammen-Aufkleber
+  } else for (const x of typ.oldtimer ? [-1, 1] : [-1.2, 1.2]) {
+    if (typ.oldtimer) {   // Oldtimer: schmale Vorderräder, große Hinterräder mit runden Kotflügeln
+      raeder.push(baueRad(K, x * 0.78, 0.45, -1.3, 0.45, 0.2, 1, felge));
+      raeder.push(baueRad(K, x * 1.15, 0.85, 1.05, 0.85, 0.4, 0, felge));
+      const hf = new THREE.Mesh(bogen(0.98, 0.48, 1.4), fluegelMat); hf.position.set(x * 1.15, 0.85, 1.05); hf.castShadow = true; K.add(hf);
+      continue;
+    }
     const vorne = baueRad(K, x, 0.55, -1.15, 0.55, 0.4, 1, felge);
     raeder.push(vorne);
     const kf = new THREE.Mesh(bogen(0.68, 0.5, 1.05), fluegelMat); kf.castShadow = true; vorne.lenker.add(kf);
@@ -1467,7 +1530,27 @@ function baueTraktor(typ, K) {
     kasten(front, 0, 1.45, -2.95, 1.5, 0.1, 0.1, chrom);
     for (const x of [-1.85, 1.85]) raeder.push(baueRad(K, x, 0.78, 1.05, 0.78, 0.45, 0, felge));
   }
-  return { raeder, auspuff: [ax, 3.62, -0.62], sitz: [0, 2.85, 0.8], radstand: 2.3, frontgewicht: front, ...kabine };
+  if (typ.elektro) {   // E-Traktor: Solardach, Blitz-Streifen und Ladestecker
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const gg = c.getContext('2d'); gg.fillStyle = '#1a2a5a'; gg.fillRect(0, 0, 64, 64); gg.strokeStyle = '#9ab0e0'; gg.lineWidth = 1.5;
+    for (let k = 0; k <= 64; k += 16) { gg.beginPath(); gg.moveTo(k, 0); gg.lineTo(k, 64); gg.stroke(); gg.beginPath(); gg.moveTo(0, k); gg.lineTo(64, k); gg.stroke(); }
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+    const solar = kasten(K, 0, 3.45, 0.45, 2.0, 0.05, 2.2, new THREE.MeshStandardMaterial({ map: tx, metalness: 0.6, roughness: 0.2 }));
+    solar.rotation.x = -0.08;
+    for (const sx of [-1, 1]) for (const sz of [-0.4, 1.3]) kasten(K, sx * 0.85, 3.35, sz, 0.05, 0.2, 0.05, grau, false);
+    for (const sx of [-1, 1]) { const blitz = kasten(K, sx * 0.725, 1.45, -1.3, 0.02, 0.5, 0.12, new THREE.MeshBasicMaterial({ color: 0xffe03a }), false); blitz.rotation.x = 0.5; }
+    kasten(K, -0.72, 1.3, -0.6, 0.04, 0.15, 0.15, new THREE.MeshBasicMaterial({ color: 0x3aff8a }), false);   // Ladebuchse (leuchtet grün)
+  }
+  if (typ.gps) {   // GPS-Profi: Empfänger-Kuppel auf dem Dach und Antenne
+    const kuppel = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xf2f2f2, { roughness: 0.3 }));
+    kuppel.position.set(0, 3.32, -0.2); K.add(kuppel);
+    kasten(K, 0, 3.28, -0.2, 0.5, 0.06, 0.4, schwarz, false);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.015, 0.9, 6), schwarz); ant.position.set(0.5, 3.7, 0.9); K.add(ant);
+    kasten(K, 0.5, 4.17, 0.9, 0.06, 0.06, 0.06, new THREE.MeshBasicMaterial({ color: 0x3aff8a }), false);   // Lämpchen
+  }
+  const sitz = typ.oldtimer ? [0, 2.75, 0.85] : [0, 2.85, 0.8];
+  const auspuff = typ.oldtimer ? [0.3, 3.05, -1.75] : [ax, 3.62, -0.62];
+  return { raeder, auspuff, sitz, radstand: typ.monster ? 2.5 : 2.3, frontgewicht: front, ...kabine };
 }
 function baueDrescher(typ, K) {
   const gelb = typ.farbe;
@@ -2640,7 +2723,9 @@ function fahrsiloUpdate(dt) {
   for (const fz of fahrzeuge) {
     let h = 0;
     for (const b of gebaute) if (b.fs) { const y = fahrsiloBoden(b, fz.g.position.x, fz.g.position.z); if (y !== null) { h = Math.max(h, y - 0.16); } }
-    fz.g.position.y += (h - fz.g.position.y) * Math.min(1, dt * 6);
+    if (fz.hopp > 0) fz.g.position.y = h + fz.hopp;   // Monster-Sprung
+    else fz.g.position.y += (h - fz.g.position.y) * Math.min(1, dt * 6);
+    if (fz.typ.elektro && fz.diesel < fz.typ.dieselMax) fz.diesel = Math.min(fz.typ.dieselMax, fz.diesel + dt * 0.12 * tagHell * (jahreszeit().zeit === 'winter' ? 0.4 : 1));   // ☀️ Solar laden
   }
   for (const a of anhaenger) {
     let h = 0;
@@ -3671,7 +3756,7 @@ function updateHUD() {
     $('fahrzeug').textContent = `${fz.typ.emoji} ${fz.typ.name}${aktiv ? '' : ' (geparkt)'}`;
     $('geraet').textContent = G ? `${G.emoji} ${G.name}` : '🦾 Kran mit Fällkopf';
     $('tempo').textContent = Math.round(Math.abs(fz.speed) * 3.6);
-    balken('diesel', fz.diesel, fz.typ.dieselMax, `${Math.round(fz.diesel)} Liter`);
+    balken('diesel', fz.diesel, fz.typ.dieselMax, fz.typ.elektro ? `⚡ ${Math.round(fz.diesel)} % Akku${tagHell > 0.5 ? ' ☀️ lädt' : ''}` : `${Math.round(fz.diesel)} Liter`);
     $('diesel').style.background = fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0';
     balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? `${fz.saatArt === 'mais' ? '🌽' : '🌾'} ${kg(fz.saat)}` : '– (kann nicht säen)');
     balken('tank', kornDrin(fz), kornPlatz(fz), kornPlatz(fz) ? `${gutText(fz)}${kornAnh(fz) ? ` (mit ${fz.anh.typ.name})` : ''}` : fz.typ.art === 'haecksler' ? '– Anhänger ankuppeln (H)!' : '– (kein Korntank)');
@@ -3864,11 +3949,11 @@ function anHofTankstelle() { return !!aktiv && Math.hypot(aktiv.g.position.x - T
 function tanken() {
   if (!aktiv) { saegeTanken(); return; }   // Zu Fuß: die Motorsäge tanken
   if (!imLaden() && !anHofTankstelle()) { meldung('⛽ Tanken kannst du beim Landhandel 🏪 oder an der Hof-Tankstelle in der Scheune 🏚️!'); sound.nein(); return; }
-  const menge = aktiv.typ.dieselMax - aktiv.diesel, kosten = Math.round(menge * DIESEL_PREIS);
-  if (menge < 1) { meldung('⛽ Der Tank ist schon voll!'); return; }
+  const E = aktiv.typ.elektro, menge = aktiv.typ.dieselMax - aktiv.diesel, kosten = Math.round(menge * (E ? 0.25 : DIESEL_PREIS));
+  if (menge < 1) { meldung(E ? '🔋 Der Akku ist schon voll!' : '⛽ Der Tank ist schon voll!'); return; }
   if (money < kosten) { meldung('💸 Nicht genug Geld zum Tanken!'); sound.nein(); return; }
   money -= kosten; aktiv.diesel = aktiv.typ.dieselMax;
-  meldung(`⛽ ${Math.round(menge)} Liter Diesel getankt für ${euro(kosten)}`);
+  meldung(E ? `⚡ Akku aufgeladen (${Math.round(menge)} %) für nur ${euro(kosten)}!` : `⛽ ${Math.round(menge)} Liter Diesel getankt für ${euro(kosten)}`);
   sound.kasse();
   speichern();
 }
@@ -4242,7 +4327,7 @@ function haendlerZeigen(an) {
     const zeile = document.createElement('div');
     zeile.className = 'angebot';
     zeile.innerHTML = `<b>${typ.emoji} ${typ.name}</b> – ${euro(typ.preis)}${anzahl ? ` <span class="klein">(du hast ${anzahl})</span>` : ''}<br>
-      <span class="klein">⭐ ${typ.faehigkeit}<br>🏁 ${Math.round(typ.tempo * 3.6)} km/h${typ.tankMax ? ` · 🌾 Tank ${kg(typ.tankMax)}` : ''} · ⛽ ${typ.dieselMax} l</span><br>`;
+      <span class="klein">⭐ ${typ.faehigkeit}<br>🏁 ${Math.round(typ.tempo * 3.6)} km/h${typ.tankMax ? ` · 🌾 Tank ${kg(typ.tankMax)}` : ''} · ${typ.elektro ? '⚡ Akku mit Solardach' : `⛽ ${typ.dieselMax} l`}</span><br>`;
     const knopf = document.createElement('button');
     knopf.textContent = money >= typ.preis ? '🛒 Kaufen' : '💸 Zu teuer';
     knopf.disabled = money < typ.preis;
@@ -4589,7 +4674,7 @@ function fahren(fz, dt) {
   // Höchsttempo: beim Arbeiten langsam, ohne Diesel nur noch Schritttempo, mit Turbo schneller!
   const turbo = typ.turbo && keys.shift && fz.diesel > 0 && !fz.arbeitet;
   let maxVor = fz.arbeitet ? GERAETE[fz.werkzeug].arbeitsTempo * typ.arbeit : typ.tempo * (turbo ? 1.4 : 1);
-  if (fz.diesel <= 0) { maxVor = 1; meldungSelten('⛽ Der Diesel ist leer! Kriech zum Landhandel und tank mit T.'); }
+  if (fz.diesel <= 0) { maxVor = 1; meldungSelten(typ.elektro ? '🔋 Der Akku ist leer! Warte in der Sonne ☀️ oder lade beim Landhandel (T).' : '⛽ Der Diesel ist leer! Kriech zum Landhandel und tank mit T.'); }
   const gas = keys.w || keys.arrowup, rueck = keys.s || keys.arrowdown;
   if (gas && fz.speed >= 0) fz.speed = Math.min(fz.speed + BESCHLEUNIGUNG * last * (turbo ? 1.8 : 1) * dt, maxVor);
   else if (rueck && fz.speed <= 0.1) fz.speed = Math.max(fz.speed - BESCHLEUNIGUNG * 0.6 * dt, -RUECKWAERTS_TEMPO);
@@ -4598,15 +4683,28 @@ function fahren(fz, dt) {
   if (fz.speed > maxVor) fz.speed = Math.max(maxVor, fz.speed - 6 * dt);   // Zu schnell fürs Feld? Langsam abbremsen
   if (keys[' ']) fz.speed *= Math.pow(0.002, dt);   // Bremsen
   // Diesel verbrauchen (mehr bei Vollgas, Turbo und beim Arbeiten; große Fahrzeuge brauchen mehr)
-  fz.diesel = Math.max(0, fz.diesel - dt * typ.groesse * (0.03 + Math.abs(fz.speed) * 0.006 * (turbo ? 2 : 1) + (fz.arbeitet && Math.abs(fz.speed) > 0.5 ? 0.04 : 0)));
+  fz.diesel = Math.max(0, fz.diesel - dt * typ.groesse * (typ.sparsam || 1) * (typ.elektro ? 0.6 : 1) * (0.03 + Math.abs(fz.speed) * 0.006 * (turbo ? 2 : 1) + (fz.arbeitet && Math.abs(fz.speed) > 0.5 ? 0.04 : 0)));
   // Lenken: Die Räder drehen sich ein, und das Fahrzeug fährt eine Kurve (im Stand dreht es sich nicht)
   const lenkZiel = ((keys.a || keys.arrowleft) ? 1 : 0) - ((keys.d || keys.arrowright) ? 1 : 0);
   fz.lenkWinkel += (lenkZiel * 0.55 - fz.lenkWinkel) * Math.min(1, dt * 6);
   fz.g.rotation.y += fz.speed * Math.tan(fz.lenkWinkel) / (fz.radstand * typ.groesse) * dt;
+  if (typ.raupe) fz.g.rotation.y += lenkZiel * 0.9 * dt * Math.max(0, 1 - Math.abs(fz.speed) / 3);   // Raupe: dreht sich auf der Stelle
+  if (typ.gps && fz.arbeitet && lenkZiel === 0 && Math.abs(fz.speed) > 0.5) {   // GPS-Autopilot: schnurgerade auf dem Feld
+    const gerade = Math.round(fz.g.rotation.y / (Math.PI / 2)) * (Math.PI / 2), d = gerade - fz.g.rotation.y;
+    fz.g.rotation.y += begrenzt(d, -0.8 * dt, 0.8 * dt);
+    if (!fz.gpsAn) { fz.gpsAn = true; meldung('🛰️ GPS-Autopilot: Ich halte die Spur – du musst nur Gas geben!', 2.5); }
+  } else if (lenkZiel !== 0 || !fz.arbeitet) fz.gpsAn = false;
+  if (typ.monster) {   // Monster: Shift = Springen!
+    if (keys.shift && !fz.hopp && fz.diesel > 0) { fz.hoppV = 7; fz.hopp = 0.01; tonGleiten(120, 260, 0, 0.3, 'sawtooth', 0.06); }
+    if (fz.hopp) {
+      fz.hopp += fz.hoppV * dt; fz.hoppV -= 16 * dt;
+      if (fz.hopp <= 0) { fz.hopp = 0; sound.rumms(); for (let k = 0; k < 10; k++) staub(fz.g.position.x + zufall(-2, 2), fz.g.position.z + zufall(-2, 2), 0xb8a37a, 0.3, 0.8, 1.5); }
+    }
+  }
   const alt = fz.g.position.clone();
   fz.g.translateZ(-fz.speed * dt);
-  // Nur blockieren, wenn wir NEU irgendwo reinfahren (steckt man schon fest, darf man raus fahren)
-  if (kollidiert(fz.g.position.x, fz.g.position.z, fz.radius, fz) && !kollidiert(alt.x, alt.z, fz.radius, fz)) {
+  // Nur blockieren, wenn wir NEU irgendwo reinfahren (steckt man schon fest, darf man raus fahren) – im Sprung fliegt der Monster-Traktor drüber!
+  if (!(fz.hopp > 0.8) && kollidiert(fz.g.position.x, fz.g.position.z, fz.radius, fz) && !kollidiert(alt.x, alt.z, fz.radius, fz)) {
     fz.g.position.copy(alt);
     if (Math.abs(fz.speed) > 4) { sound.rumms(); meldungSelten('💥 Rumms!'); }
     fz.speed = -fz.speed * 0.3;
@@ -4624,7 +4722,7 @@ function fahren(fz, dt) {
   }
   // Rauch aus dem Auspuff (mehr, wenn du Gas gibst – und beim Turbo richtig viel!)
   rauchTakt -= dt * (turbo ? 30 : gas ? 14 : 4);
-  if (rauchTakt <= 0 && fz.diesel > 0) {
+  if (rauchTakt <= 0 && fz.diesel > 0 && !typ.elektro) {
     rauchTakt = 1;
     fz.K.localToWorld(tmp.set(...fz.auspuff));
     staub(tmp.x, tmp.z, turbo ? 0x333333 : 0x555555, tmp.y, 0.8, 0.5 * typ.groesse);
@@ -5354,7 +5452,7 @@ function animate() {
     const drehzahl = fz ? (32 + Math.abs(fz.speed) * 4 + (gasGeben ? 10 : 0) + (fz.arbeitet && Math.abs(fz.speed) > 0.5 ? 6 : 0)) * fz.typ.motorTon : 30;
     motor.o.frequency.setTargetAtTime(an ? drehzahl : 0.01, t, 0.15);
     motor.o2.frequency.setTargetAtTime(an ? drehzahl * 0.5 : 0.01, t, 0.15);
-    motor.g.gain.setTargetAtTime(an && tonAn ? (0.05 + (gasGeben ? 0.03 : 0)) * (ansicht === 'ego' ? 1.3 : 1) : 0, t, 0.2);
+    motor.g.gain.setTargetAtTime(an && tonAn ? (0.05 + (gasGeben ? 0.03 : 0)) * (ansicht === 'ego' ? 1.3 : 1) * (fz.typ.elektro ? 0.35 : 1) : 0, t, 0.2);
   }
   if (saegeTon) {   // Motorsäge: im Leerlauf blubbern, beim Sägen laut kreischen
     const t = audio.currentTime, an = ((saegeAn && !aktiv && saegeSprit > 0) || harvSaegt) && tonAn;
