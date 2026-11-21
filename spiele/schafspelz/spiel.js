@@ -380,6 +380,18 @@ const sound = {
   knurren() { wackelTon([[0, 90], [0.8, 70]], 0, 0.9, 'sawtooth', 0.2, 25, 15); },
   // Määäck!
   meckern() { wackelTon([[0, 620], [0.6, 540]], 0, 0.7, 'sawtooth', 0.15, 24, 60); },
+  // 🚀 Luftschleuse: Tür zu (schhhk-KLONG) und alles wird rausgesaugt (SSSSST!)
+  schleuseZu() { ton(200, 0, 0.5, 'sawtooth', 0.06, 90); ton(90, 0.5, 0.25, 'square', 0.15, 50); },
+  zisch() {
+    if (!audio || !tonAn) return;
+    const a = audio;
+    const n = Math.floor(a.sampleRate * 1.4), puffer = a.createBuffer(1, n, a.sampleRate), d = puffer.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const q = a.createBufferSource(); q.buffer = puffer;
+    const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(3000, a.currentTime); f.frequency.exponentialRampToValueAtTime(400, a.currentTime + 1.4);
+    const g = a.createGain(); g.gain.value = 0.35;
+    q.connect(f); f.connect(g); g.connect(a.destination); q.start();
+  },
   // Plumps in die Grube
   plumps() { ton(320, 0, 0.3, 'sine', 0.3, 60); },
   // Bzzzt! (Blitz)
@@ -1896,9 +1908,14 @@ function updateCutscene(dt) {
     if (c.t > 8) endeCutscene();
     return;
   }
-  if (ab(0.8)) sound.trippel();
-  if (ab(2.0) && c.raus.istWolf) sound.knurren();
-  if (ab(2.0) && c.raus.rolle === 'ziege') sound.meckern();
+  const wann = KARTE.weltall ? 3.0 : 2.0;   // 🚀 Im All wird erst draußen enttarnt
+  if (KARTE.weltall) {
+    if (ab(0.5)) sound.schleuseZu();
+    if (ab(1.2)) sound.alarm();
+    if (ab(2.0)) sound.zisch();
+  } else if (ab(0.8)) sound.trippel();
+  if (ab(wann) && c.raus.istWolf) sound.knurren();
+  if (ab(wann) && c.raus.rolle === 'ziege') sound.meckern();
   if (ab(4.0)) {
     const gut = c.raus.rolle === 'ziege' ? c.raus.istSpieler : (spieler.rolle !== 'ziege' && c.raus.istWolf !== spielerIstWolf);
     if (gut) sound.fanfare(); else sound.traurig();
@@ -2233,6 +2250,7 @@ function zeichneCutscene() {
   if (cutscene.art === 'gefressen') { zeichneFressCutscene(); return; }
   if (cutscene.art === 'hirte') { zeichneHirtenCutscene(); return; }
   const c = cutscene, t = c.t, r = c.raus;
+  if (KARTE.weltall) { zeichneLuftschleusenRauswurf(c); zeichneRauswurfText(c); return; }   // 🚀 Raumschiff: ab durch die Luftschleuse!
   const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
   const g = ctx.createLinearGradient(0, 0, 0, 360);
   g.addColorStop(0, himmel[0]); g.addColorStop(1, himmel[1]);
@@ -2290,7 +2308,118 @@ function zeichneCutscene() {
     zeichneSchafKoerper(x, y, s.farbe, 1, 0, false, 1);
     if (s.istSpieler) text('DU', x, y - 35, 13, '#ffd166');
   });
+  zeichneRauswurfText(c);
+}
 
+// ===== 🚀 Rauswurf im Raumschiff: durch die Luftschleuse ins All! =====
+// Teil 1 (0 – 2.6 s): drinnen. Das Schaf steht in der Schleuse, die Glastür geht zu, Alarm, die Außentür geht auf ... SSSSST!
+// Teil 2 (ab 2.6 s): draußen. Das Schaf trudelt ins All, die Herde schaut aus den Fenstern zu.
+let rauswurfSterne = null;
+function zeichneSternenhimmel(verschieben) {
+  if (!rauswurfSterne) { rauswurfSterne = []; for (let i = 0; i < 160; i++) rauswurfSterne.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() < 0.15 ? 2.2 : 1.2, z: 0.3 + Math.random() }); }
+  ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(700, 150, 10, 700, 150, 420);   // bunter Weltraum-Nebel
+  g.addColorStop(0, 'rgba(140,60,200,0.35)'); g.addColorStop(1, 'rgba(140,60,200,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+  for (const s of rauswurfSterne) { const x = ((s.x - verschieben * s.z) % W + W) % W; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(zeit * 3 + s.x); ctx.fillRect(x, s.y, s.r, s.r); }
+  ctx.globalAlpha = 1;
+}
+
+function zeichneLuftschleusenRauswurf(c) {
+  const t = c.t, r = c.raus;
+  const istBoese = r.istWolf || r.rolle === 'ziege';
+  if (t < 2.6) {
+    // ----- Teil 1: In der Luftschleuse -----
+    zeichneSternenhimmel(0);
+    ctx.fillStyle = '#4a5262'; ctx.fillRect(0, 0, 820, H);              // Wand vom Raumschiff
+    ctx.fillStyle = '#5b6474'; ctx.fillRect(0, 560, 820, 40);           // Boden
+    ctx.strokeStyle = '#3a4150'; ctx.lineWidth = 3;
+    for (let x = 0; x < 820; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 560); ctx.stroke(); }
+    ctx.fillStyle = '#2b3242'; ctx.fillRect(470, 230, 350, 330);         // Die Schleusen-Kammer
+    const alarm = t > 1.2;
+    if (alarm && Math.floor(t * 6) % 2 === 0) { ctx.fillStyle = 'rgba(255,40,40,0.25)'; ctx.fillRect(470, 230, 350, 330); }
+    ctx.fillStyle = alarm ? (Math.floor(t * 6) % 2 ? '#ff3b3b' : '#661515') : '#4ade80'; ellipse(645, 215, 22, 12); ctx.fill();   // Warnlampe
+    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 10; ctx.setLineDash([20, 14]); ctx.beginPath(); ctx.moveTo(470, 556); ctx.lineTo(820, 556); ctx.stroke(); ctx.setLineDash([]);
+
+    // Außentür (rechts) geht ab 2.0 s auf – dahinter das All
+    const auf = begrenzt((t - 2.0) / 0.3, 0, 1);
+    ctx.fillStyle = '#05060f'; ctx.fillRect(820, 230, 30, 330);
+    ctx.fillStyle = '#9aa4b5'; ctx.fillRect(820, 230 - auf * 330, 30, 330);
+    ctx.fillStyle = '#4a5262'; ctx.fillRect(850, 0, W - 850, H);
+    ctx.fillStyle = '#05060f'; ctx.fillRect(850, 230, W - 850, 330 * auf);   // Loch ins All
+    if (auf > 0) { ctx.fillStyle = '#fff'; for (let i = 0; i < 12; i++) ctx.fillRect(855 + (i * 37) % 100, 240 + (i * 61) % 300 * auf, 2, 2); }
+
+    // Das Schaf in der Schleuse
+    let sx = 645 + Math.sin(t * 40) * (t < 0.8 ? 2 : 0), sy = 520, dreh = 0, gr = 1.5;
+    if (t > 2.0) { const k = (t - 2.0) / 0.6; sx += k * k * 500; sy -= k * 60; dreh = k * 5; }
+    // Wind-Striche, wenn alles rausgesaugt wird
+    if (t > 2.0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3;
+      for (let i = 0; i < 9; i++) { const y = 260 + i * 34, x = 480 + ((t * 900 + i * 97) % 340); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 50, y); ctx.stroke(); }
+    }
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(dreh);
+    zeichneSchafKoerper(0, 0, r.farbe, 1, t * 14, t > 2.0, gr);
+    ctx.restore();
+    if (t < 2.0) text(r.name, sx, sy - 75, 18, r.istSpieler ? '#ffd166' : '#fff');
+    if (t > 2.0 && t < 2.6) text('SSSSSST!', 690, 300, 40 + (t - 2.0) * 30, '#7df9ff');
+
+    // Innentür aus Glas (links) geht zu – die Herde schaut durch
+    const zu = begrenzt((t - 0.5) / 0.6, 0, 1);
+    ctx.fillStyle = 'rgba(160,230,255,0.25)'; ctx.fillRect(462, 230, 16, 330 * zu);
+    ctx.fillStyle = '#9aa4b5'; ctx.fillRect(462, 230 + 330 * zu - 10, 16, 10);
+    ctx.strokeStyle = '#9aa4b5'; ctx.lineWidth = 6; ctx.strokeRect(462, 230, 16, 330);
+    const abstand = Math.min(55, 400 / Math.max(1, c.herde.length));
+    c.herde.forEach((s, i) => {
+      const x = 40 + i * abstand, y = 530 + (i % 2) * 22;
+      zeichneSchafKoerper(x, y, s.farbe, 1, 0, false, 1);
+      if (s.istSpieler) text('DU', x, y - 35, 13, '#ffd166');
+    });
+    if (alarm) text('⚠️ LUFTSCHLEUSE ÖFFNET SICH ⚠️', 645, 180, 20, Math.floor(t * 6) % 2 ? '#ff6b6b' : '#ffd166');
+  } else {
+    // ----- Teil 2: Draußen im All -----
+    const k = t - 2.6;
+    zeichneSternenhimmel(k * 40);
+    // Ein Planet
+    ctx.fillStyle = '#e07b39'; ellipse(820, 470, 120, 120); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ellipse(790, 440, 100, 18); ctx.fill(); ellipse(830, 500, 110, 14); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,160,0.7)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.ellipse(820, 470, 190, 34, -0.25, 0, Math.PI * 2); ctx.stroke();
+    // Das Raumschiff (links) – fliegt langsam weiter
+    const rx = -60 - k * 25;
+    ctx.fillStyle = '#9aa4b5';
+    ctx.beginPath(); ctx.moveTo(rx, 330); ctx.lineTo(rx + 300, 330); ctx.quadraticCurveTo(rx + 400, 400, rx + 300, 470); ctx.lineTo(rx, 470); ctx.fill();
+    ctx.fillStyle = '#5b6474'; ctx.fillRect(rx + 120, 300, 120, 30); ctx.fillRect(rx + 120, 470, 120, 30);   // Flügel
+    ctx.fillStyle = '#05060f'; ctx.fillRect(rx + 330, 375, 12, 50);   // offene Schleuse
+    text('MÄH', rx + 200, 455, 16, '#c0392b', 'center', false);
+    // Die Herde schaut aus den Bullaugen
+    const n = Math.min(5, c.herde.length);
+    for (let i = 0; i < n; i++) {
+      const bx = rx + 70 + i * 52, by = 385;
+      ctx.fillStyle = '#ccd3dd'; ellipse(bx, by, 20, 20); ctx.fill();
+      ctx.fillStyle = '#1b2350'; ellipse(bx, by, 16, 16); ctx.fill();
+      ctx.fillStyle = c.herde[i].farbe; ellipse(bx, by + 4, 12, 9); ctx.fill();
+      ctx.fillStyle = '#2b2b2b'; ellipse(bx + 2, by + 4, 6, 6); ctx.fill();
+      if (c.herde[i].istSpieler) text('DU', bx, by - 30, 12, '#ffd166');
+    }
+    // Das Schaf trudelt davon (immer kleiner, dreht sich)
+    const f = Math.min(1, k / 5);
+    const px = 330 + f * 420 + Math.sin(k * 2) * 20, py = 400 - f * 260 + Math.cos(k * 1.7) * 15, gr = 1.3 - f * 1.0;
+    ctx.save(); ctx.translate(px, py); ctx.rotate(k * 2.2);
+    if (istBoese && k > 0.6) text(r.istWolf ? '🐺' : '🐐', 0, 0, 60 * gr, '#fff', 'center', false);
+    else zeichneSchafKoerper(0, 0, r.farbe, 1, k * 20, true, gr);
+    ctx.restore();
+    // Enttarnt: Die Wolle fliegt in alle Richtungen weg!
+    if (istBoese && k > 0.4) {
+      const w = k - 0.4;
+      ctx.fillStyle = r.farbe;
+      for (let i = 0; i < 12; i++) { ellipse(px + Math.cos(i * 0.52) * w * 110, py + Math.sin(i * 0.52) * w * 110, 7, 7); ctx.fill(); }
+    }
+    if (!istBoese && k > 1) text('😵', px + 30 * gr, py - 40 * gr, 22, '#fff', 'center', false);
+  }
+}
+
+function zeichneRauswurfText(c) {
+  const t = c.t, r = c.raus;
   // Text, Buchstabe für Buchstabe
   if (t > 4) {
     let zeile1;
@@ -2817,7 +2946,7 @@ function zeichneEffekt(e, pos) {
   const { x, y } = pos;
   switch (e.art) {
     case 'grubeRein': {   // Dreht sich im Kreis und wird immer kleiner ... weg!
-      ctx.fillStyle = 'rgba(20,12,6,0.85)'; ellipse(x, y + 12, 30 * (1 - k * 0.3), 10); ctx.fill();   // Das Loch
+      ctx.fillStyle = KARTE.weltall ? 'rgba(8,10,16,0.85)' : 'rgba(20,12,6,0.85)'; ellipse(x, y + 12, 30 * (1 - k * 0.3), 10); ctx.fill();   // Das Loch
       if (k < 0.85) {
         ctx.save(); ctx.translate(x, y - 6 + k * 18); ctx.rotate(k * Math.PI * 2.5 * e.richtung);
         zeichneSchafKoerper(0, 0, e.farbe, e.richtung, 0, false, Math.max(0.05, 1 - k * 1.15));
@@ -3193,6 +3322,41 @@ function zeichnePalme(p) {
   ellipse(x + 12 * g, y - 92 * g, 6 * g, 6 * g); ctx.fill();
 }
 
+// ----- 🚀 Raumschiff-Sachen -----
+function zeichneBullauge(x, y) {
+  ctx.fillStyle = '#9aa4b5'; ellipse(x, y, 22, 22); ctx.fill();
+  ctx.fillStyle = '#05060f'; ellipse(x, y, 16, 16); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillRect(x - 6, y - 4, 2, 2); ctx.fillRect(x + 5, y + 3, 2, 2); ctx.fillRect(x + 1, y - 9, 1.5, 1.5);
+}
+function zeichneKiste(k) {
+  const { x, y, g } = k, b = 46 * g;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ellipse(x, y + 3, b * 0.65, 8 * g); ctx.fill();
+  ctx.fillStyle = k.f; ctx.fillRect(x - b / 2, y - b, b, b);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x - b / 2, y - b, b, 8 * g);
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 3; ctx.strokeRect(x - b / 2, y - b, b, b);
+  ctx.beginPath(); ctx.moveTo(x - b / 2, y - b); ctx.lineTo(x + b / 2, y); ctx.stroke();
+}
+function zeichneSchacht(x, y) {   // Ein Lüftungsschacht mit Gitter
+  ctx.fillStyle = '#9aa4b5'; rundesRechteck(x - 42, y - 22, 84, 44, 6); ctx.fill();
+  ctx.fillStyle = '#0b0e16'; ctx.fillRect(x - 34, y - 15, 68, 30);
+  ctx.strokeStyle = '#6b7484'; ctx.lineWidth = 4;
+  for (let i = -26; i <= 26; i += 13) { ctx.beginPath(); ctx.moveTo(x + i, y - 15); ctx.lineTo(x + i, y + 15); ctx.stroke(); }
+  ctx.fillStyle = '#ccd3dd'; for (const [dx, dy] of [[-37, -17], [37, -17], [-37, 17], [37, 17]]) { ellipse(x + dx, y + dy, 2.5, 2.5); ctx.fill(); }   // Schrauben
+}
+function zeichneLuftschleuse(t, offen) {
+  const zu = offen ? Math.min(1, (sabotage.alter || 0) * 2) : 0;   // Wie weit die Tür offen ist
+  ctx.fillStyle = '#2b3242'; ctx.fillRect(t.x - 95, t.y - 120, 190, 125);   // Rahmen
+  ctx.fillStyle = offen ? '#05060f' : '#3a4150'; ctx.fillRect(t.x - 75, t.y - 105, 150, 105);
+  if (offen) { ctx.fillStyle = '#fff'; for (let i = 0; i < 10; i++) ctx.fillRect(t.x - 70 + (i * 41) % 140, t.y - 100 + (i * 23) % 95, 2, 2); }
+  const b = 75 * (1 - zu * 0.9);
+  ctx.fillStyle = '#9aa4b5'; ctx.fillRect(t.x - 75, t.y - 105, b, 105); ctx.fillRect(t.x + 75 - b, t.y - 105, b, 105);   // Zwei Schiebetüren
+  ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(t.x - 75, t.y - 20); ctx.lineTo(t.x - 75 + b, t.y - 60); ctx.moveTo(t.x + 75, t.y - 20); ctx.lineTo(t.x + 75 - b, t.y - 60); ctx.stroke();
+  const blink = offen && Math.floor(zeit * 4) % 2 === 0;
+  ctx.fillStyle = blink ? '#ff3b3b' : (offen ? '#661515' : '#4ade80'); ellipse(t.x, t.y - 132, 12, 8); ctx.fill();
+  text(offen ? 'Gatter (OFFEN!)' : 'Gatter', t.x, t.y - 155, 15, offen ? '#ff6b6b' : '#fff');
+}
+
 function zeichneLaterneUndGatter() {
   // Laterne
   const l = KARTE.laterne;
@@ -3210,6 +3374,7 @@ function zeichneLaterneUndGatter() {
   // Gatter
   const t = KARTE.gatter;
   const offen = sabotage && sabotage.art === 'gatter';
+  if (KARTE.weltall) { zeichneLuftschleuse(t, offen); return; }
   ctx.fillStyle = '#6e4b2a';
   ctx.fillRect(t.x - 110, t.y - 60, 8, 60); ctx.fillRect(t.x + 102, t.y - 60, 8, 60);
   ctx.fillRect(t.x - 50, t.y - 75, 10, 75); ctx.fillRect(t.x + 40, t.y - 75, 10, 75);
@@ -3241,8 +3406,17 @@ function zeichneWelt() {
   ctx.strokeStyle = KARTE.weg; ctx.lineWidth = 34; ctx.lineCap = 'round';
   for (const o of ORTE) { ctx.beginPath(); ctx.moveTo(GLOCKE.x, GLOCKE.y); ctx.lineTo(o.x, o.y); ctx.stroke(); }
   ctx.fillStyle = KARTE.platz; ellipse(GLOCKE.x, GLOCKE.y, 150, 110); ctx.fill();
-  // Rand: Zaun oder Meer
-  if (KARTE.rand === 'meer') {
+  // Rand: Zaun, Meer oder Raumschiff-Wand
+  if (KARTE.rand === 'all') {
+    ctx.strokeStyle = '#2b3242'; ctx.lineWidth = 70;
+    ctx.strokeRect(0, 0, WELT_B, WELT_H);
+    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 8; ctx.setLineDash([24, 18]);   // Warnstreifen
+    ctx.strokeRect(40, 40, WELT_B - 80, WELT_H - 80); ctx.setLineDash([]);
+    for (let x = 150; x < WELT_B - 100; x += 300) zeichneBullauge(x, 17);   // Runde Fenster ins All
+    for (let x = 150; x < WELT_B - 100; x += 300) zeichneBullauge(x, WELT_H - 17);
+    ctx.fillStyle = `rgba(125,249,255,${0.5 + Math.sin(zeit * 3) * 0.3})`;   // Blaue Lichtleisten
+    ctx.fillRect(35, 100, 4, WELT_H - 200); ctx.fillRect(WELT_B - 39, 100, 4, WELT_H - 200);
+  } else if (KARTE.rand === 'meer') {
     ctx.strokeStyle = '#3a9ad9'; ctx.lineWidth = 80;
     ctx.strokeRect(0, 0, WELT_B, WELT_H);
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 4;
@@ -3256,9 +3430,11 @@ function zeichneWelt() {
   for (const d of deko) {
     if (d.art === 'tannen') zeichneTanne(d);
     if (d.art === 'palmen') zeichnePalme(d);
+    if (d.art === 'kiste') zeichneKiste(d);
   }
-  // Gruben
-  for (const g of KARTE.gruben) {
+  // Gruben (im Raumschiff: Lüftungsschächte)
+  if (KARTE.weltall) for (const g of KARTE.gruben) zeichneSchacht(g.x, g.y);
+  else for (const g of KARTE.gruben) {
     ctx.fillStyle = '#6b4f3a'; ellipse(g.x, g.y, 40, 19); ctx.fill();
     ctx.fillStyle = '#140c06'; ellipse(g.x, g.y + 1, 32, 13); ctx.fill();
     ctx.fillStyle = '#8a8a8a';
