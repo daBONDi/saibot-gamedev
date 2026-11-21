@@ -2699,6 +2699,307 @@ function zeichneLuftschleusenRauswurf(c) {
   }
 }
 
+// ===== 🎬 Lange Rauswurf-Animationen: jede Karte hat ihre eigene! =====
+// Alle laufen nach dem gleichen Plan ab (siehe RW oben): reinlaufen → Countdown → Abflug → weit weg → PLING
+const RAUSWURF_BILDER = { schleuse: zeichneLuftschleusenRauswurf, katapult: zeichneKatapultRauswurf, schlitten: zeichneSchlittenRauswurf, floss: zeichneFlossRauswurf };
+function langerRauswurf() { return !!(KARTE && KARTE.rauswurf && RAUSWURF_BILDER[KARTE.rauswurf]); }
+
+// --- Helfer, die alle Animationen benutzen ---
+function rwBoese(c) { return c.raus.istWolf || c.raus.rolle === 'ziege'; }
+function rwVerjagtes(c, x, y, gr, dreh = 0, laeuft = false, richtung = 1) {   // Das Schaf (oder der enttarnte Wolf!)
+  const r = c.raus, t = c.t;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(dreh);
+  if (rwBoese(c) && t > RW.enttarnt) text(r.istWolf ? '🐺' : '🐐', 0, -12 * gr, 60 * gr, '#fff', 'center', false);
+  else zeichneSchafKoerper(0, 0, r.farbe, richtung, t * 14, laeuft, gr);
+  ctx.restore();
+  if (rwBoese(c) && t > RW.enttarnt - 0.2 && t < RW.enttarnt + 2) {   // Die Wolle fliegt weg!
+    const w = t - RW.enttarnt + 0.2, rr = 7 * Math.max(0.1, 1 - w / 2.2);
+    ctx.fillStyle = r.farbe;
+    for (let i = 0; i < 12; i++) { ellipse(x + Math.cos(i * 0.52) * w * 110, y + Math.sin(i * 0.52) * w * 110, rr, rr); ctx.fill(); }
+  }
+}
+function rwHerde(c, x0, y0, gr = 1, breite = 380, richtung = 1, huepfen = false) {   // Die Herde schaut zu
+  const abstand = Math.min(55 * gr, breite / Math.max(1, c.herde.length));
+  c.herde.forEach((s, i) => {
+    const x = x0 + i * abstand, y = y0 + (i % 2) * 20 * gr - (huepfen ? Math.abs(Math.sin(zeit * 6 + i)) * 10 : 0);
+    zeichneSchafKoerper(x, y, s.farbe, richtung, 0, false, gr);
+    if (s.istSpieler) text('DU', x, y - 35 * gr, 13, '#ffd166');
+  });
+}
+function rwCountdown(t, x, y, farbe = '#ffffff') {   // 3 … 2 … 1 … LOS!
+  if (t < RW.zu) return;
+  const zahl = t < RW.auf ? String(Math.max(1, 3 - Math.floor((t - RW.zu) / ((RW.auf - RW.zu) / 3)))) : 'LOS!';
+  const puls = 1 + Math.max(0, 0.3 - ((t - RW.zu) % ((RW.auf - RW.zu) / 3))) * 1.5;
+  text(zahl, x, y, (zahl.length > 1 ? 34 : 54) * puls, farbe, 'center', false);
+}
+function rwSagt(c, x, y, satz1) {   // Das Schaf bettelt ...
+  const t = c.t;
+  if (t > RW.zu + 0.3 && t < RW.auf) text(t < RW.zu + 1.3 ? satz1 : 'Määäh?! 😰', x, y, 17, '#fff');
+}
+function rwPling(t, x, y, farbe = '#fff8c0') {   // Ein kleiner Stern blitzt auf
+  if (t < RW.pling - 0.05 || t > RW.pling + 1.2) return;
+  const s2 = t - RW.pling, gr = s2 < 0.25 ? s2 * 4 : Math.max(0, 1 - (s2 - 0.25));
+  ctx.save(); ctx.translate(x, y); ctx.rotate(s2 * 3); ctx.fillStyle = farbe;
+  for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); dreieck(-4 * gr, 0, 4 * gr, 0, 0, -26 * gr); }
+  ctx.restore();
+}
+function rwHimmel(oben, unten, h = H) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, oben); g.addColorStop(1, unten);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function rwWolke(x, y, g) {
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ellipse(x, y, 40 * g, 18 * g); ctx.fill(); ellipse(x + 30 * g, y - 10 * g, 30 * g, 18 * g); ctx.fill(); ellipse(x - 30 * g, y - 4 * g, 26 * g, 14 * g); ctx.fill();
+}
+function rwSchild(x, y, b = 120, h = 70) {   // Holzschild für den Countdown
+  ctx.fillStyle = '#6e4b2a'; ctx.fillRect(x - 5, y, 10, 110);
+  ctx.fillStyle = '#a0703c'; rundesRechteck(x - b / 2, y - h / 2, b, h, 8); ctx.fill();
+  ctx.strokeStyle = '#6e4b2a'; ctx.lineWidth = 4; rundesRechteck(x - b / 2, y - h / 2, b, h, 8); ctx.stroke();
+}
+
+// ----- 🌾 Bauernhof: Das Heu-Katapult -----
+function zeichneKatapultRauswurf(c) {
+  const t = c.t, himmel = KARTE.himmel;
+  if (t < RW.draussen) {
+    rwHimmel(himmel[0], himmel[1], 430);
+    ctx.fillStyle = 'rgba(255,220,120,0.8)'; ellipse(820, 150, 50, 50); ctx.fill();
+    rwWolke(200 + zeit * 8 % 200, 110, 1); rwWolke(620, 70, 0.8);
+    ctx.fillStyle = KARTE.boden; ctx.beginPath(); ctx.moveTo(0, 440); ctx.quadraticCurveTo(480, 400, 960, 430); ctx.lineTo(960, 600); ctx.lineTo(0, 600); ctx.fill();
+    ctx.strokeStyle = '#8d6e4c'; ctx.lineWidth = 6;   // Zaun hinten
+    ctx.beginPath(); ctx.moveTo(0, 425); ctx.lineTo(960, 418); ctx.moveTo(0, 445); ctx.lineTo(960, 438); ctx.stroke();
+    ctx.fillStyle = '#6e4b2a'; for (let x = 20; x < 960; x += 80) ctx.fillRect(x, 405, 8, 50);
+    // Countdown-Schild
+    rwSchild(860, 400);
+    if (t < RW.zu) text('KATAPULT', 860, 400, 18, '#3b2a1a', 'center', false); else rwCountdown(t, 860, 402, '#fff');
+    // Das Katapult
+    const P = { x: 640, y: 470 }, L = 230, a0 = Math.PI - 0.3, a1 = Math.PI * 1.5 + 0.3;
+    const schwung = begrenzt((t - RW.auf) / 0.25, 0, 1), zittern = t > RW.zu && t < RW.auf ? Math.sin(t * 50) * 0.01 : 0;
+    const a = a0 + (a1 - a0) * schwung * schwung + zittern;
+    const E = { x: P.x + Math.cos(a) * L, y: P.y + Math.sin(a) * L };
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(560, 500, 170, 34);
+    ctx.fillStyle = '#4a3220'; for (const x of [585, 705]) { ellipse(x, 540, 20, 20); ctx.fill(); }
+    ctx.fillStyle = '#9a6a3a'; dreieck(600, 502, 680, 502, P.x, P.y - 6);
+    if (t < RW.auf) {   // Seil, das das Katapult unten hält
+      ctx.strokeStyle = '#d8c39a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(E.x + 20, E.y - 4); ctx.lineTo(470, 575); ctx.stroke();
+      ctx.fillStyle = '#6e4b2a'; ctx.fillRect(464, 560, 12, 26);
+    } else { ctx.strokeStyle = '#d8c39a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(470, 565); ctx.quadraticCurveTo(500, 520, 520, 560); ctx.stroke(); ctx.fillStyle = '#6e4b2a'; ctx.fillRect(464, 560, 12, 26); }
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 14; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(E.x, E.y); ctx.stroke();
+    // Das Schaf: hinlaufen, in den Löffel, ... BOING!
+    let sx, sy, dreh = 0, laeuft = false, richtung = 1;
+    if (t < RW.rein) { sx = 250 + (t / RW.rein) * (E.x - 250); sy = 545 - (t / RW.rein) * (545 - E.y + 22); laeuft = true; }
+    else if (t < RW.auf + 0.25) { sx = E.x; sy = E.y - 22; richtung = -1; if (t > RW.zu + 1.2) sx += Math.sin(t * 40) * 2; }
+    else { const f = t - RW.auf - 0.25; sx = E.x + f * 900; sy = E.y - 22 - f * 1300 + f * f * 600; dreh = f * 9; }
+    rwVerjagtes(c, sx, sy, 1.4, dreh, laeuft, richtung);
+    // Der Löffel (vor dem Schaf)
+    ctx.fillStyle = '#6e4b2a'; ctx.beginPath(); ctx.arc(E.x, E.y - 6, 34, Math.PI * 0.05 + a - a0, Math.PI * 0.95 + a - a0); ctx.fill();
+    ctx.lineCap = 'butt';
+    if (t < RW.auf) text(c.raus.name, sx, sy - 70, 18, c.raus.istSpieler ? '#ffd166' : '#fff');
+    rwSagt(c, sx, sy - 105, 'Ich will nicht fliegen! 😢');
+    if (t > RW.auf && t < RW.draussen) text('BOING!', 700, 200, 46 + (t - RW.auf) * 40, '#ffd166');
+    rwHerde(c, 20, 540, 1, 230, 1, false);
+  } else {
+    // ----- Weit weg: über die Hügel – rein in den Heuhaufen! -----
+    const k = t - RW.draussen, dauer = RW.pling - RW.draussen, f = Math.min(1, k / dauer);
+    rwHimmel(himmel[0], himmel[1], 460);
+    ctx.fillStyle = 'rgba(255,220,120,0.8)'; ellipse(820, 150, 50, 50); ctx.fill();
+    rwWolke(100 + k * 20, 120, 1.2); rwWolke(520 - k * 10, 80, 0.9); rwWolke(820, 230, 0.6);
+    const hell = KARTE.boden;
+    ctx.fillStyle = '#4e9a3a'; ctx.beginPath(); ctx.moveTo(0, 420); ctx.quadraticCurveTo(300, 360, 560, 410); ctx.quadraticCurveTo(780, 450, 960, 400); ctx.lineTo(960, 600); ctx.lineTo(0, 600); ctx.fill();
+    ctx.fillStyle = hell; ctx.beginPath(); ctx.moveTo(0, 500); ctx.quadraticCurveTo(400, 440, 960, 520); ctx.lineTo(960, 600); ctx.lineTo(0, 600); ctx.fill();
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(60, 440, 50, 34); ctx.fillStyle = '#7b241c'; dreieck(52, 440, 118, 440, 85, 415);   // Kleiner Stall hinten
+    // Ein Vogel fliegt vorbei
+    if (k > 1 && k < 4) { const vx = 960 - (k - 1) * 330, vy = 160 + Math.sin(k * 3) * 10; ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(vx - 12, vy - 6 + Math.sin(zeit * 12) * 4); ctx.lineTo(vx, vy); ctx.lineTo(vx + 12, vy - 6 + Math.sin(zeit * 12) * 4); ctx.stroke(); }
+    // Der Heuhaufen ganz hinten
+    const hx = 780, hy = 430;
+    ctx.fillStyle = '#e9c46a'; ctx.beginPath(); ctx.arc(hx, hy, 46, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 2; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(hx + i * 12, hy); ctx.lineTo(hx + i * 9, hy - 38 + Math.abs(i) * 4); ctx.stroke(); }
+    // Das Schaf fliegt im hohen Bogen
+    if (t < RW.pling) {
+      const x = 80 + f * (hx - 80), y = 370 - Math.sin(f * Math.PI) * 140 + f * (hy - 30 - 370), gr = 1.3 - f * 0.9;
+      rwVerjagtes(c, x, y, gr, k * 4, true);
+      if (k < 2.2) text(rwBoese(c) ? 'Auuuuu! 🐺' : 'Määääääh!', x + 60 * gr, y - 60 * gr, 20, '#fff');
+    } else {
+      const s2 = t - RW.pling;   // Gelandet! Heu fliegt, die Beine zappeln oben raus
+      ctx.strokeStyle = '#e9c46a'; ctx.lineWidth = 3;
+      if (s2 < 1.2) for (let i = 0; i < 14; i++) { const w = i * 0.45 + Math.PI, d = s2 * 90; ctx.beginPath(); ctx.moveTo(hx + Math.cos(w) * d, hy - 30 + Math.sin(w) * d * 0.7); ctx.lineTo(hx + Math.cos(w) * (d + 12), hy - 30 + Math.sin(w) * (d + 12) * 0.7); ctx.stroke(); }
+      ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 4;
+      for (const dx of [-8, 8]) { ctx.beginPath(); ctx.moveTo(hx + dx, hy - 40); ctx.lineTo(hx + dx + Math.sin(zeit * 15 + dx) * 4, hy - 62); ctx.stroke(); }
+      if (s2 < 1.5) text('PLUMPS!', hx, hy - 100 - s2 * 20, 30, '#ffd166');
+    }
+    rwHerde(c, 20, 565, 0.8, 300, 1, false);
+  }
+}
+
+// ----- ❄️ Winterdorf: Mit dem Schlitten den Berg runter! -----
+function zeichneSchlitten(x, y, gr = 1, winkel = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(winkel); ctx.scale(gr, gr);
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-55, 10); ctx.lineTo(45, 10); ctx.quadraticCurveTo(65, 10, 62, -6); ctx.stroke();   // Kufe
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(-50, -12, 95, 14);
+  ctx.fillStyle = '#7b241c'; ctx.fillRect(-40, 2, 6, 8); ctx.fillRect(25, 2, 6, 8);
+  ctx.lineCap = 'butt';
+  ctx.restore();
+}
+function rwSchneeflocken(k) {
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  for (let i = 0; i < 70; i++) { const x = (i * 137 + Math.sin(zeit + i) * 20 + 960) % 960, y = (i * 53 + zeit * 40) % 600; ctx.fillRect(x, y, 3, 3); }
+}
+function zeichneSchlittenRauswurf(c) {
+  const t = c.t, himmel = KARTE.himmel;
+  if (t < RW.draussen) {
+    rwHimmel(himmel[0], himmel[1], 470);
+    ctx.fillStyle = '#e8eef5'; ellipse(150, 90, 40, 40); ctx.fill();   // Mond
+    for (let i = 0; i < 7; i++) zeichneTanne({ x: 60 + i * 140, y: 470, g: 1.1 });
+    // Der Berg: oben flach, dann steil nach rechts unten
+    ctx.fillStyle = '#eef4fa'; ctx.beginPath(); ctx.moveTo(0, 470); ctx.lineTo(560, 470); ctx.quadraticCurveTo(700, 480, 960, 600); ctx.lineTo(0, 600); ctx.fill();
+    ctx.strokeStyle = '#c5d8e8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 470); ctx.lineTo(560, 470); ctx.quadraticCurveTo(700, 480, 960, 600); ctx.stroke();
+    // Der Schneemann hält das Countdown-Schild
+    const sm = { x: 300, y: 470 };
+    ctx.fillStyle = '#fff'; ellipse(sm.x, sm.y - 30, 34, 32); ctx.fill(); ellipse(sm.x, sm.y - 82, 25, 24); ctx.fill(); ellipse(sm.x, sm.y - 122, 18, 18); ctx.fill();
+    ctx.fillStyle = '#222'; ellipse(sm.x - 6, sm.y - 126, 2.5, 2.5); ctx.fill(); ellipse(sm.x + 6, sm.y - 126, 2.5, 2.5); ctx.fill();
+    ctx.fillStyle = '#ff8c1a'; dreieck(sm.x, sm.y - 122, sm.x, sm.y - 116, sm.x + 18, sm.y - 119);   // Karottennase
+    ctx.fillStyle = '#222'; ctx.fillRect(sm.x - 16, sm.y - 142, 32, 6); ctx.fillRect(sm.x - 11, sm.y - 162, 22, 22);   // Hut
+    ctx.strokeStyle = '#6b4f3a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(sm.x + 20, sm.y - 85); ctx.lineTo(sm.x + 55, sm.y - 120); ctx.stroke();
+    ctx.fillStyle = '#a0703c'; rundesRechteck(sm.x + 30, sm.y - 185, 100, 60, 8); ctx.fill();
+    if (t < RW.zu) text('🛷', sm.x + 80, sm.y - 155, 30, '#fff', 'center', false); else rwCountdown(t, sm.x + 80, sm.y - 153, '#fff');
+    // Schlitten: steht oben am Hang ... und saust runter
+    let sx = 560, sy = 456, w = 0;
+    if (t > RW.auf) { const f = (t - RW.auf) / (RW.draussen - RW.auf), d = f * f * 520; sx += d * 0.88; sy += d * 0.42; w = 0.4; }
+    const schafX = t < RW.rein ? 420 + (t / RW.rein) * (sx - 420) : sx, schafY = t < RW.rein ? 448 : sy - 16;
+    zeichneSchlitten(sx, sy, 1, w);
+    rwVerjagtes(c, schafX + (t > RW.zu + 1.2 && t < RW.auf ? Math.sin(t * 40) * 2 : 0), schafY, 1.3, w, t < RW.rein, t < RW.rein ? 1 : 1);
+    // Ein Schaf aus der Herde schubst
+    if (c.herde[0] && t > RW.zu) { const px = t < RW.auf ? 495 : 495 + Math.min(40, (t - RW.auf) * 120); zeichneSchafKoerper(px, 448, c.herde[0].farbe, 1, t * 14, t > RW.auf - 0.3, 1.1); }
+    if (t > RW.auf) {   // Schnee spritzt
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      for (let i = 0; i < 12; i++) { const a = i * 0.5; ellipse(sx - 60 - i * 8, sy + 8 - Math.abs(Math.sin(a + t * 10)) * 25, 5, 5); ctx.fill(); }
+      text('WUIIIII!', Math.min(820, sx), sy - 90, 36, '#bfe3f5');
+    }
+    if (t < RW.auf) text(c.raus.name, schafX, schafY - 70, 18, c.raus.istSpieler ? '#ffd166' : '#fff');
+    rwSagt(c, sx, sy - 110, 'Das ist viel zu steil! 😢');
+    rwHerde(c, 20, 452, 1, 200, 1, false);
+    rwSchneeflocken();
+  } else {
+    // ----- Weit weg: der lange Hang, die Sprungschanze ... und weg in die Berge! -----
+    const k = t - RW.draussen;
+    rwHimmel(himmel[0], himmel[1], 420);
+    ctx.fillStyle = '#e8eef5'; ellipse(150, 90, 40, 40); ctx.fill();
+    ctx.fillStyle = '#7d8ca3'; for (const [x, b, h] of [[520, 260, 210], [760, 300, 260], [940, 220, 180]]) dreieck(x - b / 2, 420, x + b / 2, 420, x, 420 - h);   // Berge
+    ctx.fillStyle = '#fff'; for (const [x, b, h] of [[520, 260, 210], [760, 300, 260], [940, 220, 180]]) dreieck(x - b * 0.16, 420 - h * 0.68, x + b * 0.16, 420 - h * 0.68, x, 420 - h);
+    ctx.fillStyle = '#dfe8f2'; ctx.fillRect(0, 420, W, 180);
+    for (let i = 0; i < 12; i++) zeichneTanne({ x: 520 + i * 40, y: 470 + (i % 3) * 12, g: 0.55 });   // Wald im Tal
+    // Der lange Hang mit Schanze
+    ctx.fillStyle = '#f4f8fc'; ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(620, 500); ctx.quadraticCurveTo(670, 520, 700, 488); ctx.lineTo(700, 600); ctx.lineTo(0, 600); ctx.fill();
+    ctx.strokeStyle = '#c5d8e8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(620, 500); ctx.quadraticCurveTo(670, 520, 700, 488); ctx.stroke();
+    ctx.fillStyle = '#a0703c'; ctx.fillRect(560, 430, 6, 50); ctx.fillStyle = '#c0392b'; ctx.fillRect(530, 410, 70, 24); text('SCHANZE', 565, 422, 11, '#fff', 'center', false);
+    let x, y, gr, w;
+    if (k < 2) { const f = (k / 2) * (k / 2); x = 30 + f * 650; y = 262 + f * 240; gr = 1.0; w = 0.38; }   // Runter!
+    else { const f = Math.min(1, (k - 2) / (RW.pling - RW.draussen - 2)); x = 690 + f * 160; y = 480 - Math.sin(f * Math.PI * 0.85) * 300 - f * 40; gr = Math.max(0.06, 1.0 - f * 0.94); w = -0.4 + f * 8; }   // Fliegt!
+    if (t < RW.pling) {
+      zeichneSchlitten(x, y + 16 * gr, gr, w);
+      rwVerjagtes(c, x, y, gr * 1.1, w, false);
+      if (k < 1.8) text(rwBoese(c) ? 'Auuuuu! 🐺' : 'Määääääh!', x + 50, y - 60, 20, '#fff');
+      if (k > 2 && k < 2.8) text('HUIIII!', 720, 320, 34, '#bfe3f5');
+    }
+    // Weit weg in den Bergen: PUFF! Schneewolke
+    if (t > RW.pling && t < RW.pling + 1.5) {
+      const s2 = t - RW.pling; ctx.fillStyle = `rgba(255,255,255,${1 - s2 / 1.5})`;
+      for (let i = 0; i < 8; i++) { ellipse(x + Math.cos(i * 0.8) * s2 * 40, y + Math.sin(i * 0.8) * s2 * 20, 10 + s2 * 10, 10 + s2 * 10); ctx.fill(); }
+      text('PUFF!', x, y - 50 - s2 * 15, 24, '#fff');
+    }
+    rwPling(t - 0.4, x, y, '#ffffff');
+    rwHerde(c, 30, 570, 0.8, 260, 1, false);
+    rwSchneeflocken();
+  }
+}
+
+// ----- 🏝️ Schafsinsel: Auf dem Floß in den Sonnenuntergang -----
+function zeichneFloss(x, y, gr = 1, segel = true) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(gr, gr);
+  ctx.fillStyle = "#8a5a2b"; rundesRechteck(-70, -14, 140, 22, 10); ctx.fill();
+  ctx.strokeStyle = '#5e3c1c'; ctx.lineWidth = 2; for (let i = -50; i <= 50; i += 25) { ctx.beginPath(); ctx.moveTo(i, -14); ctx.lineTo(i, 8); ctx.stroke(); }
+  if (segel) { ctx.strokeStyle = '#5e3c1c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(45, -10); ctx.lineTo(45, -110); ctx.stroke(); ctx.fillStyle = '#fff'; dreieck(48, -106, 48, -40, 95, -48); }
+  ctx.restore();
+}
+function rwMoewe(x, y, g = 1, sitzt = false) {
+  ctx.fillStyle = '#fff'; ellipse(x, y, 10 * g, 6 * g); ctx.fill();
+  ctx.fillStyle = '#ffb000'; dreieck(x + 9 * g, y - 2 * g, x + 9 * g, y + 2 * g, x + 16 * g, y);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3 * g;
+  const f = sitzt ? 2 : Math.sin(zeit * 14) * 8;
+  ctx.beginPath(); ctx.moveTo(x - 14 * g, y - 8 * g - f * g); ctx.lineTo(x - 2 * g, y - 2 * g); ctx.lineTo(x + 6 * g, y - 12 * g - f * g); ctx.stroke();
+}
+function zeichneFlossRauswurf(c) {
+  const t = c.t, himmel = KARTE.himmel;
+  if (t < RW.draussen) {
+    rwHimmel(himmel[0], himmel[1], 400);
+    ctx.fillStyle = 'rgba(255,200,100,0.9)'; ellipse(800, 330, 55, 55); ctx.fill();
+    // Meer rechts, Strand links
+    ctx.fillStyle = '#2a7fb8'; ctx.fillRect(0, 390, W, 210);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) { const y = 420 + i * 24, x = (i * 130 + zeit * 30) % 960; ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 20, y - 8, x + 40, y); ctx.stroke(); }
+    ctx.fillStyle = KARTE.boden; ctx.beginPath(); ctx.moveTo(0, 400); ctx.lineTo(480, 410); ctx.quadraticCurveTo(600, 470, 560, 600); ctx.lineTo(0, 600); ctx.fill();
+    zeichnePalme({ x: 90, y: 470, g: 1.4 });
+    // Schild + Krebs
+    rwSchild(420, 380, 110, 64);
+    if (t < RW.zu) text('⛵', 420, 380, 30, '#fff', 'center', false); else rwCountdown(t, 420, 382, '#fff');
+    text('🦀', 480 + Math.sin(zeit * 3) * 6, 545, 30, '#fff', 'center', false);
+    // Das Floß: liegt am Ufer ... dann zieht es eine Welle weg!
+    let fx = 640, fy = 505 + Math.sin(zeit * 2.5) * 3;
+    if (t > RW.auf) { const f = (t - RW.auf) / (RW.draussen - RW.auf); fx += f * f * 400; fy -= f * 40; }
+    const sx = t < RW.rein ? 300 + (t / RW.rein) * (fx - 300) : fx - 15, sy = t < RW.rein ? 520 - (t / RW.rein) * 32 : fy - 18;
+    if (t > RW.auf - 0.6) {   // Die große Welle
+      const f = begrenzt((t - RW.auf + 0.6) / 1.2, 0, 1);
+      ctx.fillStyle = 'rgba(120,200,255,0.85)'; ctx.beginPath(); ctx.moveTo(520, 600); ctx.quadraticCurveTo(560 + f * 200, 420 - Math.sin(f * Math.PI) * 60, 960, 470); ctx.lineTo(960, 600); ctx.fill();
+    }
+    rwVerjagtes(c, sx + (t > RW.zu + 1.2 && t < RW.auf ? Math.sin(t * 40) * 2 : 0), sy, 1.3, 0, t < RW.rein);
+    zeichneFloss(fx, fy, 1);
+    if (t > RW.auf) {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      for (let i = 0; i < 10; i++) { ellipse(fx - 80 + i * 18, fy - 20 - Math.abs(Math.sin(i + t * 8)) * 40, 4, 4); ctx.fill(); }
+      text('PLATSCH!', 700, 330, 40, '#bfe3f5');
+    }
+    if (t < RW.auf) text(c.raus.name, sx, sy - 70, 18, c.raus.istSpieler ? '#ffd166' : '#fff');
+    rwSagt(c, sx, sy - 105, 'Ich kann nicht schwimmen! 😢');
+    rwHerde(c, 160, 545, 1, 260, 1, false);
+  } else {
+    // ----- Weit weg: Sonnenuntergang, eine Möwe, ein Wal ... und weg am Horizont -----
+    const k = t - RW.draussen, dauer = RW.pling - RW.draussen, f = Math.min(1, k / dauer), w2 = 1 - Math.pow(1 - f, 1.5);
+    const horizont = 300;
+    rwHimmel(himmel[0], himmel[1], horizont);
+    ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(480, horizont, 70, Math.PI, 0); ctx.fill();   // Sonne geht unter
+    ctx.fillStyle = '#1f5f8f'; ctx.fillRect(0, horizont, W, H - horizont);
+    ctx.fillStyle = 'rgba(255,207,107,0.5)'; for (let i = 0; i < 9; i++) { const b = 120 - i * 8; ctx.fillRect(480 - b / 2 + Math.sin(zeit * 2 + i) * 6, horizont + 8 + i * 22, b, 5); }   // Glitzern
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 10; i++) { const y = horizont + 30 + i * 28, x = (i * 170 + zeit * 25) % 960; ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 18, y - 6, x + 36, y); ctx.stroke(); }
+    // Der Wal spritzt!
+    if (k > 2.4 && k < 5) {
+      const wx = 700, wy = 420, s2 = k - 2.4;
+      ctx.fillStyle = '#2b3f5c'; ctx.beginPath(); ctx.ellipse(wx, wy, 70, 22, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#fff'; ellipse(wx - 35, wy - 8, 3, 3); ctx.fill();
+      if (s2 > 0.3 && s2 < 2) { ctx.fillStyle = 'rgba(190,230,255,0.85)'; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i - 4.5) * 0.15, d = (s2 - 0.3) * 120; ellipse(wx + 10 + Math.cos(a) * d * 0.6, wy - 20 + Math.sin(a) * d, 5, 5); ctx.fill(); } text('PFFFFH!', wx + 10, wy - 100, 24, '#bfe3f5'); }
+    }
+    // Das Floß treibt zum Horizont
+    const x = 300 + w2 * 180, y = 520 - w2 * (520 - horizont - 4) + Math.sin(k * 2.5) * 6 * (1 - f), gr = Math.max(0.04, 1.0 - w2 * 0.96);
+    if (t < RW.pling) {
+      zeichneFloss(x, y, gr);
+      rwVerjagtes(c, x - 15 * gr, y - 18 * gr, 1.2 * gr, Math.sin(k * 2) * 0.1, false);
+      // Die Möwe kommt, setzt sich aufs Schaf ... und fliegt wieder weg
+      const kopf = { x: x - 15 * gr, y: y - 60 * gr };
+      if (k > 0.5 && k < 1.6) { const a = (k - 0.5) / 1.1; rwMoewe(960 - a * (960 - kopf.x), 80 + a * (kopf.y - 80), 1.4 - a * (1.4 - gr * 1.4)); }
+      else if (k >= 1.6 && k < 4) rwMoewe(kopf.x, kopf.y, gr * 1.4, true);
+      else if (k >= 4 && k < 5.5) { const a = (k - 4) / 1.5; rwMoewe(kopf.x - a * 500, kopf.y - a * 200, gr * 1.4 + a); }
+      if (k < 1.6) text(rwBoese(c) ? 'Auuuuu! 🐺' : 'Määääääh!', x + 60, y - 70, 20, '#fff');
+      if (k > 1.8 && k < 3) text('KRÄÄH!', kopf.x + 30, kopf.y - 40, 18, '#fff');
+    }
+    rwPling(t, x, y - 6, '#fff8c0');
+    // Die Herde winkt vom Strand
+    ctx.fillStyle = KARTE.boden; ctx.beginPath(); ctx.moveTo(0, 520); ctx.quadraticCurveTo(200, 500, 330, 600); ctx.lineTo(0, 600); ctx.fill();
+    zeichnePalme({ x: 40, y: 580, g: 1.2 });
+    rwHerde(c, 70, 560, 0.75, 220, 1, true);
+  }
+}
+
 function zeichneRauswurfText(c) {
   const t = c.t - (langerRauswurf() ? RW.text : 0), r = c.raus;   // 🎬 Bei den langen Animationen kommt der Text später
   // Text, Buchstabe für Buchstabe
