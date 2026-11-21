@@ -408,6 +408,8 @@ const sound = {
   schnee() { rauschen(1.6, 5000, 2000, 0.18); },
   welle() { rauschen(1.5, 600, 200, 0.4); },
   wal() { rauschen(1.0, 1500, 3500, 0.2); },
+  // 🔥 Feuer: Wuuusch – knister, knister
+  feuer() { rauschen(3.0, 900, 250, 0.3); for (let i = 0; i < 14; i++) ton(1500 + Math.random() * 1500, 0.2 + i * 0.2 + Math.random() * 0.1, 0.03, 'square', 0.05); },
   // 🚀 Klopf-klopf an die Glastür, und PLING! (ganz weit weg im All)
   klopf() { ton(180, 0, 0.06, 'square', 0.18, 120); ton(180, 0.18, 0.06, 'square', 0.18, 120); },
   pling() { ton(2093, 0, 0.5, 'sine', 0.12); ton(2637, 0.08, 0.6, 'sine', 0.08); },
@@ -2148,7 +2150,10 @@ function updateCutscene(dt) {
       if (ab(RW.draussen + 1.8)) sound.boing();   // Sprungschanze!
       if (ab(RW.pling)) sound.poff();
     } else if (art === 'floss') {
+      if (ab(0.6)) sound.boing();          // Hau-ruck!
+      if (ab(RW.rein)) sound.plumps();     // Plumps aufs Boot
       if (ab(RW.auf)) sound.welle();
+      if (ab(RW.enttarnt)) sound.feuer();  // 🔥
       if (ab(RW.draussen + 2.6)) sound.wal();
       if (ab(RW.pling)) sound.pling();
     }
@@ -2929,8 +2934,32 @@ function rwMoewe(x, y, g = 1, sitzt = false) {
   const f = sitzt ? 2 : Math.sin(zeit * 14) * 8;
   ctx.beginPath(); ctx.moveTo(x - 14 * g, y - 8 * g - f * g); ctx.lineTo(x - 2 * g, y - 2 * g); ctx.lineTo(x + 6 * g, y - 12 * g - f * g); ctx.stroke();
 }
+// 🔥 Flammen auf dem Floß (flackern lustig hin und her)
+function rwFlammen(x, y, gr, staerke) {
+  if (staerke <= 0) return;
+  for (let i = 0; i < 7; i++) {
+    const fx = x + (i - 3) * 18 * gr, h = (30 + Math.sin(zeit * 13 + i * 2.1) * 10 + (i % 2) * 14) * gr * staerke;
+    ctx.fillStyle = '#ff5a1f'; dreieck(fx - 11 * gr, y, fx + 11 * gr, y, fx + Math.sin(zeit * 9 + i) * 4 * gr, y - h);
+    ctx.fillStyle = '#ffd23f'; dreieck(fx - 6 * gr, y, fx + 6 * gr, y, fx + Math.sin(zeit * 11 + i) * 3 * gr, y - h * 0.6);
+  }
+}
+function rwRauch(x, y, gr, seit) {   // Graue Rauchwolken steigen auf
+  for (let i = 0; i < 6; i++) {
+    const p = ((seit * 0.6 + i / 6) % 1), r = (8 + p * 22) * Math.max(0.4, gr);
+    ctx.fillStyle = `rgba(70,70,70,${0.55 * (1 - p)})`;
+    ellipse(x + Math.sin(i * 2 + seit) * 10 * gr - p * 30 * gr, y - p * 140 * Math.max(0.5, gr), r, r); ctx.fill();
+  }
+}
+function mischFarbe(a, b, k) {   // Farbe a langsam zu Farbe b machen (k = 0 … 1)
+  const z = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const A = z(a), B = z(b);
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join('');
+}
 function zeichneFlossRauswurf(c) {
-  const t = c.t, himmel = KARTE.himmel;
+  const t = c.t, himmel = KARTE.himmel, r = c.raus;
+  const brennt = t - RW.enttarnt;                           // 🔥 Ab der Enttarnung brennt das Floß!
+  const russ = begrenzt(brennt / 1.2, 0, 1);                // So rußig ist das Schaf schon
+  const russFarbe = r.farbe.length === 7 ? mischFarbe(r.farbe, '#2b2b2b', russ) : r.farbe;
   if (t < RW.draussen) {
     rwHimmel(himmel[0], himmel[1], 400);
     ctx.fillStyle = 'rgba(255,200,100,0.9)'; ellipse(800, 330, 55, 55); ctx.fill();
@@ -2944,27 +2973,34 @@ function zeichneFlossRauswurf(c) {
     rwSchild(420, 380, 110, 64);
     if (t < RW.zu) text('⛵', 420, 380, 30, '#fff', 'center', false); else rwCountdown(t, 420, 382, '#fff');
     text('🦀', 480 + Math.sin(zeit * 3) * 6, 545, 30, '#fff', 'center', false);
-    // Das Floß: liegt am Ufer ... dann zieht es eine Welle weg!
-    let fx = 640, fy = 505 + Math.sin(zeit * 2.5) * 3;
+    // Das Boot: liegt am Ufer ... dann segelt es los!
+    let fx = 660, fy = 505 + Math.sin(zeit * 2.5) * 3;
     if (t > RW.auf) { const f = (t - RW.auf) / (RW.draussen - RW.auf); fx += f * f * 400; fy -= f * 40; }
-    const sx = t < RW.rein ? 300 + (t / RW.rein) * (fx - 300) : fx - 15, sy = t < RW.rein ? 520 - (t / RW.rein) * 32 : fy - 18;
-    if (t > RW.auf - 0.6) {   // Die große Welle
+    // Die Herde SCHMEISST das Schaf aufs Boot: hoch im Bogen – PLUMPS!
+    let sx = fx - 15, sy = fy - 18, dreh = 0;
+    if (t < RW.rein) {
+      const k = Math.max(0, (t - 0.5) / (RW.rein - 0.5));
+      sx = 330 + k * (fx - 15 - 330); sy = 520 + k * (fy - 18 - 520) - Math.sin(k * Math.PI) * 200; dreh = k * Math.PI * 2;
+    }
+    if (t > RW.auf - 0.6) {   // Eine Welle hilft beim Losfahren
       const f = begrenzt((t - RW.auf + 0.6) / 1.2, 0, 1);
       ctx.fillStyle = 'rgba(120,200,255,0.85)'; ctx.beginPath(); ctx.moveTo(520, 600); ctx.quadraticCurveTo(560 + f * 200, 420 - Math.sin(f * Math.PI) * 60, 960, 470); ctx.lineTo(960, 600); ctx.fill();
     }
-    rwVerjagtes(c, sx + (t > RW.zu + 1.2 && t < RW.auf ? Math.sin(t * 40) * 2 : 0), sy, 1.3, 0, t < RW.rein);
+    rwVerjagtes(c, sx + (t > RW.zu + 1.2 && t < RW.auf ? Math.sin(t * 40) * 2 : 0), sy, 1.3, dreh, false);
     zeichneFloss(fx, fy, 1);
+    if (t > 0.1 && t < 1.1) text('HAU – RUCK!', 300, 440, 26, '#ffd166');
+    if (t > RW.rein - 0.1 && t < RW.rein + 0.7) text('PLUMPS!', fx, fy - 120, 28, '#fff');
     if (t > RW.auf) {
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
       for (let i = 0; i < 10; i++) { ellipse(fx - 80 + i * 18, fy - 20 - Math.abs(Math.sin(i + t * 8)) * 40, 4, 4); ctx.fill(); }
-      text('PLATSCH!', 700, 330, 40, '#bfe3f5');
+      text('Leinen los! ⛵', 700, 330, 34, '#bfe3f5');
     }
-    if (t < RW.auf) text(c.raus.name, sx, sy - 70, 18, c.raus.istSpieler ? '#ffd166' : '#fff');
+    if (t > RW.rein && t < RW.auf) text(r.name, sx, sy - 70, 18, r.istSpieler ? '#ffd166' : '#fff');
     rwSagt(c, sx, sy - 105, 'Ich kann nicht schwimmen! 😢');
-    rwHerde(c, 160, 545, 1, 260, 1, false);
+    rwHerde(c, 160, 545, 1, 260, 1, t < RW.rein);
   } else {
-    // ----- Weit weg: Sonnenuntergang, eine Möwe, ein Wal ... und weg am Horizont -----
-    const k = t - RW.draussen, dauer = RW.pling - RW.draussen, f = Math.min(1, k / dauer), w2 = 1 - Math.pow(1 - f, 1.5);
+    // ----- Weit weg: Sonnenuntergang ... und dann fängt das Floß an zu BRENNEN! -----
+    const k = t - RW.draussen, dauer = RW.pling - RW.draussen, f = Math.min(1, k / dauer), w2 = Math.pow(f, 1.4);   // (Erst langsam – damit man das Feuer gut sieht)
     const horizont = 300;
     rwHimmel(himmel[0], himmel[1], horizont);
     ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(480, horizont, 70, Math.PI, 0); ctx.fill();   // Sonne geht unter
@@ -2972,31 +3008,42 @@ function zeichneFlossRauswurf(c) {
     ctx.fillStyle = 'rgba(255,207,107,0.5)'; for (let i = 0; i < 9; i++) { const b = 120 - i * 8; ctx.fillRect(480 - b / 2 + Math.sin(zeit * 2 + i) * 6, horizont + 8 + i * 22, b, 5); }   // Glitzern
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
     for (let i = 0; i < 10; i++) { const y = horizont + 30 + i * 28, x = (i * 170 + zeit * 25) % 960; ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 18, y - 6, x + 36, y); ctx.stroke(); }
-    // Der Wal spritzt!
+    // Der Wal schaut zu und spritzt
     if (k > 2.4 && k < 5) {
       const wx = 700, wy = 420, s2 = k - 2.4;
       ctx.fillStyle = '#2b3f5c'; ctx.beginPath(); ctx.ellipse(wx, wy, 70, 22, 0, Math.PI, 0); ctx.fill();
       ctx.fillStyle = '#fff'; ellipse(wx - 35, wy - 8, 3, 3); ctx.fill();
       if (s2 > 0.3 && s2 < 2) { ctx.fillStyle = 'rgba(190,230,255,0.85)'; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i - 4.5) * 0.15, d = (s2 - 0.3) * 120; ellipse(wx + 10 + Math.cos(a) * d * 0.6, wy - 20 + Math.sin(a) * d, 5, 5); ctx.fill(); } text('PFFFFH!', wx + 10, wy - 100, 24, '#bfe3f5'); }
     }
-    // Das Floß treibt zum Horizont
-    const x = 300 + w2 * 180, y = 520 - w2 * (520 - horizont - 4) + Math.sin(k * 2.5) * 6 * (1 - f), gr = Math.max(0.04, 1.0 - w2 * 0.96);
+    // Das Boot segelt zum Horizont
+    const x = 300 + w2 * 180, y = 520 - w2 * (520 - horizont - 4) + Math.sin(k * 2.5) * 6 * (1 - f), gr = Math.max(0.04, 1.4 - w2 * 1.36);
     if (t < RW.pling) {
-      zeichneFloss(x, y, gr);
-      rwVerjagtes(c, x - 15 * gr, y - 18 * gr, 1.2 * gr, Math.sin(k * 2) * 0.1, false);
-      // Die Möwe kommt, setzt sich aufs Schaf ... und fliegt wieder weg
-      const kopf = { x: x - 15 * gr, y: y - 60 * gr };
-      if (k > 0.5 && k < 1.6) { const a = (k - 0.5) / 1.1; rwMoewe(960 - a * (960 - kopf.x), 80 + a * (kopf.y - 80), 1.4 - a * (1.4 - gr * 1.4)); }
-      else if (k >= 1.6 && k < 4) rwMoewe(kopf.x, kopf.y, gr * 1.4, true);
-      else if (k >= 4 && k < 5.5) { const a = (k - 4) / 1.5; rwMoewe(kopf.x - a * 500, kopf.y - a * 200, gr * 1.4 + a); }
-      if (k < 1.6) text(rwBoese(c) ? 'Auuuuu! 🐺' : 'Määääääh!', x + 60, y - 70, 20, '#fff');
-      if (k > 1.8 && k < 3) text('KRÄÄH!', kopf.x + 30, kopf.y - 40, 18, '#fff');
+      if (brennt > 0) { const g = ctx.createRadialGradient(x, y, 5, x, y, 160 * gr); g.addColorStop(0, 'rgba(255,150,60,0.55)'); g.addColorStop(1, 'rgba(255,150,60,0)'); ctx.fillStyle = g; ellipse(x, y, 160 * gr, 60 * gr); ctx.fill(); }   // Feuerschein auf dem Wasser
+      zeichneFloss(x, y, gr, brennt < 2.5);   // (Das Segel brennt irgendwann ab)
+      const huepf = brennt > 0 ? Math.abs(Math.sin(k * 9)) * 14 * gr : 0;   // AUA! Heiß! Hüpf, hüpf!
+      const fake = { ...c, raus: { ...r, farbe: russFarbe } };
+      rwVerjagtes(fake, x - 15 * gr, y - 18 * gr - huepf, 1.2 * gr, Math.sin(k * 2) * 0.1, brennt > 0);
+      rwFlammen(x, y - 8 * gr, gr, begrenzt(brennt / 0.8, 0, 1));
+      if (brennt > 0) rwRauch(x - 15 * gr, y - 60 * gr, gr, brennt);
+      // Die Möwe sitzt auf dem Kopf ... bis es brennt!
+      const kopf = { x: x - 15 * gr, y: y - 60 * gr - huepf };
+      const flieht = RW.enttarnt - RW.draussen;
+      if (k > 0.05 && k < 0.6) { const a = (k - 0.05) / 0.55; rwMoewe(960 - a * (960 - kopf.x), 80 + a * (kopf.y - 80), 1.4 - a * (1.4 - gr * 1.4)); }
+      else if (k >= 0.6 && k < flieht) rwMoewe(kopf.x, kopf.y, gr * 1.4, true);
+      else if (k >= flieht && k < flieht + 1.6) { const a = (k - flieht) / 1.6; rwMoewe(kopf.x - a * 500, kopf.y - a * 250, gr * 1.4 + a); text('KRÄÄH!!', kopf.x - a * 500 + 30, kopf.y - a * 250 - 30, 18, '#fff'); }
+      if (k < 0.7) text('Määääääh!', x + 60, y - 70, 20, '#fff');
+      if (brennt > 0 && brennt < 3.5) {
+        const satz = rwBoese(c) ? 'AUA! HEISS! 🔥🐺' : (Math.floor(brennt * 2) % 2 ? 'HUST! HUST! 🔥' : 'HEISS! HEISS! 🔥');
+        text(satz, x + 70, y - 90 * Math.max(0.6, gr), 20, '#ffb36b');
+      }
+      if (brennt > 0 && brennt < 0.8) text('🔥 FEUER! 🔥', x, y - 150 * Math.max(0.6, gr), 30 + brennt * 20, '#ff5a1f');
     }
-    rwPling(t, x, y - 6, '#fff8c0');
-    // Die Herde winkt vom Strand
+    rwPling(t, x, y - 6, '#ffb36b');
+    // Die Herde vom Strand (erst winken, dann staunen)
     ctx.fillStyle = KARTE.boden; ctx.beginPath(); ctx.moveTo(0, 520); ctx.quadraticCurveTo(200, 500, 330, 600); ctx.lineTo(0, 600); ctx.fill();
     zeichnePalme({ x: 40, y: 580, g: 1.2 });
-    rwHerde(c, 70, 560, 0.75, 220, 1, true);
+    rwHerde(c, 70, 560, 0.75, 220, 1, brennt < 0);
+    if (brennt > 0.5 && brennt < 3) text('😱', 170, 500, 30, '#fff', 'center', false);
   }
 }
 
