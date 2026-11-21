@@ -1803,48 +1803,97 @@ function karoTextur(farbe = '#b3261e') {   // Kariertes Holzfäller-Hemd
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter;
   return t;
 }
+function strohTextur() {   // Geflochtenes Stroh für den Hut
+  if (strohTextur.t) return strohTextur.t;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e6c35c'; g.fillRect(0, 0, 64, 64);
+  for (let y = 0; y < 64; y += 8) for (let x = 0; x < 64; x += 8) {
+    g.fillStyle = ((x + y) / 8) % 2 ? 'rgba(150,100,30,0.35)' : 'rgba(255,240,180,0.35)';
+    g.fillRect(x, y, 8, 4);
+    g.fillStyle = 'rgba(120,80,20,0.3)'; g.fillRect(x, y + 7, 8, 1);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 1);
+  strohTextur.t = t;
+  return t;
+}
 function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die anderen Spieler im Multiplayer)
   const player = new THREE.Group(), farmer = { phase: 0 };
   const haut = mat(0xe8b896), jeans = mat(0x2f4f86), hemd = new THREE.MeshStandardMaterial({ map: karoTextur(hemdFarbe), roughness: 0.9 });
   farmer.hemd = hemd;
-  const stiefel = mat(0x4a2e18), hut = mat(0xe6c35c), hutband = mat(0x7a3b1d), schwarz = mat(0x111111), bart = mat(0x6b4423);
+  const schwarz = mat(0x111111), weiss = mat(0xffffff), bart = mat(0x6b4423);
+  const stiefel = mat(0x2f5a2a, { roughness: 0.5 }), sohle = mat(0x1a1a1a), jeansHell = mat(0x3f62a0), naht = mat(0xd8a040);
+  const handschuh = mat(0x9a6a3a), wange = mat(0xe89a8a), halstuch = mat(0xc8231e), messing = mat(0xd4af37, { metalness: 0.7, roughness: 0.3 });
+  const hut = new THREE.MeshStandardMaterial({ map: strohTextur(), roughness: 1 }), hutband = mat(0xb3261e);
   const teil = (eltern, geo, m, x, y, z) => { const t = new THREE.Mesh(geo, m); t.position.set(x, y, z); t.castShadow = true; eltern.add(t); return t; };
-  // Beine (drehen sich an der Hüfte)
+  const B = (b, h, t) => new THREE.BoxGeometry(b, h, t);
+  // Beine (drehen sich an der Hüfte): Latzhose mit Flicken am Knie, umgekrempelter Saum und grüne Gummistiefel
   for (const s of [-1, 1]) {
     const bein = new THREE.Group(); bein.position.set(s * 0.13, 0.92, 0); player.add(bein);
-    teil(bein, new THREE.BoxGeometry(0.2, 0.8, 0.22), jeans, 0, -0.42, 0);
-    teil(bein, new THREE.BoxGeometry(0.22, 0.16, 0.34), stiefel, 0, -0.84, -0.05);
+    teil(bein, B(0.2, 0.56, 0.22), jeans, 0, -0.3, 0);
+    teil(bein, B(0.21, 0.06, 0.23), jeansHell, 0, -0.6, 0);                            // Umgekrempelter Saum
+    if (s > 0) teil(bein, B(0.12, 0.12, 0.02), mat(0xb3261e), 0.01, -0.32, -0.115);   // Flicken am Knie (rot)
+    teil(bein, B(0.21, 0.26, 0.23), stiefel, 0, -0.74, 0);                              // Gummistiefel
+    teil(bein, B(0.21, 0.12, 0.14), stiefel, 0, -0.82, -0.15);                          // Stiefelspitze
+    teil(bein, B(0.23, 0.05, 0.38), sohle, 0, -0.895, -0.06);                           // Sohle
     farmer[s < 0 ? 'beinL' : 'beinR'] = bein;
   }
-  // Körper: Hemd + Latzhose
-  teil(player, new THREE.BoxGeometry(0.5, 0.62, 0.3), hemd, 0, 1.24, 0);
-  teil(player, new THREE.BoxGeometry(0.52, 0.42, 0.32), jeans, 0, 1.1, 0);                 // Latzhose unten
-  teil(player, new THREE.BoxGeometry(0.34, 0.24, 0.02), jeans, 0, 1.38, -0.16);            // Latz vorne
-  for (const s of [-1, 1]) teil(player, new THREE.BoxGeometry(0.06, 0.26, 0.33), jeans, s * 0.14, 1.45, 0);   // Träger
-  for (const s of [-1, 1]) teil(player, new THREE.BoxGeometry(0.05, 0.05, 0.02), mat(0xd4af37), s * 0.13, 1.47, -0.175);   // Knöpfe
-  // Arme (drehen sich an der Schulter)
+  // Körper: kariertes Hemd mit Kragen, Latzhose mit Tasche, Trägern und Messingknöpfen
+  teil(player, B(0.5, 0.62, 0.3), hemd, 0, 1.24, 0);
+  for (const s of [-1, 1]) { const k = teil(player, B(0.13, 0.06, 0.12), hemd, s * 0.09, 1.56, -0.12); k.rotation.z = s * 0.35; }   // Kragen
+  teil(player, B(0.52, 0.4, 0.32), jeans, 0, 1.08, 0);                                   // Latzhose unten
+  teil(player, B(0.34, 0.26, 0.02), jeans, 0, 1.38, -0.16);                              // Latz vorne
+  teil(player, B(0.18, 0.12, 0.01), jeansHell, 0, 1.38, -0.172);                         // Brusttasche
+  teil(player, B(0.18, 0.01, 0.012), naht, 0, 1.44, -0.178);                             // Naht an der Tasche
+  teil(player, B(0.03, 0.09, 0.01), mat(0xf2c200), 0.05, 1.42, -0.18);                   // Bleistift in der Tasche
+  for (const s of [-1, 1]) {
+    teil(player, B(0.07, 0.3, 0.33), jeans, s * 0.14, 1.44, 0);                          // Träger
+    teil(player, B(0.06, 0.06, 0.02), messing, s * 0.13, 1.47, -0.18);                   // Knöpfe
+    teil(player, B(0.1, 0.13, 0.01), jeansHell, s * 0.17, 1.02, -0.165);                 // Hosentaschen
+  }
+  teil(player, B(0.53, 0.012, 0.325), naht, 0, 1.28, 0);                                 // Naht oben an der Hose
+  // Arme (drehen sich an der Schulter): hochgekrempelte Ärmel, braune Arbeitshandschuhe
   for (const s of [-1, 1]) {
     const arm = new THREE.Group(); arm.position.set(s * 0.33, 1.5, 0); player.add(arm);
-    teil(arm, new THREE.BoxGeometry(0.15, 0.55, 0.17), hemd, 0, -0.27, 0);
-    teil(arm, new THREE.BoxGeometry(0.12, 0.13, 0.13), haut, 0, -0.6, 0);                 // Hand
+    teil(arm, B(0.16, 0.32, 0.17), hemd, 0, -0.14, 0);                                   // Oberarm
+    teil(arm, B(0.17, 0.07, 0.18), hemd, 0, -0.31, 0);                                   // Hochgekrempelter Ärmel
+    teil(arm, B(0.13, 0.22, 0.14), haut, 0, -0.44, 0);                                   // Unterarm
+    teil(arm, B(0.14, 0.13, 0.14), handschuh, 0, -0.6, 0);                               // Hand im Handschuh
+    teil(arm, B(0.05, 0.08, 0.06), handschuh, -s * 0.07, -0.57, -0.05);                  // Daumen
+    teil(arm, B(0.15, 0.04, 0.15), mat(0x7a4a22), 0, -0.535, 0);                         // Handschuh-Rand
     farmer[s < 0 ? 'armL' : 'armR'] = arm;
   }
-  // Kopf mit Gesicht
+  // Kopf mit freundlichem Gesicht
   const kopf = new THREE.Group(); kopf.position.set(0, 1.72, 0); player.add(kopf);
-  teil(kopf, new THREE.BoxGeometry(0.12, 0.1, 0.12), haut, 0, -0.14, 0);                  // Hals
-  teil(kopf, new THREE.BoxGeometry(0.3, 0.32, 0.3), haut, 0, 0.04, 0);
+  teil(kopf, B(0.13, 0.1, 0.13), haut, 0, -0.14, 0);                                     // Hals
+  const tuch = teil(kopf, B(0.2, 0.08, 0.2), halstuch, 0, -0.13, 0); tuch.rotation.y = Math.PI / 4;   // Halstuch
+  const zipfel = teil(kopf, new THREE.ConeGeometry(0.06, 0.1, 4), halstuch, 0, -0.19, -0.1); zipfel.rotation.x = Math.PI;
+  teil(kopf, B(0.3, 0.32, 0.3), haut, 0, 0.04, 0);
+  teil(kopf, B(0.26, 0.05, 0.26), haut, 0, -0.13, 0);                                    // Kinn (etwas schmaler)
   for (const s of [-1, 1]) {
-    teil(kopf, new THREE.BoxGeometry(0.06, 0.05, 0.02), schwarz, s * 0.07, 0.08, -0.155);   // Augen
-    teil(kopf, new THREE.BoxGeometry(0.09, 0.02, 0.02), bart, s * 0.07, 0.13, -0.155);      // Augenbrauen
-    teil(kopf, new THREE.BoxGeometry(0.03, 0.08, 0.06), haut, s * 0.16, 0.04, 0);           // Ohren
+    teil(kopf, B(0.07, 0.06, 0.02), weiss, s * 0.07, 0.08, -0.152);                      // Augen: weiß ...
+    teil(kopf, B(0.035, 0.045, 0.02), mat(0x3a2a1a), s * 0.065, 0.075, -0.158);         // ... mit Pupille
+    teil(kopf, B(0.012, 0.012, 0.01), weiss, s * 0.055, 0.088, -0.166);                  // Glanzpunkt
+    teil(kopf, B(0.09, 0.022, 0.02), bart, s * 0.07, 0.135, -0.155);                     // Augenbrauen
+    teil(kopf, B(0.035, 0.09, 0.07), haut, s * 0.165, 0.04, 0);                          // Ohren
+    teil(kopf, B(0.06, 0.035, 0.01), wange, s * 0.1, -0.01, -0.152);                     // Rote Bäckchen
+    teil(kopf, B(0.035, 0.12, 0.08), bart, s * 0.152, 0.07, 0.04);                       // Koteletten
   }
-  teil(kopf, new THREE.BoxGeometry(0.06, 0.07, 0.06), mat(0xd9a07e), 0, 0.02, -0.17);      // Nase
-  teil(kopf, new THREE.BoxGeometry(0.2, 0.05, 0.03), bart, 0, -0.04, -0.16);               // Schnurrbart
-  teil(kopf, new THREE.BoxGeometry(0.31, 0.06, 0.31), bart, 0, 0.19, 0.0);                 // Haare
-  // Strohhut
-  teil(kopf, new THREE.CylinderGeometry(0.36, 0.38, 0.03, 20), hut, 0, 0.22, 0);
-  teil(kopf, new THREE.CylinderGeometry(0.17, 0.2, 0.16, 16), hut, 0, 0.31, 0);
-  teil(kopf, new THREE.CylinderGeometry(0.205, 0.205, 0.04, 16), hutband, 0, 0.26, 0);
+  teil(kopf, B(0.06, 0.08, 0.07), mat(0xe0a585), 0, 0.02, -0.175);                       // Nase
+  const schnurr = teil(kopf, B(0.2, 0.045, 0.035), bart, 0, -0.035, -0.16);              // Schnurrbart
+  for (const s of [-1, 1]) { const e = teil(kopf, B(0.05, 0.035, 0.03), bart, s * 0.115, -0.05, -0.158); e.rotation.z = s * 0.5; }   // Gezwirbelte Enden
+  teil(kopf, B(0.11, 0.02, 0.01), mat(0x8a3a2a), 0, -0.085, -0.152);                     // Lächelnder Mund ...
+  for (const s of [-1, 1]) teil(kopf, B(0.02, 0.02, 0.01), mat(0x8a3a2a), s * 0.06, -0.075, -0.152);   // ... mit Mundwinkeln nach oben
+  teil(kopf, B(0.31, 0.06, 0.31), bart, 0, 0.19, 0);                                     // Haare
+  teil(kopf, B(0.31, 0.16, 0.04), bart, 0, 0.1, 0.15);                                   // Haare hinten
+  // Strohhut mit geflochtener Struktur, gebogener Krempe und rotem Band
+  const krempe = teil(kopf, new THREE.CylinderGeometry(0.4, 0.37, 0.05, 24, 1, true), hut, 0, 0.215, 0);
+  krempe.material = hut.clone(); krempe.material.side = THREE.DoubleSide;
+  teil(kopf, new THREE.CylinderGeometry(0.37, 0.37, 0.02, 24), hut, 0, 0.21, 0);
+  teil(kopf, new THREE.CylinderGeometry(0.16, 0.2, 0.17, 18), hut, 0, 0.31, 0);
+  teil(kopf, new THREE.CylinderGeometry(0.205, 0.205, 0.045, 18), hutband, 0, 0.255, 0);
+  const delle = teil(kopf, B(0.2, 0.03, 0.04), mat(0xc9a44a), 0, 0.395, 0); delle.rotation.y = Math.PI / 2;   // Delle oben im Hut
+  const halm = teil(kopf, B(0.012, 0.012, 0.16), mat(0xe8cf6a), 0.09, -0.05, -0.22); halm.rotation.y = -0.4; halm.rotation.x = -0.2;   // Strohhalm im Mund
   farmer.kopf = kopf;
   // Motorsäge: wird mit beiden Händen vor dem Bauch gehalten (erst mal versteckt)
   const saege = new THREE.Group(); saege.position.set(0.12, 1.02, -0.45); saege.visible = false;
