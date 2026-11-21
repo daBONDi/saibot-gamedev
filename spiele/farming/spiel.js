@@ -28,8 +28,12 @@ const SPEICHER_NAME = 'farming-spielstand';
 const MAIS_WACHS_ZEIT = 180;     // Mais braucht länger als Getreide
 const MAIS_SAAT_PREIS = 0.8;     // Mais-Saat kostet so viel pro kg
 const MAIS_ERTRAG = 300;         // So viel Häckselgut (kg) gibt ein reifes Mais-Stück
-const FAHRSILO_MAX = 60000;      // So viel passt in ein Silagesilo
-const WALZ_ZEIT = 20;            // So viele Sekunden musst du über 20 Tonnen Häckselgut fahren, bis es fest ist
+const FAHRSILO_MAX = 150000;     // So viel passt in ein Silagesilo
+const FS_BREIT = 7.4;            // Silagesilo: halbe Breite innen (Meter) – 7,4 = fast 15 m breit
+const FS_LANG = 14;              // Silagesilo: halbe Länge (Meter) – 14 = 28 m lang
+const FS_WAND = 3.4;             // Silagesilo: so hoch sind die Wände
+const FS_RAMPE = 4;              // So lang ist die Schräge vorne und hinten am Haufen (da fährst du hoch)
+const WALZ_ZEIT = 20;            // So viele Sekunden musst du über 40 Tonnen Häckselgut fahren, bis es fest ist
 const GAER_ZEIT = 180;           // So lange gärt die Silage unter der Folie
 const FOLIE_PREIS = 500;         // Die Silofolie kostet so viel
 const SILAGE_PREIS = 0.9;        // Silage bringt so viel pro kg beim Landhandel
@@ -79,7 +83,7 @@ const GEBAEUDE_ARTEN = {
   erlenwald: { name: 'Erlenwald', emoji: '🌲', preis: 3000, r: 6, holz: 'erle' },
   ahornwald: { name: 'Ahornwald', emoji: '🍁', preis: 4000, r: 6, holz: 'ahorn' },
   werkbank: { name: 'Werkbank', emoji: '🛠️', preis: 2500, r: 2.2 },
-  fahrsilo: { name: 'Silagesilo', emoji: '🟩', preis: 20000, r: 10 },
+  fahrsilo: { name: 'Silagesilo', emoji: '🟩', preis: 20000, r: 15 },
   bienenstock: { name: 'Bienenstock', emoji: '🐝', preis: 1500, r: 1.3 },
   // 🛢️ Verschiedene Silos: max = so viel passt rein · gut = was reinkommt · hoch = wo das Schild hängt
   kleinsilo: { name: 'Kleines Silo', emoji: '🥫', preis: 12000, r: 2, silo: { max: 20000, gut: 'korn', hoch: 9 } },
@@ -2103,25 +2107,27 @@ function baueGebaeudeMesh(art) {
     }
   } else if (art === 'fahrsilo') {   // Silagesilo: Betonboden, zwei hohe Wände, vorne und hinten offen (zum Durchfahren!)
     const beton = mat(0xa8a49a, { roughness: 1 });
-    kasten(g, 0, 0.08, 0, 10.6, 0.16, 18, beton);                                   // Boden
+    const L = FS_LANG * 2, W = FS_BREIT + 0.2;
+    kasten(g, 0, 0.08, 0, W * 2 + 0.4, 0.16, L, beton);                            // Boden
     for (const sx of [-1, 1]) {
-      kasten(g, sx * 5.1, 1.4, 0, 0.4, 2.8, 18, beton);                             // Wand
-      for (let k = 0; k < 6; k++) kasten(g, sx * 5.31, 1.4, -7.5 + k * 3, 0.04, 2.8, 0.06, 0x8a867c, false);   // Fugen zwischen den Betonteilen
-      kasten(g, sx * 5.1, 2.83, 0, 0.42, 0.06, 18, 0xffd166, false);                // Gelbe Kante oben
+      kasten(g, sx * W, FS_WAND / 2, 0, 0.4, FS_WAND, L, beton);                   // Wand
+      for (let z = -FS_LANG + 3; z < FS_LANG; z += 3) kasten(g, sx * (W + 0.21), FS_WAND / 2, z, 0.04, FS_WAND, 0.06, 0x8a867c, false);   // Fugen zwischen den Betonteilen
+      kasten(g, sx * W, FS_WAND + 0.03, 0, 0.42, 0.06, L, 0xffd166, false);         // Gelbe Kante oben
     }
     // Der Haufen: von der Seite ein Trapez (vorne und hinten schräg – da fährst du hoch!), 1 Meter hoch – wird mit scale.y größer
-    const form = new THREE.Shape([new THREE.Vector2(-8.4, 0), new THREE.Vector2(8.4, 0), new THREE.Vector2(5.4, 1), new THREE.Vector2(-5.4, 1)]);
-    const haufenGeo = new THREE.ExtrudeGeometry(form, { depth: 9.4, bevelEnabled: false });
-    haufenGeo.translate(0, 0, -4.7); haufenGeo.rotateY(Math.PI / 2);
+    const hl = FS_LANG - 0.6, ol = hl - FS_RAMPE;
+    const form = new THREE.Shape([new THREE.Vector2(-hl, 0), new THREE.Vector2(hl, 0), new THREE.Vector2(ol, 1), new THREE.Vector2(-ol, 1)]);
+    const haufenGeo = new THREE.ExtrudeGeometry(form, { depth: FS_BREIT * 2 - 0.4, bevelEnabled: false });
+    haufenGeo.translate(0, 0, -(FS_BREIT - 0.2)); haufenGeo.rotateY(Math.PI / 2);
     const haufen = new THREE.Mesh(haufenGeo, mat(GUETER.haeckselgut.farbe, { roughness: 1, flatShading: true }));
     haufen.position.y = 0.16; haufen.receiveShadow = true; haufen.castShadow = true; haufen.visible = false; g.add(haufen);
     const folie = new THREE.Mesh(haufenGeo, mat(0x1a1a1a, { roughness: 0.35, metalness: 0.1 }));   // Schwarze Silofolie
     folie.position.y = 0.16; folie.scale.set(1.02, 1, 1.02); folie.visible = false; g.add(folie);
     const reifen = new THREE.Group(); reifen.visible = false; g.add(reifen);       // Alte Autoreifen halten die Folie fest
     const reifenGeo = new THREE.TorusGeometry(0.32, 0.13, 6, 14);
-    for (let k = 0; k < 12; k++) {
+    for (let rx = -FS_BREIT + 1.5; rx < FS_BREIT - 1; rx += 3) for (let rz = -FS_LANG + FS_RAMPE + 1.5; rz < FS_LANG - FS_RAMPE - 1; rz += 3) {
       const r = new THREE.Mesh(reifenGeo, mat(0x161616)); r.rotation.x = Math.PI / 2;
-      r.position.set(-3 + (k % 3) * 3, 0.1, -4.5 + Math.floor(k / 3) * 3); r.castShadow = true; reifen.add(r);
+      r.position.set(rx, 0.1, rz); r.castShadow = true; reifen.add(r);
     }
     g.userData.fs = { haufen, folie, reifen };
   } else if (GEBAEUDE_ARTEN[art].tier) {   // Ein rundes Gehege mit Holzzaun, Unterstand und Futtertrog
@@ -2401,11 +2407,11 @@ function fahrsiloEinrichten(b) {
   b.h.r = -100;   // Man kann hineinfahren! Nur die Wände sind im Weg:
   b.hx = [];
   const c = Math.cos(b.rot), sn = Math.sin(b.rot);
-  for (const lx of [-5.1, 5.1]) for (let lz = -9; lz <= 9.01; lz += 1.5) {
+  for (const lx of [-FS_BREIT - 0.2, FS_BREIT + 0.2]) for (let lz = -FS_LANG; lz <= FS_LANG + 0.01; lz += 1.5) {
     const h = { x: b.x + lx * c + lz * sn, z: b.z - lx * sn + lz * c, r: 0.45 };
     hindernisse.push(h); b.hx.push(h);
   }
-  b.schild = schild('', '#fff', 8); b.schild.position.set(b.x, 5.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  b.schild = schild('', '#fff', 9); b.schild.position.set(b.x, FS_WAND + 3.5, b.z); scene.add(b.schild); b.extra.push(b.schild);
   fahrsiloMalen(b);
 }
 function fahrsiloLokal(b, x, z, v = { x: 0, z: 0 }) {   // Wo ist dieser Punkt im Silo? (x = quer, z = längs)
@@ -2413,11 +2419,11 @@ function fahrsiloLokal(b, x, z, v = { x: 0, z: 0 }) {   // Wo ist dieser Punkt i
   v.x = dx * c - dz * sn; v.z = dx * sn + dz * c;
   return v;
 }
-const fahrsiloHoehe = b => b.fs.inhalt > 0 ? (0.15 + 2.25 * b.fs.inhalt / FAHRSILO_MAX) * (1 - 0.15 * b.fs.fest) : 0;   // Festgefahren = etwas flacher
+const fahrsiloHoehe = b => b.fs.inhalt > 0 ? (0.15 + (FS_WAND - 0.6) * b.fs.inhalt / FAHRSILO_MAX) * (1 - 0.15 * b.fs.fest) : 0;   // Festgefahren = etwas flacher
 function fahrsiloBoden(b, x, z) {   // Wie hoch ist der Haufen an dieser Stelle? (null = nicht im Silo)
   const l = fahrsiloLokal(b, x, z);
-  if (Math.abs(l.x) > 4.9 || Math.abs(l.z) > 9) return null;
-  return 0.16 + fahrsiloHoehe(b) * begrenzt((8.4 - Math.abs(l.z)) / 3, 0, 1);
+  if (Math.abs(l.x) > FS_BREIT || Math.abs(l.z) > FS_LANG) return null;
+  return 0.16 + fahrsiloHoehe(b) * begrenzt((FS_LANG - 0.6 - Math.abs(l.z)) / FS_RAMPE, 0, 1);
 }
 function fahrsiloMalen(b) {
   const F = b.fs, u = b.mesh.userData.fs, H = fahrsiloHoehe(b);
@@ -2435,7 +2441,7 @@ function fahrsiloMalen(b) {
 function nahesFahrsilo() {   // Bist du mit einem Fahrzeug im (oder direkt vor dem) Silagesilo?
   if (!aktiv) return null;
   const p = aktiv.g.position;
-  return gebaute.find(b => { if (!b.fs) return false; const l = fahrsiloLokal(b, p.x, p.z); return Math.abs(l.x) < 6 && Math.abs(l.z) < 13; }) || null;
+  return gebaute.find(b => { if (!b.fs) return false; const l = fahrsiloLokal(b, p.x, p.z); return Math.abs(l.x) < FS_BREIT + 1.2 && Math.abs(l.z) < FS_LANG + 4; }) || null;
 }
 function fahrsiloAbladen(b) {   // L: Häckselgut vom Anhänger in das Silo kippen
   const F = b.fs, gut = gutVon(aktiv);
@@ -2506,8 +2512,8 @@ function fahrsiloUpdate(dt) {
     // Festfahren: Mit einem Fahrzeug über den Haufen fahren
     if (aktiv && F.inhalt > 0 && !F.zu && !F.fertig && F.fest < 1 && Math.abs(aktiv.speed) > 1) {
       const l = fahrsiloLokal(b, aktiv.g.position.x, aktiv.g.position.z, fsTmp);
-      if (Math.abs(l.x) < 4.9 && Math.abs(l.z) < 8.4) {
-        F.fest = Math.min(1, F.fest + dt * aktiv.typ.groesse / (WALZ_ZEIT * Math.max(0.5, F.inhalt / 20000)));
+      if (Math.abs(l.x) < FS_BREIT && Math.abs(l.z) < FS_LANG - 0.6) {
+        F.fest = Math.min(1, F.fest + dt * aktiv.typ.groesse / (WALZ_ZEIT * Math.max(0.5, F.inhalt / 40000)));
         F.geaendert = true;
         if (F.fest >= 1) { meldung('✅ Festgefahren! Jetzt P drücken und mit Folie zudecken.', 4); sound.klick(); }
         if (Math.random() < dt * 6) staub(aktiv.g.position.x + zufall(-1, 1), aktiv.g.position.z + zufall(-1, 1), GUETER.haeckselgut.farbe, fahrsiloHoehe(b) + 0.3, 0.4);
