@@ -24,6 +24,21 @@ const DIESEL_PREIS = 1.5;        // Diesel kostet so viel pro Liter
 const WIND = 1;                  // Wie stark Getreide und Gras im Wind wehen (0 = gar nicht)
 const LAUF_TEMPO = 10;           // So schnell läufst du zu Fuß
 const SPEICHER_NAME = 'farming-spielstand';
+// 🌽 Mais, Häcksler und Silagesilo
+const MAIS_WACHS_ZEIT = 180;     // Mais braucht länger als Getreide
+const MAIS_SAAT_PREIS = 0.8;     // Mais-Saat kostet so viel pro kg
+const MAIS_ERTRAG = 300;         // So viel Häckselgut (kg) gibt ein reifes Mais-Stück
+const FAHRSILO_MAX = 60000;      // So viel passt in ein Silagesilo
+const WALZ_ZEIT = 20;            // So viele Sekunden musst du über 20 Tonnen Häckselgut fahren, bis es fest ist
+const GAER_ZEIT = 180;           // So lange gärt die Silage unter der Folie
+const FOLIE_PREIS = 500;         // Die Silofolie kostet so viel
+const SILAGE_PREIS = 0.9;        // Silage bringt so viel pro kg beim Landhandel
+// Was in einem Tank oder Anhänger sein kann (immer nur eine Sorte auf einmal!)
+const GUETER = {
+  korn: { name: 'Korn', emoji: '🌾', farbe: 0xe3c46a },
+  haeckselgut: { name: 'Häckselgut', emoji: '🌽', farbe: 0x7fae3a },
+  silage: { name: 'Silage', emoji: '🟫', farbe: 0x9a8a3a },
+};
 
 // Die Felder: x/z = Mitte, b/t = Breite/Tiefe, preis = so viel kostet es (0 = gehört dir schon)
 const FELDER = [
@@ -43,6 +58,7 @@ const GERAETE = {
   pflug: { name: 'Pflug', emoji: '🟫', taste: '1', breite: 3, hinten: true, arbeitsTempo: 4.5 },
   saat: { name: 'Sämaschine', emoji: '🌱', taste: '2', breite: 3.5, hinten: true, arbeitsTempo: 5.5 },
   ernte: { name: 'Erntevorsatz', emoji: '🌾', taste: '3', breite: 4.5, hinten: false, arbeitsTempo: 4 },
+  maisgebiss: { name: 'Maisgebiss', emoji: '🌽', taste: '', breite: 4.5, hinten: false, arbeitsTempo: 4.5 },   // Nur am Häcksler
 };
 // Was du im Baumodus bauen kannst (Taste 1, 2, 3)
 const GEBAEUDE_ARTEN = {
@@ -63,6 +79,7 @@ const GEBAEUDE_ARTEN = {
   erlenwald: { name: 'Erlenwald', emoji: '🌲', preis: 3000, r: 6, holz: 'erle' },
   ahornwald: { name: 'Ahornwald', emoji: '🍁', preis: 4000, r: 6, holz: 'ahorn' },
   werkbank: { name: 'Werkbank', emoji: '🛠️', preis: 2500, r: 2.2 },
+  fahrsilo: { name: 'Silagesilo', emoji: '🟩', preis: 20000, r: 10 },
 };
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
 // (blatt/frucht = Farben, n = Früchte pro Pflanze, fy = wie hoch die Früchte hängen, fg = Fruchtgröße, hoehe = Pflanzenhöhe)
@@ -861,6 +878,19 @@ const pflanzenGeo = (() => {
   }
   return mergeGeometries(teile);
 })();
+// Eine Maispflanze: dicker Stängel, lange Blätter, ein Kolben und oben die Fahne (1 Meter hoch – sie wird beim Wachsen größer)
+const maisGeo = (() => {
+  const teile = [new THREE.BoxGeometry(0.07, 1, 0.07).translate(0, 0.5, 0)];                       // Stängel
+  for (let k = 0; k < 5; k++) {                                                                      // Blätter (hängen schräg nach außen)
+    const y = 0.25 + k * 0.15, l = 0.5 - k * 0.05;
+    teile.push(new THREE.BoxGeometry(l, 0.012, 0.09).translate(l / 2, 0, 0).applyMatrix4(new THREE.Matrix4().makeRotationZ(0.45)).rotateY(k * 2.4).translate(0, y, 0));
+  }
+  teile.push(new THREE.BoxGeometry(0.09, 0.2, 0.09).translate(0.07, 0.55, 0));                       // Kolben
+  for (let k = 0; k < 3; k++) teile.push(new THREE.BoxGeometry(0.015, 0.18, 0.015).translate(0, 0.09, 0).applyMatrix4(new THREE.Matrix4().makeRotationZ((k - 1) * 0.4)).translate(0, 1, 0));   // Fahne
+  return mergeGeometries(teile);
+})();
+const maisMat = windMaterial(mat(0xffffff, { roughness: 0.8 }), 0.4);
+const maisGruen = new THREE.Color('#3f8f2a'), maisReif = new THREE.Color('#9aa83a');
 const felder = FELDER.map((F, nr) => {
   const nx = Math.floor(F.b / ZELLE), nz = Math.floor(F.t / ZELLE);
   const f = { ...F, nr, nx, nz, x0: F.x - nx * ZELLE / 2, z0: F.z - nz * ZELLE / 2, gekauft: F.preis === 0, zellen: [] };
@@ -877,6 +907,10 @@ const felder = FELDER.map((F, nr) => {
   f.pflanzen.castShadow = false; f.pflanzen.receiveShadow = true;   // (Schatten von tausenden Halmen wäre zu langsam)
   f.pflanzen.frustumCulled = false;   // Sonst verschwinden sie manchmal, wenn sie größer werden
   scene.add(f.pflanzen);
+  // Der Mais: 2 große Pflanzen pro Zelle
+  f.mais = new THREE.InstancedMesh(maisGeo, maisMat, nx * nz * 2);
+  f.mais.castShadow = false; f.mais.receiveShadow = true; f.mais.frustumCulled = false;
+  scene.add(f.mais);
   // Das erste Feld ist am Anfang schon reif – dann kannst du gleich ernten!
   for (let k = 0; k < nx * nz; k++) f.zellen.push(f.gekauft ? { z: 'gesaet', w: 1 } : { z: 'wiese', w: 0 });
   f.schild = schild('', '#fff', 9);
@@ -949,8 +983,23 @@ function malBoden(f, i, j) {   // Den Boden einer Zelle anmalen (nur wenn sich d
 }
 function malZelle(f, i, j) {
   const c = f.zellen[j * f.nx + i];
+  const mais = c.z === 'gesaet' && c.a === 'mais';
+  // Mais: wird bis zu 2,8 Meter hoch, erst dunkelgrün, reif ein bisschen gelblich
+  const mh = mais ? 0.15 + Math.min(1, c.w) * 2.65 : 0;
+  farbeTmp.copy(maisGruen).lerp(maisReif, c.w >= 1 ? 1 : Math.max(0, (c.w - 0.6) / 0.4) * 0.6);
+  for (let k = 0; k < 2; k++) {
+    const idx = (j * f.nx + i) * 2 + k;
+    dummy.position.set(f.x0 + (i + 0.3 + k * 0.4) * ZELLE, 0.16, f.z0 + (j + 0.3 + k * 0.4) * ZELLE);
+    dummy.rotation.y = (idx * 2.3) % 6;
+    dummy.scale.set(mh ? 0.6 + mh * 0.4 : 0.0001, mh || 0.0001, mh ? 0.6 + mh * 0.4 : 0.0001);
+    dummy.updateMatrix();
+    f.mais.setMatrixAt(idx, dummy.matrix);
+    f.mais.setColorAt(idx, farbeTmp);
+  }
+  f.mais.instanceMatrix.needsUpdate = true;
+  f.mais.instanceColor.needsUpdate = true;
   // Die Pflanzen in dieser Zelle: Größe je nach Wachstum, grün -> gold, wenn reif
-  const h = c.z === 'gesaet' ? 0.12 + Math.min(1, c.w) * 1.1 : 0;
+  const h = c.z === 'gesaet' && !mais ? 0.12 + Math.min(1, c.w) * 1.1 : 0;
   const reife = c.w >= 1 ? 1 : Math.max(0, (c.w - 0.55) / 0.45) * 0.8;   // Erst grün, kurz vor der Ernte gelb, reif = golden
   farbeTmp.copy(gruen).lerp(gold, reife);
   for (let k = 0; k < 4; k++) {
@@ -1013,6 +1062,11 @@ const FAHRZEUGE = {
     name: 'Harvester', emoji: '🦾', preis: 150000, farbe: 0xd9531e, art: 'harvester', groesse: 1, tempo: 6.9, arbeit: 1, breite: 1,
     dieselMax: 400, tankMax: 0, saatMax: 0, geraete: [], motorTon: 0.9, allrad: true,
     faehigkeit: 'Fällt mit dem Kran eine Fichte in 2 Sekunden (X)! Das Holz holst du mit dem Holzanhänger',
+  },
+  haecksler: {
+    name: 'Häcksler', emoji: '🌽', preis: 160000, farbe: 0x2f9a4a, art: 'haecksler', groesse: 1, tempo: 8.3, arbeit: 1.5, breite: 1.4,
+    dieselMax: 500, tankMax: 0, saatMax: 0, geraete: ['maisgebiss'], motorTon: 0.8, allrad: true,
+    faehigkeit: 'Häckselt Mais! Bläst das Häckselgut in einen Anhänger (hinten mit H ankuppeln – oder ein Freund fährt daneben)',
   },
 };
 let aktiv = null;       // In welchem Fahrzeug du gerade sitzt (null = zu Fuß)
@@ -1288,6 +1342,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
     radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' ? 2.4 : 1.8) * typ.groesse,
     werkzeug: typ.geraete.includes(daten.werkzeug) ? daten.werkzeug : typ.geraete[typ.geraete.length - 1],
     diesel: daten.diesel ?? typ.dieselMax, tank: daten.tank ?? 0, saat: daten.saat ?? typ.saatMax,
+    gut: GUETER[daten.gut] ? daten.gut : 'korn', saatArt: daten.saatArt === 'mais' ? 'mais' : 'weizen',
   };
   for (const art of typ.geraete) {
     const m = baueGeraet(art), G = GERAETE[art];
@@ -1337,7 +1392,7 @@ function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
   } else {
     for (const s of [-1, 1]) kasten(g, s * 1.17, 1.75, 0.3, 0.08, 1.2, L, typ.farbe);  // Seitenwände
     for (const s of [-1, 1]) kasten(g, 0, 1.75, 0.3 + s * L / 2, 2.4, 1.2, 0.08, typ.farbe);   // Vorne und hinten
-    korn = kasten(g, 0, 1.2, 0.3, 2.2, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);   // Das Korn drin
+    korn = kasten(g, 0, 1.2, 0.3, 2.2, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);   // Das Korn drin (oder Häckselgut, Silage)
   }
   const deichsel = L / 2 + 1.4;   // Abstand von der Achse bis zur Kupplung vorne
   kasten(g, 0, 0.75, -(L / 2 + 1.4) / 2 - 0.1, 0.15, 0.15, deichsel - 0.4, 0x222222);   // Deichsel
@@ -1347,7 +1402,7 @@ function neuerAnhaenger(typName, x, z, rot = 0, daten = {}) {
   for (const az of achsen) for (const x of [-1.25, 1.25]) raeder.push(baueRad(g, x, 0.6, az, 0.6, 0.45, 0));
   for (const r of raeder) r.rad.parent.position.y = 0.6;
   const a = { id: daten.id || `${mp.ich}-a-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, typName, typ, g, korn, holzTeile, raeder, deichsel,
-    inhalt: daten.inhalt || 0, basis: daten.inhalt || 0, an: null };
+    inhalt: daten.inhalt || 0, basis: daten.inhalt || 0, an: null, gut: GUETER[daten.gut] ? daten.gut : 'korn' };
   a.schild = schild(`${typ.emoji} ${typ.name}`, '#ffffff', 4.5);
   a.schild.position.y = 3.3; g.add(a.schild);
   g.position.set(x, 0, z); g.rotation.y = rot;
@@ -1385,10 +1440,15 @@ const kornAnh = fz => fz.anh && fz.anh.typ.art !== 'holz' ? fz.anh : null;   // 
 const holzAnh = fz => fz && fz.anh && fz.anh.typ.art === 'holz' ? fz.anh : null;
 const kornPlatz = fz => fz.typ.tankMax + (kornAnh(fz) ? fz.anh.typ.max : 0);
 const kornDrin = fz => fz.tank + (kornAnh(fz) ? fz.anh.inhalt : 0);
-function kornDazu(fz, menge) {   // Erst in den eigenen Tank, dann in den Anhänger
+// Was ist gerade drin? (null = leer) – Korn, Häckselgut und Silage dürfen nicht gemischt werden!
+const gutVon = fz => fz.tank > 0 ? (fz.gut || 'korn') : kornAnh(fz) && fz.anh.inhalt > 0 ? (fz.anh.gut || 'korn') : null;
+const gutPasst = (fz, gut) => { const g = gutVon(fz); return !g || g === gut; };
+const gutText = fz => { const g = gutVon(fz); return g ? `${GUETER[g].emoji} ${kg(kornDrin(fz))} ${GUETER[g].name}` : 'leer'; };
+function kornDazu(fz, menge, gut = 'korn') {   // Erst in den eigenen Tank, dann in den Anhänger
   const inTank = Math.min(menge, fz.typ.tankMax - fz.tank);
   fz.tank += inTank;
-  if (kornAnh(fz)) fz.anh.inhalt += menge - inTank;
+  if (inTank > 0) fz.gut = gut;
+  if (kornAnh(fz) && menge - inTank > 0) { fz.anh.inhalt += menge - inTank; fz.anh.gut = gut; }
 }
 function kornWeg(fz, menge) {   // Erst aus dem Anhänger, dann aus dem Tank
   if (kornAnh(fz)) { const ausAnh = Math.min(menge, fz.anh.inhalt); fz.anh.inhalt -= ausAnh; menge -= ausAnh; }
@@ -1402,11 +1462,12 @@ function kuppeln() {
   if (!aktiv) { meldung('🔗 Steig in einen Traktor, um einen Anhänger anzukuppeln!'); sound.nein(); return; }
   if (aktiv.typ.art === 'drescher') { meldung('🌾 Der Mähdrescher kann keinen Anhänger ziehen – lade mit O in einen Anhänger über!'); sound.nein(); return; }
   if (aktiv.typ.art === 'harvester') { meldung('🦾 Der Harvester zieht keinen Anhänger – nimm einen Traktor!'); sound.nein(); return; }
+  if (aktiv.typ.art === 'haecksler' && !aktiv.anh) { const a = naheAnhaengerZumKuppeln(aktiv); if (a && a.typ.art === 'holz') { meldung('🌽 In den Holzanhänger passt kein Häckselgut – nimm einen Kipper!'); sound.nein(); return; } }
   if (aktiv.anh) { const a = aktiv.anh; abkuppeln(aktiv); meldung(`🔓 ${a.typ.name} abgekuppelt.`); sound.klick(); return; }
   const a = naheAnhaengerZumKuppeln(aktiv);
   if (!a) { meldung('🔗 Fahr rückwärts mit der Kupplung an die Deichsel eines Anhängers (näher ran!)'); sound.nein(); return; }
   ankuppeln(aktiv, a);
-  meldung(a.typ.art === 'holz' ? `🔗 ${a.typ.name} angekuppelt! Fahr zum Holz und drück L – der Kran lädt auf.` : `🔗 ${a.typ.name} angekuppelt! Jetzt passen ${kg(kornPlatz(aktiv))} Korn rein.`, 3);
+  meldung(a.typ.art === 'holz' ? `🔗 ${a.typ.name} angekuppelt! Fahr zum Holz und drück L – der Kran lädt auf.` : aktiv.typ.art === 'haecksler' ? `🔗 ${a.typ.name} angekuppelt! Der Häcksler bläst den Mais jetzt hinten hinein. 🌽` : `🔗 ${a.typ.name} angekuppelt! Jetzt passen ${kg(kornPlatz(aktiv))} rein.`, 3);
   sound.tuer();
 }
 function ueberladenZiel() {   // Wohin kann der Mähdrescher sein Korn laden? (Fahrzeug oder Anhänger in der Nähe)
@@ -1416,12 +1477,12 @@ function ueberladenZiel() {   // Wohin kann der Mähdrescher sein Korn laden? (F
   for (const fz of fahrzeuge) {
     if (fz === aktiv || fz.typ.art === 'drescher') continue;
     const d = Math.hypot(fz.g.position.x - p.x, fz.g.position.z - p.z);
-    if (d < bestD && kornDrin(fz) < kornPlatz(fz)) { bestD = d; bestes = { fz }; }
+    if (d < bestD && kornDrin(fz) < kornPlatz(fz) && gutPasst(fz, 'korn')) { bestD = d; bestes = { fz }; }
   }
   for (const a of anhaenger) {
     if (a.an || a.typ.art === 'holz') continue;
     const d = Math.hypot(a.g.position.x - p.x, a.g.position.z - p.z);
-    if (d < bestD && a.inhalt < a.typ.max) { bestD = d; bestes = { a }; }
+    if (d < bestD && a.inhalt < a.typ.max && (a.inhalt <= 0 || (a.gut || 'korn') === 'korn')) { bestD = d; bestes = { a }; }
   }
   return bestes;
 }
@@ -1431,8 +1492,8 @@ function ueberladen() {
   if (!z) { meldung('🚛 Fahr mit dem Mähdrescher neben einen Traktor mit Anhänger (oder einen Anhänger)!'); sound.nein(); return; }
   if (aktiv.tank <= 0) { meldung('Der Korntank vom Mähdrescher ist leer!'); sound.nein(); return; }
   let menge;
-  if (z.fz) { menge = Math.min(aktiv.tank, kornPlatz(z.fz) - kornDrin(z.fz)); kornDazu(z.fz, menge); mpEvent({ t: 'korn', id: z.fz.id, m: menge }); }
-  else { menge = Math.min(aktiv.tank, z.a.typ.max - z.a.inhalt); z.a.inhalt += menge; }
+  if (z.fz) { menge = Math.min(aktiv.tank, kornPlatz(z.fz) - kornDrin(z.fz)); kornDazu(z.fz, menge); mpEvent({ t: 'korn', id: z.fz.id, m: menge, g: 'korn' }); }
+  else { menge = Math.min(aktiv.tank, z.a.typ.max - z.a.inhalt); z.a.inhalt += menge; z.a.gut = 'korn'; }
   aktiv.tank -= menge;
   meldung(`🌾➡️🚛 ${kg(menge)} Korn übergeladen!`);
   sound.korn();
@@ -2914,7 +2975,7 @@ function wachsen(dt) {
     for (let j = 0; j < f.nz; j++) for (let i = 0; i < f.nx; i++) {
       const c = f.zellen[j * f.nx + i];
       if (c.z !== 'gesaet' || c.w >= 1) continue;
-      c.w = Math.min(1, c.w + 0.5 / WACHS_ZEIT);
+      c.w = Math.min(1, c.w + 0.5 / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
       malZelle(f, i, j);
     }
   }
@@ -3412,19 +3473,23 @@ function naechstesFahrzeug() {
 
 // ===== Speichern (im Browser) =====
 const ZUSTAND_KURZ = { wiese: 'w', stoppeln: 's', gepfluegt: 'p', gesaet: 'g' };
-const ZUSTAND_LANG = { w: 'wiese', s: 'stoppeln', p: 'gepfluegt', g: 'gesaet' };
-const zellCode = c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '');
-const zelleAusCode = code => ({ z: ZUSTAND_LANG[code[0]] || 'wiese', w: code[0] === 'g' ? Number(code.slice(1)) / 100 : 0 });
+const ZUSTAND_LANG = { w: 'wiese', s: 'stoppeln', p: 'gepfluegt', g: 'gesaet', m: 'gesaet' };   // m = Mais gesät
+const zellCode = c => (c.z === 'gesaet' && c.a === 'mais' ? 'm' : ZUSTAND_KURZ[c.z]) + (c.z === 'gesaet' ? Math.round(c.w * 100) : '');
+const zelleAusCode = code => {
+  const z = ZUSTAND_LANG[code[0]] || 'wiese', c = { z, w: z === 'gesaet' ? Number(code.slice(1)) / 100 : 0 };
+  if (code[0] === 'm') c.a = 'mais';
+  return c;
+};
 function speichern() {
   if (mp.rolle === 'gast') return;   // Beim Freund mitspielen überschreibt nicht deinen eigenen Hof!
   try {
     localStorage.setItem(SPEICHER_NAME, JSON.stringify({
       v: 2, money, hofSilo: hofSilo.inhalt,
-      fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, werkzeug: f.werkzeug })),
+      fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, werkzeug: f.werkzeug, gut: f.gut, saatArt: f.saatArt })),
       aktiv: fahrzeuge.indexOf(aktiv),
-      anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
+      anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, gut: a.gut, an: a.an ? a.an.id : null })),
       spieler: { x: player.position.x, z: player.position.z, yaw },
-      felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(c => ZUSTAND_KURZ[c.z] + (c.z === 'gesaet' ? Math.round(c.w * 100) : '')) })),
+      felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
       gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })), vorrat, tageszeit, salzsteine, fischRekorde,
       wald: waldDaten(), holz: holzDaten(), saege: { sprit: saegeSprit, getragen },
     }));
@@ -3439,7 +3504,7 @@ function laden() {
     const f = felder[k];
     if (!f || !df || df.c.length !== f.zellen.length) return;
     f.gekauft = df.g;
-    df.c.forEach((code, n) => { f.zellen[n] = { z: ZUSTAND_LANG[code[0]] || 'wiese', w: code[0] === 'g' ? Number(code.slice(1)) / 100 : 0 }; });
+    df.c.forEach((code, n) => { f.zellen[n] = zelleAusCode(code); });
   });
   for (const b of d.gebaeude || []) if (GEBAEUDE_ARTEN[b.art]) gebaeudeHinzu(b.art, b.x, b.z, b.rot, b.inhalt || 0, b.d);
   if (d.vorrat) vorrat = d.vorrat;
@@ -3764,7 +3829,7 @@ function mpEvent(n) {   // Etwas an alle schicken (Gast: an den Gastgeber, der l
 function mpZelle(f, i, j) { if (mp.aktiv) mpEvent({ t: 'zelle', f: f.nr, i, j, c: zellCode(f.zellen[j * f.nx + i]) }); }
 function mpFzSenden(fz, fahrer) {
   mpEvent({ t: 'fz', id: fz.id, fa: fahrer, x: r2(fz.g.position.x), z: r2(fz.g.position.z), r: r2(fz.g.rotation.y), sp: r2(fz.speed), lw: r2(fz.lenkWinkel),
-    wz: fz.werkzeug, ab: fz.arbeitet, di: Math.round(fz.diesel), ta: fz.tank, sa: fz.saat, an: fz.anh ? fz.anh.id : null, ai: fz.anh ? fz.anh.inhalt : 0 });
+    wz: fz.werkzeug, ab: fz.arbeitet, di: Math.round(fz.diesel), ta: fz.tank, sa: fz.saat, an: fz.anh ? fz.anh.id : null, ai: fz.anh ? fz.anh.inhalt : 0, gu: fz.gut, agu: fz.anh ? fz.anh.gut : null, sart: fz.saatArt });
 }
 function mpSpielerNeu(id, nr) {
   const info = MP_BAUERN[nr] || MP_BAUERN[0];
@@ -3791,10 +3856,10 @@ function weltSchnappschuss() {
     t: 'welt', money, spielZeit, tageszeit, hofSilo: hofSilo.inhalt, fischRekorde,
     felder: felder.map(f => ({ g: f.gekauft, c: f.zellen.map(zellCode) })),
     gebaeude: gebaute.map(b => ({ art: b.art, x: b.x, z: b.z, rot: b.rot, inhalt: b.silo ? b.silo.inhalt : 0, d: gebDaten(b) })),
-    fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel,
+    fahrzeuge: fahrzeuge.map(f => ({ id: f.id, typ: f.typName, x: f.g.position.x, z: f.g.position.z, r: f.g.rotation.y, saat: f.saat, tank: f.tank, diesel: f.diesel, gut: f.gut, saatArt: f.saatArt,
       werkzeug: f.werkzeug, fahrer: f === aktiv ? mp.ich : f.fahrer })),
     spieler: [{ id: mp.ich, nr: mp.nr }, ...[...mp.andere.values()].map(o => ({ id: o.id, nr: o.nr }))],
-    anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, an: a.an ? a.an.id : null })),
+    anhaenger: anhaenger.map(a => ({ id: a.id, typ: a.typName, x: a.g.position.x, z: a.g.position.z, r: a.g.rotation.y, inhalt: a.inhalt, gut: a.gut, an: a.an ? a.an.id : null })),
     wald: waldDaten(), holz: holzDaten(),
   };
 }
@@ -3951,24 +4016,26 @@ function mpEmpfangen(d, vonGast) {
         fz.ziel = d; fz.fahrer = d.fa; fz.fahrerZeit = spielZeit;
         fz.werkzeug = fz.typ.geraete.includes(d.wz) ? d.wz : fz.werkzeug;
         fz.diesel = d.di; fz.tank = d.ta; fz.saat = d.sa;
+        if (GUETER[d.gu]) fz.gut = d.gu;
+        if (d.sart) fz.saatArt = d.sart;
         // Anhänger: an- oder abgekuppelt?
         if ((fz.anh ? fz.anh.id : null) !== (d.an || null)) {
           abkuppeln(fz);
           const a = d.an ? anhaenger.find(x => x.id === d.an) : null;
           if (a) ankuppeln(fz, a);
         }
-        if (fz.anh) { fz.anh.inhalt = d.ai; fz.anh.basis = d.ai; }
+        if (fz.anh) { fz.anh.inhalt = d.ai; fz.anh.basis = d.ai; if (GUETER[d.agu]) fz.anh.gut = d.agu; }
       }
       break;
     }
     case 'zelle': { const f = felder[d.f]; if (f) { f.zellen[d.j * f.nx + d.i] = zelleAusCode(d.c); malBoden(f, d.i, d.j); } break; }
     case 'feld': { const f = felder[d.nr]; if (f && !f.gekauft) { f.gekauft = true; malFeld(f); meldung(`🎉 Feld ${d.nr + 1} wurde gekauft!`); } break; }
     case 'bau': gebaeudeHinzu(d.art, d.x, d.z, d.rot, 0); sound.bauen(); break;
-    case 'korn': { const fz = fahrzeuge.find(x => x.id === d.id); if (fz) kornDazu(fz, d.m); break; }   // Der Mähdrescher hat übergeladen
+    case 'korn': { const fz = fahrzeuge.find(x => x.id === d.id); if (fz) kornDazu(fz, d.m, GUETER[d.g] ? d.g : 'korn'); break; }   // Der Mähdrescher (oder Häcksler) hat übergeladen
     case 'neuerAnh': if (!anhaenger.some(a => a.id === d.id) && ANHAENGER[d.typ]) neuerAnhaenger(d.typ, d.x, d.z, d.r, { id: d.id }); break;
     case 'anh': {   // Ein abgestellter Anhänger hat jetzt anderen Inhalt (Mähdrescher hat übergeladen)
       const a = anhaenger.find(x => x.id === d.id);
-      if (a && !a.an) { a.inhalt = d.i; a.basis = d.i; }
+      if (a && !a.an) { a.inhalt = d.i; a.basis = d.i; if (GUETER[d.g]) a.gut = d.g; }
       break;
     }
     case 'faellt': { const b = baeume[d.nr]; if (b && (b.zustand === 'steht' || b.zustand === 'waechst')) baumFaellen(b, d.w, d.id, false); break; }
@@ -4010,7 +4077,7 @@ function mpTick(dt) {
     else mpEvent({ t: 'silo', s: siloSchluessel(s), d: s.inhalt - (s.basis || 0) });
     s.basis = s.inhalt;
   }
-  for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt }); }
+  for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt, g: a.gut }); }
   // Wo bin ich?
   mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
@@ -4137,7 +4204,7 @@ const uhrText = () => `${String(Math.floor(tageszeit)).padStart(2, '0')}:${Strin
 let schlaeft = false;
 function zeitVorspulen(sek) {
   for (const f of felder) {
-    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek / WACHS_ZEIT);
+    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
     malFeld(f);
   }
   for (const b of gebaute) {
@@ -4314,6 +4381,7 @@ function animate() {
     a.korn.visible = voll > 0.005;
     a.korn.scale.y = Math.max(0.01, voll * 1.15);
     a.korn.position.y = 1.15 + voll * 0.575;
+    if (a.korn.material && a.korn.material.color && a.zeigtGut !== a.gut) { a.zeigtGut = a.gut; a.korn.material.color.setHex((GUETER[a.gut] || GUETER.korn).farbe); }
     a.schild.visible = !a.an;
     if (a.holzTeile) a.holzTeile.forEach((h, k) => { h.visible = k < a.inhalt; });
   }
