@@ -45,9 +45,9 @@ const GUETER = {
   stroh: { name: 'Stroh', emoji: '🟨', farbe: 0xe8d27a },
 };
 // 🌾 Stroh: Nach der Weizen-Ernte bleibt Stroh liegen. Die Ballenpresse (Taste 4) macht daraus runde Ballen.
-const ZELLEN_PRO_BALLEN = 4;     // So viele Feld-Stücke Stroh ergeben einen Ballen
+const ZELLEN_PRO_BALLEN = 1;     // So viele Feld-Stücke Stroh ergeben einen Ballen (1 = jedes Stück Strohspur gibt einen Ballen)
 const BALLEN_KG = 250;           // So schwer ist ein Strohballen
-const STROH_PREIS = 0.3;         // Stroh bringt so viel pro kg beim Landhandel (ein Ballen = 75 €)
+const STROH_PREIS = 0.8;         // Stroh bringt so viel pro kg beim Landhandel (ein Ballen = 200 €)
 const EINSTREU_PRO_BALLEN = 120; // Ein Ballen Einstreu im Gehege hält so viele Sekunden: Die Tiere geben dann 30 % mehr!
 
 // Die Felder: x/z = Mitte, b/t = Breite/Tiefe, preis = so viel kostet es (0 = gehört dir schon)
@@ -3942,7 +3942,7 @@ function bearbeite(fz, x, z) {
       delete c.stroh; malBoden(f, i, j); mpZelle(f, i, j);
       if (Math.random() < 0.4) staub(x, z, 0xe8d27a, 0.4, 0.6);
       fz.strohSammel = (fz.strohSammel || 0) + 1;
-      if (fz.strohSammel >= ZELLEN_PRO_BALLEN) { fz.strohSammel = 0; ballenAuswerfen(fz); }
+      if (fz.strohSammel >= ZELLEN_PRO_BALLEN) { fz.strohSammel = 0; ballenAuswerfen(fz, f.x0 + (i + 0.5) * ZELLE, f.z0 + (j + 0.5) * ZELLE); }   // Der Ballen liegt mitten auf dem Stück
     } else if (c.z === 'gesaet') meldungSelten('🟨 Hier liegt kein Stroh! Stroh gibt es nach der Weizen-Ernte.');
   } else if (fz.werkzeug === 'maisgebiss') {   // Der Häcksler: Mais klein häckseln und in den Anhänger blasen
     if (c.z === 'gesaet' && c.a === 'mais' && c.w >= 1) {
@@ -4028,21 +4028,23 @@ function haeckselUpdate(dt) {
 const ballen = [];   // { id, x, z, r, g }
 const ballenGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.2, 20).rotateZ(Math.PI / 2);
 let ballenMat = null;
+const netzGeo = mergeGeometries([-0.35, 0, 0.35].map(dx => new THREE.TorusGeometry(0.76, 0.012, 4, 24).rotateY(Math.PI / 2).translate(dx, 0, 0)));
+const netzMat = mat(0xf2f2f2);
 function ballenNeu(id, x, z, r) {
   if (ballen.some(b => b.id === id)) return;
   if (!ballenMat) ballenMat = [new THREE.MeshStandardMaterial({ map: strohTextur(), color: 0xf2dc8a, roughness: 1 }), mat(0xe0c46a), mat(0xe0c46a)];
   const g = new THREE.Mesh(ballenGeo, ballenMat); g.position.set(x, 0.9, z); g.rotation.y = r; g.castShadow = true; g.receiveShadow = true; scene.add(g);
-  for (const dx of [-0.35, 0, 0.35]) { const netz = new THREE.Mesh(new THREE.TorusGeometry(0.76, 0.012, 4, 24), mat(0xf2f2f2)); netz.rotation.y = Math.PI / 2; netz.position.x = dx; g.add(netz); }   // Netz drumherum
+  g.add(new THREE.Mesh(netzGeo, netzMat));   // Netz drumherum
   ballen.push({ id, x, z, r, g });
 }
 function ballenWeg(id) { const k = ballen.findIndex(b => b.id === id); if (k >= 0) { scene.remove(ballen[k].g); ballen.splice(k, 1); } }
-function ballenAuswerfen(fz) {   // Ein fertiger Ballen kommt hinten aus der Presse
+function ballenAuswerfen(fz, x, z) {   // Ein fertiger Ballen kommt aus der Presse (x/z = wo er liegen soll)
   const m = fz.geraete.presse; if (!m) return;
-  const p = new THREE.Vector3(0, 0, 1.6).applyMatrix4(m.matrixWorld);
+  const p = x === undefined ? new THREE.Vector3(0, 0, 1.6).applyMatrix4(m.matrixWorld) : new THREE.Vector3(x, 0, z);
   const id = `${mp.ich}-b-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`;
   ballenNeu(id, p.x, p.z, fz.g.rotation.y);
   mpEvent({ t: 'ballen', id, x: r2(p.x), z: r2(p.z), r: r2(fz.g.rotation.y) });
-  sound.rumms(); meldungSelten('🟨 Ein Strohballen ist fertig! Aufladen mit L (Anhänger oder Lastwagen).');
+  ton(90, 0, 0.12, 'sine', 0.12); meldungSelten('🟨 Strohballen! Aufladen mit L (Anhänger oder Lastwagen) · Ein Ballen bringt 200 €');
 }
 function naheBallen(fz) {   // Ballen in der Nähe vom Fahrzeug oder seinem Anhänger
   const punkte = [fz.g.position]; if (fz.anh) punkte.push(fz.anh.g.position);
@@ -4056,7 +4058,7 @@ function ballenAufladen() {
   if (n <= 0) { meldung('🚛 Voll! Ab zum Landhandel (V) – oder zu den Tieren als Einstreu (L).'); sound.nein(); return; }
   for (const b of liste.slice(0, n)) { mpEvent({ t: 'ballenWeg', id: b.id }); ballenWeg(b.id); }
   kornDazu(aktiv, n * BALLEN_KG, 'stroh');
-  meldung(`🟨 ${n} Strohballen aufgeladen (${kg(kornDrin(aktiv))})! Verkaufen beim Landhandel (V) oder als Einstreu ins Gehege (L) – dann geben die Tiere mehr.`, 4);
+  meldung(`🟨 ${n} Strohballen aufgeladen (${kg(kornDrin(aktiv))} = ${euro(kornDrin(aktiv) * STROH_PREIS)})! Verkaufen beim Landhandel (V) oder als Einstreu ins Gehege (L) – dann geben die Tiere mehr.`, 4);
   sound.holz(); speichern();
 }
 const ballenDaten = () => ballen.map(b => ({ id: b.id, x: r2(b.x), z: r2(b.z), r: r2(b.r) }));
