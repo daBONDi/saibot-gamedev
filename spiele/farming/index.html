@@ -71,6 +71,15 @@ body {
 #hinweis { bottom: 15px; }
 #meldung { top: 15px; font-size: 1.1em; background: #2b3a1fee; }
 #bauleiste { display: none; margin-top: 6px; }
+/* ===== Scrollen: Wenn ein Menü zu lang ist, kann man es mit dem Mausrad (oder dem Balken rechts) scrollen ===== */
+#hud { max-height: calc(100vh - 54px); overflow-y: auto; }
+#bauleiste { max-height: 40vh; overflow-y: auto; padding-right: 4px; }
+#help-inhalt { max-height: 40vh; overflow-y: auto; padding-right: 4px; }
+#mp-box { max-height: calc(100vh - 50px); overflow-y: auto; }
+#haendler, #hofpanel, #album, #werkbank, #hud, #bauleiste, #help-inhalt, #mp-box, #wbBuch { overscroll-behavior: contain; scrollbar-width: auto; scrollbar-color: #b9f5a0 #ffffff22; }
+.box ::-webkit-scrollbar, .box::-webkit-scrollbar { width: 12px; }
+.box ::-webkit-scrollbar-track, .box::-webkit-scrollbar-track { background: #ffffff22; border-radius: 6px; }
+.box ::-webkit-scrollbar-thumb, .box::-webkit-scrollbar-thumb { background: #b9f5a0; border-radius: 6px; border: 2px solid #17251d; }
 button {
     padding: 7px 9px;
     margin: 2px;
@@ -335,7 +344,7 @@ B = Baumodus (1–9, 0 oder , . = Gebäude) · R = Gebäude drehen · M = Ton an
 }
 </script>
 <!-- ?v=... ändern, damit der Browser sicher die neue Version lädt -->
-<script type="module" src="spiel.js?v=31"></script>
+<script type="module" src="spiel.js?v=32"></script>
 <!-- ⭐ Bewertungs-Knopf (schickt Bewertungen in den Supabase-Briefkasten) -->
 <script src="../../feedback.js?v=1" data-spiel="farming" data-ort="#hud"></script>
 </body>
