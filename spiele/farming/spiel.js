@@ -1270,7 +1270,7 @@ const FAHRZEUGE = {
   },
   lkw: {
     name: 'Lastwagen', emoji: '🚚', preis: 80000, farbe: 0x2a6fb0, art: 'lkw', groesse: 1, tempo: 22.2, arbeit: 1, breite: 1,
-    dieselMax: 400, tankMax: 20000, saatMax: 0, geraete: [], motorTon: 0.7, kupplung: 4.4,
+    dieselMax: 400, tankMax: 20000, saatMax: 0, geraete: [], motorTon: 0.7, kupplung: 4.4, beifahrer: true,
     faehigkeit: 'Fährt 80 km/h und trägt 20.000 kg – Korn, Häckselgut oder Silage! Kippt beim Abladen die Mulde. Mähdrescher (O) und Häcksler laden direkt hinein',
   },
   haecksler: {
@@ -1823,7 +1823,7 @@ function baueLKW(typ, K) {
   for (let k = 1; k < 6; k++) for (const sx of [-1, 1]) kasten(mulde, sx * (B / 2 + 0.05), 0.2 + H / 2, -k * L / 6, 0.05, H, 0.1, mat(0xb88010), false);   // Rippen
   const ladung = kasten(mulde, 0, 0.25, -L / 2, B - 0.15, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);
   const zylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2, 10), chrom); zylinder.position.set(0, 1.2, -1.9); K.add(zylinder);   // Kipp-Zylinder
-  return { raeder, auspuff: [1.05, 3.65, -1.72], sitz: [-0.55, 3.05, -3.3], radstand: 4.8, mulde: { g: mulde, ladung, zylinder, H } };
+  return { raeder, auspuff: [1.05, 3.65, -1.72], sitz: [-0.55, 3.05, -3.3], beifahrerSitz: [0.55, 3.05, -3.3], radstand: 4.8, mulde: { g: mulde, ladung, zylinder, H } };
 }
 function lkwUpdate(fz, dt) {   // Ladung zeigen und beim Abladen die Mulde kippen
   const M = fz.mulde, voll = fz.typ.tankMax ? fz.tank / fz.typ.tankMax : 0;
@@ -2822,7 +2822,7 @@ function haustierUpdate(dt) {
     const H = herzen[k]; H.t -= dt; H.h.position.y += dt * 0.8; H.h.material.opacity = Math.min(1, H.t);
     if (H.t <= 0) { scene.remove(H.h); H.h.material.dispose(); herzen.splice(k, 1); }
   }
-  const p = player.position, zuFuss = !aktiv;
+  const p = player.position, zuFuss = !aktiv && !mitfahrt;
   for (const t of haustiere) {
     const g = t.g, pos = g.position;
     const dSpieler = Math.hypot(p.x - pos.x, p.z - pos.z);
@@ -3981,6 +3981,7 @@ function gebaeudeEntfernen(b) {
   const n = gebaute.indexOf(b); if (n >= 0) gebaute.splice(n, 1);
 }
 function fahrzeugEntfernen(fz) {
+  if (mitfahrt === fz) beifahrerAus();
   if (fz.anh) abkuppeln(fz);
   scene.remove(fz.g);
   const n = fahrzeuge.indexOf(fz); if (n >= 0) fahrzeuge.splice(n, 1);
@@ -4347,7 +4348,7 @@ function wachsen(dt) {
 }
 
 // ===== Kaufen, Verkaufen, Silo =====
-function wo() { return aktiv ? aktiv.g.position : player.position; }
+function wo() { return aktiv ? aktiv.g.position : mitfahrt ? mitfahrt.g.position : player.position; }
 function imLaden() { return !!aktiv && Math.hypot(aktiv.g.position.x - LADEN.x, aktiv.g.position.z - LADEN.z) < LADEN.r + 1; }
 function beimHaendler() { const p = wo(); return Math.hypot(p.x - LADEN.x, p.z - LADEN.z) < LADEN.r + 10; }
 function nahesSilo() {
@@ -4835,6 +4836,35 @@ function einsteigen(fz) {
   farmerWerkzeug(farmer, false, false, 0);
   sound.tuer();
 }
+// ===== 🪑 Beifahrer: Im Lastwagen (2 Sitze) kann ein zweiter Bauer mitfahren, wenn ein anderer fährt =====
+let mitfahrt = null;   // In welchem Fahrzeug du gerade Beifahrer bist
+const beifahrerBesetzt = fz => [...mp.andere.values()].some(o => o.fz === fz.id && o.bf);
+function beifahrerEin(fz) {
+  mitfahrt = fz;
+  kamOffset = 0; blickHoch = 0;
+  saegeAn = false; saegt = false;
+  fz.K.add(player);
+  const gr = fz.typ.groesse, S = fz.beifahrerSitz;
+  player.position.set(S[0], S[1] - 1.65 / gr, S[2] + 0.05);
+  player.rotation.set(0, 0, 0); player.scale.setScalar(1 / gr);
+  farmerPose(farmer, true, false, 0);
+  farmerWerkzeug(farmer, false, false, 0);
+  meldung(`🪑 Du sitzt auf dem Beifahrersitz im ${fz.typ.name}! Lehn dich zurück und genieß die Fahrt. (E = aussteigen)`, 3.5);
+  sound.tuer();
+}
+function beifahrerAus() {
+  const fz = mitfahrt;
+  mitfahrt = null;
+  scene.add(player);
+  player.scale.setScalar(1);
+  yaw = fz.g.rotation.y;
+  const seite = fz.radius + 0.6;   // Rechts aussteigen (die Beifahrertür)
+  player.position.set(fz.g.position.x + Math.cos(yaw) * seite, 0, fz.g.position.z - Math.sin(yaw) * seite);
+  if (kollidiert(player.position.x, player.position.z, 0.4, fz)) player.position.set(fz.g.position.x - Math.cos(yaw) * seite, 0, fz.g.position.z + Math.sin(yaw) * seite);
+  player.rotation.set(0, yaw, 0);
+  spielerVy = 0; amBoden = true; blickHoch = 0;
+  sound.tuer();
+}
 function aussteigen() {
   const fz = aktiv;
   fz.speed = 0;
@@ -5028,11 +5058,14 @@ document.addEventListener('keydown', e => {
   if (e.repeat) return;   // Gedrückt halten soll nicht ständig ein- und aussteigen
 
   if (k === 'e' && angel && angel.phase === 'kampf') { angelKurbeln(); return; }   // Beim Angeln: E = kurbeln!
+  if (mitfahrt && !['e', 'f', 'm', 'j', 'i', 'c', 'tab', 'escape'].includes(k)) { if (k.length === 1) meldungSelten('🪑 Du bist Beifahrer – nur der Fahrer kann fahren. E = aussteigen'); return; }
   if (k === 'e') {
     if (aktiv) aussteigen();
+    else if (mitfahrt) beifahrerAus();
     else {
       const fz = naechstesFahrzeug();
-      if (fz && fremdGefahren(fz)) { meldung('🚫 Da sitzt schon ein anderer Bauer drin!'); sound.nein(); }
+      if (fz && fremdGefahren(fz) && fz.typ.beifahrer && !beifahrerBesetzt(fz)) beifahrerEin(fz);   // Lastwagen: Es gibt noch einen Sitz!
+      else if (fz && fremdGefahren(fz)) { meldung(fz.typ.beifahrer ? '🚫 Beide Sitze sind schon besetzt!' : '🚫 Da sitzt schon ein anderer Bauer drin!'); sound.nein(); }
       else if (fz && fz.helfer) { meldung(`👷 Da arbeitet gerade ${fz.helfer.name}! Stoppen kannst du im Helfer-Menü (Tab).`, 3); sound.nein(); }
       else if (fz) einsteigen(fz);
     }
@@ -5361,6 +5394,7 @@ function mpVerbindungWeg(text) {
 function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
   fischRekorde = d.fischRekorde || {};
   if (aktiv) aussteigen();
+  if (mitfahrt) beifahrerAus();
   for (const fz of fahrzeuge) scene.remove(fz.g);
   fahrzeuge.length = 0; letztes = null;
   for (const a of anhaenger) scene.remove(a.g);
@@ -5435,7 +5469,7 @@ function mpEmpfangen(d, vonGast) {
         vonGast.versionOk = true;
         if (d.v !== SPIEL_VERSION) meldung(`${ALTE_VERSION} (${vonGast.name})`, 12);
       }
-      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag }); } break;
+      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, bf: d.bf, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag }); } break;
     case 'fz': {
       const fz = fahrzeuge.find(f => f.id === d.id);
       if (fz && fz !== aktiv) {
@@ -5511,7 +5545,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt, g: a.gut }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), v: SPIEL_VERSION });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : mitfahrt ? mitfahrt.id : null, bf: mitfahrt ? 1 : 0, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) for (const fz of fahrzeuge) if (fz.helfer) mpFzSenden(fz, 'helfer');
   if (host) {
@@ -5526,10 +5560,11 @@ function mpAndereZeigen(dt) {
     const G = o.farmer.g;
     const fzO = o.fz ? fahrzeuge.find(f => f.id === o.fz) : null;
     if (fzO) {
-      if (G.parent !== fzO.K) {
-        fzO.K.add(G);
+      const S = o.bf && fzO.beifahrerSitz ? fzO.beifahrerSitz : fzO.sitz;   // Fahrer- oder Beifahrersitz
+      if (G.parent !== fzO.K || o.sitzBf !== !!o.bf) {
+        fzO.K.add(G); o.sitzBf = !!o.bf;
         const gr = fzO.typ.groesse;
-        G.position.set(fzO.sitz[0], fzO.sitz[1] - 1.65 / gr, fzO.sitz[2] + 0.05);
+        G.position.set(S[0], S[1] - 1.65 / gr, S[2] + 0.05);
         G.rotation.set(0, 0, 0); G.scale.setScalar(1 / gr);
         o.schild.visible = false;
       }
@@ -5794,6 +5829,9 @@ function animate() {
 
   if (aktiv) {
     fahren(aktiv, dt);
+  } else if (mitfahrt) {
+    if (!fahrzeuge.includes(mitfahrt)) { mitfahrt = null; scene.add(player); player.scale.setScalar(1); player.position.set(0, 0, 10); }
+    else farmerPose(farmer, true, false, dt);
   } else {
     // Zu Fuß: "Vorne" ist da, wo du hinschaust
     const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -5889,7 +5927,8 @@ function animate() {
 
   // Hinweis unten in der Mitte
   const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis(), hh = hofHinweis();
-  if (building && entfernen) zeigeHinweis(entfernenZiel ? `🗑️ Klick = ${zielInfo(entfernenZiel).name} entfernen (+${euro(zielInfo(entfernenZiel).geld)} zurück)` : '🗑️ Entfernen: Zeig mit der Maus auf etwas und klick · Entf = zurück zum Bauen · B = fertig');
+  if (mitfahrt) zeigeHinweis(`🪑 Beifahrer im ${mitfahrt.typ.emoji} ${mitfahrt.typ.name} · E = aussteigen · F = Ansicht wechseln`);
+  else if (building && entfernen) zeigeHinweis(entfernenZiel ? `🗑️ Klick = ${zielInfo(entfernenZiel).name} entfernen (+${euro(zielInfo(entfernenZiel).geld)} zurück)` : '🗑️ Entfernen: Zeig mit der Maus auf etwas und klick · Entf = zurück zum Bauen · B = fertig');
   else if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–9, 0 oder , . = anderes Gebäude · B = fertig`);
   else if (wh) zeigeHinweis(wh);
   else if (hh) zeigeHinweis(hh);
@@ -5934,14 +5973,16 @@ function animate() {
   }
 
   // Kamera
-  const target = aktiv ? aktiv.g.position : player.position;
+  const kamFz = aktiv || mitfahrt;   // Im Fahrzeug (als Fahrer oder Beifahrer)
+  const target = kamFz ? kamFz.g.position : player.position;
   if (ansicht === 'ego') {
     // First Person: mit den Augen des Farmers (im Fahrzeug: aus der Kabine)
-    if (aktiv) {
-      aktiv.K.updateMatrixWorld();
-      aktiv.K.localToWorld(tmp.set(aktiv.sitz[0], aktiv.sitz[1], aktiv.sitz[2]));
+    if (kamFz) {
+      const S = mitfahrt ? kamFz.beifahrerSitz : kamFz.sitz;
+      kamFz.K.updateMatrixWorld();
+      kamFz.K.localToWorld(tmp.set(S[0], S[1], S[2]));
       camera.position.copy(tmp);
-      camera.rotation.set(blickHoch, aktiv.g.rotation.y + kamOffset, 0);
+      camera.rotation.set(blickHoch, kamFz.g.rotation.y + kamOffset, 0);
     } else {
       camera.position.set(player.position.x, player.position.y + 1.68, player.position.z);
       camera.rotation.set(blickHoch, yaw, 0);
@@ -5949,10 +5990,10 @@ function animate() {
     kamPos.copy(camera.position);
   } else {
     // Von hinten: weich hinterher fliegen
-    if (!mouseDown && aktiv) kamOffset *= Math.pow(0.4, dt);   // Langsam wieder hinter das Fahrzeug drehen
-    const angle = aktiv ? aktiv.g.rotation.y + kamOffset : yaw;
-    const g = aktiv ? aktiv.typ.groesse * (aktiv.typ.art === 'drescher' ? 1.4 : 1) : 1;
-    const distance = (aktiv ? 10 : 6) * zoom * g, height = (aktiv ? 5 : 3.2) * zoom * g;
+    if (!mouseDown && kamFz) kamOffset *= Math.pow(0.4, dt);   // Langsam wieder hinter das Fahrzeug drehen
+    const angle = kamFz ? kamFz.g.rotation.y + kamOffset : yaw;
+    const g = kamFz ? kamFz.typ.groesse * (kamFz.typ.art === 'drescher' ? 1.4 : 1) : 1;
+    const distance = (kamFz ? 10 : 6) * zoom * g, height = (kamFz ? 5 : 3.2) * zoom * g;
     const ziel = new THREE.Vector3(target.x + Math.sin(angle) * distance, target.y + height + pitch * 3 * zoom, target.z + Math.cos(angle) * distance);
     if (inScheune(target.x, target.z)) {   // Drinnen: Kamera bleibt in der Scheune – oder schaut von draußen durchs Tor
       const S = SCHEUNE, mx = (S.x1 + S.x2) / 2;
