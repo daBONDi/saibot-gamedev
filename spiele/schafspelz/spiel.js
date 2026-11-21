@@ -4356,11 +4356,12 @@ function d3WeltBauen() {
   D3.dekoRef = deko;
   const B = WELT_B * METER, Hh = WELT_H * METER;
   // Licht und Himmel
-  D3.hemi = new T.HemisphereLight(KARTE.himmel[1], '#2a2a3a', 1.1); G.add(D3.hemi);
+  D3.hemi = new T.HemisphereLight(KARTE.weltall ? '#c8d4ff' : KARTE.himmel[1], '#2a2a3a', 1.1); G.add(D3.hemi);
   const mond = new T.DirectionalLight('#c8d4ff', 0.9); mond.position.set(B * 0.3, 30, Hh * 0.2); mond.target.position.set(B / 2, 0, Hh / 2); G.add(mond, mond.target);
   D3.mond = mond;
   D3.amb = new T.AmbientLight('#ffffff', 0.25); G.add(D3.amb);
-  S.fog = new T.Fog('#141a3a', 3, 12); S.background = new T.Color('#141a3a');
+  const himmelFarbe = KARTE.weltall ? '#05060f' : '#141a3a';
+  S.fog = new T.Fog(himmelFarbe, 3, 12); S.background = new T.Color(himmelFarbe);
   const sterne = [];
   for (let k = 0; k < 400; k++) { const w = Math.random() * Math.PI * 2, h = 0.15 + Math.random() * 0.8, r = 90; sterne.push(B / 2 + Math.cos(w) * r * Math.cos(h), Math.sin(h) * r, Hh / 2 + Math.sin(w) * r * Math.cos(h)); }
   const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(sterne, 3));
@@ -4373,15 +4374,34 @@ function d3WeltBauen() {
   g.strokeStyle = KARTE.weg; g.lineWidth = 34; g.lineCap = 'round';
   for (const o of ORTE) { g.beginPath(); g.moveTo(GLOCKE.x, GLOCKE.y); g.lineTo(o.x, o.y); g.stroke(); }
   g.fillStyle = KARTE.platz; g.beginPath(); g.ellipse(GLOCKE.x, GLOCKE.y, 150, 110, 0, 0, 7); g.fill();
-  for (const gr of KARTE.gruben) {
+  if (KARTE.weltall) {   // 🚀 Lüftungsschächte mit Gitter und Warnstreifen am Rand
+    for (const gr of KARTE.gruben) {
+      g.fillStyle = '#9aa4b5'; g.fillRect(gr.x - 42, gr.y - 30, 84, 60);
+      g.fillStyle = '#0b0e16'; g.fillRect(gr.x - 34, gr.y - 22, 68, 44);
+      g.strokeStyle = '#6b7484'; g.lineWidth = 5;
+      for (let i = -26; i <= 26; i += 13) { g.beginPath(); g.moveTo(gr.x + i, gr.y - 22); g.lineTo(gr.x + i, gr.y + 22); g.stroke(); }
+    }
+    g.strokeStyle = '#f1c40f'; g.lineWidth = 10; g.setLineDash([24, 18]); g.strokeRect(85, 85, WELT_B - 170, WELT_H - 170); g.setLineDash([]);
+  } else for (const gr of KARTE.gruben) {
     g.fillStyle = '#6b4f3a'; g.beginPath(); g.ellipse(gr.x, gr.y, 42, 26, 0, 0, 7); g.fill();
     g.fillStyle = '#140c06'; g.beginPath(); g.ellipse(gr.x, gr.y, 33, 19, 0, 0, 7); g.fill();
   }
   const bt = new T.CanvasTexture(bc); bt.colorSpace = T.SRGBColorSpace; bt.anisotropy = 8;
   const boden = d3Teil(G, new T.PlaneGeometry(B, Hh), new T.MeshLambertMaterial({ map: bt }), B / 2, 0, Hh / 2); boden.rotation.x = -Math.PI / 2;
-  const aussen = d3Teil(G, new T.PlaneGeometry(400, 400), d3Mat(KARTE.rand === 'meer' ? '#2a7fb8' : new T.Color(KARTE.boden).multiplyScalar(0.7)), B / 2, -0.03, Hh / 2); aussen.rotation.x = -Math.PI / 2;
-  // Der Rand: Zaun ... oder das Meer
-  if (KARTE.rand === 'meer') {
+  if (KARTE.rand !== 'all') { const aussen = d3Teil(G, new T.PlaneGeometry(400, 400), d3Mat(KARTE.rand === 'meer' ? '#2a7fb8' : new T.Color(KARTE.boden).multiplyScalar(0.7)), B / 2, -0.03, Hh / 2); aussen.rotation.x = -Math.PI / 2; }
+  // Der Rand: Zaun ... oder das Meer ... oder die Wand vom Raumschiff
+  if (KARTE.rand === 'all') {
+    const wand = d3Mat('#4a5262'), d = 1.6, h = 3.2;
+    for (const [x, z, b, t] of [[B / 2, d / 2, B, d], [B / 2, Hh - d / 2, B, d], [d / 2, Hh / 2, d, Hh], [B - d / 2, Hh / 2, d, Hh]]) {
+      d3Teil(G, new T.BoxGeometry(b, h, t), wand, x, h / 2, z);
+      d3Teil(G, new T.BoxGeometry(b === B ? B - 2 * d : 0.05, 0.08, t === Hh ? Hh - 2 * d : 0.05), new T.MeshBasicMaterial({ color: '#7df9ff' }), x + (x < 2 ? d / 2 + 0.03 : x > B - 2 ? -d / 2 - 0.03 : 0), 1.6, z + (z < 2 ? d / 2 + 0.03 : z > Hh - 2 ? -d / 2 - 0.03 : 0));   // Leuchtstreifen
+    }
+    for (let x = 4; x < B - 2; x += 7.5) for (const z of [d + 0.01, Hh - d - 0.01]) {   // Runde Fenster ins All
+      const f = d3Teil(G, new T.CircleGeometry(0.55, 20), new T.MeshBasicMaterial({ color: '#0b1030' }), x, 2.0, z);
+      if (z > Hh / 2) f.rotation.y = Math.PI;
+      const ring = d3Teil(G, new T.TorusGeometry(0.58, 0.07, 6, 20), d3Mat('#ccd3dd'), x, 2.0, z);
+    }
+  } else if (KARTE.rand === 'meer') {
     for (const [x, z, b, t] of [[B / 2, 0.5, B, 1], [B / 2, Hh - 0.5, B, 1], [0.5, Hh / 2, 1, Hh], [B - 0.5, Hh / 2, 1, Hh]]) d3Teil(G, new T.BoxGeometry(b, 0.06, t), d3Mat('#bfe8ff', { transparent: true, opacity: 0.7 }), x, 0.02, z);   // Schaumkrone
   } else {
     const holz = d3Mat('#8d6e4c'), pf = [], r = 10 * METER;
@@ -4404,6 +4424,10 @@ function d3WeltBauen() {
       const t = new T.Group(); t.position.set(x, 0, z); t.scale.setScalar(d.g); G.add(t);
       const st = d3Teil(t, new T.CylinderGeometry(0.1, 0.16, 3.2, 7), d3Mat('#8a6a43'), 0.15, 1.6, 0); st.rotation.z = -0.1;
       for (let k = 0; k < 6; k++) { const bl = d3Teil(t, new T.ConeGeometry(0.35, 1.8, 4), d3Mat('#2f9e44'), 0.32, 3.15, 0); bl.rotation.set(0, k * Math.PI / 3, 1.9); bl.scale.set(1, 1, 0.25); bl.position.x = 0.32 + Math.cos(k * Math.PI / 3) * 0.6; bl.position.z = Math.sin(k * Math.PI / 3) * 0.6; }
+    } else if (d.art === 'kiste') {   // 🚀 Frachtkisten
+      const b = 1.1 * d.g, k = d3Teil(G, new T.BoxGeometry(b, b, b), d3Mat(d.f), x, b / 2, z - b / 2);
+      k.rotation.y = (d.x * 7) % 1;
+      d3Teil(k, new T.BoxGeometry(b * 1.02, 0.1, b * 1.02), d3Mat('#2b3242'), 0, b / 2 - 0.1, 0);
     }
   }
   // Die Orte (mit Namensschild und „!“, wenn du dort eine Aufgabe hast)
@@ -4428,16 +4452,32 @@ function d3WeltBauen() {
   d3Teil(G, new T.BoxGeometry(0.4, 0.5, 0.4), D3.laterneMat, lx, 2.45, lz);
   D3.laterneLicht = new T.PointLight('#ffe08a', 6, 10, 1); D3.laterneLicht.position.set(lx, 2.4, lz); G.add(D3.laterneLicht);
   const ls = d3Schild('🏮 Laterne', '#ffffff', 2.2); ls.position.set(lx, 3.2, lz); G.add(ls);
-  // Gatter (geht auf bei Sabotage!)
+  // Gatter (geht auf bei Sabotage!) – im Raumschiff: die Luftschleuse mit zwei Schiebetüren
   const Tt = KARTE.gatter, [tx, , tz] = d3Pos(Tt.x, Tt.y), gh = d3Mat('#6e4b2a'), gl = d3Mat('#a0703c');
+  D3.schleuse = null;
+  if (KARTE.weltall) {
+    const rahmen = d3Mat('#2b3242');
+    for (const s of [-1, 1]) d3Teil(G, new T.BoxGeometry(0.4, 3.0, 0.5), rahmen, tx + s * 2.1, 1.5, tz);
+    d3Teil(G, new T.BoxGeometry(4.6, 0.4, 0.5), rahmen, tx, 3.0, tz);
+    const all = d3Teil(G, new T.PlaneGeometry(3.8, 2.8), new T.MeshBasicMaterial({ color: '#05060f' }), tx, 1.4, tz - 0.05);   // Dahinter: das All!
+    all.rotation.y = 0;
+    const tuer = d3Mat('#9aa4b5'), streifen = d3Mat('#f1c40f');
+    const links = new T.Group(), rechts = new T.Group(); links.position.set(tx - 0.95, 0, tz); rechts.position.set(tx + 0.95, 0, tz); G.add(links, rechts);
+    for (const [g2, s] of [[links, 1], [rechts, -1]]) { d3Teil(g2, new T.BoxGeometry(1.9, 2.8, 0.15), tuer, 0, 1.4, 0); d3Teil(g2, new T.BoxGeometry(1.9, 0.18, 0.17), streifen, 0, 1.0, 0).rotation.z = s * 0.4; }
+    D3.lampeSchleuse = new T.MeshBasicMaterial({ color: '#4ade80' });
+    d3Teil(G, new T.SphereGeometry(0.2, 10, 8), D3.lampeSchleuse, tx, 3.35, tz);
+    D3.schleuse = { links, rechts, x: tx };
+    D3.tor = new T.Group();   // (nur damit der Rest vom Code nicht meckert)
+  } else {
   for (const dx of [-2.75, -1.1, 1.1, 2.75]) d3Teil(G, new T.BoxGeometry(0.2, 1.7, 0.2), gh, tx + dx, 0.85, tz);
   for (const s of [-1, 1]) for (const y of [0.55, 1.2]) d3Teil(G, new T.BoxGeometry(1.6, 0.12, 0.1), gh, tx + s * 1.92, y, tz);
   const tor = new T.Group(); tor.position.set(tx - 1.0, 0, tz); G.add(tor); D3.tor = tor;
   for (const y of [0.55, 1.25]) d3Teil(tor, new T.BoxGeometry(2.0, 0.14, 0.1), gl, 1.0, y, 0);
   const schraeg = d3Teil(tor, new T.BoxGeometry(2.2, 0.12, 0.08), gl, 1.0, 0.9, 0); schraeg.rotation.z = 0.33;
-  D3.torSchild = d3Schild('🚪 Gatter', '#ffffff', 2.4); D3.torSchild.position.set(tx, 2.4, tz); G.add(D3.torSchild);
-  // Gruben: ein paar Steine drumherum
-  for (const gr of KARTE.gruben) { const [x, , z] = d3Pos(gr.x, gr.y); for (const [dx, dz, r] of [[-1.0, 0.2, 0.18], [0.95, -0.15, 0.15], [0.3, 0.6, 0.12]]) d3Teil(G, new T.DodecahedronGeometry(r, 0), d3Mat('#8a8a8a'), x + dx, r * 0.5, z + dz); }
+  }
+  D3.torSchild = d3Schild('🚪 Gatter', '#ffffff', 2.4); D3.torSchild.position.set(tx, KARTE.weltall ? 3.9 : 2.4, tz); G.add(D3.torSchild);
+  // Gruben: ein paar Steine drumherum (im Raumschiff nicht – da sind es Schächte)
+  if (!KARTE.weltall) for (const gr of KARTE.gruben) { const [x, , z] = d3Pos(gr.x, gr.y); for (const [dx, dz, r] of [[-1.0, 0.2, 0.18], [0.95, -0.15, 0.15], [0.3, 0.6, 0.12]]) d3Teil(G, new T.DodecahedronGeometry(r, 0), d3Mat('#8a8a8a'), x + dx, r * 0.5, z + dz); }
   // Schneeflocken (im Winterdorf)
   D3.schnee = null;
   if (KARTE.schnee) {
@@ -4540,6 +4580,60 @@ function d3Ort(o) {
       d3Teil(boot, new T.ConeGeometry(0.5, 0.7, 4), d3Mat(f[0] || '#c0392b'), 0, 0.15, 1.4).rotation.set(Math.PI / 2, Math.PI / 4, 0);
       d3Teil(boot, new T.CylinderGeometry(0.04, 0.04, 1.8), h, 0, 1.0, 0);
       hoehe = 2.6; break;
+    }
+    // ===== 🚀 Raumschiff-Orte =====
+    case 'kantine': {
+      const metall = d3Mat('#9aa4b5');
+      d3Teil(g, new T.BoxGeometry(4, 2.4, 1.2), metall, 0, 1.2, -0.4);   // Heu-o-mat an der Wand
+      d3Teil(g, new T.BoxGeometry(3.4, 0.7, 0.05), new T.MeshBasicMaterial({ color: '#2b5f8a' }), 0, 1.8, 0.21);   // Bildschirm
+      d3Teil(g, new T.BoxGeometry(3.6, 0.15, 1.0), d3Mat('#c9d2df'), 0, 0.9, 0.9);   // Theke
+      for (const s2 of [-1, 0, 1]) d3Teil(g, new T.CylinderGeometry(0.35, 0.3, 0.12, 12), d3Mat('#f4d03f'), s2 * 1.1, 1.03, 0.9);   // Heu-Teller
+      for (const s2 of [-1, 1]) d3Teil(g, new T.CylinderGeometry(0.3, 0.3, 0.6, 12), d3Mat('#5b6474'), s2 * 1.3, 0.3, 1.9);   // Hocker
+      hoehe = 3.0; break;
+    }
+    case 'reaktor': {
+      d3Teil(g, new T.CylinderGeometry(1.5, 1.7, 0.5, 20), d3Mat('#3a4150'), 0, 0.25, 0);
+      const kern = d3Teil(g, new T.CylinderGeometry(0.7, 0.7, 3.2, 16), new T.MeshBasicMaterial({ color: '#4dffb5', transparent: true, opacity: 0.85 }), 0, 2.1, 0);
+      for (let k = 0; k < 4; k++) d3Teil(g, new T.TorusGeometry(0.85, 0.1, 8, 20), d3Mat('#9aa4b5'), 0, 0.9 + k * 0.8, 0).rotation.x = Math.PI / 2;
+      d3Teil(g, new T.ConeGeometry(1.0, 0.8, 16), d3Mat('#c0392b'), 0, 4.1, 0);
+      const licht = new T.PointLight('#4dffb5', 4, 7, 1); licht.position.set(0, 2.2, 1.2); g.add(licht);
+      const ring = new T.Group(); ring.position.set(0, 2.1, 0); g.add(ring);
+      d3Teil(ring, new T.TorusGeometry(1.25, 0.05, 6, 24), new T.MeshBasicMaterial({ color: '#7df9ff' }), 0, 0, 0);
+      D3.drehen.push({ obj: ring, achse: 'y', tempo: 1.5 }); ring.rotation.x = 0.4;
+      hoehe = 4.6; break;
+    }
+    case 'tank': {
+      d3Teil(g, new T.CylinderGeometry(1.3, 1.3, 3.4, 20), new T.MeshLambertMaterial({ color: '#bfe6ff', transparent: true, opacity: 0.35, depthWrite: false }), 0, 1.9, 0);
+      d3Teil(g, new T.CylinderGeometry(1.22, 1.22, 2.2, 20), new T.MeshLambertMaterial({ color: '#3ba3ff', emissive: '#0a2a44' }), 0, 1.3, 0);
+      for (const y of [0.15, 3.65]) d3Teil(g, new T.CylinderGeometry(1.4, 1.4, 0.3, 20), d3Mat('#9aa4b5'), 0, y, 0);
+      d3Teil(g, new T.BoxGeometry(0.2, 0.2, 1.6), d3Mat('#5b6474'), 1.0, 0.6, 1.2);   // Rohr zum Zapfhahn
+      hoehe = 4.2; break;
+    }
+    case 'fracht': {
+      const farben = ['#e0a030', '#4a90d9', '#9b59b6', '#3fb37f', '#e0a030'];
+      [[-1.5, 0.5, 0], [-0.4, 0.5, 0], [0.7, 0.5, 0], [-1.0, 1.5, 0], [1.6, 0.5, 0.9]].forEach(([x2, y2, z2], k) => d3Teil(g, new T.BoxGeometry(1, 1, 1), d3Mat(farben[k]), x2, y2, z2));
+      for (const [x2, z2] of [[1.4, 1.9], [1.9, 2.2]]) d3Teil(g, new T.SphereGeometry(0.3, 10, 8), d3Mat('#ffffff'), x2, 0.3, z2);   // Wollknäuel
+      const gelb = d3Teil(g, new T.PlaneGeometry(4.4, 3.2), d3Mat('#f1c40f'), 0, 0.01, 0.6); gelb.rotation.x = -Math.PI / 2;
+      const innen = d3Teil(g, new T.PlaneGeometry(4.0, 2.8), d3Mat('#2b3242'), 0, 0.015, 0.6); innen.rotation.x = -Math.PI / 2;
+      hoehe = 2.6; break;
+    }
+    case 'kuppel': {
+      const erde = d3Teil(g, new T.CircleGeometry(2.2, 24), d3Mat('#3d8b37'), 0, 0.02, 0.5); erde.rotation.x = -Math.PI / 2;
+      const farben = ['#ff9ecf', '#ffe066', '#c9a0ff', '#7df9ff'];
+      for (let k = 0; k < 24; k++) { const r = Math.random() * 1.9, w = Math.random() * 7, h = 0.3 + Math.random() * 0.5; d3Teil(g, new T.CylinderGeometry(0.02, 0.02, h, 4), d3Mat('#2e7d32'), Math.cos(w) * r, h / 2, 0.5 + Math.sin(w) * r); d3Teil(g, new T.SphereGeometry(0.1, 6, 5), d3Mat(farben[k % 4]), Math.cos(w) * r, h, 0.5 + Math.sin(w) * r); }
+      d3Teil(g, new T.SphereGeometry(2.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new T.MeshLambertMaterial({ color: '#cdeeff', transparent: true, opacity: 0.25, depthWrite: false, side: T.DoubleSide }), 0, 0, 0.5);
+      d3Teil(g, new T.TorusGeometry(2.3, 0.06, 6, 32), d3Mat('#b8e8ff'), 0, 0.05, 0.5).rotation.x = Math.PI / 2;
+      hoehe = 2.7; break;
+    }
+    case 'cockpit': {
+      d3Teil(g, new T.BoxGeometry(4, 1.0, 1.2), d3Mat('#3a4150'), 0, 0.5, 0.6);   // Steuerpult
+      const knoepfe = ['#ff6b6b', '#4ade80', '#ffd166', '#7df9ff'];
+      for (let k = 0; k < 8; k++) d3Teil(g, new T.SphereGeometry(0.08, 8, 6), new T.MeshBasicMaterial({ color: knoepfe[k % 4] }), -1.6 + k * 0.45, 1.02, 0.6);
+      d3Teil(g, new T.TorusGeometry(0.3, 0.05, 6, 16), d3Mat('#dddddd'), 0, 1.3, 0.9);   // Steuerrad
+      d3Teil(g, new T.BoxGeometry(4.4, 2.6, 0.2), d3Mat('#9aa4b5'), 0, 1.9, -0.3);
+      d3Teil(g, new T.PlaneGeometry(3.8, 1.6), new T.MeshBasicMaterial({ color: '#05060f' }), 0, 2.2, -0.19);   // Großes Fenster ins All
+      for (let k = 0; k < 12; k++) d3Teil(g, new T.PlaneGeometry(0.04, 0.04), new T.MeshBasicMaterial({ color: '#ffffff' }), -1.8 + Math.random() * 3.6, 1.5 + Math.random() * 1.4, -0.18);
+      hoehe = 3.4; break;
     }
   }
   const schild = d3Schild(`${o.name}`, '#ffffff', 3.2); schild.position.set(0, hoehe + 0.5, 0); g.add(schild);
@@ -4668,6 +4762,11 @@ function d3Zeichnen() {
   D3.laterneMat.color.set(nebel ? '#555555' : '#ffe680'); D3.laterneLicht.intensity = nebel ? 0 : 6;
   const offen = sabotage && sabotage.art === 'gatter';
   D3.tor.rotation.y += ((offen ? -1.3 : 0) - D3.tor.rotation.y) * 0.1;
+  if (D3.schleuse) {   // 🚀 Schiebetüren gehen auf, Lampe blinkt rot
+    const S2 = D3.schleuse, ziel = offen ? 1.85 : 0.95;
+    S2.rechts.position.x += (S2.x + ziel - S2.rechts.position.x) * 0.08; S2.links.position.x += (S2.x - ziel - S2.links.position.x) * 0.08;
+    D3.lampeSchleuse.color.set(offen ? (Math.floor(zeit * 4) % 2 ? '#ff3b3b' : '#661515') : '#4ade80');
+  }
   const torText = offen ? '🚪 Gatter (OFFEN!)' : '🚪 Gatter';
   if (D3.torSchild.userData.text !== torText) { D3.torSchild.userData.text = torText; D3.torSchild.userData.malen(torText, offen ? '#ff6b6b' : '#ffffff'); }
   for (const d of D3.drehen) d.obj.rotation[d.achse] += d.tempo / 60;
