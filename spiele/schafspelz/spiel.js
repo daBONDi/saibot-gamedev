@@ -255,6 +255,18 @@ function ton(hoehe, start, dauer, klang = 'sine', laut = 0.2, hoeheEnde = null) 
   osz.stop(t0 + dauer + 0.05);
 }
 
+// Rauschen (Wind, Wellen, Zischen): Dauer, Filter-Höhe am Anfang und am Ende, Lautstärke
+function rauschen(dauer, von, bis, laut) {
+  if (!audio || !tonAn) return;
+  const a = audio;
+  const n = Math.floor(a.sampleRate * dauer), puffer = a.createBuffer(1, n, a.sampleRate), d = puffer.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const q = a.createBufferSource(); q.buffer = puffer;
+  const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(von, a.currentTime); f.frequency.exponentialRampToValueAtTime(bis, a.currentTime + dauer);
+  const g = a.createGain(); g.gain.value = laut;
+  q.connect(f); f.connect(g); g.connect(a.destination); q.start();
+}
+
 // Ton mit Wackeln (für Mäh und Geheul)
 function wackelTon(punkte, start, dauer, klang, laut, wackelTempo, wackelStaerke) {
   if (!audio || !tonAn) return;
@@ -388,16 +400,14 @@ const sound = {
   meckern() { wackelTon([[0, 620], [0.6, 540]], 0, 0.7, 'sawtooth', 0.15, 24, 60); },
   // 🚀 Luftschleuse: Tür zu (schhhk-KLONG) und alles wird rausgesaugt (SSSSST!)
   schleuseZu() { ton(200, 0, 0.5, 'sawtooth', 0.06, 90); ton(90, 0.5, 0.25, 'square', 0.15, 50); },
-  zisch() {
-    if (!audio || !tonAn) return;
-    const a = audio;
-    const n = Math.floor(a.sampleRate * 1.4), puffer = a.createBuffer(1, n, a.sampleRate), d = puffer.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-    const q = a.createBufferSource(); q.buffer = puffer;
-    const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(3000, a.currentTime); f.frequency.exponentialRampToValueAtTime(400, a.currentTime + 1.4);
-    const g = a.createGain(); g.gain.value = 0.35;
-    q.connect(f); f.connect(g); g.connect(a.destination); q.start();
-  },
+  zisch() { rauschen(1.4, 3000, 400, 0.35); },
+  // 🌾 Katapult: Holz knarzt ... BOING!
+  knarz() { wackelTon([[0, 95], [0.7, 75]], 0, 0.7, 'sawtooth', 0.07, 30, 12); },
+  boing() { ton(140, 0, 0.45, 'square', 0.1, 650); ton(700, 0.12, 0.35, 'sine', 0.12, 250); },
+  // ❄️ Schlitten: Wuiiii (Schnee rauscht) / 🏝️ Welle: Platsch!
+  schnee() { rauschen(1.6, 5000, 2000, 0.18); },
+  welle() { rauschen(1.5, 600, 200, 0.4); },
+  wal() { rauschen(1.0, 1500, 3500, 0.2); },
   // 🚀 Klopf-klopf an die Glastür, und PLING! (ganz weit weg im All)
   klopf() { ton(180, 0, 0.06, 'square', 0.18, 120); ton(180, 0.18, 0.06, 'square', 0.18, 120); },
   pling() { ton(2093, 0, 0.5, 'sine', 0.12); ton(2637, 0.08, 0.6, 'sine', 0.08); },
@@ -2115,17 +2125,33 @@ function updateCutscene(dt) {
     if (c.t > 8) endeCutscene();
     return;
   }
-  const wann = KARTE.weltall ? RW.enttarnt : 2.0;   // 🚀 Im All wird erst draußen enttarnt
-  const v = KARTE.weltall ? RW.text : 0;            // (Fanfare kommt im All später)
-  if (KARTE.weltall) {
+  const lang = langerRauswurf();                     // 🎬 Hat die Karte eine eigene lange Rauswurf-Animation?
+  const wann = lang ? RW.enttarnt : 2.0;             // (Da wird erst später enttarnt)
+  const v = lang ? RW.text : 0;                      // (und die Fanfare kommt später)
+  if (lang) {
+    const art = KARTE.rauswurf;
     if (ab(0.2)) sound.trippel();
-    if (ab(RW.rein)) sound.schleuseZu();
-    for (const z of [0, 1.2]) if (ab(RW.zu + z)) sound.klopf();
     for (let i = 0; i < 3; i++) if (ab(RW.zu + i * (RW.auf - RW.zu) / 3)) sound.piep();
-    if (ab(RW.zu + 0.1)) sound.alarm();
-    if (ab(RW.auf)) sound.zisch();
     if (ab(RW.draussen + 0.4) && !c.raus.istWolf && c.raus.rolle !== 'ziege') sound.huuu();
-    if (ab(RW.pling)) sound.pling();
+    if (art === 'schleuse') {
+      if (ab(RW.rein)) sound.schleuseZu();
+      for (const z of [0, 1.2]) if (ab(RW.zu + z)) sound.klopf();
+      if (ab(RW.zu + 0.1)) sound.alarm();
+      if (ab(RW.auf)) sound.zisch();
+      if (ab(RW.pling)) sound.pling();
+    } else if (art === 'katapult') {
+      if (ab(RW.rein) || ab(RW.zu + 1)) sound.knarz();
+      if (ab(RW.auf)) sound.boing();
+      if (ab(RW.pling)) sound.plumps();
+    } else if (art === 'schlitten') {
+      if (ab(RW.auf)) sound.schnee();
+      if (ab(RW.draussen + 1.8)) sound.boing();   // Sprungschanze!
+      if (ab(RW.pling)) sound.poff();
+    } else if (art === 'floss') {
+      if (ab(RW.auf)) sound.welle();
+      if (ab(RW.draussen + 2.6)) sound.wal();
+      if (ab(RW.pling)) sound.pling();
+    }
   } else if (ab(0.8)) sound.trippel();
   if (ab(wann) && c.raus.istWolf) sound.knurren();
   if (ab(wann) && c.raus.rolle === 'ziege') sound.meckern();
@@ -2133,7 +2159,7 @@ function updateCutscene(dt) {
     const gut = c.raus.rolle === 'ziege' ? c.raus.istSpieler : (spieler.rolle !== 'ziege' && c.raus.istWolf !== spielerIstWolf);
     if (gut) sound.fanfare(); else sound.traurig();
   }
-  if (c.t > (KARTE.weltall ? RW.ende : 8)) endeCutscene();
+  if (c.t > (lang ? RW.ende : 8)) endeCutscene();
 }
 
 // Wo ist das verjagte Schaf gerade?
@@ -2463,7 +2489,7 @@ function zeichneCutscene() {
   if (cutscene.art === 'gefressen') { zeichneFressCutscene(); return; }
   if (cutscene.art === 'hirte') { zeichneHirtenCutscene(); return; }
   const c = cutscene, t = c.t, r = c.raus;
-  if (KARTE.weltall) { zeichneLuftschleusenRauswurf(c); zeichneRauswurfText(c); return; }   // 🚀 Raumschiff: ab durch die Luftschleuse!
+  if (langerRauswurf()) { RAUSWURF_BILDER[KARTE.rauswurf](c); zeichneRauswurfText(c); return; }   // 🎬 Jede Karte hat ihre eigene Animation!
   const himmel = KARTE.himmel || ['#3b2a6b', '#ff9a62'];
   const g = ctx.createLinearGradient(0, 0, 0, 360);
   g.addColorStop(0, himmel[0]); g.addColorStop(1, himmel[1]);
@@ -2674,7 +2700,7 @@ function zeichneLuftschleusenRauswurf(c) {
 }
 
 function zeichneRauswurfText(c) {
-  const t = c.t - (KARTE.weltall ? RW.text : 0), r = c.raus;   // 🚀 Im Raumschiff kommt der Text später (die Animation ist länger)
+  const t = c.t - (langerRauswurf() ? RW.text : 0), r = c.raus;   // 🎬 Bei den langen Animationen kommt der Text später
   // Text, Buchstabe für Buchstabe
   if (t > 4) {
     let zeile1;

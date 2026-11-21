@@ -22,6 +22,8 @@
 // "himmel" sind die Farben vom Himmel in der Cutscene (oben, unten).
 // "weltall: true" = Raumschiff! Gruben sind dann Lüftungsschächte und
 // wer rausgewählt wird, fliegt durch die Luftschleuse ins All.
+// "rauswurf" = So wird ein Schaf beim Herden-Treffen rausgeworfen:
+//   'katapult', 'schlitten', 'floss' oder 'schleuse' (ohne: einfach durchs Gatter weg)
 // "woerter" tauscht Wörter im Spiel aus (z. B. 'Grube' → 'Schacht').
 // "waende" sind Rechtecke, durch die keiner durchlaufen kann: { x, y, b (Breite), h (Höhe) }.
 //   Damit baut man Räume und Gänge! (Die Computer-Schafe finden den Weg dann selbst.)
@@ -30,7 +32,7 @@
 
 const KARTEN = [
   {
-    name: 'Bauernhof', himmel: ['#3b2a6b', '#ff9a62'], emoji: '🌾',
+    name: 'Bauernhof', himmel: ['#3b2a6b', '#ff9a62'], emoji: '🌾', rauswurf: 'katapult',
     boden: '#6abf4b', weg: '#c8a96b', platz: '#d6bb82', rand: 'zaun', deko: 'blumen',
     treffpunkt: { x: 900, y: 680 },
     laterne: { x: 160, y: 690 },
@@ -46,7 +48,7 @@ const KARTEN = [
     ],
   },
   {
-    name: 'Winterdorf', himmel: ['#0f1a33', '#5a76a8'], emoji: '❄️',
+    name: 'Winterdorf', himmel: ['#0f1a33', '#5a76a8'], emoji: '❄️', rauswurf: 'schlitten',
     boden: '#eef4fa', weg: '#b8c7d6', platz: '#d5e1ec', rand: 'zaun', deko: 'tannen', schnee: true,
     treffpunkt: { x: 880, y: 650 },
     laterne: { x: 560, y: 420 },
@@ -62,7 +64,7 @@ const KARTEN = [
     ],
   },
   {
-    name: 'Schafsinsel', himmel: ['#2a3f7a', '#ffb36b'], emoji: '🏝️',
+    name: 'Schafsinsel', himmel: ['#2a3f7a', '#ffb36b'], emoji: '🏝️', rauswurf: 'floss',
     boden: '#f0d9a0', weg: '#dcc086', platz: '#e6cc90', rand: 'meer', deko: 'palmen',
     treffpunkt: { x: 900, y: 660 },
     laterne: { x: 1560, y: 640 },
@@ -78,7 +80,7 @@ const KARTEN = [
     ],
   },
   {
-    name: 'Spaceship Mäh', himmel: ['#05060f', '#1b2350'], emoji: '🚀',
+    name: 'Spaceship Mäh', himmel: ['#05060f', '#1b2350'], emoji: '🚀', rauswurf: 'schleuse',
     boden: '#5b6474', weg: '#3a4150', platz: '#7c8798', rand: 'all', deko: 'raumschiff', weltall: true,
     treffpunkt: { x: 900, y: 660 },
     laterne: { x: 1560, y: 660 },
