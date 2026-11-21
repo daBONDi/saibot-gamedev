@@ -96,6 +96,7 @@ const GEBAEUDE_ARTEN = {
   kleinsilo: { name: 'Kleines Silo', emoji: '🥫', preis: 12000, r: 2, silo: { max: 20000, gut: 'korn', hoch: 9 } },
   grosssilo: { name: 'Großsilo', emoji: '🏭', preis: 60000, r: 5, silo: { max: 150000, gut: 'korn', hoch: 19 } },
   hochsilo: { name: 'Silage-Hochsilo', emoji: '🗼', preis: 35000, r: 3.3, silo: { max: 40000, gut: 'silage', hoch: 20 } },
+  garage3: { name: '3er-Garage', emoji: '🅿️', preis: 15000, r: 12 },
   futtersilo: { name: 'Futtersilo', emoji: '🐄', preis: 8000, r: 1.8, silo: { max: 15000, gut: 'futter', hoch: 9 } },
   hundehuette: { name: 'Hundehütte', emoji: '🐕', preis: 300, r: 1.2, haustier: 'hund' },
   katzenkorb: { name: 'Katzenkorb', emoji: '🐈', preis: 200, r: 0.8, haustier: 'katze' },
@@ -104,6 +105,7 @@ const GEBAEUDE_ARTEN = {
 const HONIG_PRO_MIN = 0.5;
 const HONIG_MAX = 15;            // So viel Honig passt in einen Bienenstock
 const BIENEN_BLUETEN_WEITE = 30; // So weit fliegen die Bienen zu den Obstbäumen
+const GARAGE = { breite: 21, tief: 12, hoch: 5 };   // 3er-Garage: drei Plätze, je 7 m breit (da passt sogar der Mähdrescher rein!)
 const HOCHSILO_GAER = 90;        // So ungefähr viele Sekunden gärt das Häckselgut im Hochsilo (ganz von allein, ohne Folie!)
 const FUTTERSILO_WEITE = 30;     // Bis zu so weit weg füllt das Futtersilo die Futtertröge automatisch auf
 // Gemüse fürs Gewächshaus: kosten = Saat, zeit = Sekunden bis reif, menge = so viel erntest du, preis = so viel bringt eins im Dorfladen
@@ -2397,6 +2399,31 @@ function baueGebaeudeMesh(art) {
       const kissen = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 16), mat(0xd85a8a)); kissen.position.y = 0.06; g.add(kissen);
       kasten(g, 0.7, 0.05, 0.2, 0.3, 0.08, 0.3, 0x4a8fd8);                            // Napf
     }
+  } else if (art === 'garage3') {   // 3er-Garage: drei Stellplätze nebeneinander, vorne Rolltore, die von allein aufgehen
+    const W = GARAGE.breite, T = GARAGE.tief, H = GARAGE.hoch, P = W / 3;
+    const wand = new THREE.MeshStandardMaterial({ map: bretterTextur('#c8b89a'), roughness: 0.95 }), beton = mat(0x9a968e, { roughness: 1 });
+    kasten(g, 0, 0.04, 0, W, 0.08, T, beton);                                       // Betonboden
+    kasten(g, 0, H / 2, -T / 2, W + 0.3, H, 0.3, wand);                             // Rückwand
+    for (const sx of [-1, 1]) kasten(g, sx * W / 2, H / 2, 0, 0.3, H, T, wand);     // Seitenwände
+    for (const sx of [-1, 1]) kasten(g, sx * P / 2, H / 2, -0.25, 0.25, H, T - 0.5, wand);   // Trennwände zwischen den Plätzen
+    kasten(g, 0, H - 0.3, T / 2, W + 0.3, 0.6, 0.3, mat(0x8a6a4a));                 // Balken über den Toren
+    const dach = kasten(g, 0, H + 0.45, 0, W + 1.2, 0.25, T + 1.4, mat(0x7a3a2a)); dach.rotation.x = 0.06;   // Dach (leicht schräg)
+    for (let k = 0; k < 3; k++) for (const lz of [-2, 2]) kasten(g, (k - 1) * P, H - 0.08, lz, 1.2, 0.08, 0.25, new THREE.MeshBasicMaterial({ color: 0xfff6d0 }), false);   // Lampen an der Decke
+    g.userData.tore = [];
+    for (let k = 0; k < 3; k++) {
+      const x = (k - 1) * P;
+      // Rolltor mit Rillen
+      const tor = new THREE.Group(); tor.position.set(x, 0, T / 2 + 0.05); g.add(tor);
+      const blatt = kasten(tor, 0, (H - 0.6) / 2, 0, P - 0.45, H - 0.6, 0.08, mat(0xe8e8e8, { metalness: 0.3, roughness: 0.5 }));
+      for (let r = 1; r < 9; r++) kasten(blatt, 0, -(H - 0.6) / 2 + r * (H - 0.6) / 9, 0.05, P - 0.5, 0.03, 0.02, mat(0xaaaaaa), false);   // Rillen
+      g.userData.tore.push({ tor, blatt, auf: 0 });
+      // Nummer über dem Tor
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const gg = c.getContext('2d'); gg.fillStyle = '#ffd166'; gg.beginPath(); gg.arc(32, 32, 30, 0, 7); gg.fill();
+      gg.fillStyle = '#17251d'; gg.font = 'bold 44px Arial'; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(String(k + 1), 32, 35);
+      const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+      const nr = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ map: tx, transparent: true })); nr.position.set(x, H - 0.3, T / 2 + 0.17); g.add(nr);
+    }
   } else if (art === 'fahrsilo') {   // Silagesilo: Betonboden, zwei hohe Wände, vorne und hinten offen (zum Durchfahren!)
     const beton = mat(0xa8a49a, { roughness: 1 });
     const L = FS_LANG * 2, W = FS_BREIT + 0.2;
@@ -2506,6 +2533,7 @@ function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   if (art === 'teich') teichEinrichten(b);
   if (GEBAEUDE_ARTEN[art].holz) waldPlotEinrichten(b);
   if (art === 'fahrsilo') fahrsiloEinrichten(b);
+  if (art === 'garage3') garageEinrichten(b);
   if (art === 'bienenstock') bienenEinrichten(b);
   if (GEBAEUDE_ARTEN[art].haustier) { b.h.r = 0.5; b.tier = haustierNeu(GEBAEUDE_ARTEN[art].haustier, x, z, rot, null); b.extra.push(b.tier.g, b.tier.schild); }
   if (art === 'werkbank') { b.werkbank = true; b.schild = schild('🛠️ Werkbank · P', '#ffd166', 5); b.schild.position.set(x, 2.9, z); scene.add(b.schild); b.extra.push(b.schild); }
@@ -2690,6 +2718,32 @@ function haustierUpdate(dt) {
     if (!t.hund && t.speed === 0 && t.streichel <= 0) t.k.position.y = -0.03; else t.k.position.y = 0;
     t.schild.position.set(pos.x, t.hund ? 1.8 : 1.25, pos.z);
     t.schild.visible = dSpieler < 12;
+  }
+}
+
+// ===== 🅿️ 3er-Garage: Man kann hineinfahren, nur die Wände sind im Weg. Die Tore gehen auf, wenn jemand kommt =====
+function garageEinrichten(b) {
+  b.garage = true; b.h.r = -100; b.hx = [];
+  const W = GARAGE.breite, T = GARAGE.tief, c = Math.cos(b.rot), sn = Math.sin(b.rot);
+  const punkt = (lx, lz) => { const h = { x: b.x + lx * c + lz * sn, z: b.z - lx * sn + lz * c, r: 0.35 }; hindernisse.push(h); b.hx.push(h); };
+  for (let lx = -W / 2; lx <= W / 2 + 0.01; lx += 1) punkt(lx, -T / 2);                   // Rückwand
+  for (let lz = -T / 2; lz <= T / 2 + 0.01; lz += 1) { punkt(-W / 2, lz); punkt(W / 2, lz); punkt(-W / 6, Math.min(lz, T / 2 - 0.5)); punkt(W / 6, Math.min(lz, T / 2 - 0.5)); }   // Seiten- und Trennwände
+}
+function garageUpdate(dt) {
+  for (const b of gebaute) {
+    if (!b.garage) continue;
+    const tore = b.mesh.userData.tore, c = Math.cos(b.rot), sn = Math.sin(b.rot);
+    tore.forEach((T, k) => {
+      const lx = (k - 1) * GARAGE.breite / 3, lz = GARAGE.tief / 2 + 2;
+      const px = b.x + lx * c + lz * sn, pz = b.z - lx * sn + lz * c;
+      const nah = fahrzeuge.some(fz => Math.hypot(fz.g.position.x - px, fz.g.position.z - pz) < 9 && (fz === aktiv || fremdGefahren(fz) || fz.helfer)) || Math.hypot(player.position.x - px, player.position.z - pz) < 5;
+      const vorher = T.auf;
+      T.auf = begrenzt(T.auf + (nah ? 1 : -1) * dt * 0.8, 0, 1);
+      if (vorher === 0 && T.auf > 0 && Math.hypot(wo().x - px, wo().z - pz) < 30) tonGleiten(160, 220, 0, 1.2, 'square', 0.02);   // Surrr ...
+      const H = GARAGE.hoch - 0.6;
+      T.blatt.scale.y = Math.max(0.05, 1 - T.auf);
+      T.blatt.position.y = H - H * T.blatt.scale.y / 2;   // Rollt sich oben auf
+    });
   }
 }
 
@@ -3743,11 +3797,80 @@ const HOF_SILO = { x: 41, z: 23 };
   hindernisse.push({ x: HOF_SILO.x, z: HOF_SILO.z, r: 2.6 });
 }
 const hofSilo = neuesSilo(HOF_SILO.x, HOF_SILO.z);
+// ===== 🗑️ Entfernen-Modus: Gebäude, Bäume, Fahrzeuge und Anhänger wieder wegmachen (du bekommst die Hälfte vom Preis zurück) =====
+let entfernen = false, entfernenZiel = null;
+const markierung = new THREE.BoxHelper(new THREE.Object3D(), 0xff3333); markierung.visible = false; scene.add(markierung);
+function entfernenUmschalten(an = !entfernen) {
+  entfernen = an;
+  if (entfernen && !building) buildMode();
+  if (!entfernen) { entfernenZiel = null; markierung.visible = false; }
+  if (entfernen) meldung('🗑️ Entfernen: Zeig mit der Maus auf ein Gebäude, einen Baum, ein Fahrzeug oder einen Anhänger und klick drauf!', 3.5);
+  updateHUD();
+}
+function zielInfo(z) {   // Name und Geld zurück
+  if (z.b) { const A = GEBAEUDE_ARTEN[z.b.art]; return { name: `${A.emoji} ${A.name}`, geld: Math.round(A.preis / 2) }; }
+  if (z.fz) return { name: `${z.fz.typ.emoji} ${z.fz.typ.name}`, geld: Math.round(z.fz.typ.preis / 2) };
+  return { name: `${z.a.typ.emoji} ${z.a.typ.name}`, geld: Math.round(z.a.typ.preis / 2) };
+}
+function entfernenSuchen() {   // Was ist unter der Maus?
+  strahl.setFromCamera(zeiger, camera);
+  const besitzer = new Map();
+  for (const b of gebaute) besitzer.set(b.mesh, { b });
+  for (const fz of fahrzeuge) besitzer.set(fz.g, { fz });
+  for (const a of anhaenger) besitzer.set(a.g, { a });
+  const treffer = strahl.intersectObjects([...besitzer.keys()], true);
+  entfernenZiel = null;
+  for (const t of treffer) {
+    let o = t.object;
+    while (o && !besitzer.has(o)) o = o.parent;
+    if (o) { entfernenZiel = besitzer.get(o); markierung.setFromObject(o); break; }
+  }
+  markierung.visible = !!entfernenZiel;
+}
+function gebaeudeEntfernen(b) {
+  scene.remove(b.mesh);
+  const k = hindernisse.indexOf(b.h); if (k >= 0) hindernisse.splice(k, 1);
+  for (const h of b.hx || []) { const n = hindernisse.indexOf(h); if (n >= 0) hindernisse.splice(n, 1); }
+  if (b.silo) { scene.remove(b.silo.schild); silos.splice(silos.indexOf(b.silo), 1); }
+  for (const o of b.extra || []) scene.remove(o);
+  if (b.tier) { const n = haustiere.indexOf(b.tier); if (n >= 0) haustiere.splice(n, 1); }
+  if (panelGeb === b) panelZeigen(null);
+  const n = gebaute.indexOf(b); if (n >= 0) gebaute.splice(n, 1);
+}
+function fahrzeugEntfernen(fz) {
+  if (fz.anh) abkuppeln(fz);
+  scene.remove(fz.g);
+  const n = fahrzeuge.indexOf(fz); if (n >= 0) fahrzeuge.splice(n, 1);
+  if (letztes === fz) letztes = fahrzeuge[0] || null;
+}
+function anhaengerEntfernen(a) {
+  if (a.an) abkuppeln(a.an);
+  scene.remove(a.g);
+  const n = anhaenger.indexOf(a); if (n >= 0) anhaenger.splice(n, 1);
+}
+function entfernenKlick() {
+  const z = entfernenZiel;
+  if (!z) { meldung('🗑️ Da ist nichts zum Entfernen. Zeig genau auf ein Gebäude, einen Baum oder ein Fahrzeug!'); sound.nein(); return; }
+  if (z.fz && z.fz === aktiv) { meldung('🚜 Da sitzt du gerade drin! Steig erst aus (E).'); sound.nein(); return; }
+  if (z.fz && (fremdGefahren(z.fz) || z.fz.helfer)) { meldung(z.fz.helfer ? `👷 Damit arbeitet gerade ${z.fz.helfer.name}!` : '🚫 Damit fährt gerade ein anderer Bauer!'); sound.nein(); return; }
+  if (z.a && z.a.an && (z.a.an === aktiv || fremdGefahren(z.a.an))) { meldung('🔗 Der Anhänger hängt gerade an einem Fahrzeug, das fährt!'); sound.nein(); return; }
+  const I = zielInfo(z);
+  const inhalt = z.b && z.b.silo && z.b.silo.inhalt > 0 ? `\n⚠️ Da sind noch ${kg(z.b.silo.inhalt)} drin – die sind dann weg!` : z.b && z.b.geh && z.b.geh.tiere.length ? `\n⚠️ Die ${z.b.geh.tiere.length} Tiere werden verkauft (zählt zum Geld dazu).` : '';
+  const tierGeld = z.b && z.b.geh ? Math.round(z.b.geh.tiere.length * TIERE[z.b.geh.tier].preis / 2) : 0;
+  if (!confirm(`${I.name} wirklich entfernen?\nDu bekommst ${euro(I.geld + tierGeld)} zurück.${inhalt}`)) return;
+  if (z.b) { mpEvent({ t: 'gebWeg', k: gebSchluessel(z.b) }); gebaeudeEntfernen(z.b); }
+  else if (z.fz) { mpEvent({ t: 'fzWeg', id: z.fz.id }); fahrzeugEntfernen(z.fz); }
+  else { mpEvent({ t: 'anhWeg', id: z.a.id }); anhaengerEntfernen(z.a); }
+  money += I.geld + tierGeld;
+  entfernenZiel = null; markierung.visible = false;
+  meldung(`🗑️ ${I.name} entfernt! +${euro(I.geld + tierGeld)} zurück.`, 3);
+  sound.bauen(); updateHUD(); speichern();
+}
 // Vorschau ("Geist") im Baumodus: grün = hier geht's, rot = geht nicht
 const geistMat = new THREE.MeshBasicMaterial({ color: 0x55ff77, transparent: true, opacity: 0.45, depthWrite: false });
 let geist = null, geistArt = null, geistOk = false;
 function geistAktualisieren(punkt) {
-  if (!building || !punkt) { if (geist) geist.visible = false; return; }
+  if (!building || !punkt || entfernen) { if (geist) geist.visible = false; return; }
   if (geistArt !== bauArt) {
     if (geist) scene.remove(geist);
     geist = baueGebaeudeMesh(bauArt);
@@ -3902,7 +4025,8 @@ function updateHUD() {
   const steigt = Math.cos(spielZeit / 45) > 0;
   $('preis').textContent = `${kornPreis().toFixed(2).replace('.', ',')} €/kg ${steigt ? '📈' : '📉'}`;
   $('bauleiste').style.display = building ? 'block' : 'none';
-  for (const art of Object.keys(GEBAEUDE_ARTEN)) $('bau-' + art).classList.toggle('aktiv', art === bauArt);
+  for (const art of Object.keys(GEBAEUDE_ARTEN)) $('bau-' + art).classList.toggle('aktiv', art === bauArt && !entfernen);
+  $('bau-entfernen').classList.toggle('aktiv', entfernen);
   $('fadenkreuz').style.display = ansicht === 'ego' ? 'block' : 'none';
 }
 
@@ -4682,6 +4806,7 @@ function geraetWaehlen(art) {
 }
 function buildMode() {
   building = !building;
+  if (!building && entfernen) { entfernen = false; entfernenZiel = null; markierung.visible = false; }
   if (building && ansicht === 'ego') ansichtWechseln();   // Zum Bauen brauchst du die Maus
   if (!building && geist) geist.visible = false;
   updateHUD();
@@ -4749,7 +4874,8 @@ function anleitungInsBild() {   // Nicht aus dem Bildschirm rausschieben!
   }
   addEventListener('resize', anleitungInsBild);
 }
-for (const art of Object.keys(GEBAEUDE_ARTEN)) $('bau-' + art).addEventListener('click', () => { bauArt = art; updateHUD(); });
+for (const art of Object.keys(GEBAEUDE_ARTEN)) $('bau-' + art).addEventListener('click', () => { bauArt = art; if (entfernen) entfernenUmschalten(false); updateHUD(); });
+$('bau-entfernen').addEventListener('click', e => { entfernenUmschalten(); e.currentTarget.blur(); });
 
 document.addEventListener('keydown', e => {
   tonStart();
@@ -4794,7 +4920,8 @@ document.addEventListener('keydown', e => {
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
   if (k === 'escape') { helferZeigen(false); haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
-  if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; updateHUD(); }
+  if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; if (entfernen) entfernenUmschalten(false); updateHUD(); }
+  if (k === 'delete') entfernenUmschalten();   // Entf-Taste
   else if (['1', '2', '3', '4'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
   updateHUD();
 });
@@ -4826,9 +4953,11 @@ document.addEventListener('mousemove', e => {
   strahl.setFromCamera(zeiger, camera);
   const hit = strahl.intersectObject(ground);
   mausPunkt = hit.length ? hit[0].point : null;
+  if (building && entfernen) entfernenSuchen();
 });
 renderer.domElement.addEventListener('wheel', e => { zoom = begrenzt(zoom + e.deltaY * 0.001, 0.5, 2.5); e.preventDefault(); }, { passive: false });
 renderer.domElement.addEventListener('click', () => {
+  if (building && entfernen && gezogen <= 6) { entfernenSuchen(); entfernenKlick(); return; }
   if (!building || gezogen > 6 || !mausPunkt) return;   // Nach Kamera-Drehen nicht aus Versehen bauen
   geistAktualisieren(mausPunkt);
   const A = GEBAEUDE_ARTEN[bauArt];
@@ -4844,6 +4973,7 @@ renderer.domElement.addEventListener('click', () => {
   if (OBST[bauArt]) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gepflanzt! Erst blüht er, dann wachsen die ${OBST[bauArt].name}. Wenn sie reif sind: P = pflücken.`, 4);
   if (bauArt === 'bienenstock') meldung('🐝 Neuer Bienenstock! Die Bienen machen Honig – mit Obstbäumen in der Nähe doppelt so viel. P = Honig ernten.', 4.5);
   if (GEBAEUDE_ARTEN[bauArt].haustier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} Ein neues Haustier ist eingezogen! Geh hin und drück P zum Streicheln. 💕`, 4.5);
+  if (bauArt === 'garage3') meldung('🅿️ Neue 3er-Garage! Fahr einfach hinein – die Rolltore gehen von allein auf.', 4);
   if (bauArt === 'fahrsilo') meldung('🟩 Neues Silagesilo! Häcksel Mais 🌽, kipp das Häckselgut hier ab (L), fahr drüber, deck es zu (P) – dann wird Silage daraus.', 5);
   if (bauArt === 'teich') meldung('🎣 Neuer Fischteich! Geh ans Ufer und drück P zum Angeln.', 4);
   if (bauArt === 'gewaechshaus') meldung('🪴 Neues Gewächshaus! Geh hin und drück P, um Gemüse zu pflanzen.', 4);
@@ -5186,6 +5316,9 @@ function mpEmpfangen(d, vonGast) {
     case 'bau': gebaeudeHinzu(d.art, d.x, d.z, d.rot, 0); sound.bauen(); break;
     case 'korn': { const fz = fahrzeuge.find(x => x.id === d.id); if (fz) kornDazu(fz, d.m, GUETER[d.g] ? d.g : 'korn'); break; }   // Der Mähdrescher (oder Häcksler) hat übergeladen
     case 'ballen': ballenNeu(d.id, d.x, d.z, d.r); break;
+    case 'gebWeg': { const b = gebaute.find(x => gebSchluessel(x) === d.k); if (b) gebaeudeEntfernen(b); break; }
+    case 'fzWeg': { const fz = fahrzeuge.find(x => x.id === d.id); if (fz && fz !== aktiv) fahrzeugEntfernen(fz); break; }
+    case 'anhWeg': { const a = anhaenger.find(x => x.id === d.id); if (a) anhaengerEntfernen(a); break; }
     case 'ballenWeg': ballenWeg(d.id); break;
     case 'neuerAnh': if (!anhaenger.some(a => a.id === d.id) && ANHAENGER[d.typ]) neuerAnhaenger(d.typ, d.x, d.z, d.r, { id: d.id }); break;
     case 'anh': {   // Ein abgestellter Anhänger hat jetzt anderen Inhalt (Mähdrescher hat übergeladen)
@@ -5603,6 +5736,7 @@ function animate() {
   fahrsiloUpdate(dt);
   bienenUpdate(dt);
   siloUpdate(dt);
+  garageUpdate(dt);
   haustierUpdate(dt);
   stadtUpdate(dt);
   helferUpdate(dt);
@@ -5612,7 +5746,8 @@ function animate() {
 
   // Hinweis unten in der Mitte
   const fn = feldInDerNaehe(), silo = nahesSilo(), wh = waldHinweis(), hh = hofHinweis();
-  if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–9, 0 oder , . = anderes Gebäude · B = fertig`);
+  if (building && entfernen) zeigeHinweis(entfernenZiel ? `🗑️ Klick = ${zielInfo(entfernenZiel).name} entfernen (+${euro(zielInfo(entfernenZiel).geld)} zurück)` : '🗑️ Entfernen: Zeig mit der Maus auf etwas und klick · Entf = zurück zum Bauen · B = fertig');
+  else if (building) zeigeHinweis(`🏗️ ${GEBAEUDE_ARTEN[bauArt].name} (${euro(GEBAEUDE_ARTEN[bauArt].preis)}) · Klick = bauen · R = drehen · 1–9, 0 oder , . = anderes Gebäude · B = fertig`);
   else if (wh) zeigeHinweis(wh);
   else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
