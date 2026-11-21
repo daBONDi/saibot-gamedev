@@ -2261,11 +2261,11 @@ const herzMat = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d'); g.font = '52px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('💕', 32, 36);
   const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.SpriteMaterial({ map: tx, depthWrite: false });
+  return new THREE.SpriteMaterial({ map: tx, depthWrite: false, transparent: true });
 })();
 const herzen = [];
 function herzchen(x, y, z) {
-  const h = new THREE.Sprite(herzMat); h.scale.setScalar(0.5); h.position.set(x + zufall(-0.3, 0.3), y, z + zufall(-0.3, 0.3)); scene.add(h);
+  const h = new THREE.Sprite(herzMat.clone()); h.scale.setScalar(0.5); h.position.set(x + zufall(-0.3, 0.3), y, z + zufall(-0.3, 0.3)); scene.add(h);
   herzen.push({ h, t: 1.5 });
 }
 function naechstesHaustier(weite = 2.6) {
@@ -2285,7 +2285,7 @@ function streicheln(t) {
 function haustierUpdate(dt) {
   for (let k = herzen.length - 1; k >= 0; k--) {
     const H = herzen[k]; H.t -= dt; H.h.position.y += dt * 0.8; H.h.material.opacity = Math.min(1, H.t);
-    if (H.t <= 0) { scene.remove(H.h); herzen.splice(k, 1); }
+    if (H.t <= 0) { scene.remove(H.h); H.h.material.dispose(); herzen.splice(k, 1); }
   }
   const p = player.position, zuFuss = !aktiv;
   for (const t of haustiere) {
@@ -3453,6 +3453,7 @@ let meldungZeit = 0;
 function meldung(text, dauer = 2.5) { $('meldung').textContent = text; $('meldung').style.display = 'block'; meldungZeit = dauer; }
 let letzteMeldung = '', letzteMeldungZeit = 0;
 function meldungSelten(text) {   // Gleiche Meldung nicht dauernd wiederholen
+  if (stumm) return;   // (Ein Helfer arbeitet gerade)
   if (text === letzteMeldung && spielZeit - letzteMeldungZeit < 3) return;
   letzteMeldung = text; letzteMeldungZeit = spielZeit;
   meldung(text);
@@ -3511,6 +3512,7 @@ function arbeiten(fz) {
 function bearbeite(fz, x, z) {
   const f = feldBei(x, z);
   if (!f) return;
+  if (fz.helferFeld && f !== fz.helferFeld) return;   // Ein Helfer arbeitet nur auf seinem Feld
   if (!f.gekauft) { meldungSelten(`🚫 Feld ${f.nr + 1} gehört dir noch nicht! Fahr zum Schild und drück K.`); return; }
   const i = Math.floor((x - f.x0) / ZELLE), j = Math.floor((z - f.z0) / ZELLE);
   if (i < 0 || j < 0 || i >= f.nx || j >= f.nz) return;
@@ -3529,10 +3531,11 @@ function bearbeite(fz, x, z) {
     if (c.z === 'gesaet' && c.a === 'mais' && c.w >= 1) {
       const ziel = haeckselZiel(fz);
       if (!ziel) { meldungSelten(!kornAnh(fz) ? '🚛 Wohin mit dem Häckselgut? Kuppel einen Kipper an (H) – oder ein Freund fährt mit Anhänger neben dir!' : !gutPasst(fz, 'haeckselgut') ? '🚛 Im Anhänger ist noch was anderes drin – erst leer machen!' : '🚛 Der Anhänger ist voll! Ab zum Silagesilo 🟩 und mit L abladen.'); return; }
-      if (ziel.a) { ziel.a.inhalt += MAIS_ERTRAG; ziel.a.gut = 'haeckselgut'; }
+      if (ziel.fsB) { const F = ziel.fsB.fs; F.fest = F.inhalt > 0 ? F.fest * F.inhalt / (F.inhalt + MAIS_ERTRAG) : 0; F.inhalt += MAIS_ERTRAG; F.fertig = false; F.geaendert = true; }
+      else if (ziel.a) { ziel.a.inhalt += MAIS_ERTRAG; ziel.a.gut = 'haeckselgut'; }
       else { kornDazu(ziel.fz, MAIS_ERTRAG, 'haeckselgut'); if (ziel.fz !== fz) mpEvent({ t: 'korn', id: ziel.fz.id, m: MAIS_ERTRAG, g: 'haeckselgut' }); }
       c.z = 'stoppeln'; c.w = 0; delete c.a; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0x7fae3a);
-      haeckselStrahl(fz, ziel);
+      if (!ziel.fsB) haeckselStrahl(fz, ziel);
     } else if (c.z === 'gesaet' && c.a === 'mais') meldungSelten('⏳ Der Mais ist noch nicht reif – warte, bis er groß und gelblich ist!');
     else if (c.z === 'gesaet' && c.w >= 1) meldungSelten('🌾 Getreide erntest du mit dem Erntevorsatz (Traktor) oder dem Mähdrescher – der Häcksler ist für Mais!');
   } else if (fz.werkzeug === 'ernte') {
@@ -3546,6 +3549,7 @@ function bearbeite(fz, x, z) {
 }
 // Wohin bläst der Häcksler? 1. in den eigenen Anhänger, 2. in ein Fahrzeug/einen Anhänger daneben (bis 12 m)
 function haeckselZiel(fz) {
+  if (fz.helfer) { const b = gebaute.find(b => b.fs && !b.fs.zu && !(b.fs.fertig && b.fs.inhalt > 0) && b.fs.inhalt + MAIS_ERTRAG <= FAHRSILO_MAX); return b ? { fsB: b } : null; }
   if (kornAnh(fz)) return gutPasst(fz, 'haeckselgut') && kornDrin(fz) + MAIS_ERTRAG <= kornPlatz(fz) ? { fz } : null;
   const p = fz.g.position;
   let bestes = null, bestD = 12;
@@ -3595,7 +3599,7 @@ function haeckselUpdate(dt) {
     let ziel = -Math.PI / 2 - 0.6;   // In Ruhe: schräg nach hinten links
     if (fz === aktiv) {
       const z = haeckselZiel(fz);
-      if (z) { zielPunkt(z, tmpA); fz.g.worldToLocal(tmpA); ziel = Math.atan2(-tmpA.z, tmpA.x); }
+      if (z && !z.fsB) { zielPunkt(z, tmpA); fz.g.worldToLocal(tmpA); ziel = Math.atan2(-tmpA.z, tmpA.x); }
     }
     let d = ziel - fz.kruemmer.g.rotation.y;
     while (d > Math.PI) d -= Math.PI * 2;
@@ -4280,7 +4284,7 @@ document.addEventListener('keydown', e => {
   tonStart();
   const k = e.key.toLowerCase();
   keys[k] = true;
-  if ([' ', 'arrowup', 'arrowdown'].includes(k)) e.preventDefault();
+  if ([' ', 'arrowup', 'arrowdown', 'tab'].includes(k)) e.preventDefault();
   if (e.repeat) return;   // Gedrückt halten soll nicht ständig ein- und aussteigen
 
   if (k === 'e' && angel && angel.phase === 'kampf') { angelKurbeln(); return; }   // Beim Angeln: E = kurbeln!
@@ -4289,6 +4293,7 @@ document.addEventListener('keydown', e => {
     else {
       const fz = naechstesFahrzeug();
       if (fz && fremdGefahren(fz)) { meldung('🚫 Da sitzt schon ein anderer Bauer drin!'); sound.nein(); }
+      else if (fz && fz.helfer) { meldung(`👷 Da arbeitet gerade ${fz.helfer.name}! Stoppen kannst du im Helfer-Menü (Tab).`, 3); sound.nein(); }
       else if (fz) einsteigen(fz);
     }
   }
@@ -4314,8 +4319,9 @@ document.addEventListener('keydown', e => {
   else if (k === 'p' && naechstesHaustier()) streicheln(naechstesHaustier());
   else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (nb && nb.fs) fahrsiloP(nb); else if (nb && nb.biene) honigErnten(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
+  if (k === 'tab') helferZeigen($('helferpanel').style.display !== 'block');
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
-  if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
+  if (k === 'escape') { helferZeigen(false); haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
   if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; updateHUD(); }
   else if (['1', '2', '3'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
@@ -4741,6 +4747,7 @@ function mpTick(dt) {
   // Wo bin ich?
   mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : null, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
+  if (host) for (const fz of fahrzeuge) if (fz.helfer) mpFzSenden(fz, 'helfer');
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
     if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'zeit', z: tageszeit, tag: tagNr }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich || b.fs || b.biene).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
@@ -5068,7 +5075,7 @@ function animate() {
     if (fz !== aktiv && fremd && fz.ziel) {
       fz.speed = fz.ziel.sp; fz.lenkWinkel = fz.ziel.lw; fz.arbeitet = fz.ziel.ab;
       for (const r of fz.raeder) { r.rad.rotation.x -= fz.speed * dt / (r.r * fz.typ.groesse); if (r.lenkt) r.lenker.rotation.y = fz.lenkWinkel * r.lenkt; }
-    } else if (fz !== aktiv) { fz.speed = 0; fz.arbeitet = false; }
+    } else if (fz !== aktiv && !fz.helfer) { fz.speed = 0; fz.arbeitet = false; }
     for (const [art, m] of Object.entries(fz.geraete)) {
       m.visible = art === fz.werkzeug;
       m.position.y += ((fz.arbeitet ? 0 : 0.45) - m.position.y) * Math.min(1, dt * 5);   // Abgesenkt auf dem Feld, sonst angehoben
@@ -5201,6 +5208,322 @@ function animate() {
 
   renderer.render(scene, camera);
 }
+
+// =====================================================================
+// ===== 👷 Helfer: arbeiten auf dem Feld oder auf dem Hof – und werden immer besser (Level 1 bis 5) =====
+// =====================================================================
+const HELFER_MAX = 4;            // So viele Helfer kannst du haben
+const HELFER_PREIS = 200;        // Einstellen kostet so viel
+const HELFER_LOHN = 2;           // Lohn pro Minute beim Arbeiten (mal Level): Level 1 = 2 €, Level 5 = 10 €
+const HELFER_XP = [0, 60, 180, 400, 800];   // So viele Erfahrungspunkte braucht man für Level 1, 2, 3, 4, 5
+const HELFER_NAMEN = ['Paul', 'Lena', 'Ali', 'Mia', 'Tom', 'Sophie', 'Jonas', 'Emma'];
+const HELFER_FARBEN = ['#d8a03a', '#3a7fd8', '#7fd83a', '#d83a7f', '#8a3ad8', '#3ad8c8'];
+const HELFER_HEIM = { x: 10, z: 34 };   // Hier warten die Hof-Helfer, wenn es nichts zu tun gibt
+const HELFER_AUFGABEN = {
+  pflug: { name: 'Pflügen', emoji: '🟫', geraet: 'pflug', zelle: c => c.z === 'wiese' || c.z === 'stoppeln' },
+  saat: { name: 'Getreide säen', emoji: '🌱', geraet: 'saat', saatArt: 'weizen', zelle: c => c.z === 'gepfluegt' },
+  mais: { name: 'Mais säen', emoji: '🌽', geraet: 'saat', saatArt: 'mais', zelle: c => c.z === 'gepfluegt' },
+  ernte: { name: 'Getreide ernten', emoji: '🌾', geraet: 'ernte', zelle: c => c.z === 'gesaet' && c.a !== 'mais' && c.w >= 1 },
+  haecksel: { name: 'Mais häckseln', emoji: '🚜', geraet: 'maisgebiss', zelle: c => c.z === 'gesaet' && c.a === 'mais' && c.w >= 1 },
+};
+const helfer = [];
+const helferLevel = h => HELFER_XP.filter(x => h.xp >= x).length;
+let stumm = false;   // Wenn ein Helfer arbeitet, sollen seine Meldungen dich nicht stören
+function helferNeu(name, farbe, xp = 0) {
+  const h = { name, farbe, xp, job: null, wahl: null, wahlFeld: null, lohnZeit: 0, status: 'Wartet auf Arbeit', figur: null, schild: schild('', '#ffd166', 4) };
+  h.schild.visible = false; scene.add(h.schild);
+  helfer.push(h);
+  return h;
+}
+const helferDaten = () => helfer.map(h => ({ n: h.name, f: h.farbe, xp: Math.round(h.xp) }));
+function helferLaden(liste) { for (const d of liste) if (helfer.length < HELFER_MAX) helferNeu(d.n, d.f, d.xp || 0); }
+function helferEinstellen() {
+  if (helfer.length >= HELFER_MAX) return;
+  if (money < HELFER_PREIS) { meldung(`💸 Ein Helfer kostet ${euro(HELFER_PREIS)}!`); sound.nein(); return; }
+  money -= HELFER_PREIS;
+  const name = HELFER_NAMEN.find(n => !helfer.some(h => h.name === n)) || 'Helfer';
+  helferNeu(name, HELFER_FARBEN[helfer.length % HELFER_FARBEN.length]);
+  meldung(`👷 ${name} hilft jetzt auf deinem Hof! Gib ${name} im Helfer-Menü eine Aufgabe.`, 3.5);
+  sound.kaufen(); speichern();
+}
+function xpDazu(h, n) {
+  const alt = helferLevel(h);
+  h.xp += n;
+  if (helferLevel(h) > alt) { meldung(`⭐ ${h.name} ist jetzt Level ${helferLevel(h)}! ${h.name} arbeitet jetzt schneller.`, 4); [523, 659, 784, 1047].forEach((f, k) => ton(f, k * 0.1, 0.2, 'triangle', 0.06)); helferMalen(); }
+}
+const zuTun = (f, A) => f.zellen.filter(A.zelle).length;
+// ----- Feldarbeit: Der Helfer nimmt sich ein passendes Fahrzeug und fährt das Feld in Bahnen ab -----
+function fahrzeugFuer(A, f) {
+  let bestes = null, bestD = Infinity;
+  for (const fz of fahrzeuge) {
+    if (fz === aktiv || fz.helfer || fremdGefahren(fz) || !fz.typ.geraete.includes(A.geraet)) continue;
+    if (GERAETE[A.geraet].hinten && fz.anh) continue;   // Pflug und Sämaschine gehen nicht mit Anhänger
+    if (A.geraet === 'ernte' && !gutPasst(fz, 'korn')) continue;   // Da ist noch Silage oder Häckselgut drin
+    let d = Math.hypot(fz.g.position.x - f.x, fz.g.position.z - f.z);
+    if (A.geraet === 'ernte' && fz.typ.art === 'drescher') d -= 1000;   // Zum Ernten am liebsten den Mähdrescher
+    if (d < bestD) { bestD = d; bestes = fz; }
+  }
+  return bestes;
+}
+function feldJobStarten(h, feldNr, aufgabe) {
+  const f = felder[feldNr], A = HELFER_AUFGABEN[aufgabe];
+  if (!f || !f.gekauft || h.job) return;
+  if (!zuTun(f, A)) { meldung(`👷 Auf Feld ${f.nr + 1} gibt es nichts zu ${A.name.toLowerCase()}!`); sound.nein(); return; }
+  const fz = fahrzeugFuer(A, f);
+  if (!fz) {
+    meldung(aufgabe === 'haecksel' ? '👷 Dafür braucht der Helfer einen Häcksler (beim Händler)!' : aufgabe === 'ernte' ? '👷 Kein freies Fahrzeug zum Ernten da!' : '👷 Kein freier Traktor da! (Ohne Anhänger – und du darfst nicht selbst drinsitzen.)', 4);
+    sound.nein(); return;
+  }
+  if (aufgabe === 'haecksel' && !gebaute.some(b => b.fs && !b.fs.zu && !(b.fs.fertig && b.fs.inhalt > 0) && b.fs.inhalt < FAHRSILO_MAX)) { meldung('👷 Wohin mit dem Häckselgut? Bau erst ein Silagesilo 🟩 (Baumodus) – der Helfer bringt alles dorthin.', 4.5); sound.nein(); return; }
+  // Die Bahnen über das Feld (hin und her)
+  const G = GERAETE[A.geraet], W = G.breite * fz.typ.breite, schritt = W * 0.85, breite = f.nx * ZELLE;
+  const bahnen = [];
+  for (let lx = W / 2 - 0.3; lx - W / 2 < breite; lx += schritt) {
+    const i0 = Math.max(0, Math.floor((lx - W / 2) / ZELLE)), i1 = Math.min(f.nx - 1, Math.floor((lx + W / 2) / ZELLE));
+    let noetig = false;
+    for (let j = 0; j < f.nz && !noetig; j++) for (let i = i0; i <= i1; i++) if (A.zelle(f.zellen[j * f.nx + i])) { noetig = true; break; }
+    if (noetig) bahnen.push(f.x0 + Math.min(lx, breite - 0.5));
+  }
+  const za = f.z0 - 4.5, zb = f.z0 + f.nz * ZELLE + 4.5, wege = [];
+  const p = fz.g.position, start = { x: p.x, z: p.z, r: fz.g.rotation.y };
+  const zuerstUnten = Math.abs(p.z - za) < Math.abs(p.z - zb);
+  const anfahrt = [{ x: p.x, z: -8 }, { x: bahnen[0], z: -8 }];
+  bahnen.forEach((bx, k) => { const runter = (k % 2 === 0) === zuerstUnten; wege.push({ x: bx, z: runter ? za : zb, a: 1 }, { x: bx, z: runter ? zb : za, a: 1 }); });
+  const letzte = wege[wege.length - 1];
+  const rueck = [{ x: letzte.x, z: -8 }, { x: start.x, z: -8 }, { x: start.x, z: start.z }];
+  if (fz.werkzeug !== A.geraet) fz.werkzeug = A.geraet;
+  fz.helfer = h; fz.helferFeld = f; fz.ziel = null;
+  h.job = { art: 'feld', aufgabe, feld: f, fz, wege: [...anfahrt, ...wege, ...rueck], n: 0, start, gesamt: zuTun(f, A), fertig: false };
+  h.wahl = null;
+  // Der Helfer setzt sich hinein
+  const fig = baueFarmer(h.farbe), gr = fz.typ.groesse;
+  fig.g.position.set(fz.sitz[0], fz.sitz[1] - 1.65 / gr, fz.sitz[2] + 0.05); fig.g.scale.setScalar(1 / gr);
+  farmerPose(fig.t, true, false, 0); fz.K.add(fig.g); h.figur = fig;
+  meldung(`👷 ${h.name} fährt mit dem ${fz.typ.name} los: ${A.emoji} ${A.name} auf Feld ${f.nr + 1}!`, 3.5);
+  sound.tuer(); helferMalen();
+}
+function helferAbliefern(h, fz) {   // Tank voll: Der Helfer bringt das Korn ins Silo (oder verkauft es, wenn alle Silos voll sind)
+  let m = kornDrin(fz);
+  for (const s of silos) { const rein = Math.min(m, SILO_MAX - s.inhalt); if (rein > 0) { s.inhalt += rein; m -= rein; siloSchild(s); } }
+  let text = `${kg(kornDrin(fz) - m)} Korn ins Silo gebracht`;
+  if (m > 0) { const e = Math.round(m * kornPreis()); money += e; text = `${kg(m)} Korn verkauft (${euro(e)}) – die Silos sind voll`; }
+  kornWeg(fz, kornDrin(fz));
+  h.status = `📦 Hat ${text}`;
+  meldung(`👷 ${h.name} hat ${text}!`, 3);
+}
+function feldJobUpdate(h, dt) {
+  const J = h.job, fz = J.fz, A = HELFER_AUFGABEN[J.aufgabe], lv = helferLevel(h);
+  if (!fahrzeuge.includes(fz) || fz === aktiv) { jobEnde(h, '🛑 Das Fahrzeug ist weg!'); return; }
+  // Diesel und Saat holt der Helfer automatisch (das kostet Geld!)
+  if (fz.diesel < 20) { const k = Math.round((fz.typ.dieselMax - fz.diesel) * DIESEL_PREIS); if (money < k) { jobEnde(h, '💸 Kein Geld für Diesel!'); return; } money -= k; fz.diesel = fz.typ.dieselMax; }
+  if (A.saatArt) {
+    if (fz.saatArt !== A.saatArt) { money += Math.round(fz.saat * (fz.saatArt === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS)); fz.saat = 0; fz.saatArt = A.saatArt; }
+    if (fz.saat < SAAT_PRO_ZELLE * 8) { const k = Math.round((fz.typ.saatMax - fz.saat) * (A.saatArt === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS)); if (money < k) { jobEnde(h, '💸 Kein Geld für Saat!'); return; } money -= k; fz.saat = fz.typ.saatMax; }
+  }
+  if (A.geraet === 'ernte' && kornDrin(fz) + ERTRAG_PRO_ZELLE * 12 > kornPlatz(fz)) helferAbliefern(h, fz);
+  const wp = J.wege[J.n];
+  if (!wp) { jobEnde(h, `✅ Fertig mit Feld ${J.feld.nr + 1}!`, true); return; }
+  const p = fz.g.position, dx = wp.x - p.x, dz = wp.z - p.z, d = Math.hypot(dx, dz);
+  if (d < 1.6) {
+    J.n++;
+    if (J.n === J.wege.length - 1) fz.helferFeld = null;   // Auf dem Heimweg nicht mehr arbeiten
+    if (!J.fertig && !zuTun(J.feld, A) && wp.a) {           // Alles erledigt? Dann gleich nach Hause
+      J.fertig = true;
+      J.n = J.wege.findIndex((w, k) => k > J.n && !w.a && w.z === -8);
+      if (J.n < 0) J.n = J.wege.length;
+    }
+    return;
+  }
+  // Lenken und fahren
+  let dw = Math.atan2(-dx, -dz) - fz.g.rotation.y;
+  while (dw > Math.PI) dw -= Math.PI * 2;
+  while (dw < -Math.PI) dw += Math.PI * 2;
+  const amArbeiten = !!wp.a && !J.fertig && J.n > 1;
+  const tempo = (amArbeiten ? GERAETE[A.geraet].arbeitsTempo * fz.typ.arbeit * (0.6 + 0.12 * lv) : Math.min(8, fz.typ.tempo)) * begrenzt(Math.cos(dw), 0.3, 1);
+  const dreh = (0.9 + 0.1 * lv) * dt;
+  fz.g.rotation.y += begrenzt(dw, -dreh, dreh);
+  fz.lenkWinkel = begrenzt(dw, -0.55, 0.55);
+  fz.g.translateZ(-tempo * dt);
+  fz.speed = tempo;
+  for (const r of fz.raeder) { r.rad.rotation.x -= tempo * dt / (r.r * fz.typ.groesse); if (r.lenkt) r.lenker.rotation.y = fz.lenkWinkel * r.lenkt; }
+  if (fz.geraete[A.geraet] && fz.geraete[A.geraet].userData.haspel) fz.geraete[A.geraet].userData.haspel.rotation.x -= dt * 4;
+  fz.diesel = Math.max(0, fz.diesel - dt * 0.08 * fz.typ.groesse);
+  // Arbeiten (nur auf dem Ziel-Feld)
+  const vorher = zuTun(J.feld, A);
+  if (amArbeiten) { stumm = true; try { arbeiten(fz); } finally { stumm = false; } } else fz.arbeitet = false;
+  const geschafft = vorher - zuTun(J.feld, A);
+  if (geschafft > 0) xpDazu(h, geschafft * 0.5);
+  h.status = J.fertig ? `🏠 Fährt zurück zum Parkplatz` : amArbeiten ? `${A.emoji} ${A.name} auf Feld ${J.feld.nr + 1}: ${Math.floor(100 - 100 * zuTun(J.feld, A) / Math.max(1, J.gesamt))} %` : `🚜 Fährt zu Feld ${J.feld.nr + 1}`;
+  if (A.geraet === 'maisgebiss' && amArbeiten && !gebaute.some(b => b.fs && !b.fs.zu && !(b.fs.fertig && b.fs.inhalt > 0) && b.fs.inhalt + MAIS_ERTRAG <= FAHRSILO_MAX)) { J.fertig = true; J.n = J.wege.length - 3; meldung(`👷 ${h.name}: Das Silagesilo ist voll! Ich fahre zurück.`, 4); }
+}
+// ----- Hofarbeit: Der Helfer läuft von Gebäude zu Gebäude und kümmert sich um alles -----
+function hofAufgabeSuchen(h) {
+  const p = h.figur.g.position, besetzt = helfer.filter(o => o !== h && o.job && o.job.ziel).map(o => o.job.ziel);
+  let bestes = null, bestD = Infinity;
+  for (const b of gebaute) {
+    if (besetzt.includes(b)) continue;
+    let was = null;
+    if (b.geh && b.geh.lager >= 1) was = 'sammeln';
+    else if (b.geh && b.geh.tiere.length && b.geh.futter < FUTTER_MAX * 0.3) was = 'futter';
+    else if (b.gh && b.gh.art && b.gh.w >= 1) was = 'gemuese';
+    else if (b.obst && b.obst.w >= 1) was = 'obst';
+    else if (b.biene && b.biene.lager >= 3) was = 'honig';
+    if (!was) continue;
+    const d = Math.hypot(b.x - p.x, b.z - p.z);
+    if (d < bestD) { bestD = d; bestes = { b, was }; }
+  }
+  return bestes;
+}
+function hofArbeitMachen(h, b, was) {
+  let text = '';
+  if (was === 'sammeln') {
+    const T = TIERE[b.geh.tier], P = PRODUKTE[T.produkt], m = Math.floor(b.geh.lager);
+    vorrat[T.produkt] = (vorrat[T.produkt] || 0) + m; b.geh.lager -= m; gehegeSchild(b);
+    text = `${P.emoji} ${m} ${P.einheit} ${P.name} eingesammelt`;
+  } else if (was === 'futter') {
+    let m = FUTTER_MAX - b.geh.futter;
+    const ausSilo = Math.min(m, hofSilo.inhalt); hofSilo.inhalt -= ausSilo; siloSchild(hofSilo);   // Erst gratis Korn aus dem Hof-Silo
+    let gekauft = Math.min(m - ausSilo, Math.floor(money / FUTTER_PREIS));
+    money -= Math.round(gekauft * FUTTER_PREIS);
+    b.geh.futter += ausSilo + gekauft;
+    text = `🌾 ${kg(ausSilo + gekauft)} Futter in den Trog${ausSilo ? ' (aus dem Hof-Silo)' : ''}`;
+  } else if (was === 'gemuese') {
+    const art = b.gh.art, G = GEMUESE[art];
+    vorrat[art] = (vorrat[art] || 0) + G.menge; b.gh.art = null; b.gh.w = 0;
+    text = `${G.emoji} ${G.menge} ${G.einheit} ${G.name} geerntet`;
+    if (money >= G.kosten) { money -= G.kosten; b.gh.art = art; text += ' und neu gepflanzt'; }
+    ghMalen(b);
+  } else if (was === 'obst') {
+    const O = OBST[b.art];
+    vorrat[O.frucht] = (vorrat[O.frucht] || 0) + O.menge; b.obst.w = 0; obstMalen(b);
+    text = `${O.emoji} ${O.menge} kg ${O.name} gepflückt`;
+  } else if (was === 'honig') {
+    const m = Math.floor(b.biene.lager * 10) / 10;
+    vorrat.honig = (vorrat.honig || 0) + m; b.biene.lager -= m; bienenSchild(b);
+    text = `🍯 ${m.toFixed(1).replace('.', ',')} kg Honig geerntet`;
+  }
+  gebSenden(b);
+  h.status = `✅ Hat ${text}`;
+  h.schild.userData.malen(`✅ ${text}`, '#b9f5a0');
+  xpDazu(h, 5);
+  sound.klick();
+}
+function hofJobUpdate(h, dt) {
+  const J = h.job, fig = h.figur, p = fig.g.position, lv = helferLevel(h);
+  if (J.pause > 0) { J.pause -= dt; farmerPose(fig.t, false, false, dt); return; }
+  if (!J.ziel || !gebaute.includes(J.ziel)) {
+    const a = hofAufgabeSuchen(h);
+    if (a) { J.ziel = a.b; J.was = a.was; }
+    else { J.ziel = null; }
+  }
+  const zx = J.ziel ? J.ziel.x : HELFER_HEIM.x + (helfer.indexOf(h) - 1.5) * 1.5, zz = J.ziel ? J.ziel.z : HELFER_HEIM.z;
+  const rand = J.ziel ? GEBAEUDE_ARTEN[J.ziel.art].r + 0.8 : 0.3;
+  const dx = zx - p.x, dz = zz - p.z, d = Math.hypot(dx, dz);
+  if (d > rand) {
+    const tempo = (2.5 + 0.5 * lv) * dt;
+    p.x += dx / d * Math.min(tempo, d - rand + 0.01); p.z += dz / d * Math.min(tempo, d - rand + 0.01);
+    fig.g.rotation.y = Math.atan2(-dx, -dz);
+    farmerPose(fig.t, false, true, dt);
+    h.status = J.ziel ? `🚶 Geht zum ${GEBAEUDE_ARTEN[J.ziel.art].name}` : '😴 Alles erledigt – wartet beim Hof';
+  } else {
+    farmerPose(fig.t, false, false, dt);
+    if (J.ziel) { hofArbeitMachen(h, J.ziel, J.was); J.ziel = null; J.pause = Math.max(1.5, 9 - 1.5 * lv); }
+    else J.pause = 2;
+  }
+  h.schild.position.set(p.x, 2.6, p.z);
+}
+function hofJobStarten(h) {
+  if (h.job) return;
+  const fig = baueFarmer(h.farbe);
+  fig.g.position.set(HELFER_HEIM.x + zufall(-2, 2), 0, HELFER_HEIM.z + zufall(-2, 2)); scene.add(fig.g);
+  h.figur = fig; h.job = { art: 'hof', ziel: null, was: null, pause: 0 }; h.wahl = null;
+  h.schild.visible = true; h.schild.userData.malen(`👷 ${h.name}`, '#ffd166');
+  meldung(`👷 ${h.name} kümmert sich jetzt um den Hof: Tiere füttern, Eier und Milch einsammeln, Gemüse, Obst und Honig ernten!`, 4);
+  sound.klick(); helferMalen();
+}
+function jobEnde(h, text, gut = false) {
+  const J = h.job;
+  if (!J) return;
+  if (J.art === 'feld') {
+    J.fz.helfer = null; J.fz.helferFeld = null; J.fz.speed = 0; J.fz.arbeitet = false;
+    if (h.figur) J.fz.K.remove(h.figur.g);
+  } else if (h.figur) scene.remove(h.figur.g);
+  h.figur = null; h.job = null; h.schild.visible = false;
+  h.status = text;
+  meldung(`👷 ${h.name}: ${text}`, 3.5);
+  if (gut) sound.kasse();
+  helferMalen(); speichern();
+}
+function helferUpdate(dt) {
+  if (mp.aktiv && mp.rolle !== 'host') return;   // Im Multiplayer arbeiten die Helfer nur beim Gastgeber
+  for (const h of helfer) {
+    if (!h.job) continue;
+    // Lohn: jede Minute ein bisschen Geld
+    h.lohnZeit += dt;
+    if (h.lohnZeit >= 60) { h.lohnZeit -= 60; money -= HELFER_LOHN * helferLevel(h); }
+    if (h.job.art === 'feld') feldJobUpdate(h, dt); else hofJobUpdate(h, dt);
+  }
+  if ($('helferpanel').style.display === 'block') {
+    helferTakt -= dt;
+    if (helferTakt <= 0) { helferTakt = 0.5; helfer.forEach((h, i) => { const e = document.getElementById('hstat-' + i); if (e) e.textContent = h.status; }); }
+  }
+}
+let helferTakt = 0;
+// ----- Das Helfer-Menü (Taste Tab oder Knopf) -----
+function helferZeigen(an) {
+  $('helferpanel').style.display = an ? 'block' : 'none';
+  if (!an) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  helferMalen();
+}
+function helferMalen() {
+  if ($('helferpanel').style.display !== 'block') return;
+  if (mp.aktiv && mp.rolle !== 'host') { $('helferInhalt').innerHTML = '<p>🌐 Im Multiplayer gibt es die Helfer nur beim Gastgeber.</p>'; return; }
+  let html = '';
+  helfer.forEach((h, i) => {
+    const lv = helferLevel(h), naechste = HELFER_XP[lv], vorige = HELFER_XP[lv - 1];
+    const anteil = naechste === undefined ? 100 : Math.floor((h.xp - vorige) / (naechste - vorige) * 100);
+    html += `<div class="angebot"><b>👷 ${h.name}</b> · Level ${lv} ${'⭐'.repeat(lv)}<br>
+      <div class="balken"><div style="width:${anteil}%;background:#ffd166"></div></div>
+      <span class="klein">${naechste === undefined ? '🏆 Höchstes Level!' : `Erfahrung ${Math.floor(h.xp)} / ${naechste}`} · Lohn beim Arbeiten: ${euro(HELFER_LOHN * lv)} pro Minute · Tempo ×${(0.6 + 0.12 * lv).toFixed(2).replace('.', ',')}</span><br>
+      <span id="hstat-${i}">${h.status}</span><br>`;
+    if (h.job) html += `<button data-a="stopp" data-h="${i}">⏹️ Aufhören</button>`;
+    else {
+      html += `<button data-a="feld" data-h="${i}" class="${h.wahl === 'feld' ? 'aktiv' : ''}">🚜 Feldarbeit</button><button data-a="hof" data-h="${i}">🐄 Hofarbeit</button><button data-a="weg" data-h="${i}">👋 Entlassen</button>`;
+      if (h.wahl === 'feld') {
+        html += '<br><span class="klein">Welches Feld?</span><br>';
+        for (const f of felder) if (f.gekauft) html += `<button data-a="wf" data-h="${i}" data-f="${f.nr}" class="${h.wahlFeld === f.nr ? 'aktiv' : ''}">Feld ${f.nr + 1}</button>`;
+        const f = felder[h.wahlFeld];
+        if (f && f.gekauft) {
+          html += '<br><span class="klein">Was soll gemacht werden?</span><br>';
+          for (const [k, A] of Object.entries(HELFER_AUFGABEN)) { const n = zuTun(f, A); html += `<button data-a="job" data-h="${i}" data-j="${k}" ${n ? '' : 'disabled'}>${A.emoji} ${A.name} (${n})</button>`; }
+        }
+      }
+    }
+    html += '</div>';
+  });
+  if (!helfer.length) html += '<p>Du hast noch keine Helfer. Helfer arbeiten auf dem Feld (pflügen, säen, ernten) oder auf dem Hof (Tiere, Gemüse, Obst, Honig) – und werden mit der Zeit immer besser!</p>';
+  if (helfer.length < HELFER_MAX) html += `<button data-a="neu" ${money >= HELFER_PREIS ? '' : 'disabled'}>➕ Helfer einstellen (${euro(HELFER_PREIS)})</button>`;
+  html += `<p class="klein">💡 Feld-Helfer nehmen sich ein freies Fahrzeug, kaufen selbst Saat und Diesel und bringen das Korn ins Silo. Häckseln geht nur mit Häcksler + Silagesilo.</p>`;
+  $('helferInhalt').innerHTML = html;
+}
+document.getElementById('helferInhalt').addEventListener('click', e => {
+  const k = e.target.closest('button');
+  if (!k) return;
+  const h = helfer[Number(k.dataset.h)], a = k.dataset.a;
+  if (a === 'neu') helferEinstellen();
+  else if (!h) return;
+  else if (a === 'stopp') jobEnde(h, '⏹️ Hat aufgehört.');
+  else if (a === 'feld') { h.wahl = h.wahl === 'feld' ? null : 'feld'; if (h.wahlFeld === null) h.wahlFeld = felder.find(f => f.gekauft).nr; }
+  else if (a === 'wf') h.wahlFeld = Number(k.dataset.f);
+  else if (a === 'job') feldJobStarten(h, h.wahlFeld, k.dataset.j);
+  else if (a === 'hof') hofJobStarten(h);
+  else if (a === 'weg') { if (confirm(`${h.name} wirklich entlassen?`)) { helfer.splice(helfer.indexOf(h), 1); scene.remove(h.schild); meldung(`👋 Tschüss, ${h.name}!`); speichern(); } }
+  helferMalen();
+  k.blur();
+});
+document.getElementById('btn-helfer').addEventListener('click', e => { helferZeigen($('helferpanel').style.display !== 'block'); e.currentTarget.blur(); });
+document.getElementById('helfer-zu').addEventListener('click', () => helferZeigen(false));
 
 // ===== Los geht's! =====
 const geladen = laden();
