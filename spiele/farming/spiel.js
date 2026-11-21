@@ -1255,6 +1255,11 @@ const FAHRZEUGE = {
     dieselMax: 400, tankMax: 0, saatMax: 0, geraete: [], motorTon: 0.9, allrad: true,
     faehigkeit: 'Fällt mit dem Kran eine Fichte in 2 Sekunden (X)! Das Holz holst du mit dem Holzanhänger',
   },
+  lkw: {
+    name: 'Lastwagen', emoji: '🚚', preis: 80000, farbe: 0x2a6fb0, art: 'lkw', groesse: 1, tempo: 22.2, arbeit: 1, breite: 1,
+    dieselMax: 400, tankMax: 20000, saatMax: 0, geraete: [], motorTon: 0.7, kupplung: 4.4,
+    faehigkeit: 'Fährt 80 km/h und trägt 20.000 kg – Korn, Häckselgut oder Silage! Kippt beim Abladen die Mulde. Mähdrescher (O) und Häcksler laden direkt hinein',
+  },
   haecksler: {
     name: 'Häcksler', emoji: '🌽', preis: 160000, farbe: 0x2f9a4a, art: 'haecksler', groesse: 1, tempo: 8.3, arbeit: 1.5, breite: 1.4,
     dieselMax: 500, tankMax: 0, saatMax: 0, geraete: ['maisgebiss'], motorTon: 0.8, allrad: true, kupplung: 3.7,
@@ -1611,6 +1616,71 @@ function baueHarvester(typ, K) {
   kasten(kopf, 0, -0.45, -0.55, 0.06, 0.1, 0.9, 0xb5b9bf, false);        // Sägeschwert unten
   return { raeder, auspuff: [0.85, 4.05, 3.2], sitz: [0, 2.95, -0.65], radstand: 4.2, kran: { turm, armG, arm, kopf, phi: 0, d: 2.6, h: -0.2 } };
 }
+// Der Lastwagen: Fahrerhaus vorne, drei Achsen, hinten eine Kippmulde (kippt beim Abladen nach hinten)
+function baueLKW(typ, K) {
+  const lack = mat(typ.farbe, { roughness: 0.3, metalness: 0.3 }), dunkel = mat(0x1e1f22, { roughness: 0.6 }), grau = mat(0x4a4d52, { metalness: 0.4, roughness: 0.5 });
+  const chrom = mat(0xd8dde2, { metalness: 0.9, roughness: 0.15 }), licht = new THREE.MeshBasicMaterial({ color: 0xfff6c0 });
+  const rot = new THREE.MeshBasicMaterial({ color: 0xe0201e }), orange = new THREE.MeshBasicMaterial({ color: 0xff9a1e });
+  const muldeMat = mat(0xd8a020, { roughness: 0.6, metalness: 0.3 });
+  // Rahmen und Tank
+  kasten(K, 0, 0.95, 0.2, 1.1, 0.35, 8.0, dunkel);
+  kasten(K, -1.0, 1.05, -1.3, 0.5, 0.55, 1.1, chrom);                     // Tank (glänzt)
+  kasten(K, 1.0, 1.05, -1.3, 0.5, 0.45, 0.8, dunkel);                     // Batteriekasten
+  // Fahrerhaus
+  kasten(K, 0, 2.05, -3.15, 2.5, 2.1, 1.9, lack);                         // Kabine
+  kasten(K, 0, 3.25, -3.0, 2.4, 0.3, 1.6, lack);                          // Dach-Spoiler
+  kasten(K, 0, 2.45, -4.11, 2.2, 1.0, 0.04, glasMat, false);              // Frontscheibe
+  for (const sx of [-1, 1]) kasten(K, sx * 1.26, 2.45, -3.4, 0.04, 0.9, 1.0, glasMat, false);   // Seitenfenster
+  kasten(K, 0, 1.45, -4.12, 1.7, 0.7, 0.05, dunkel, false);               // Kühlergrill
+  for (let k = 0; k < 5; k++) kasten(K, 0, 1.2 + k * 0.13, -4.15, 1.6, 0.04, 0.03, chrom, false);
+  kasten(K, 0, 0.75, -4.15, 2.5, 0.35, 0.25, grau);                       // Stoßstange
+  for (const sx of [-1, 1]) {
+    kasten(K, sx * 0.95, 0.85, -4.29, 0.4, 0.14, 0.02, licht, false);     // Scheinwerfer
+    kasten(K, sx * 1.2, 0.85, -4.29, 0.1, 0.14, 0.02, orange, false);     // Blinker
+    kasten(K, sx * 1.42, 2.6, -3.9, 0.06, 0.06, 0.4, dunkel, false);      // Spiegel-Arm
+    kasten(K, sx * 1.62, 2.45, -3.75, 0.08, 0.5, 0.25, dunkel, false);    // Spiegel
+    kasten(K, sx * 1.26, 1.4, -2.7, 0.06, 0.15, 0.5, dunkel, false);      // Trittstufe
+  }
+  for (const x of [-0.75, -0.25, 0.25, 0.75]) kasten(K, x, 3.45, -3.7, 0.25, 0.15, 0.12, licht, false);   // Lampen auf dem Dach
+  const rundum = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.2, 12), new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff6a00, emissiveIntensity: 0.6 }));
+  rundum.position.set(0, 3.52, -2.5); K.add(rundum);
+  kasten(K, 0, 2.0, -3.4, 0.5, 0.12, 0.5, 0x2a2a2a, false);               // Sitz innen
+  const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 8, 20), dunkel); lenkrad.position.set(0, 2.35, -3.85); lenkrad.rotation.x = -1.0; K.add(lenkrad);
+  // Auspuff hinter dem Fahrerhaus
+  const ap = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.4, 10), chrom); ap.position.set(1.05, 2.4, -2.1); K.add(ap);
+  // Räder: vorne lenken, hinten zwei Achsen – mit Kotflügeln
+  const raeder = [];
+  for (const sx of [-1, 1]) {
+    raeder.push(baueRad(K, sx * 1.1, 0.6, -3.0, 0.6, 0.45, 1, mat(0xd8d8d8, { metalness: 0.5 })));
+    for (const z of [1.5, 2.8]) raeder.push(baueRad(K, sx * 1.1, 0.6, z, 0.6, 0.55, 0, mat(0xd8d8d8, { metalness: 0.5 })));
+    kasten(K, sx * 1.1, 1.3, 2.15, 0.65, 0.08, 2.9, dunkel);               // Kotflügel hinten
+    kasten(K, sx * 1.1, 0.6, 3.6, 0.6, 0.7, 0.04, dunkel, false);          // Schmutzfänger
+    kasten(K, sx * 0.95, 1.05, 3.9, 0.4, 0.15, 0.06, rot, false);          // Rücklichter
+  }
+  // Die Kippmulde: dreht sich hinten unten (Gelenk), damit sie nach hinten kippen kann
+  const mulde = new THREE.Group(); mulde.position.set(0, 1.25, 3.7); K.add(mulde);
+  const L = 5.6, B = 2.4, H = 1.4;
+  kasten(mulde, 0, 0.1, -L / 2, B, 0.2, L, muldeMat);                     // Boden
+  for (const sx of [-1, 1]) kasten(mulde, sx * B / 2, 0.2 + H / 2, -L / 2, 0.08, H, L, muldeMat);   // Seitenwände
+  kasten(mulde, 0, 0.2 + H / 2, -L, B, H + 0.3, 0.1, muldeMat);           // Stirnwand vorne
+  kasten(mulde, 0, 0.2 + H / 2, -0.02, B, H, 0.08, muldeMat);             // Klappe hinten
+  for (let k = 1; k < 6; k++) for (const sx of [-1, 1]) kasten(mulde, sx * (B / 2 + 0.05), 0.2 + H / 2, -k * L / 6, 0.05, H, 0.1, mat(0xb88010), false);   // Rippen
+  const ladung = kasten(mulde, 0, 0.25, -L / 2, B - 0.15, 1, L - 0.15, mat(0xe3c46a, { roughness: 1 }), false);
+  const zylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2, 10), chrom); zylinder.position.set(0, 1.2, -1.9); K.add(zylinder);   // Kipp-Zylinder
+  return { raeder, auspuff: [1.05, 3.65, -2.1], sitz: [0, 2.85, -3.4], radstand: 4.8, mulde: { g: mulde, ladung, zylinder, H } };
+}
+function lkwUpdate(fz, dt) {   // Ladung zeigen und beim Abladen die Mulde kippen
+  const M = fz.mulde, voll = fz.typ.tankMax ? fz.tank / fz.typ.tankMax : 0;
+  M.ladung.visible = voll > 0.005;
+  M.ladung.scale.y = Math.max(0.01, voll * M.H);
+  M.ladung.position.y = 0.2 + voll * M.H / 2;
+  if (M.gut !== fz.gut) { M.gut = fz.gut; M.ladung.material.color.setHex((GUETER[fz.gut] || GUETER.korn).farbe); }
+  if (fz.kipp > 0) fz.kipp -= dt;
+  const ziel = fz.kipp > 0 ? 0.75 : 0;
+  M.g.rotation.x += (ziel - M.g.rotation.x) * Math.min(1, dt * 2.5);
+  M.zylinder.scale.y = 1 + M.g.rotation.x * 2.5; M.zylinder.position.y = 1.2 + M.g.rotation.x * 1.2;
+  if (fz.kipp > 0.5 && Math.random() < dt * 12) { const p = new THREE.Vector3(0, 0.5, 4.2).applyMatrix4(fz.g.matrixWorld); staub(p.x, p.z, (GUETER[fz.gut] || GUETER.korn).farbe, 1.0, -0.4); }
+}
 // Der Häcksler (Feldhäcksler): großer Motor hinten, Kabine vorne – und oben das drehbare Auswurfrohr (der "Krümmer")
 function baueHaecksler(typ, K) {
   const farbe = typ.farbe, dunkel = new THREE.Color(farbe).multiplyScalar(0.6).getHex();
@@ -1691,11 +1761,11 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   const typ = FAHRZEUGE[typName];
   const g = new THREE.Group(); scene.add(g);
   const K = new THREE.Group(); K.scale.setScalar(typ.groesse); g.add(K);   // Der Körper (größer oder kleiner je nach Fahrzeug)
-  const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : typ.art === 'harvester' ? baueHarvester(typ, K) : typ.art === 'haecksler' ? baueHaecksler(typ, K) : baueTraktor(typ, K);
+  const teile = typ.art === 'drescher' ? baueDrescher(typ, K) : typ.art === 'harvester' ? baueHarvester(typ, K) : typ.art === 'haecksler' ? baueHaecksler(typ, K) : typ.art === 'lkw' ? baueLKW(typ, K) : baueTraktor(typ, K);
   const fz = {
     typName, typ, g, K, ...teile, speed: 0, lenkWinkel: 0, arbeitet: false, geraete: {},
     id: daten.id || `${mp.ich}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`, fahrer: null, fahrerZeit: 0, ziel: null,
-    radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' || typ.art === 'haecksler' ? 2.4 : 1.8) * typ.groesse,
+    radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' || typ.art === 'haecksler' ? 2.4 : typ.art === 'lkw' ? 2.6 : 1.8) * typ.groesse,
     werkzeug: typ.geraete.includes(daten.werkzeug) ? daten.werkzeug : typ.geraete[typ.geraete.length - 1],
     diesel: daten.diesel ?? typ.dieselMax, tank: daten.tank ?? 0, saat: daten.saat ?? typ.saatMax,
     gut: GUETER[daten.gut] ? daten.gut : 'korn', saatArt: daten.saatArt === 'mais' ? 'mais' : 'weizen',
@@ -1709,7 +1779,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   }
   fz.schild = schild(`${typ.emoji} ${typ.name}`, '#ffffff', 5);
   if (fz.kran) kranStellen(fz, 0, 2.6, -0.2, 1);
-  fz.schild.position.y = (typ.art === 'drescher' ? 6.8 : typ.art === 'haecksler' ? 5.6 : 4.2) * typ.groesse;
+  fz.schild.position.y = (typ.art === 'drescher' ? 6.8 : typ.art === 'haecksler' ? 5.6 : typ.art === 'lkw' ? 5 : 4.2) * typ.groesse;
   g.add(fz.schild);
   g.position.set(x, 0, z); g.rotation.y = rot;
   fahrzeuge.push(fz);
@@ -1774,7 +1844,7 @@ function ankuppeln(fz, a) {
   const h = anhKupplung(fz, new THREE.Vector3());
   a.g.rotation.y = fz.g.rotation.y;
   a.g.position.set(h.x + Math.sin(fz.g.rotation.y) * a.deichsel, 0, h.z + Math.cos(fz.g.rotation.y) * a.deichsel);
-  if (GERAETE[fz.werkzeug].hinten) fz.werkzeug = 'ernte';   // Hinten ist jetzt der Anhänger, kein Pflug
+  if (GERAETE[fz.werkzeug]?.hinten) fz.werkzeug = 'ernte';   // Hinten ist jetzt der Anhänger, kein Pflug
 }
 function abkuppeln(fz) { if (fz.anh) { fz.anh.an = null; fz.anh = null; } }
 // Der Anhänger rollt hinter dem Traktor her (die Deichsel zieht ihn)
@@ -1807,6 +1877,7 @@ function kornDazu(fz, menge, gut = 'korn') {   // Erst in den eigenen Tank, dann
   if (kornAnh(fz) && menge - inTank > 0) { fz.anh.inhalt += menge - inTank; fz.anh.gut = gut; }
 }
 function kornWeg(fz, menge) {   // Erst aus dem Anhänger, dann aus dem Tank
+  if (fz.mulde && menge > 0 && fz.tank > 0) fz.kipp = 2.5;   // Lastwagen: Mulde kippen!
   if (kornAnh(fz)) { const ausAnh = Math.min(menge, fz.anh.inhalt); fz.anh.inhalt -= ausAnh; menge -= ausAnh; }
   fz.tank -= menge;
 }
@@ -3789,7 +3860,7 @@ function updateHUD() {
   if (fz) {
     const G = GERAETE[fz.werkzeug];
     $('fahrzeug').textContent = `${fz.typ.emoji} ${fz.typ.name}${aktiv ? '' : ' (geparkt)'}`;
-    $('geraet').textContent = G ? `${G.emoji} ${G.name}` : '🦾 Kran mit Fällkopf';
+    $('geraet').textContent = G ? `${G.emoji} ${G.name}` : fz.mulde ? '🚚 Kippmulde (20 t)' : '🦾 Kran mit Fällkopf';
     $('tempo').textContent = Math.round(Math.abs(fz.speed) * 3.6);
     balken('diesel', fz.diesel, fz.typ.dieselMax, fz.typ.elektro ? `⚡ ${Math.round(fz.diesel)} % Akku${tagHell > 0.5 ? ' ☀️ lädt' : ''}` : `${Math.round(fz.diesel)} Liter`);
     $('diesel').style.background = fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0';
@@ -4522,6 +4593,7 @@ function neuesSpiel() {
 function geraetWaehlen(art) {
   if (!aktiv || aktiv.werkzeug === art) return;
   if (aktiv.kran) { meldung('🦾 Der Harvester hat einen Kran mit Fällkopf – fahr an eine Fichte und halt X!'); sound.nein(); return; }
+  if (aktiv.mulde) { meldung('🚚 Der Lastwagen hat keine Anbaugeräte – er transportiert nur!'); sound.nein(); return; }
   if (!aktiv.typ.geraete.includes(art)) { meldung(aktiv.typ.art === 'haecksler' ? '🌽 Der Häcksler hat nur das Maisgebiss!' : `🌾 Der ${aktiv.typ.name} kann nur ernten!`); sound.nein(); return; }
   if (aktiv.anh && GERAETE[art].hinten) { meldung('🔗 Hinten hängt der Anhänger! Erst abkuppeln (H), dann geht der Pflug/die Sämaschine.'); sound.nein(); return; }
   aktiv.werkzeug = art;
@@ -5412,6 +5484,7 @@ function animate() {
       fz.speed = fz.ziel.sp; fz.lenkWinkel = fz.ziel.lw; fz.arbeitet = fz.ziel.ab;
       for (const r of fz.raeder) { r.rad.rotation.x -= fz.speed * dt / (r.r * fz.typ.groesse); if (r.lenkt) r.lenker.rotation.y = fz.lenkWinkel * r.lenkt; }
     } else if (fz !== aktiv && !fz.helfer) { fz.speed = 0; fz.arbeitet = false; }
+    if (fz.mulde) lkwUpdate(fz, dt);
     if (fz.frontgewicht) fz.frontgewicht.visible = !(GERAETE[fz.werkzeug] && !GERAETE[fz.werkzeug].hinten);
     for (const [art, m] of Object.entries(fz.geraete)) {
       m.visible = art === fz.werkzeug;
