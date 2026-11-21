@@ -20,6 +20,8 @@
 // "weltall: true" = Raumschiff! Gruben sind dann Lüftungsschächte und
 // wer rausgewählt wird, fliegt durch die Luftschleuse ins All.
 // "woerter" tauscht Wörter im Spiel aus (z. B. 'Grube' → 'Schacht').
+// "waende" sind Rechtecke, durch die keiner durchlaufen kann: { x, y, b (Breite), h (Höhe) }.
+//   Damit baut man Räume und Gänge! (Die Computer-Schafe finden den Weg dann selbst.)
 //
 // Die Welt ist 1800 breit und 1300 hoch.
 
@@ -78,7 +80,20 @@ const KARTEN = [
     treffpunkt: { x: 900, y: 660 },
     laterne: { x: 1560, y: 660 },
     gatter: { x: 240, y: 660 },
-    gruben: [{ x: 600, y: 470 }, { x: 1220, y: 470 }, { x: 1220, y: 880 }, { x: 600, y: 880 }],
+    // Lüftungsschächte: in den Ecken der vier äußeren Räume
+    gruben: [{ x: 470, y: 400 }, { x: 1330, y: 400 }, { x: 1330, y: 1200 }, { x: 470, y: 1200 }],
+    // 🧱 Oben 3 Räume, unten 3 Räume, in der Mitte der Hauptgang mit der Glocke.
+    // Jeder Raum hat eine Tür zum Hauptgang und kleine Seitengänge zum Nachbarraum.
+    waende: [
+      // Wand zwischen den oberen Räumen und dem Hauptgang (Türen bei x 250–390, 830–970, 1410–1550)
+      { x: 0, y: 470, b: 250, h: 90 }, { x: 390, y: 470, b: 440, h: 90 }, { x: 970, y: 470, b: 440, h: 90 }, { x: 1550, y: 470, b: 250, h: 90 },
+      // Wand zwischen dem Hauptgang und den unteren Räumen
+      { x: 0, y: 760, b: 250, h: 120 }, { x: 390, y: 760, b: 440, h: 120 }, { x: 970, y: 760, b: 440, h: 120 }, { x: 1550, y: 760, b: 250, h: 120 },
+      // Dicke Wände zwischen den oberen Räumen (mit Seitengang bei y 230–350)
+      { x: 540, y: 0, b: 160, h: 230 }, { x: 540, y: 350, b: 160, h: 120 }, { x: 1100, y: 0, b: 160, h: 230 }, { x: 1100, y: 350, b: 160, h: 120 },
+      // Dicke Wände zwischen den unteren Räumen (mit Seitengang bei y 1000–1120)
+      { x: 540, y: 880, b: 160, h: 120 }, { x: 540, y: 1120, b: 160, h: 180 }, { x: 1100, y: 880, b: 160, h: 120 }, { x: 1100, y: 1120, b: 160, h: 180 },
+    ],
     woerter: [
       ['Die Herde ist durchs offene Gatter weggelaufen!', 'Die Herde ist durch die offene Luftschleuse ins All geflogen!'],
       ['vom Hof gejagt', 'aus dem Raumschiff geworfen'], ['den Hof verlassen', 'das Raumschiff verlassen'], ['Der Hof ist sicher', 'Das Raumschiff ist sicher'],

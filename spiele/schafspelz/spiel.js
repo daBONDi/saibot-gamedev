@@ -488,7 +488,79 @@ function ladeKarte(nr) {
   KARTE = KARTEN[nr];
   ORTE = KARTE.orte;
   GLOCKE = { name: 'Glocke', bei: 'bei der Glocke', x: KARTE.treffpunkt.x, y: KARTE.treffpunkt.y };
+  baueNav();
   deko = macheDeko();
+}
+
+// ===== 🧱 Wände (nur auf Karten mit "waende", z. B. im Raumschiff) =====
+const WAND_RADIUS = 18;   // So dick ist ein Schaf (damit es nicht halb in der Wand steckt)
+function inWand(x, y, r = WAND_RADIUS) {
+  const WD = KARTE.waende;
+  if (!WD) return false;
+  for (const w of WD) if (x > w.x - r && x < w.x + w.b + r && y > w.y - r && y < w.y + w.h + r) return true;
+  return false;
+}
+function sichtFrei(a, b, r = WAND_RADIUS - 4) {   // Kann man von a gerade nach b laufen (ohne Wand dazwischen)?
+  if (!KARTE.waende) return true;
+  const n = Math.ceil(dist(a, b) / 12);
+  for (let i = 1; i < n; i++) { const k = i / n; if (inWand(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, r)) return false; }
+  return true;
+}
+function schiebe(s, dx, dy) {   // Bewegen – aber an Wänden entlangrutschen statt durchlaufen
+  if (!KARTE.waende || inWand(s.x, s.y)) { s.x += dx; s.y += dy; return; }   // (Steckt man schon drin: raus da!)
+  if (!inWand(s.x + dx, s.y)) s.x += dx;
+  if (!inWand(s.x, s.y + dy)) s.y += dy;
+}
+
+// 🗺️ Weg finden: Die Welt wird in kleine Kästchen geteilt, und wir suchen den Weg von Kästchen zu Kästchen
+const NAV_ZELLE = 25;
+let navGitter = null;
+function baueNav() {
+  navGitter = null;
+  if (!KARTE.waende) return;
+  const nx = Math.ceil(WELT_B / NAV_ZELLE), ny = Math.ceil(WELT_H / NAV_ZELLE), frei = new Uint8Array(nx * ny);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    const cx = (x + 0.5) * NAV_ZELLE, cy = (y + 0.5) * NAV_ZELLE;
+    frei[y * nx + x] = cx > 50 && cx < WELT_B - 50 && cy > 60 && cy < WELT_H - 50 && !inWand(cx, cy, WAND_RADIUS + 3) ? 1 : 0;
+  }
+  navGitter = { nx, ny, frei };
+}
+function navZelle(p) {   // Das nächste freie Kästchen bei p
+  const G = navGitter, x0 = Math.floor(p.x / NAV_ZELLE), y0 = Math.floor(p.y / NAV_ZELLE);
+  for (let r = 0; r < 6; r++) for (let y = y0 - r; y <= y0 + r; y++) for (let x = x0 - r; x <= x0 + r; x++) {
+    if (Math.max(Math.abs(x - x0), Math.abs(y - y0)) !== r || x < 0 || y < 0 || x >= G.nx || y >= G.ny) continue;
+    if (G.frei[y * G.nx + x]) return y * G.nx + x;
+  }
+  return -1;
+}
+function findeWeg(a, b) {
+  const G = navGitter, start = navZelle(a), ziel = navZelle(b);
+  if (start < 0 || ziel < 0) return null;
+  const vorher = new Int32Array(G.nx * G.ny).fill(-1), schlange = [ziel];
+  vorher[ziel] = ziel;
+  for (let k = 0; k < schlange.length && vorher[start] < 0; k++) {   // Vom Ziel aus rückwärts suchen
+    const c = schlange[k], cx = c % G.nx, cy = (c - cx) / G.nx;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= G.nx || y >= G.ny) continue;
+      const n = y * G.nx + x;
+      if (vorher[n] >= 0 || !G.frei[n]) continue;
+      if (dx && dy && (!G.frei[cy * G.nx + x] || !G.frei[y * G.nx + cx])) continue;   // Nicht um Ecken schneiden
+      vorher[n] = c; schlange.push(n);
+    }
+  }
+  if (vorher[start] < 0) return null;
+  const pfad = [];
+  for (let c = start; c !== ziel; c = vorher[c]) pfad.push({ x: (c % G.nx + 0.5) * NAV_ZELLE, y: (Math.floor(c / G.nx) + 0.5) * NAV_ZELLE });
+  pfad.push({ x: b.x, y: b.y });
+  return pfad;
+}
+function naechsterSchritt(s, z) {   // Wohin muss s als Nächstes laufen, um zu z zu kommen? (Um die Wände herum)
+  if (!navGitter || sichtFrei(s, z)) { s.nav = null; return z; }
+  let n = s.nav;
+  if (!n || n.zx !== z.x || n.zy !== z.y || zeit - n.zeit > 2.5 || zeit < n.zeit) n = s.nav = { zx: z.x, zy: z.y, zeit, pfad: findeWeg(s, z) || [z], i: 0 };
+  while (n.i < n.pfad.length - 1 && (dist(s, n.pfad[n.i]) < 10 || sichtFrei(s, n.pfad[n.i + 1]))) n.i++;
+  return n.pfad[n.i];
 }
 
 function abstandZurLinie(p, a, b) {
@@ -499,6 +571,7 @@ function abstandZurLinie(p, a, b) {
 
 // Ist hier Platz für einen Baum? (nicht auf Wegen und Orten)
 function freierPlatz(p) {
+  if (inWand(p.x, p.y, 60)) return false;
   if (KARTE.gruben.some(g => dist(p, g) < 90)) return false;
   if (dist(p, GLOCKE) < 200 || dist(p, KARTE.laterne) < 110 || dist(p, KARTE.gatter) < 160) return false;
   for (const o of ORTE) {
@@ -754,6 +827,16 @@ function jagdUpdate(dt) {
 function fluchtZiel(s, ww) {   // Weg vom Werwolf – und nicht in die Ecke!
   const dx = s.x - ww.x, dy = s.y - ww.y, l = Math.hypot(dx, dy) || 1;
   const rein = p => ({ x: begrenzt(p.x, 70, WELT_B - 70), y: begrenzt(p.y, 80, WELT_H - 70) });
+  if (KARTE.waende) {   // 🧱 Mit Wänden: die freie Richtung nehmen, die am weitesten vom Werwolf wegführt
+    let best = null, bd = -1;
+    for (let k = 0; k < 16; k++) {
+      const w = k / 16 * Math.PI * 2, p = rein({ x: s.x + Math.cos(w) * 140, y: s.y + Math.sin(w) * 140 });
+      if (inWand(p.x, p.y) || !sichtFrei(s, p)) continue;
+      const d = dist(p, ww) + (dx * Math.cos(w) + dy * Math.sin(w)) / l * 40;
+      if (d > bd) { bd = d; best = p; }
+    }
+    if (best) return best;
+  }
   const weg = rein({ x: s.x + dx / l * 160, y: s.y + dy / l * 160 });
   if (dist(weg, s) > 80) return weg;
   // In der Ecke: zur Seite ausweichen (auf die Seite, die weiter weg vom Werwolf ist)
@@ -926,6 +1009,7 @@ function alleZurGlocke() {
     const r = 110 + Math.max(0, lebende.length - 8) * 9;   // Bei vielen Tieren ein größerer Kreis
     s.x = GLOCKE.x + Math.cos(w) * r;
     s.y = GLOCKE.y + Math.sin(w) * r * 0.75;
+    for (let k = 0; k < 20 && inWand(s.x, s.y); k++) { s.x += (GLOCKE.x - s.x) * 0.15; s.y += (GLOCKE.y - s.y) * 0.25; }   // 🧱 Nicht in die Wand stellen!
     s.ziel = null; s.jagt = null; s.amOrt = null;
     s.warte = Math.random() * 2;
     s.aufgabeAktiv = null;
@@ -964,11 +1048,12 @@ function beende(sieger, grund) {   // sieger: 'schafe', 'wolf' oder 'ziege'
 
 // ===== Bewegung =====
 function laufeZu(s, z, tempo, dt) {
-  const dx = z.x - s.x, dy = z.y - s.y, d = Math.hypot(dx, dy);
-  if (d < 5) { s.laeuft = false; return true; }
+  if (Math.hypot(z.x - s.x, z.y - s.y) < 5) { s.laeuft = false; return true; }
+  if (KARTE.waende && inWand(z.x, z.y)) { s.laeuft = false; return true; }   // Ziel steckt in der Wand? Dann ein anderes nehmen
+  const zw = naechsterSchritt(s, z);
+  const dx = zw.x - s.x, dy = zw.y - s.y, d = Math.hypot(dx, dy) || 1;
   const schritt = Math.min(d, tempo * dt);
-  s.x += dx / d * schritt;
-  s.y += dy / d * schritt;
+  schiebe(s, dx / d * schritt, dy / d * schritt);
   if (Math.abs(dx) > 1) s.richtung = Math.sign(dx);
   s.phase += dt * 12;
   s.laeuft = true;
@@ -995,16 +1080,16 @@ function bewegeSpieler(dt) {
   }
   if (dx || dy) klickZiel = null;
   else if (klickZiel) {
-    const zx = klickZiel.x - spieler.x, zy = klickZiel.y - spieler.y, d = Math.hypot(zx, zy);
-    if (d < 6) klickZiel = null; else { dx = zx / d; dy = zy / d; }
+    const zw = dist(klickZiel, spieler) < 6 ? klickZiel : naechsterSchritt(spieler, klickZiel);   // (Um Wände herum laufen)
+    const zx = zw.x - spieler.x, zy = zw.y - spieler.y, d = Math.hypot(zx, zy);
+    if (dist(klickZiel, spieler) < 6) klickZiel = null; else if (d > 0.5) { dx = zx / d; dy = zy / d; }
   }
 
   const laenge = Math.hypot(dx, dy);
   spieler.laeuft = laenge > 0;
   if (laenge > 0) {
     const tempo = (jagdZ && spielerIstWolf ? JAGD_TEMPO_WERWOLF * (jagdZ.finale ? JAGD_FINALE_TEMPO : 1) : TEMPO_SPIELER) * (spieler.sprint > 0 ? 1.8 : 1);
-    spieler.x += dx / laenge * tempo * dt;
-    spieler.y += dy / laenge * tempo * dt;
+    schiebe(spieler, dx / laenge * tempo * dt, dy / laenge * tempo * dt);
     if (dx) spieler.richtung = Math.sign(dx);
     spieler.phase += dt * 12;
   }
