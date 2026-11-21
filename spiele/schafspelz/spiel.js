@@ -19,7 +19,7 @@ const ZIEGE_CHANCE = 0.2;             // Wie oft DU die Ziege bist, wenn du kein
 
 // 🛠️ Entwickler-Modus: Funktioniert NUR auf deinem Computer (localhost), nie auf der Webseite!
 // Rolle aussuchen mit der Adresse:  http://localhost:8080/spiele/schafspelz/?rolle=ziege
-// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, angsthase, schaefer, schleicher, verkleider, turbo, schlange
+// Möglich: schaf, wolf, ziege, spuernase, flitzer, beschuetzer, bastler, angsthase, schaefer, maehneur, schleicher, verkleider, turbo, schlange
 const ENTWICKLER = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
 function entwicklerRolle() {
   if (!ENTWICKLER) return null;
@@ -70,6 +70,7 @@ const ROLLEN = {
   bastler:     { name: 'Bastler',           emoji: '🔧', knopf: 'Reparieren', pause: 40, text: 'Du kannst Sabotagen von überall aus reparieren!' },
   schleicher:  { name: 'Schleich-Wolf',     emoji: '👻', knopf: 'Unsichtbar', pause: 30, text: 'Werde kurz unsichtbar. Dann sieht dich keiner beim Fressen!' },
   verkleider:  { name: 'Verkleidungs-Wolf', emoji: '🎭', knopf: 'Verkleiden', pause: 35, text: 'Verkleide dich als anderes Schaf. Dann wird DAS verdächtigt!' },
+  maehneur:    { name: 'Mäh-negeur',        emoji: '🪛', text: 'Du darfst durch die Gruben schleichen – wie ein Wolf! Aber pass auf: Wer dich dabei sieht, hält DICH für den Wolf ...' },
   angsthase:   { name: 'Angsthase',         emoji: '😱', text: 'Wenn dich ein Wolf frisst, mähst du 8-mal ganz laut – und alle sehen, wo!' },
   schaefer:    { name: 'Schäfer',           emoji: '🧑‍🌾', knopf: 'Hirtenstab', pause: 30, text: 'Keine Aufgaben! Hau den Wolf mit dem Hirtenstab raus. Triffst du ein Schaf, musst DU gehen!' },
   ziege:       { name: 'Ziege',             emoji: '🐐', knopf: 'Meckern',    pause: 25, text: 'Lass dich beim Herden-Treffen verjagen, dann gewinnst DU!' },
@@ -77,7 +78,12 @@ const ROLLEN = {
   turbo:       { name: 'Turbo-Wolf',        emoji: '⚡', text: 'Du kannst viel öfter fressen als andere Wölfe!' },
   werwolf:     { name: 'Schafs-Werwolf',    emoji: '🌕', text: 'Zähl bis 15, dann fang alle Schafe! In die Gruben kommst du nicht rein.' },
 };
-const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'angsthase', 'schaefer'];
+const SCHAF_ROLLEN = ['spuernase', 'flitzer', 'beschuetzer', 'bastler', 'angsthase', 'schaefer', 'maehneur'];
+const MAEHNEUR_ZEIT = 10;    // So lange darf der Mäh-negeur in den Gruben bleiben
+const MAEHNEUR_PAUSE = 8;    // So lange muss er warten, bis er wieder rein darf
+// Darf s in die Gruben? (Wölfe und der Mäh-negeur)
+const darfInGrube = s => s.istWolf || s.rolle === 'maehneur';
+function maehneurWarte(s) { return s.rolle === 'maehneur' && !s.istWolf ? Math.max(0, MAEHNEUR_PAUSE - (zeit - (s.rausZeit ?? -99))) : 0; }
 const SCHAEFER_REICHWEITE = 150;   // So weit reicht der Hirtenstab
 const WOLF_ROLLEN = ['schleicher', 'verkleider', 'turbo', 'schlange'];
 const AUFLOESE_ZEIT = 7;   // So viele Sekunden bleibt die Wolle beim Schlangenwolf liegen
@@ -512,6 +518,45 @@ function schiebe(s, dx, dy) {   // Bewegen – aber an Wänden entlangrutschen s
   if (!inWand(s.x, s.y + dy)) s.y += dy;
 }
 
+// 👀 Kann a den Punkt b sehen? (Wände sind nicht durchsichtig!)
+function sichtOk(a, b) {
+  const WD = KARTE.waende;
+  if (!WD) return true;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  for (const w of WD) {
+    const t = strahlTrifft(a.x, a.y, dx, dy, w, 2);
+    if (t !== null && t < 1) return false;
+  }
+  return true;
+}
+// Wo trifft ein Strahl (von x,y in Richtung dx,dy) das Rechteck w? (t = wie viele "Richtungen" weit, oder null)
+function strahlTrifft(x, y, dx, dy, w, schrumpf = 0) {
+  const x0 = w.x + schrumpf, x1 = w.x + w.b - schrumpf, y0 = w.y + schrumpf, y1 = w.y + w.h - schrumpf;
+  let tmin = -Infinity, tmax = Infinity;
+  if (Math.abs(dx) < 1e-9) { if (x < x0 || x > x1) return null; }
+  else { let a = (x0 - x) / dx, b = (x1 - x) / dx; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
+  if (Math.abs(dy) < 1e-9) { if (y < y0 || y > y1) return null; }
+  else { let a = (y0 - y) / dy, b = (y1 - y) / dy; if (a > b) [a, b] = [b, a]; tmin = Math.max(tmin, a); tmax = Math.min(tmax, b); }
+  if (tmax < tmin || tmax <= 0 || tmin <= 0) return null;   // (Steht man drin, zählt es nicht)
+  return tmin;
+}
+// Das Sicht-Vieleck: Strahlen in alle Richtungen, bis sie eine Wand treffen
+function sichtVieleck(px, py, weite) {
+  const winkel = [];
+  for (let k = 0; k < 120; k++) winkel.push(k / 120 * Math.PI * 2);
+  for (const w of KARTE.waende) for (const [ex, ey] of [[w.x, w.y], [w.x + w.b, w.y], [w.x, w.y + w.h], [w.x + w.b, w.y + w.h]]) {
+    if (Math.hypot(ex - px, ey - py) > weite + 200) continue;
+    const a = Math.atan2(ey - py, ex - px); winkel.push(a - 0.002, a + 0.002);   // Genau an den Ecken vorbei
+  }
+  winkel.sort((a, b) => a - b);
+  return winkel.map(a => {
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let t = weite;
+    for (const w of KARTE.waende) { const h = strahlTrifft(px, py, dx, dy, w); if (h !== null && h + 28 < t) t = h + 28; }   // (+28: die Vorderseite der Wand sieht man noch)
+    return { x: px + dx * t, y: py + dy * t };
+  });
+}
+
 // 🗺️ Weg finden: Die Welt wird in kleine Kästchen geteilt, und wir suchen den Weg von Kästchen zu Kästchen
 const NAV_ZELLE = 25;
 let navGitter = null;
@@ -903,8 +948,9 @@ function werwolfBot(w, dt) {   // Ein Computer-Werwolf jagt das nächste Schaf, 
 // 🔦 Ist p im Licht der Taschenlampe von s? (oder ganz nah dran)
 function imLicht(p, s = spieler) {
   const dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy);
-  if (d < JAGD_NAH) return true;
   if (d > JAGD_LAMPE_WEITE) return false;
+  if (!sichtOk(s, p)) return false;   // 🧱 Die Lampe leuchtet nicht durch Wände
+  if (d < JAGD_NAH) return true;
   let w = Math.atan2(dy, dx) - (s.blick || 0);
   while (w > Math.PI) w -= Math.PI * 2;
   while (w < -Math.PI) w += Math.PI * 2;
@@ -1099,6 +1145,7 @@ function bewegeSpieler(dt) {
 }
 
 function bewegeBot(s, dt) {
+  if (s.rolle === 'maehneur' && !s.istWolf && (s.grubenPlan || s.inGrube != null)) { maehneurBot(s, dt); return; }
   if (s.jagt || s.grubenPlan || s.inGrube != null) return;   // Der Wolf wird dann in wolfLogik bewegt
 
   if (s.warte > 0) {
@@ -1121,6 +1168,12 @@ function bewegeBot(s, dt) {
       : Math.floor(Math.random() * ORTE.length);
     const o = ORTE[ortNr];
     s.ziel = { x: o.x + (Math.random() - 0.5) * 60, y: o.y + (Math.random() - 0.5) * 40, ort: ortNr };
+    // 🪛 Mäh-negeur: Ist der Weg durch die Gruben kürzer? Dann ab in den Schacht!
+    if (s.rolle === 'maehneur' && !s.istWolf && maehneurWarte(s) <= 0 && Math.random() < 0.7) {
+      const von = naechsteGrube(s, 260), nach = naechsteGrube(s.ziel, 400);
+      if (von !== null && nach !== null && von !== nach && dist(s, KARTE.gruben[von]) + dist(KARTE.gruben[nach], s.ziel) + 250 < dist(s, s.ziel))
+        s.grubenPlan = { phase: 'hin', von, nach, ziel: s.ziel };
+    }
   }
   if (laufeZu(s, s.ziel, TEMPO_SCHAF * (s.rolle === 'flitzer' ? 1.25 : 1) * (s.meldet ? 1.4 : 1), dt)) {
     if (s.ziel.ort === null) {   // War unterwegs zum Reparieren
@@ -1134,10 +1187,25 @@ function bewegeBot(s, dt) {
   }
 }
 
+// 🪛 Ein Computer-Mäh-negeur unterwegs durch die Gruben
+function maehneurBot(s, dt) {
+  const gp = s.grubenPlan, G = KARTE.gruben;
+  if (!gp) { if (zeit - (s.grubeStart ?? zeit) > 2) kletterRaus(s, s.inGrube); return; }   // (Sicherheit: nicht drin vergessen)
+  if (gp.phase === 'hin') {
+    if (laufeZu(s, G[gp.von], TEMPO_SCHAF, dt) || dist(s, G[gp.von]) < 20) { const z = gp.ziel; springeInGrube(s, gp.von); s.grubenPlan = { ...gp, phase: 'drin', t: 1.2, ziel: z }; }
+    return;
+  }
+  gp.t -= dt; s.laeuft = false;
+  if (gp.t <= 0) {
+    if (s.inGrube !== gp.nach) { s.inGrube = gp.nach; s.x = G[gp.nach].x; s.y = G[gp.nach].y; }
+    s.grubenPlan = null; kletterRaus(s, gp.nach); s.ziel = gp.ziel;
+  }
+}
+
 // ===== Die Wölfe =====
 // Ist das Schaf allein? (Andere Wölfe zählen nicht, die halten zusammen!)
 function istAllein(ziel) {
-  return !schafe.some(s => s.lebt && s !== ziel && !s.istWolf && dist(s, ziel) < 230);
+  return !schafe.some(s => s.lebt && s !== ziel && !s.istWolf && dist(s, ziel) < 230 && sichtOk(s, ziel));   // (Hinter einer Wand sieht keiner was!)
 }
 
 // Was ein Computer-Wolf macht
@@ -1229,6 +1297,7 @@ function fressen(opfer, w) {
     if (s.istSpieler || s.mensch || !s.lebt || s.istWolf) continue;
     if (w.unsichtbar > 0 || s === taeter) continue;
     const d = dist(s, w);
+    if (!sichtOk(s, w)) continue;   // 🧱 Hinter einer Wand sieht man nichts
     const nebel = sabotage && sabotage.art === 'nebel';   // Im Nebel sieht man schlechter
     if (d < (nebel ? 120 : 230) || (d < (nebel ? 200 : 420) && Math.random() < 0.6)) {
       s.verdacht = { wer: taeter, ort };
@@ -1389,7 +1458,7 @@ function grubenZeugen(p, w) {
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf || s === taeter || s.meldet) continue;
     if (s.mensch) continue;   // (Mitspieler sehen selbst, was passiert)
-    if (dist(s, p) < (nebel ? 150 : 300)) {
+    if (dist(s, p) < (nebel ? 150 : 300) && sichtOk(s, p)) {
       s.verdacht = { wer: taeter, ort: naechsterOrt(p), grube: true };
       s.meldet = true;
       s.ziel = { x: GLOCKE.x, y: GLOCKE.y, ort: null }; s.warte = 0; s.amOrt = null;
@@ -1463,8 +1532,9 @@ function moeglicheAktion() {
     const opfer = schafe.find(s => s.lebt && !s.istSpieler && !s.istWolf && dist(s, spieler) < 50);
     if (opfer) return { text: 'Fressen!', tun: () => fressen(opfer, spieler) };
   }
-  if (spielerIstWolf) {
-    const g = naechsteGrube(spieler, 50);
+  if (darfInGrube(spieler)) {   // 🕳️ Wölfe und der Mäh-negeur 🪛
+    const g = naechsteGrube(spieler, 50), warte = maehneurWarte(spieler);
+    if (g !== null && warte > 0) return { text: `Grube in ${Math.ceil(warte)}`, tun: () => sound.fehler() };
     if (g !== null) return { text: 'In die Grube', tun: () => springeInGrube(spieler, g) };
   }
   for (const w of wolle) if (dist(spieler, w) < 80) return { text: 'Wolle melden!', tun: () => starteTreffen(spieler, w) };
@@ -2859,6 +2929,12 @@ function update(dt) {
 
   updateFaehigkeiten(dt);
   if (!simLaeuft()) return;   // z. B. Schäfer-Cutscene hat angefangen
+  for (const s of schafe) {   // 🪛 Der Mäh-negeur darf nicht ewig im Schacht bleiben
+    if (s.rolle !== 'maehneur' || s.istWolf || !s.lebt || s.inGrube == null || zeit - (s.grubeStart ?? zeit) <= MAEHNEUR_ZEIT) continue;
+    s.grubenPlan = null; kletterRaus(s, s.inGrube);
+    if (s === spieler) zeigeNachricht('⏰ Zu lange in der Grube! Raus mit dir!', 2.5);
+    else if (s.mensch) mpNachrichtAn(s, '⏰ Zu lange in der Grube! Raus mit dir!');
+  }
   if (miniSpiel) miniUpdate(dt);
   bewegeSpieler(dt);
   for (const s of schafe) if (!s.istSpieler && !s.mensch && s.lebt) bewegeBot(s, dt);
@@ -3604,6 +3680,23 @@ function zeichneLampenDunkel() {
   }
 }
 
+// 🧱 Alles, was hinter einer Wand liegt, wird dunkel
+let schattenC = null;
+function zeichneWandSchatten() {
+  if (!schattenC) { schattenC = document.createElement('canvas'); schattenC.width = W; schattenC.height = H; }
+  const d = schattenC.getContext('2d');
+  d.globalCompositeOperation = 'source-over';
+  d.clearRect(0, 0, W, H);
+  d.fillStyle = 'rgba(8,10,22,0.93)'; d.fillRect(0, 0, W, H);
+  d.globalCompositeOperation = 'destination-out';
+  const punkte = sichtVieleck(spieler.x, spieler.y, 1400);
+  d.fillStyle = '#000'; d.beginPath();
+  punkte.forEach((p, i) => { const x = p.x - kamera.x, y = p.y - kamera.y; if (i) d.lineTo(x, y); else d.moveTo(x, y); });
+  d.closePath(); d.fill();
+  d.globalCompositeOperation = 'source-over';
+  ctx.drawImage(schattenC, 0, 0);
+}
+
 function zeichneDunkel() {
   if (jagdZ && spieler.lebt && zustand === 'spiel') { zeichneLampenDunkel(); return; }
   const sx = spieler.x - kamera.x, sy = spieler.y - kamera.y;
@@ -3812,7 +3905,7 @@ function zeichneHUD() {
   if (spieler.inGrube != null && zustand === 'spiel') {
     ctx.fillStyle = 'rgba(20,12,6,0.9)';
     rundesRechteck(W / 2 - 200, H - 190, 400, 40, 10); ctx.fill();
-    text(jagdZ ? `🕳️ In der Grube! Noch ${Math.max(0, Math.ceil(JAGD_GRUBE_MAX - (zeit - (spieler.grubeStart ?? zeit))))} s · ← → andere Grube · E raus` : '🕳️ Du bist in der Grube! ← → oder E', W / 2, H - 170, 16, '#fff', 'center', false);
+    text(jagdZ || (spieler.rolle === 'maehneur' && !spielerIstWolf) ? `🕳️ In der Grube! Noch ${Math.max(0, Math.ceil((jagdZ ? JAGD_GRUBE_MAX : MAEHNEUR_ZEIT) - (zeit - (spieler.grubeStart ?? zeit))))} s · ← → andere Grube · E raus` : '🕳️ Du bist in der Grube! ← → oder E', W / 2, H - 170, 16, '#fff', 'center', false);
     zeichneKnopf(GRUBE_LINKS, '◀ Grube', '#c9a27a');
     zeichneKnopf(GRUBE_RAUS, '⬆ Raus', '#ffd166');
     zeichneKnopf(GRUBE_RECHTS, 'Grube ▶', '#c9a27a');
@@ -4310,7 +4403,9 @@ function zeichne() {
 
   kamera.x = begrenzt(spieler.x - W / 2, 0, WELT_B - W);
   kamera.y = begrenzt(spieler.y - H / 2, 0, WELT_H - H);
-  const sichtbar = jagdZ && spieler.lebt && zustand === 'spiel' ? p => imLicht(p) : p => dist(p, spieler) < sicht + 20;   // 🔦 Bei der Jagd: nur was im Licht ist
+  const sichtbar0 = jagdZ && spieler.lebt && zustand === 'spiel' ? p => imLicht(p) : p => dist(p, spieler) < sicht + 20;   // 🔦 Bei der Jagd: nur was im Licht ist
+  const wandSicht = KARTE.waende && spieler.lebt && zustand === 'spiel';   // 🧱 Hinter Wände kann man nicht gucken!
+  const sichtbar = wandSicht ? p => sichtbar0(p) && sichtOk(spieler, p) : sichtbar0;
 
   ctx.save();
   ctx.translate(-kamera.x, -kamera.y);
@@ -4348,6 +4443,7 @@ function zeichne() {
   }
   ctx.restore();
 
+  if (wandSicht) zeichneWandSchatten();
   zeichneDunkel();
   zeichneExtras();
   zeichneHUD();
@@ -4941,7 +5037,7 @@ function d3Minikarte() {
     ctx.fillStyle = aufgabe ? '#ffd166' : '#6b5b4a'; ctx.beginPath(); ctx.arc(x, y, aufgabe ? 5 : 3.5, 0, 7); ctx.fill();
   });
   const [gx, gy] = P(GLOCKE); ctx.fillStyle = glockeGenutzt ? '#999' : '#f1c40f'; ctx.fillRect(gx - 3, gy - 3, 6, 6);
-  if (spielerIstWolf) for (const g of KARTE.gruben) { const [x, y] = P(g); ctx.fillStyle = '#140c06'; ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); }
+  if (darfInGrube(spieler)) for (const g of KARTE.gruben) { const [x, y] = P(g); ctx.fillStyle = '#140c06'; ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); }
   if (sabotage && Math.sin(zeit * 8) > 0) { const [x, y] = P(sabotagePunkt()); ctx.fillStyle = '#ff6b6b'; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); }
   // Du (Pfeil in deine Blickrichtung)
   const [px, py] = P(spieler);
@@ -5292,7 +5388,7 @@ function mpVomGast(g, d) {
       if (zustand === 'spiel' && s.lebt && s.rolle === 'schaefer' && s.faehigkeit <= 0.5 && z && z.lebt && z !== s && z.inGrube == null && dist(s, z) < SCHAEFER_REICHWEITE + 40) hirtenstab(s, z);
       break;
     }
-    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && (jagdZ ? !s.istWolf && s.grubenUebrig > 0 : s.istWolf) && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
+    case 'grube': { const g = KARTE.gruben[d.i]; if (zustand === 'spiel' && (jagdZ ? !s.istWolf && s.grubenUebrig > 0 : darfInGrube(s) && maehneurWarte(s) <= 0) && s.lebt && s.inGrube == null && g && dist(s, g) < 120) springeInGrube(s, d.i); break; }
     case 'grubeWechsel': { const g = KARTE.gruben[d.i]; if (s.inGrube != null && g) { s.inGrube = d.i; s.x = g.x; s.y = g.y; } break; }
     case 'raus': if (s.inGrube != null && KARTE.gruben[d.i]) kletterRaus(s, d.i); break;
     case 'stimme': if (treffen && treffen.phase === 'waehlen' && s.lebt && !mp.stimmen.has(s)) { mp.stimmen.set(s, d.z >= 0 ? schafe[d.z] : null); mpAbstimmungPruefen(); } break;
@@ -5492,8 +5588,9 @@ function moeglicheAktionGast() {
     const opfer = schafe.find(s => s.lebt && s !== spieler && !s.istWolf && dist(s, spieler) < 50);
     if (opfer) return { text: 'Fressen!', tun: () => { mpSende({ t: 'fressen', z: schafe.indexOf(opfer) }); spieler.cooldown = 2; } };
   }
-  if (spielerIstWolf) {   // 🕳️ Durch die Gruben schleichen
-    const g = naechsteGrube(spieler, 50);
+  if (darfInGrube(spieler)) {   // 🕳️ Durch die Gruben schleichen (Wolf und Mäh-negeur)
+    const g = naechsteGrube(spieler, 50), warte = maehneurWarte(spieler);
+    if (g !== null && warte > 0) return { text: `Grube in ${Math.ceil(warte)}`, tun: () => sound.fehler() };
     if (g !== null) return { text: 'In die Grube', tun: () => springeInGrube(spieler, g) };
   }
   for (let i = 0; i < wolle.length; i++) if (dist(spieler, wolle[i]) < 80) return { text: 'Wolle melden!', tun: () => mpSende({ t: 'melden', w: i }) };
