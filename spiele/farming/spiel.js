@@ -6498,12 +6498,13 @@ document.getElementById('helfer-zu').addEventListener('click', () => helferZeige
 const geladen = laden();
 jahreszeitZeigen();
 angebotNeu();
-if (!geladen) {
+if (!geladen) {   // Neues Spiel: Du fängst mit einem Traktor UND einem Mähdrescher an!
   einsteigen(neuesFahrzeug('fendt', 0, 10, 0, { werkzeug: 'ernte' }));
+  neuesFahrzeug('drescher', 9, 12, -Math.PI / 2);   // Steht rechts neben dir auf dem Weg zum Landhandel
 }
 for (const f of felder) malFeld(f);
 updateHUD();
-meldung(geladen ? '💾 Willkommen zurück auf deinem Hof!' : '🌾 Feld 1 ist schon reif! Fahr hin und ernte es (Taste 3 = Erntevorsatz).', 5);
+meldung(geladen ? '💾 Willkommen zurück auf deinem Hof!' : '🌾 Feld 1 ist schon reif! Ernte es mit dem Traktor (Taste 3) – oder steig in deinen Mähdrescher rechts neben dir (E)!', 6);
 animate();
 
 addEventListener('resize', () => {
