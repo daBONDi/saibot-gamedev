@@ -1204,17 +1204,17 @@ function feldBei(x, z, rand = 0) {
 //   arbeit = wie schnell es auf dem Feld arbeiten darf (1 = normal) · breite = wie breit die Geräte sind (1 = normal)
 const FAHRZEUGE = {
   fendt: {
-    name: 'Fendt', emoji: '🚜', preis: 0, farbe: 0x16852c, groesse: 1, tempo: 11.1, arbeit: 1, breite: 1,
+    name: 'Fendt', emoji: '🚜', preis: 0, farbe: 0x16852c, felge: 0xc8ccd0,  groesse: 1, tempo: 11.1, arbeit: 1, breite: 1,
     dieselMax: DIESEL_MAX, tankMax: TANK_MAX, saatMax: SAAT_MAX, geraete: ['pflug', 'saat', 'ernte'], motorTon: 1,
     faehigkeit: 'Allrounder – kann pflügen, säen und ernten',
   },
   flitzer: {
-    name: 'Flitzer', emoji: '🏎️', preis: 40000, farbe: 0xd9442b, groesse: 0.8, tempo: 13.9, arbeit: 0.9, breite: 0.8,
+    name: 'Flitzer', emoji: '🏎️', preis: 40000, farbe: 0xd9442b, felge: 0x1a1a1a,  groesse: 0.8, tempo: 13.9, arbeit: 0.9, breite: 0.8,
     dieselMax: 150, tankMax: 4000, saatMax: 1000, geraete: ['pflug', 'saat', 'ernte'], motorTon: 1.4, turbo: true,
     faehigkeit: 'TURBO mit Shift (bis 70 km/h)! Klein, aber flink',
   },
   kraftprotz: {
-    name: 'Kraftprotz', emoji: '💪', preis: 120000, farbe: 0x2457a6, groesse: 1.35, tempo: 9.7, arbeit: 1.5, breite: 1.6,
+    name: 'Kraftprotz', emoji: '💪', preis: 120000, farbe: 0x2457a6, felge: 0xf2c200,  groesse: 1.35, tempo: 9.7, arbeit: 1.5, breite: 1.6,
     dieselMax: 600, tankMax: 12000, saatMax: 4000, geraete: ['pflug', 'saat', 'ernte'], motorTon: 0.75, allrad: true,
     faehigkeit: 'Allrad: wird nie träge · extra breite Geräte · schnell auf dem Feld',
   },
@@ -1239,7 +1239,7 @@ let letztes = null;     // Das zuletzt gefahrene Fahrzeug (für die Anzeige)
 
 const reifenMat = mat(0x1b1b1b, { roughness: 1 }), felgenMat = mat(0xd9b400, { metalness: 0.3, roughness: 0.5 });
 const glasMat = new THREE.MeshStandardMaterial({ color: 0x83c9df, transparent: true, opacity: 0.4, roughness: 0.1 });
-function baueRad(K, x, y, z, r, b, lenkt) {   // lenkt: 1 = lenkt mit, -1 = lenkt andersrum (Hinterradlenkung), 0 = gar nicht
+function baueRad(K, x, y, z, r, b, lenkt, felge = felgenMat) {   // lenkt: 1 = lenkt mit, -1 = lenkt andersrum (Hinterradlenkung), 0 = gar nicht
   const lenker = new THREE.Group(); lenker.position.set(x, y, z); K.add(lenker);
   const rad = new THREE.Group(); lenker.add(rad);
   const teile = [new THREE.CylinderGeometry(r * 0.92, r * 0.92, b, 24)];
@@ -1249,8 +1249,9 @@ function baueRad(K, x, y, z, r, b, lenkt) {   // lenkt: 1 = lenkt mit, -1 = lenk
   }
   const reifenGeo = mergeGeometries(teile); reifenGeo.rotateZ(Math.PI / 2);
   const reifen = new THREE.Mesh(reifenGeo, reifenMat); reifen.castShadow = true; rad.add(reifen);
-  const felge = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, b + 0.02, 16), felgenMat);
-  felge.rotation.z = Math.PI / 2; rad.add(felge);
+  const fm = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, b + 0.02, 16), felge);
+  fm.rotation.z = Math.PI / 2; rad.add(fm);
+  for (let k = 0; k < 6; k++) { const bolzen = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.05, r * 0.05, b + 0.06, 6), mat(0x888888)); bolzen.rotation.z = Math.PI / 2; bolzen.position.set(0, Math.cos(k / 6 * Math.PI * 2) * r * 0.3, Math.sin(k / 6 * Math.PI * 2) * r * 0.3); rad.add(bolzen); }   // Radmuttern
   rad.add(new THREE.Mesh(new THREE.BoxGeometry(b + 0.06, r * 0.3, r * 0.3), mat(0x555555)));   // Nabe (damit man das Drehen sieht)
   return { lenker, rad, r, lenkt };
 }
@@ -1377,32 +1378,96 @@ function malBildschirm(fz) {   // Der Bildschirm in der Kabine
   g.fillStyle = '#7cf5a0'; g.fillText(fz.typ.name, 10, 104);
   fz.bildTex.needsUpdate = true;
 }
+// Der Traktor: runde Motorhaube mit Kühlergrill, Kotflügel (vorne lenken sie mit!), Tank, Auspuff, Frontgewicht und Hydraulik hinten
 function baueTraktor(typ, K) {
   const farbe = typ.farbe, dunkler = new THREE.Color(farbe).multiplyScalar(0.65).getHex();
-  kasten(K, 0, 1, 0, 2.3, 1.1, 3.5, farbe);                       // Körper
-  kasten(K, 0, 1.15, -1.55, 1.6, 0.9, 0.5, dunkler);              // Motorhaube vorne
-  kasten(K, 0, 0.75, -2.0, 1.4, 0.5, 0.35, 0x333333);             // Frontgewicht
-  kasten(K, 0, 1.15, -1.83, 1.3, 0.6, 0.06, 0x1a1a1a);            // Kühlergrill
-  for (let k = 0; k < 5; k++) kasten(K, 0, 0.92 + k * 0.11, -1.87, 1.2, 0.03, 0.03, 0x666666, false);
-  kasten(K, 0.75, 2.2, -1.3, 0.12, 1.4, 0.12, 0x222222);          // Auspuff
-  kasten(K, 0.75, 2.95, -1.3, 0.16, 0.1, 0.16, 0x111111);         // Auspuff-Klappe
-  for (const x of [-0.6, 0.6]) kasten(K, x, 1.25, -1.82, 0.3, 0.2, 0.05, new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), false);   // Lichter
+  const lack = mat(farbe, { roughness: 0.35, metalness: 0.25 }), lackDunkel = mat(dunkler, { roughness: 0.4, metalness: 0.2 });
+  const schwarz = mat(0x1e1f22, { roughness: 0.6 }), chrom = mat(0xd8dde2, { metalness: 0.9, roughness: 0.15 }), grau = mat(0x4a4d52, { metalness: 0.4, roughness: 0.5 });
+  const licht = new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), rot = new THREE.MeshBasicMaterial({ color: 0xe0201e }), orange = new THREE.MeshBasicMaterial({ color: 0xff9a1e });
+  const felge = mat(typ.felge ?? 0xd9b400, { metalness: 0.4, roughness: 0.45 });
+  // Rahmen und Getriebe unten
+  kasten(K, 0, 0.78, -0.5, 0.9, 0.35, 3.0, schwarz);                    // Rahmen von vorne bis zur Kabine
+  kasten(K, 0, 1.12, 0.55, 1.45, 0.95, 2.1, lackDunkel);                 // Unter der Kabine
+  kasten(K, 0, 0.85, 1.55, 1.15, 0.7, 0.8, grau);                        // Getriebe hinten
+  // Motorhaube: oben abgerundet (eine Form, die nach vorne "hinausgeschoben" wird)
+  const hw = 0.66, hh = 0.95, hr = 0.3, form = new THREE.Shape();
+  form.moveTo(-hw, 0); form.lineTo(hw, 0); form.lineTo(hw, hh - hr); form.quadraticCurveTo(hw, hh, hw - hr, hh);
+  form.lineTo(-hw + hr, hh); form.quadraticCurveTo(-hw, hh, -hw, hh - hr); form.closePath();
+  const haubeGeo = new THREE.ExtrudeGeometry(form, { depth: 1.8, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.05, bevelSegments: 2, curveSegments: 8 });
+  haubeGeo.translate(0, 0.9, -2.16);
+  const haube = new THREE.Mesh(haubeGeo, lack); haube.castShadow = true; haube.receiveShadow = true; K.add(haube);
+  for (const sx of [-1, 1]) {
+    kasten(K, sx * 0.72, 1.25, -1.25, 0.02, 0.12, 1.7, mat(0xffffff, { roughness: 0.5 }), false);   // Weißer Zierstreifen
+    for (let k = 0; k < 5; k++) kasten(K, sx * 0.715, 1.55, -1.95 + k * 0.13, 0.02, 0.28, 0.05, schwarz, false);   // Lüftungsschlitze
+  }
+  kasten(K, 0, 1.91, -1.3, 0.9, 0.02, 1.6, lackDunkel, false);           // Streifen oben auf der Haube
+  // Kühlergrill vorne mit Chrom-Streifen, Wappen und Scheinwerfern
+  kasten(K, 0, 1.3, -2.22, 1.12, 0.72, 0.04, schwarz, false);
+  for (let k = 0; k < 6; k++) kasten(K, 0, 1.02 + k * 0.11, -2.25, 1.0, 0.035, 0.03, chrom, false);
+  const wappen = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.03, 20), chrom); wappen.rotation.x = Math.PI / 2; wappen.position.set(0, 1.72, -2.24); K.add(wappen);
+  const wappenMitte = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.035, 20), lack); wappenMitte.rotation.x = Math.PI / 2; wappenMitte.position.set(0, 1.72, -2.245); K.add(wappenMitte);
+  for (const sx of [-1, 1]) {
+    kasten(K, sx * 0.48, 1.6, -2.21, 0.26, 0.14, 0.06, grau, false);      // Scheinwerfer-Rahmen
+    kasten(K, sx * 0.48, 1.6, -2.245, 0.21, 0.1, 0.01, licht, false);
+    kasten(K, sx * 0.48, 1.42, -2.245, 0.14, 0.06, 0.01, orange, false); // Blinker
+  }
+  // Vorderachse und Frontgewicht
+  kasten(K, 0, 0.55, -1.15, 2.0, 0.22, 0.28, schwarz);
+  const gewichtB = typ.allrad ? 1.6 : 1.3;
+  kasten(K, 0, 0.75, -2.35, 0.5, 0.3, 0.3, grau);                        // Fronthydraulik
+  const front = new THREE.Group(); K.add(front);   // Frontgewicht (wird abgenommen, wenn vorne ein Gerät dran ist)
+  for (let k = 0; k < 4; k++) kasten(front, 0, 0.62 + k * 0.17, -2.62, gewichtB, 0.14, 0.4, k % 2 ? grau : mat(0x2f3236));   // Gewichte (übereinander)
+  if (typ.allrad) for (let k = 0; k < 5; k++) kasten(front, -0.6 + k * 0.3, 0.97, -2.83, 0.15, 0.12, 0.01, new THREE.MeshBasicMaterial({ color: k % 2 ? 0x111111 : 0xf2c200 }), false);   // Warnstreifen
+  // Tank rechts und Batteriekasten
+  kasten(K, 0.9, 1.0, -0.25, 0.42, 0.6, 0.65, schwarz);
+  const deckel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.06, 12), chrom); deckel.position.set(0.9, 1.33, -0.25); K.add(deckel);
+  // Auspuff: steht rechts vorne an der Kabine, mit Hitzeschutz und Klappe
+  const ax = typ.turbo ? 0.42 : 0.5;
+  const auspuffRohr = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 1.7, 10), typ.turbo ? chrom : schwarz);
+  auspuffRohr.position.set(ax, 2.7, -0.62); auspuffRohr.castShadow = true; K.add(auspuffRohr);
+  kasten(K, ax, 2.5, -0.62, 0.2, 0.7, 0.2, chrom, false);                // Hitzeschutz (glänzt)
+  kasten(K, ax, 3.58, -0.62, 0.16, 0.05, 0.16, schwarz, false);          // Klappe
+  if (typ.turbo) {   // Flitzer: zweites Rohr, beide verchromt
+    const zwei = auspuffRohr.clone(); zwei.position.x = -ax; K.add(zwei);
+    kasten(K, -ax, 2.5, -0.62, 0.2, 0.7, 0.2, chrom, false);
+  }
   const kabine = baueKabine(K, farbe, dunkler);
+  // Räder mit Kotflügeln (vorne hängen die Kotflügel am Rad und lenken mit)
   const raeder = [];
+  const bogen = (r, b, w) => { const geo = new THREE.CylinderGeometry(r, r, b, 18, 1, true, Math.PI / 2 - w, w * 2); geo.rotateZ(Math.PI / 2); return geo; };
+  const fluegelMat = mat(farbe, { roughness: 0.35, metalness: 0.25, side: THREE.DoubleSide });
   for (const x of [-1.2, 1.2]) {
-    raeder.push(baueRad(K, x, 0.55, -1.15, 0.55, 0.4, 1));        // Vorne: klein, lenkt
-    raeder.push(baueRad(K, x * 1.1, 0.78, 1.05, 0.78, 0.55, 0));  // Hinten: groß und breit
-    kasten(K, x * 1.1, 1.61, 1.05, 0.7, 0.08, 1.25, farbe);       // Kotflügel
+    const vorne = baueRad(K, x, 0.55, -1.15, 0.55, 0.4, 1, felge);
+    raeder.push(vorne);
+    const kf = new THREE.Mesh(bogen(0.68, 0.5, 1.05), fluegelMat); kf.castShadow = true; vorne.lenker.add(kf);
+    const hinten = baueRad(K, x * 1.1, 0.78, 1.05, 0.78, 0.55, 0, felge);
+    raeder.push(hinten);
+    const hf = new THREE.Mesh(bogen(0.92, 0.66, 1.25), fluegelMat); hf.position.set(x * 1.1, 0.78, 1.05); hf.castShadow = true; K.add(hf);
+    kasten(K, x * 1.1, 1.72, 1.05, 0.66, 0.05, 1.0, lack);                // Flacher Teil oben
+    kasten(K, x * 1.1, 1.62, 1.86, 0.5, 0.12, 0.08, schwarz, false);      // Rücklicht-Halter
+    kasten(K, x * 1.1 - Math.sign(x) * 0.1, 1.62, 1.905, 0.16, 0.08, 0.01, rot, false);
+    kasten(K, x * 1.1 + Math.sign(x) * 0.12, 1.62, 1.905, 0.12, 0.08, 0.01, orange, false);
+    kasten(K, x * 1.1, 1.82, 0.62, 0.2, 0.12, 0.12, grau, false);         // Arbeitsscheinwerfer auf dem Kotflügel
+    kasten(K, x * 1.1, 1.82, 0.555, 0.15, 0.08, 0.01, licht, false);
   }
-  if (typ.turbo) {   // Flitzer: Spoiler und Rennstreifen
+  // Hinten: Dreipunkt-Hydraulik, Zapfwelle und Anhängerkupplung
+  for (const sx of [-1, 1]) { const arm = kasten(K, sx * 0.42, 0.62, 2.1, 0.09, 0.12, 0.9, grau); arm.rotation.y = -sx * 0.12; }   // Unterlenker
+  const oberlenker = kasten(K, 0, 1.25, 2.05, 0.08, 0.08, 0.8, mat(0xd23c2a)); oberlenker.rotation.x = -0.25;
+  const zapf = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), chrom); zapf.rotation.x = Math.PI / 2; zapf.position.set(0, 0.9, 2.0); K.add(zapf);
+  kasten(K, 0, 0.72, 2.15, 0.3, 0.12, 0.35, schwarz);                    // Kupplungsmaul
+  if (typ.turbo) {   // Flitzer: Spoiler, Rennstreifen auf der Haube, Frontlippe und Seitenschweller
     kasten(K, 0, 3.4, 1.5, 1.9, 0.08, 0.3, 0x111111);
-    kasten(K, 0, 1.56, -0.2, 0.4, 0.02, 3.4, 0xffffff, false);
+    for (const sx of [-0.18, 0.18]) kasten(K, sx, 1.925, -1.3, 0.12, 0.01, 1.65, 0xffffff, false);
+    kasten(K, 0, 0.62, -2.45, 1.5, 0.06, 0.5, 0x111111, false);
+    for (const sx of [-1, 1]) kasten(K, sx * 0.74, 0.72, -0.35, 0.06, 0.12, 0.9, 0x111111, false);
   }
-  if (typ.allrad) {   // Kraftprotz: Zusatz-Scheinwerfer auf dem Dach und Zwillingsräder
-    for (const x of [-0.5, -0.2, 0.2, 0.5]) kasten(K, x, 3.33, -0.42, 0.18, 0.14, 0.1, new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), false);
-    for (const x of [-1.85, 1.85]) raeder.push(baueRad(K, x, 0.78, 1.05, 0.78, 0.45, 0));
+  if (typ.allrad) {   // Kraftprotz: Zusatz-Scheinwerfer auf dem Dach, Rammschutz vorne und Zwillingsräder
+    for (const x of [-0.5, -0.2, 0.2, 0.5]) kasten(K, x, 3.33, -0.42, 0.18, 0.14, 0.1, licht, false);
+    for (const sx of [-1, 1]) kasten(front, sx * 0.7, 1.05, -2.95, 0.1, 0.9, 0.1, chrom);
+    kasten(front, 0, 1.45, -2.95, 1.5, 0.1, 0.1, chrom);
+    for (const x of [-1.85, 1.85]) raeder.push(baueRad(K, x, 0.78, 1.05, 0.78, 0.45, 0, felge));
   }
-  return { raeder, auspuff: [0.75, 3.05, -1.3], sitz: [0, 2.85, 0.8], radstand: 2.3, ...kabine };
+  return { raeder, auspuff: [ax, 3.62, -0.62], sitz: [0, 2.85, 0.8], radstand: 2.3, frontgewicht: front, ...kabine };
 }
 function baueDrescher(typ, K) {
   const gelb = typ.farbe;
@@ -5165,6 +5230,7 @@ function animate() {
       fz.speed = fz.ziel.sp; fz.lenkWinkel = fz.ziel.lw; fz.arbeitet = fz.ziel.ab;
       for (const r of fz.raeder) { r.rad.rotation.x -= fz.speed * dt / (r.r * fz.typ.groesse); if (r.lenkt) r.lenker.rotation.y = fz.lenkWinkel * r.lenkt; }
     } else if (fz !== aktiv && !fz.helfer) { fz.speed = 0; fz.arbeitet = false; }
+    if (fz.frontgewicht) fz.frontgewicht.visible = !(GERAETE[fz.werkzeug] && !GERAETE[fz.werkzeug].hinten);
     for (const [art, m] of Object.entries(fz.geraete)) {
       m.visible = art === fz.werkzeug;
       m.position.y += ((fz.arbeitet ? 0 : 0.45) - m.position.y) * Math.min(1, dt * 5);   // Abgesenkt auf dem Feld, sonst angehoben
