@@ -8,6 +8,9 @@
 //   'blumen' = Blumen gießen
 //   'zaun'   = Nägel reinhauen
 //
+// ✨ "beweis: true" = Beweis-Aufgabe! Wenn ein Schaf sie schafft, leuchtet es hell auf
+//   und alle in der Nähe sehen: Das ist ein echtes Schaf! (Wölfe können sie nicht machen.)
+//
 // "bild" sagt, wie der Ort aussieht:
 //   'stall', 'muehle', 'teich', 'scheune', 'wiese', 'garten',
 //   'krippe', 'iglu', 'glashaus', 'brunnen', 'leuchtturm', 'boot',
@@ -35,7 +38,7 @@ const KARTEN = [
     gruben: [{ x: 600, y: 470 }, { x: 1220, y: 470 }, { x: 1220, y: 900 }, { x: 600, y: 900 }],
     orte: [
       { name: 'Stall',        bei: 'beim Stall',          x: 320,  y: 300,  aufgabe: 'Heu fressen',     labelY: -225, spiel: 'heu',    bild: 'stall' },
-      { name: 'Mühle',        bei: 'bei der Mühle',       x: 900,  y: 300,  aufgabe: 'Korn mahlen',     labelY: -265, spiel: 'kurbel', bild: 'muehle' },
+      { name: 'Mühle',        bei: 'bei der Mühle',       x: 900,  y: 300,  aufgabe: 'Korn mahlen',     labelY: -265, spiel: 'kurbel', bild: 'muehle', beweis: true },
       { name: 'Teich',        bei: 'beim Teich',          x: 1480, y: 320,  aufgabe: 'Wasser trinken',  labelY: -195, spiel: 'eimer',  bild: 'teich' },
       { name: 'Scheune',      bei: 'bei der Scheune',     x: 320,  y: 1080, aufgabe: 'Wolle abgeben',   labelY: -255, spiel: 'wolle',  bild: 'scheune' },
       { name: 'Blumenwiese',  bei: 'auf der Blumenwiese', x: 900,  y: 1120, aufgabe: 'Blumen gießen',   labelY: -145, spiel: 'blumen', bild: 'wiese' },
@@ -51,7 +54,7 @@ const KARTEN = [
     gruben: [{ x: 230, y: 300 }, { x: 1230, y: 560 }, { x: 1650, y: 1180 }, { x: 720, y: 900 }],
     orte: [
       { name: 'Futterkrippe',      bei: 'bei der Futterkrippe',   x: 300,  y: 640,  aufgabe: 'Heu fressen',          labelY: -175, spiel: 'heu',    bild: 'krippe' },
-      { name: 'Windrad',           bei: 'beim Windrad',           x: 900,  y: 290,  aufgabe: 'Korn mahlen',          labelY: -265, spiel: 'kurbel', bild: 'muehle' },
+      { name: 'Windrad',           bei: 'beim Windrad',           x: 900,  y: 290,  aufgabe: 'Korn mahlen',          labelY: -265, spiel: 'kurbel', bild: 'muehle', beweis: true },
       { name: 'Eisloch',           bei: 'beim Eisloch',           x: 1450, y: 300,  aufgabe: 'Wasser holen',         labelY: -195, spiel: 'eimer',  bild: 'teich', farben: ['#7fb8d8', '#bfe3f5'] },
       { name: 'Iglu',              bei: 'beim Iglu',              x: 420,  y: 1080, aufgabe: 'Wolle abgeben',        labelY: -165, spiel: 'wolle',  bild: 'iglu' },
       { name: 'Gewächshaus',       bei: 'im Gewächshaus',         x: 1020, y: 1110, aufgabe: 'Blumen gießen',        labelY: -225, spiel: 'blumen', bild: 'glashaus' },
@@ -68,7 +71,7 @@ const KARTEN = [
     orte: [
       { name: 'Fischerhütte', bei: 'bei der Fischerhütte', x: 320,  y: 300,  aufgabe: 'Seegras fressen', labelY: -225, spiel: 'heu',    bild: 'stall', farben: ['#3a8fb7', '#1f5f7a'] },
       { name: 'Brunnen',      bei: 'beim Brunnen',         x: 900,  y: 300,  aufgabe: 'Wasser holen',    labelY: -205, spiel: 'eimer',  bild: 'brunnen' },
-      { name: 'Leuchtturm',   bei: 'beim Leuchtturm',      x: 1480, y: 320,  aufgabe: 'Licht kurbeln',   labelY: -290, spiel: 'kurbel', bild: 'leuchtturm' },
+      { name: 'Leuchtturm',   bei: 'beim Leuchtturm',      x: 1480, y: 320,  aufgabe: 'Licht kurbeln',   labelY: -290, spiel: 'kurbel', bild: 'leuchtturm', beweis: true },
       { name: 'Muschelmarkt', bei: 'auf dem Muschelmarkt', x: 330,  y: 1060, aufgabe: 'Wolle abgeben',   labelY: -255, spiel: 'wolle',  bild: 'scheune', farben: ['#e67e22', '#c0392b'] },
       { name: 'Palmengarten', bei: 'im Palmengarten',      x: 900,  y: 1100, aufgabe: 'Blumen gießen',   labelY: -145, spiel: 'blumen', bild: 'wiese' },
       { name: 'Bootssteg',    bei: 'am Bootssteg',         x: 1480, y: 1060, aufgabe: 'Boot reparieren', labelY: -245, spiel: 'zaun',   bild: 'boot' },
@@ -107,7 +110,7 @@ const KARTEN = [
     ],
     orte: [
       { name: 'Kantine',         bei: 'in der Kantine',       x: 320,  y: 300,  aufgabe: 'Weltraum-Heu fressen', labelY: -215, spiel: 'heu',    bild: 'kantine' },
-      { name: 'Reaktor',         bei: 'beim Reaktor',         x: 900,  y: 300,  aufgabe: 'Reaktor ankurbeln',    labelY: -255, spiel: 'kurbel', bild: 'reaktor' },
+      { name: 'Reaktor',         bei: 'beim Reaktor',         x: 900,  y: 300,  aufgabe: 'Reaktor ankurbeln',    labelY: -255, spiel: 'kurbel', bild: 'reaktor', beweis: true },
       { name: 'Wassertank',      bei: 'beim Wassertank',      x: 1480, y: 320,  aufgabe: 'Wasser tanken',        labelY: -225, spiel: 'eimer',  bild: 'tank' },
       { name: 'Frachtraum',      bei: 'im Frachtraum',        x: 320,  y: 1080, aufgabe: 'Wolle verladen',       labelY: -215, spiel: 'wolle',  bild: 'fracht' },
       { name: 'Weltraumgarten',  bei: 'im Weltraumgarten',    x: 900,  y: 1110, aufgabe: 'Blumen gießen',        labelY: -205, spiel: 'blumen', bild: 'kuppel' },

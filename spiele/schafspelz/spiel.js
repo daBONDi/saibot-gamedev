@@ -398,6 +398,8 @@ const sound = {
     const g = a.createGain(); g.gain.value = 0.35;
     q.connect(f); f.connect(g); g.connect(a.destination); q.start();
   },
+  // ✨ Beweis-Aufgabe: hell glitzernder Akkord
+  beweis() { [523, 659, 784, 1047, 1319].forEach((h, i) => ton(h, i * 0.07, 0.6, 'triangle', 0.09)); },
   // Plumps in die Grube
   plumps() { ton(320, 0, 0.3, 'sine', 0.3, 60); },
   // Bzzzt! (Blitz)
@@ -667,6 +669,7 @@ function macheSchaf(name, farbe, istSpieler) {
     aufgabeAktiv: null, aufgabeT: 0,
     rolle: 'normal', faehigkeit: 8, sprint: 0, unsichtbar: 0, verkleidet: null,
     inGrube: null, grubenPlan: null, meldet: false,
+    sicher: new Map(),   // ✨ Wen hat dieses Schaf bei einer Beweis-Aufgabe gesehen? (Schaf → Ort-Nummer)
     geschuetzt: false, geruch: null, schnupperZeit: 20 + Math.random() * 20,
   };
 }
@@ -1155,7 +1158,8 @@ function bewegeBot(s, dt) {
       if (!s.istWolf && s.aufgaben.includes(s.amOrt)) {
         s.aufgaben = s.aufgaben.filter(i => i !== s.amOrt);
         s.erledigt++;
-      }
+        beweisAufgabe(s, s.amOrt);   // ✨ (nur wenn es eine Beweis-Aufgabe ist)
+      } else if (s.istWolf) wolfOhneLicht(s, s.amOrt);   // 🐺 Tut nur so ... aber nichts leuchtet!
       s.amOrt = null;
     }
     return;
@@ -1163,10 +1167,11 @@ function bewegeBot(s, dt) {
 
   if (!s.ziel && s.meldet) s.ziel = { x: GLOCKE.x, y: GLOCKE.y, ort: null };   // Schnell zur Glocke!
   if (!s.ziel) {
-    const ortNr = (s.aufgaben.length && Math.random() < 0.6)
+    let ortNr = (s.aufgaben.length && Math.random() < 0.6)
       ? zufall(s.aufgaben)
       : Math.floor(Math.random() * ORTE.length);
-    const o = ORTE[ortNr];
+    let o = ORTE[ortNr];
+    if (s.istWolf && o.beweis && Math.random() < 0.7) { ortNr = (ortNr + 1) % ORTE.length; o = ORTE[ortNr]; }   // 🐺 Schlauer Wolf: Da leuchtet bei mir ja nichts ...
     s.ziel = { x: o.x + (Math.random() - 0.5) * 60, y: o.y + (Math.random() - 0.5) * 40, ort: ortNr };
     // 🪛 Mäh-negeur: Ist der Weg durch die Gruben kürzer? Dann ab in den Schacht!
     if (s.rolle === 'maehneur' && !s.istWolf && maehneurWarte(s) <= 0 && Math.random() < 0.7) {
@@ -1199,6 +1204,38 @@ function maehneurBot(s, dt) {
   if (gp.t <= 0) {
     if (s.inGrube !== gp.nach) { s.inGrube = gp.nach; s.x = G[gp.nach].x; s.y = G[gp.nach].y; }
     s.grubenPlan = null; kletterRaus(s, gp.nach); s.ziel = gp.ziel;
+  }
+}
+
+// ===== ✨ Beweis-Aufgaben: Nur echte Schafe können sie – und alle in der Nähe sehen es! =====
+const BEWEIS_WEITE = 380;   // So weit sieht man das Leuchten
+function beweisAufgabe(s, nr) {   // (Rechnet nur der Gastgeber bzw. das Einzelspiel)
+  if (jagdZ || !ORTE[nr] || !ORTE[nr].beweis || s.istWolf) return;
+  beweisZeigen(s, nr);
+  if (mp.rolle === 'host') mpAnAlle({ t: 'beweis', s: schafe.indexOf(s), nr });
+  for (const b of schafe) {   // Wer hat es gesehen?
+    if (b === s || !b.lebt || b.istWolf || b.istSpieler || b.mensch) continue;
+    if (dist(b, s) > BEWEIS_WEITE || !sichtOk(b, s)) continue;
+    b.sicher.set(s, nr);
+    if (b.verdacht && b.verdacht.wer === s) b.verdacht = null;   // Doch kein Wolf!
+  }
+}
+function beweisZeigen(s, nr) {   // Das Leuchten (das sehen alle Spieler)
+  effekte.push({ ziel: s, art: 'beweis', t: 3, max: 3 });
+  ortLeuchten[nr] = zeit;
+  const o = ORTE[nr];
+  if (s === spieler) { zeigeNachricht('✨ Beweis-Aufgabe! Alle in der Nähe wissen jetzt: Du bist ein echtes Schaf!', 3); sound.beweis(); }
+  else if (spieler.lebt && dist(spieler, s) < BEWEIS_WEITE && sichtOk(spieler, s)) { zeigeNachricht(`✨ ${s.name} hat ${o.bei} „${o.aufgabe}“ geschafft – ${s.name} ist ein echtes Schaf!`, 3.5); sound.beweis(); }
+}
+const ortLeuchten = {};
+const beweisAktiv = s => effekte.some(e => e.art === 'beweis' && e.ziel === s);
+// Ein Computer-Wolf tut so, als ob er die Beweis-Aufgabe macht ... aber nichts leuchtet!
+function wolfOhneLicht(w, nr) {
+  if (jagdZ || !ORTE[nr] || !ORTE[nr].beweis) return;
+  const taeter = w.verkleidet ? w.verkleidet.als : w;
+  for (const b of schafe) {
+    if (b === w || !b.lebt || b.istWolf || b.istSpieler || b.mensch || b.verdacht) continue;
+    if (dist(b, w) < 260 && sichtOk(b, w) && Math.random() < 0.7) b.verdacht = { wer: taeter, ort: ORTE[nr], keinLicht: true };
   }
 }
 
@@ -1458,7 +1495,7 @@ function grubenZeugen(p, w) {
   for (const s of schafe) {
     if (s.istSpieler || !s.lebt || s.istWolf || s === taeter || s.meldet) continue;
     if (s.mensch) continue;   // (Mitspieler sehen selbst, was passiert)
-    if (dist(s, p) < (nebel ? 150 : 300) && sichtOk(s, p)) {
+    if (dist(s, p) < (nebel ? 150 : 300) && sichtOk(s, p) && !s.sicher.has(taeter)) {   // (Wer bewiesen hat, dass er ein Schaf ist: der darf das – Mäh-negeur!)
       s.verdacht = { wer: taeter, ort: naechsterOrt(p), grube: true };
       s.meldet = true;
       s.ziel = { x: GLOCKE.x, y: GLOCKE.y, ort: null }; s.warte = 0; s.amOrt = null;
@@ -1595,6 +1632,10 @@ function starteTreffen(melder, fund) {
         teile.push(v.wer.istSpieler && !mp.aktiv
           ? 'Ich hab gesehen, wie DU in eine Grube gesprungen bist! Das können nur Wölfe! 🕳️'
           : `Ich hab gesehen, wie ${v.wer.name} ${v.ort.bei} in eine Grube gesprungen ist! Das können nur Wölfe! 🕳️`);
+      } else if (v.keinLicht) {
+        teile.push(v.wer.istSpieler && !mp.aktiv
+          ? `DU warst ${v.ort.bei} bei „${v.ort.aufgabe}“ – aber nichts hat geleuchtet! Nur Wölfe tun so! 🤨`
+          : `${v.wer.name} war ${v.ort.bei} bei „${v.ort.aufgabe}“ – aber nichts hat geleuchtet! Nur Wölfe tun so! 🤨`);
       } else if (v.komisch) {
         teile.push(v.wer.istSpieler && !mp.aktiv
           ? `DU hast dich ${v.ort.bei} total komisch benommen! Verdächtig! 🤨`
@@ -1609,6 +1650,12 @@ function starteTreffen(melder, fund) {
           : `Ich hab gesehen, wie ${v.wer.name} sich ${v.ort.bei} an jemanden rangeschlichen hat! 😨`);
       }
       anklaeger.push(s);
+    }
+    // ✨ Wen hat es bei einer Beweis-Aufgabe gesehen?
+    if (!s.istWolf) for (const [b, nr] of s.sicher) {
+      if (!b.lebt || teile.length > 1) continue;
+      teile.push(b.istSpieler && !mp.aktiv ? `Ich hab DICH ${ORTE[nr].bei} leuchten sehen – du bist ein echtes Schaf! ✨` : `Ich hab ${b.name} ${ORTE[nr].bei} leuchten sehen – echtes Schaf! ✨`);
+      break;
     }
     if (!teile.length && s.rolle === 'ziege') {
       teile.push(zufall(['Hihi, vielleicht war ich\'s ja ... 😏', 'Ich sag nicht, wo ich war! 🙊', 'Määäck ... äh, ich meine: Mäh! 🐑']));
@@ -1669,6 +1716,7 @@ function abstimmen(wahl) {
       else if (r < 0.8) ziel = null;                     // Überspringen
       else ziel = zufall(andere);
     }
+    if (ziel && s.sicher && s.sicher.has(ziel) && !s.istWolf) ziel = null;   // ✨ Das ist ein echtes Schaf – das hab ich gesehen!
     stimmen.set(s, ziel);
   }
 
@@ -2656,6 +2704,7 @@ function aufgabeErledigt(nr) {
   if (mp.rolle === 'gast') mpSende({ t: 'aufgabe', nr });
   zeigeNachricht('✅ ' + ORTE[nr].aufgabe + ' geschafft!' + (jagdZ ? ` Sonnenaufgang ${JAGD_AUFGABE_ZEIT} s früher! ☀️` : ''), 2.5);
   if (jagdZ && mp.rolle !== 'gast') jagdAufgabeGeschafft(spieler);
+  if (mp.rolle !== 'gast') beweisAufgabe(spieler, nr);   // ✨ (Beim Gast rechnet das der Gastgeber)
   miniSpiel = null;
 }
 
@@ -3132,6 +3181,21 @@ function zeichneEffekt(e, pos) {
       ctx.globalAlpha = Math.min(1, e.t);
       text('💨', x, y - 10 - (0.8 - e.t) * 30, 34, '#fff', 'center', false);
       break;
+    case 'beweis': {   // ✨ Eine Lichtsäule von oben – das Schaf leuchtet!
+      const an = Math.min(1, (e.max - e.t) * 4, e.t * 1.5);
+      ctx.globalAlpha = an;
+      const g = ctx.createLinearGradient(0, y - 320, 0, y + 10);
+      g.addColorStop(0, 'rgba(255,240,150,0)'); g.addColorStop(0.6, 'rgba(255,240,150,0.45)'); g.addColorStop(1, 'rgba(160,255,190,0.8)');
+      ctx.fillStyle = g; ctx.fillRect(x - 32, y - 320, 64, 330);
+      ctx.strokeStyle = 'rgba(160,255,190,0.9)'; ctx.lineWidth = 4;
+      ellipse(x, y + 4, 36 + Math.sin(zeit * 8) * 4, 12); ctx.stroke();
+      for (let i = 0; i < 8; i++) {   // Glitzer, der nach oben schwebt
+        const h = ((zeit * 90 + i * 40) % 260), w = Math.sin(zeit * 3 + i) * 26;
+        text('✨', x + w, y - h, 14, '#fff', 'center', false);
+      }
+      text('✅ ECHTES SCHAF!', x, y - 78, 17, '#9bffb0');
+      break;
+    }
     case 'schild': {
       ctx.globalAlpha = Math.min(1, e.t);
       ctx.strokeStyle = '#8fd3ff'; ctx.lineWidth = 5;
@@ -3455,7 +3519,16 @@ function zeichneOrt(o) {
   }
   // Etwas Schnee auf Dächern im Winter
   if (KARTE.schnee && (o.bild === 'muehle')) { ctx.fillStyle = '#fff'; ctx.fillRect(x - 27, y - 194, 54, 8); }
-  text(o.name, x, y + o.labelY, 18, '#fff');
+  if (o.beweis) {   // ✨ Beweis-Aufgabe
+    const seit = zeit - (ortLeuchten[ORTE.indexOf(o)] ?? -99);
+    if (seit < 3) {
+      const a = Math.max(0, 1 - seit / 3);
+      const g = ctx.createRadialGradient(x, y - 110, 10, x, y - 110, 200);
+      g.addColorStop(0, `rgba(255,240,150,${0.7 * a})`); g.addColorStop(1, 'rgba(255,240,150,0)');
+      ctx.fillStyle = g; ellipse(x, y - 110, 200, 200); ctx.fill();
+    }
+    text(o.name + ' ✨', x, y + o.labelY, 18, '#fff4b0');
+  } else text(o.name, x, y + o.labelY, 18, '#fff');
 }
 
 function zeichneTanne(t) {
@@ -3879,7 +3952,7 @@ function zeichneHUD() {
   text('Deine Aufgaben:', 26, 96, 14, '#ffd166', 'left', false);
   spieler.alleAufgaben.forEach((i, n) => {
     const fertig = !spieler.aufgaben.includes(i);
-    text(`${fertig ? '✅' : '⬜'} ${ORTE[i].aufgabe}`, 26, 120 + n * 22, 13, fertig ? '#8f8' : '#fff', 'left', false);
+    text(`${fertig ? '✅' : '⬜'} ${ORTE[i].aufgabe}${ORTE[i].beweis ? ' ✨' : ''}`, 26, 120 + n * 22, 13, fertig ? '#8f8' : (ORTE[i].beweis ? '#fff4b0' : '#fff'), 'left', false);
   });
   }
   }
@@ -4891,7 +4964,9 @@ function d3SchafBauen() {
   const blase = d3Teil(g, new T.SphereGeometry(0.8, 16, 12), new T.MeshBasicMaterial({ color: '#8fd3ff', transparent: true, opacity: 0.18, depthWrite: false }), 0, 0.6, 0);
   const ring = d3Teil(g, new T.TorusGeometry(0.6, 0.05, 6, 24), new T.MeshBasicMaterial({ color: '#ffd166' }), 0, 0.05, 0); ring.rotation.x = Math.PI / 2;
   D3.szene.add(g);
-  return { g, woll, kopf, beine, label, blase, ring, auge, wolfTeile, key: '', winkel: 0, lx: null, ly: null };
+  const strahl = d3Teil(g, new T.CylinderGeometry(0.75, 0.75, 9, 20, 1, true), new T.MeshBasicMaterial({ color: '#fff3a0', transparent: true, opacity: 0.35, depthWrite: false, side: T.DoubleSide, fog: false }), 0, 4.5, 0);   // ✨ Beweis-Licht
+  strahl.visible = false;
+  return { g, woll, kopf, beine, label, blase, ring, auge, wolfTeile, strahl, key: '', winkel: 0, lx: null, ly: null };
 }
 function d3SchafZeigen(s) {
   let m = D3.schafe.get(s);
@@ -4899,6 +4974,8 @@ function d3SchafZeigen(s) {
   const sinkt = s.inGrube != null && zeit - (s.grubeStart ?? -9) < 0.6;   // 🕳️ Gerade reingesprungen: man sieht es noch versinken
   const zeigen = s !== spieler && s.lebt && (s.inGrube == null || sinkt) && !(s.unsichtbar > 0);
   m.g.visible = zeigen;
+  m.strahl.visible = beweisAktiv(s);   // ✨
+  if (m.strahl.visible) m.strahl.material.opacity = 0.25 + Math.sin(zeit * 8) * 0.1;
   if (m.lx === null) { m.lx = s.x; m.ly = s.y; }
   const dx = s.x - m.lx, dy = s.y - m.ly;
   if (Math.hypot(dx, dy) > 0.6) m.winkel = Math.atan2(dx, dy);   // Wohin läuft es? Dahin schaut es auch
@@ -5372,7 +5449,7 @@ function mpVomGast(g, d) {
     case 'pos': if (s.inGrube != null) break;   // (In der Grube bestimmt der Gastgeber, wo du bist)
       if (jagdZ && s.istWolf && jagdZ.phase === 'zaehlen') break;   // 🙈 Der Werwolf zählt noch!
       s.x = begrenzt(d.x, 50, WELT_B - 50); s.y = begrenzt(d.y, 60, WELT_H - 50); s.richtung = d.r; s.laeuft = !!d.l; if (s.laeuft) s.phase += 0.8; break;
-    case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; if (jagdZ) jagdAufgabeGeschafft(s); } break;
+    case 'aufgabe': if (s.lebt && s.aufgaben.includes(d.nr)) { s.aufgaben = s.aufgaben.filter(i => i !== d.nr); s.erledigt++; if (jagdZ) jagdAufgabeGeschafft(s); else beweisAufgabe(s, d.nr); } break;
     case 'melden': { const w = wolle[d.w]; if (zustand === 'spiel' && s.lebt && w && dist(s, w) < 130) starteTreffen(s, w); break; }
     case 'glocke': if (zustand === 'spiel' && s.lebt && !glockeGenutzt && dist(s, GLOCKE) < 120) { glockeGenutzt = true; starteTreffen(s, null); } break;
     case 'fressen': { const o = schafe[d.z]; if (zustand === 'spiel' && s.istWolf && s.lebt && s.cooldown <= 0 && o && o.lebt && !o.istWolf && dist(s, o) < 80) fressen(o, s); break; }
@@ -5509,6 +5586,7 @@ function mpVomHost(d) {
       zustand = 'cutscene';
       cutscene = { t: 0, art: 'gefressen', wolf: schafe[d.wolf] || spieler, variante: FRESS_ARTEN.includes(d.variante) ? d.variante : zufall(FRESS_ARTEN) };
       break;
+    case 'beweis': if (schafe[d.s] && ORTE[d.nr]) beweisZeigen(schafe[d.s], d.nr); break;   // ✨
     case 'treffen': {
       const neu = !treffen || zustand !== 'treffen';
       const lebende = d.leb.map(i => schafe[i]).filter(Boolean);
