@@ -111,11 +111,13 @@ const GEMUESE = {
 };
 // Nutztiere: brauchen ein Gehege! proMin = so viel geben sie pro Minute, frisst = so viel Futter (kg) pro Minute
 const TIERE = {
-  kuh: { name: 'Kühe', einzeln: 'Kuh', emoji: '🐄', preis: 1500, max: 6, produkt: 'milch', proMin: 30, frisst: 15, tempo: 0.7 },
-  schaf: { name: 'Schafe', einzeln: 'Schaf', emoji: '🐑', preis: 600, max: 8, produkt: 'wolle', proMin: 2, frisst: 6, tempo: 0.9 },
-  huhn: { name: 'Hühner', einzeln: 'Huhn', emoji: '🐔', preis: 50, max: 12, produkt: 'eier', proMin: 3, frisst: 1, tempo: 1.3 },
-  schwein: { name: 'Schweine', einzeln: 'Schwein', emoji: '🐖', preis: 800, max: 8, produkt: 'trueffel', proMin: 0.5, frisst: 8, tempo: 0.8 },   // Schweine finden Trüffel!
+  kuh: { name: 'Kühe', einzeln: 'Kuh', emoji: '🐄', preis: 1500, max: 6, produkt: 'milch', proMin: 30, frisst: 15, tempo: 0.7, baby: 'Kälbchen', babyEmoji: '🐮', zucht: 240, gross: 240 },
+  schaf: { name: 'Schafe', einzeln: 'Schaf', emoji: '🐑', preis: 600, max: 8, produkt: 'wolle', proMin: 2, frisst: 6, tempo: 0.9, baby: 'Lämmchen', babyEmoji: '🐑', zucht: 150, gross: 180 },
+  huhn: { name: 'Hühner', einzeln: 'Huhn', emoji: '🐔', preis: 50, max: 12, produkt: 'eier', proMin: 3, frisst: 1, tempo: 1.3, baby: 'Küken', babyEmoji: '🐤', zucht: 90, gross: 120 },
+  schwein: { name: 'Schweine', einzeln: 'Schwein', emoji: '🐖', preis: 800, max: 8, produkt: 'trueffel', proMin: 0.5, frisst: 8, tempo: 0.8, baby: 'Ferkel', babyEmoji: '🐷', zucht: 150, gross: 180 },   // Schweine finden Trüffel!
 };
+// 🍼 Nachwuchs: zucht = so viele Sekunden, bis 2 erwachsene Tiere ein Baby bekommen (mit Futter!) · gross = so lange wächst das Baby
+const ZUCHT_WINTER = 0.5;        // Im Winter gibt es nur halb so schnell Babys
 // Zum Metzger bringen: So viel Fleisch (kg) gibt jedes Tier. preis = so viel ist 1 kg wert (roh kann man es nicht verkaufen – erst verarbeiten!)
 const FLEISCH = {
   kuh: { k: 'rind', kurz: 'Rind', name: 'Rindfleisch', emoji: '🥩', kg: 60, preis: 8, grill: 'Steak vom Grill', poekel: 'Corned Beef' },
@@ -3317,7 +3319,7 @@ function baueTier(art) {
 }
 function gehegeEinrichten(b) {
   const A = GEBAEUDE_ARTEN[b.art];
-  b.geh = { tier: A.tier, R: A.r - 1.6, futter: 0, lager: 0, tiere: [], takt: 0, salz: 0 };
+  b.geh = { tier: A.tier, R: A.r - 1.6, futter: 0, lager: 0, tiere: [], takt: 0, salz: 0, zucht: 0, zuchtAus: false };
   b.schild = schild('', '#fff', 8); b.schild.position.set(b.x, 4.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
   gehegeSchild(b);
 }
@@ -3326,16 +3328,18 @@ function tierZahl(b, n) {   // So viele Tiere sollen im Gehege sein
   while (geh.tiere.length < n) {
     const t = baueTier(geh.tier), w = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * geh.R;
     t.x = b.x + Math.cos(w) * rr; t.z = b.z + Math.sin(w) * rr; t.zx = t.x; t.zz = t.z; t.warte = Math.random() * 3; t.phase = 0;
-    t.g.position.set(t.x, 0, t.z); t.g.rotation.y = Math.random() * 6;
+    t.g.position.set(t.x, 0, t.z); t.g.rotation.y = Math.random() * 6; t.jung = 1;   // jung: 1 = erwachsen, kleiner = Baby
     scene.add(t.g); geh.tiere.push(t); b.extra.push(t.g);
   }
   while (geh.tiere.length > n) { const t = geh.tiere.pop(); scene.remove(t.g); }
 }
+const babyZahl = geh => geh.tiere.filter(t => t.jung < 1).length;
+const erwachsenZahl = geh => geh.tiere.length - babyZahl(geh);
 function gehegeSchild(b) {
-  const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length;
+  const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt], n = geh.tiere.length, babys = babyZahl(geh);
   if (!n) { b.schild.userData.malen(`${T.emoji} Leer – P drücken`, '#b9f5a0'); return; }
   const hunger = geh.futter <= 0;
-  b.schild.userData.malen(`${T.emoji} ${n} · ${P.emoji} ${Math.floor(geh.lager)} ${P.einheit}${hunger ? ' · ⚠️ Hunger!' : geh.salz > 0 ? ' · 🧂×2' : ''}`, hunger ? '#ff9a6b' : '#ffd166');
+  b.schild.userData.malen(`${T.emoji} ${n - babys}${babys ? ` ${T.babyEmoji} ${babys}` : ''} · ${P.emoji} ${Math.floor(geh.lager)} ${P.einheit}${hunger ? ' · ⚠️ Hunger!' : geh.salz > 0 ? ' · 🧂×2' : ''}`, hunger ? '#ff9a6b' : '#ffd166');
 }
 const tierLaute = {
   kuh: l => tonGleiten(150, 105, 0, 1.3, 'sawtooth', 0.05 * l),
@@ -3376,14 +3380,34 @@ function gebUpdate(dt) {
       if (b.gh.takt <= 0 || b.gh.w >= 1) { b.gh.takt = 0.5; ghMalen(b); }
     }
     if (b.geh) {
-      const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length;
-      // Fressen und Milch/Wolle/Eier geben (nur wenn Futter da ist!). Das Lager fasst so viel wie 10 Minuten.
+      const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length, gross = erwachsenZahl(geh);
+      // Fressen und Milch/Wolle/Eier geben (nur wenn Futter da ist!). Das Lager fasst so viel wie 10 Minuten. Babys fressen nur halb so viel und geben noch nichts.
       const boost = geh.salz > 0 ? 2 : 1;   // Mit Salzstein: doppelt so viel!
       if (geh.salz > 0) geh.salz = Math.max(0, geh.salz - dt);
       b.mesh.userData.salz.visible = geh.salz > 0;
       if (n && geh.futter > 0) {
-        geh.futter = Math.max(0, geh.futter - n * T.frisst * dt / 60);
-        geh.lager = Math.min(n * T.proMin * 20, geh.lager + n * T.proMin * boost * dt / 60);
+        geh.futter = Math.max(0, geh.futter - (gross + (n - gross) * 0.5) * T.frisst * dt / 60);
+        geh.lager = Math.min(Math.max(1, gross) * T.proMin * 20, geh.lager + gross * T.proMin * boost * dt / 60);
+        // Babys wachsen (nur mit Futter)
+        for (const t of geh.tiere) if (t.jung < 1) {
+          t.jung = Math.min(1, t.jung + dt / T.gross);
+          if (t.jung >= 1 && Math.hypot(wo().x - b.x, wo().z - b.z) < 40) meldung(`${T.emoji} Ein ${T.baby} ist groß geworden! Jetzt gibt es auch ${PRODUKTE[T.produkt].name}.`, 3);
+        }
+        // Nachwuchs: mindestens 2 erwachsene Tiere, noch Platz im Gehege, Futter da (macht nur der Gastgeber)
+        if (gross >= 2 && n < T.max && !geh.zuchtAus && (!mp.aktiv || mp.rolle === 'host')) {
+          geh.zucht += dt * (jahreszeit().zeit === 'winter' ? ZUCHT_WINTER : 1) * (geh.salz > 0 ? 1.5 : 1) * Math.min(2, gross / 2);
+          if (geh.zucht >= T.zucht) {
+            geh.zucht = 0;
+            tierZahl(b, n + 1);
+            const baby = geh.tiere[geh.tiere.length - 1]; baby.jung = 0.02;
+            gebSenden(b); gehegeSchild(b); speichern();
+            const nah = Math.max(0, 1 - Math.hypot(wo().x - b.x, wo().z - b.z) / 60);
+            meldung(`🍼 Juhu! In der ${GEBAEUDE_ARTEN[b.art].name} ist ein ${T.baby} ${T.babyEmoji} geboren!`, 4);
+            [784, 988, 1175, 1568].forEach((f, k) => ton(f, k * 0.1, 0.18, 'triangle', 0.05));
+            if (nah > 0.05) tierLaute[geh.tier](nah);
+            for (let k = 0; k < 3; k++) herzchen(baby.x, 1 + k * 0.2, baby.z);
+          }
+        }
       }
       const trog = b.mesh.userData.trog;
       trog.visible = geh.futter > 0; trog.scale.y = 0.3 + 2 * geh.futter / FUTTER_MAX;
@@ -3397,13 +3421,14 @@ function gebUpdate(dt) {
             const w = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * geh.R;
             t.zx = b.x + Math.cos(w) * rr; t.zz = b.z + Math.sin(w) * rr;
           } else {
-            const v = Math.min(l, T.tempo * dt);
+            const v = Math.min(l, T.tempo * (t.jung < 1 ? 1.3 : 1) * dt);
             t.x += dx / l * v; t.z += dz / l * v;
             t.g.rotation.y = Math.atan2(-dx, -dz);
             t.phase += dt * 8;
           }
         }
         t.g.position.set(t.x, 0, t.z);
+        t.g.scale.setScalar(0.45 + 0.55 * t.jung);   // Babys sind klein
         t.beine.forEach((bn, k) => { bn.rotation.x = Math.sin(t.phase + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI : 0)) * 0.45 * Math.min(1, t.phase); });
       }
       // Ab und zu macht ein Tier "Muh", "Mäh" oder "Gack" (wenn du in der Nähe bist)
@@ -3417,7 +3442,8 @@ function gebUpdate(dt) {
 function gebDaten(b) {
   if (b.obst) return { o: Math.round(b.obst.w * 1000) / 1000 };
   if (b.gh) return { a: b.gh.art, w: Math.round(b.gh.w * 1000) / 1000 };
-  if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10, s: Math.round(b.geh.salz) };
+  if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10, s: Math.round(b.geh.salz),
+    j: b.geh.tiere.map(t => Math.round(t.jung * 100) / 100), z: Math.round(b.geh.zucht), za: b.geh.zuchtAus ? 1 : 0 };
   if (b.teich) return { t: Math.round(b.teich.fische * 100) / 100 };
   if (b.wald) return { wa: b.wald.w.map(w => Math.round(w * 100) / 100) };
   if (b.biene) return { hn: Math.round(b.biene.lager * 10) / 10 };
@@ -3429,7 +3455,13 @@ function gebDatenSetzen(b, d) {
   if (!d) return;
   if (b.obst) { b.obst.w = d.o || 0; obstMalen(b); }
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
-  if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0; gehegeSchild(b); }
+  if (b.geh) {
+    tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0;
+    if (Array.isArray(d.j)) b.geh.tiere.forEach((t, k) => { if (typeof d.j[k] === 'number') t.jung = d.j[k]; });
+    if (typeof d.z === 'number') b.geh.zucht = d.z;
+    b.geh.zuchtAus = !!d.za;
+    gehegeSchild(b);
+  }
   if (b.teich) { b.teich.fische = d.t ?? TEICH_FISCHE_MAX; teichSchild(b); }
   if (b.silo && typeof d.roh === 'number') { b.silo.roh = Math.min(d.roh, b.silo.inhalt); b.silo.rohBasis = b.silo.roh; siloSchild(b.silo); }
   if (b.biene && typeof d.hn === 'number') { b.biene.lager = d.hn; bienenSchild(b); }
@@ -3483,9 +3515,11 @@ function panelStatus() {   // Der Text oben im Menü (wird ständig neu geschrie
   const b = panelGeb;
   if (b.gh) { const G = GEMUESE[b.gh.art]; return G ? (b.gh.w >= 1 ? `${G.emoji} ${G.name} sind reif!` : `${G.emoji} ${G.name} wachsen: ${Math.floor(b.gh.w * 100)} %`) : 'Das Gewächshaus ist leer. Was willst du anbauen?'; }
   const geh = b.geh, T = TIERE[geh.tier], P = PRODUKTE[T.produkt];
-  return `${T.emoji} ${geh.tiere.length} von ${T.max} ${T.name} · 🌾 Futter: ${kg(geh.futter)} · ${P.emoji} ${P.name}: ${Math.floor(geh.lager)} ${P.einheit}${geh.salz > 0 ? ` · 🧂 Salz-Boost ×2 noch ${minSek(geh.salz)}` : ''}${geh.futter <= 0 && geh.tiere.length ? ' · ⚠️ Die Tiere haben Hunger!' : ''}`;
+  const babys = babyZahl(geh), gross = geh.tiere.length - babys;
+  const zucht = geh.zuchtAus ? '🍼 Nachwuchs: aus' : geh.tiere.length >= T.max ? '🍼 Gehege voll – kein Platz für Babys' : gross < 2 ? `🍼 Für Babys brauchst du 2 erwachsene ${T.name}` : geh.futter <= 0 ? '🍼 Ohne Futter keine Babys' : `🍼 Nächstes ${T.baby}: ${Math.floor(geh.zucht / T.zucht * 100)} %`;
+  return `${T.emoji} ${gross} ${T.name}${babys ? ` + ${T.babyEmoji} ${babys} ${T.baby}` : ''} (Platz für ${T.max}) · ${zucht} · 🌾 Futter: ${kg(geh.futter)} · ${P.emoji} ${P.name}: ${Math.floor(geh.lager)} ${P.einheit}${geh.salz > 0 ? ` · 🧂 Salz-Boost ×2 noch ${minSek(geh.salz)}` : ''}${geh.futter <= 0 && geh.tiere.length ? ' · ⚠️ Die Tiere haben Hunger!' : ''}`;
 }
-const panelZustandJetzt = b => b.gh ? `${b.gh.art}-${b.gh.w >= 1}` : `${b.geh.tiere.length}-${Math.floor(b.geh.lager) > 0}-${Math.round(b.geh.futter / 50)}-${money}-${salzsteine}`;
+const panelZustandJetzt = b => b.gh ? `${b.gh.art}-${b.gh.w >= 1}` : `${b.geh.tiere.length}-${b.geh.zuchtAus}-${Math.floor(b.geh.lager) > 0}-${Math.round(b.geh.futter / 50)}-${money}-${salzsteine}`;
 function panelMalen() {
   const b = panelGeb, A = GEBAEUDE_ARTEN[b.art], box = $('hofpanelInhalt');
   $('hofpanelTitel').textContent = `${A.emoji} ${A.name}`;
@@ -3508,6 +3542,7 @@ function panelMalen() {
     knopf(box, `🧺 Einsammeln: ${Math.floor(geh.lager)} ${P.einheit} ${P.name}`, geh.lager >= 1, () => einsammeln(b));
     const FL = FLEISCH[geh.tier];
     if (FL) knopf(box, `🔪 1 ${T.einzeln} zum Metzger bringen → ${FL.kg} kg ${FL.emoji} ${FL.name}`, n > 0, () => zumMetzger(b));
+    knopf(box, geh.zuchtAus ? `🍼 Nachwuchs ist AUS – wieder anschalten` : `🍼 Nachwuchs ist AN – ausschalten (keine Babys mehr)`, true, () => { geh.zuchtAus = !geh.zuchtAus; gebSenden(b); speichern(); panelMalen(); });
     knopf(box, `🧂 Salzstein hinlegen → ×2 für 10 Min. (du hast ${salzsteine})`, salzsteine > 0, () => salzHinlegen(b));
     knopf(box, `🌾 1.000 kg Futter kaufen (${euro(1000 * FUTTER_PREIS)})`, geh.futter < FUTTER_MAX - 1 && money >= 1000 * FUTTER_PREIS, () => futterKaufen(b));
     const tipp = document.createElement('div'); tipp.className = 'klein'; tipp.style.marginTop = '6px';
