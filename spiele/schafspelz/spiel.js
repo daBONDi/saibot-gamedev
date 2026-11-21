@@ -398,6 +398,9 @@ const sound = {
     const g = a.createGain(); g.gain.value = 0.35;
     q.connect(f); f.connect(g); g.connect(a.destination); q.start();
   },
+  // 🚀 Klopf-klopf an die Glastür, und PLING! (ganz weit weg im All)
+  klopf() { ton(180, 0, 0.06, 'square', 0.18, 120); ton(180, 0.18, 0.06, 'square', 0.18, 120); },
+  pling() { ton(2093, 0, 0.5, 'sine', 0.12); ton(2637, 0.08, 0.6, 'sine', 0.08); },
   // ✨ Beweis-Aufgabe: hell glitzernder Akkord
   beweis() { [523, 659, 784, 1047, 1319].forEach((h, i) => ton(h, i * 0.07, 0.6, 'triangle', 0.09)); },
   // Plumps in die Grube
@@ -2112,19 +2115,25 @@ function updateCutscene(dt) {
     if (c.t > 8) endeCutscene();
     return;
   }
-  const wann = KARTE.weltall ? 3.0 : 2.0;   // 🚀 Im All wird erst draußen enttarnt
+  const wann = KARTE.weltall ? RW.enttarnt : 2.0;   // 🚀 Im All wird erst draußen enttarnt
+  const v = KARTE.weltall ? RW.text : 0;            // (Fanfare kommt im All später)
   if (KARTE.weltall) {
-    if (ab(0.5)) sound.schleuseZu();
-    if (ab(1.2)) sound.alarm();
-    if (ab(2.0)) sound.zisch();
+    if (ab(0.2)) sound.trippel();
+    if (ab(RW.rein)) sound.schleuseZu();
+    for (const z of [0, 1.2]) if (ab(RW.zu + z)) sound.klopf();
+    for (let i = 0; i < 3; i++) if (ab(RW.zu + i * (RW.auf - RW.zu) / 3)) sound.piep();
+    if (ab(RW.zu + 0.1)) sound.alarm();
+    if (ab(RW.auf)) sound.zisch();
+    if (ab(RW.draussen + 0.4) && !c.raus.istWolf && c.raus.rolle !== 'ziege') sound.huuu();
+    if (ab(RW.pling)) sound.pling();
   } else if (ab(0.8)) sound.trippel();
   if (ab(wann) && c.raus.istWolf) sound.knurren();
   if (ab(wann) && c.raus.rolle === 'ziege') sound.meckern();
-  if (ab(4.0)) {
+  if (ab(4.0 + v)) {
     const gut = c.raus.rolle === 'ziege' ? c.raus.istSpieler : (spieler.rolle !== 'ziege' && c.raus.istWolf !== spielerIstWolf);
     if (gut) sound.fanfare(); else sound.traurig();
   }
-  if (c.t > 8) endeCutscene();
+  if (c.t > (KARTE.weltall ? RW.ende : 8)) endeCutscene();
 }
 
 // Wo ist das verjagte Schaf gerade?
@@ -2530,10 +2539,18 @@ function zeichneSternenhimmel(verschieben) {
   ctx.globalAlpha = 1;
 }
 
+// ⏱️ Ablauf (Sekunden):
+//   0.0  Das Schaf geht traurig in die Luftschleuse
+//   1.8  Die Glastür geht zu – das Schaf dreht sich um
+//   2.6  Klopf, klopf! Countdown 3 … 2 … 1, Alarm
+//   5.0  Die Außentür geht auf – SSSSST!
+//   5.6  Draußen: Das Schaf trudelt ins All (Wolf? Dann fliegt die Wolle weg!)
+//  11.0  Ganz weit weg: PLING! ✨ – und weg ist es
+const RW = { rein: 1.8, zu: 2.6, auf: 5.0, draussen: 5.6, enttarnt: 6.4, pling: 11.0, ende: 14, text: 3.4 };
 function zeichneLuftschleusenRauswurf(c) {
   const t = c.t, r = c.raus;
   const istBoese = r.istWolf || r.rolle === 'ziege';
-  if (t < 2.6) {
+  if (t < RW.draussen) {
     // ----- Teil 1: In der Luftschleuse -----
     zeichneSternenhimmel(0);
     ctx.fillStyle = '#4a5262'; ctx.fillRect(0, 0, W, H);                // Wand vom Raumschiff
@@ -2541,47 +2558,60 @@ function zeichneLuftschleusenRauswurf(c) {
     ctx.strokeStyle = '#3a4150'; ctx.lineWidth = 3;
     for (let x = 0; x < 820; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 560); ctx.stroke(); }
     ctx.fillStyle = '#2b3242'; ctx.fillRect(470, 230, 350, 330);         // Die Schleusen-Kammer
-    const alarm = t > 1.2;
+    const alarm = t > RW.zu;
     if (alarm && Math.floor(t * 6) % 2 === 0) { ctx.fillStyle = 'rgba(255,40,40,0.25)'; ctx.fillRect(470, 230, 350, 330); }
     ctx.fillStyle = alarm ? (Math.floor(t * 6) % 2 ? '#ff3b3b' : '#661515') : '#4ade80'; ellipse(645, 215, 22, 12); ctx.fill();   // Warnlampe
     ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 10; ctx.setLineDash([20, 14]); ctx.beginPath(); ctx.moveTo(470, 556); ctx.lineTo(820, 556); ctx.stroke(); ctx.setLineDash([]);
 
-    // Außentür (rechts) geht ab 2.0 s auf – dahinter das All
-    const auf = begrenzt((t - 2.0) / 0.3, 0, 1);
+    // Countdown-Bildschirm über der Schleuse
+    ctx.fillStyle = '#111622'; rundesRechteck(560, 60, 170, 90, 10); ctx.fill();
+    ctx.strokeStyle = '#9aa4b5'; ctx.lineWidth = 4; rundesRechteck(560, 60, 170, 90, 10); ctx.stroke();
+    if (t < RW.zu) text('SCHLEUSE', 645, 105, 22, '#4ade80', 'center', false);
+    else if (t < RW.auf) { const zahl = 3 - Math.floor((t - RW.zu) / ((RW.auf - RW.zu) / 3)); text(String(Math.max(1, zahl)), 645, 105, 58, '#ff6b6b', 'center', false); }
+    else text('OFFEN!', 645, 105, 30, '#ff3b3b', 'center', false);
+
+    // Außentür (rechts) geht auf – dahinter das All
+    const auf = begrenzt((t - RW.auf) / 0.3, 0, 1);
     ctx.fillStyle = '#05060f'; ctx.fillRect(820, 230, 30, 330);
     ctx.fillStyle = '#9aa4b5'; ctx.fillRect(820, 230 - auf * 330, 30, 330);
     ctx.fillStyle = '#05060f'; ctx.fillRect(850, 230, W - 850, 330 * auf);   // Loch ins All
     if (auf > 0) { ctx.fillStyle = '#fff'; for (let i = 0; i < 12; i++) ctx.fillRect(855 + (i * 37) % 100, 240 + (i * 61) % 300 * auf, 2, 2); }
 
-    // Das Schaf in der Schleuse
-    let sx = 645 + Math.sin(t * 40) * (t < 0.8 ? 2 : 0), sy = 520, dreh = 0, gr = 1.5;
-    if (t > 2.0) { const k = (t - 2.0) / 0.6; sx += k * k * 500; sy -= k * 60; dreh = k * 5; }
-    // Wind-Striche, wenn alles rausgesaugt wird
-    if (t > 2.0) {
+    // Das Schaf: erst reinlaufen, dann umdrehen, zittern, klopfen ... und weg!
+    let sx = 645, sy = 520, dreh = 0, richtung = 1, laeuft = false;
+    if (t < RW.rein) { const k = t / RW.rein; sx = 380 + k * 265; laeuft = true; }
+    else if (t < RW.auf) { richtung = -1; sx += Math.sin(t * 40) * (t > RW.zu + 1.2 ? 2.5 : 0.8); }   // schaut zurück zur Herde und zittert
+    if (t > RW.auf) { const k = (t - RW.auf) / (RW.draussen - RW.auf); sx += k * k * 500; sy -= k * 60; dreh = k * 5; laeuft = true; }
+    // Klopf, klopf!
+    const klopf = t > RW.zu && t < RW.auf - 0.6 && (t - RW.zu) % 1.2 < 0.35;
+    if (klopf) sx -= 14;
+    if (t > RW.auf) {   // Wind-Striche, wenn alles rausgesaugt wird
       ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3;
       for (let i = 0; i < 9; i++) { const y = 260 + i * 34, x = 480 + ((t * 900 + i * 97) % 340); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 50, y); ctx.stroke(); }
     }
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(dreh);
-    zeichneSchafKoerper(0, 0, r.farbe, 1, t * 14, t > 2.0, gr);
+    zeichneSchafKoerper(0, 0, r.farbe, richtung, t * 14, laeuft, 1.5);
     ctx.restore();
-    if (t < 2.0) text(r.name, sx, sy - 75, 18, r.istSpieler ? '#ffd166' : '#fff');
-    if (t > 2.0 && t < 2.6) text('SSSSSST!', 690, 300, 40 + (t - 2.0) * 30, '#7df9ff');
+    if (t < RW.auf) text(r.name, sx, sy - 75, 18, r.istSpieler ? '#ffd166' : '#fff');
+    if (klopf) text('KLOPF!', sx - 60, sy - 110, 20, '#ffd166');
+    if (t > RW.zu + 0.4 && t < RW.auf) text(t < RW.zu + 1.3 ? 'Lasst mich rein! 😢' : 'Määäh?! 😰', sx, sy - 140, 17, '#fff');
+    if (t > RW.auf && t < RW.draussen) text('SSSSSST!', 690, 300, 40 + (t - RW.auf) * 30, '#7df9ff');
 
     // Innentür aus Glas (links) geht zu – die Herde schaut durch
-    const zu = begrenzt((t - 0.5) / 0.6, 0, 1);
+    const zu = begrenzt((t - RW.rein) / 0.6, 0, 1);
     ctx.fillStyle = 'rgba(160,230,255,0.25)'; ctx.fillRect(462, 230, 16, 330 * zu);
     ctx.fillStyle = '#9aa4b5'; ctx.fillRect(462, 230 + 330 * zu - 10, 16, 10);
     ctx.strokeStyle = '#9aa4b5'; ctx.lineWidth = 6; ctx.strokeRect(462, 230, 16, 330);
-    const abstand = Math.min(55, 400 / Math.max(1, c.herde.length));
+    const abstand = Math.min(55, 380 / Math.max(1, c.herde.length));
     c.herde.forEach((s, i) => {
-      const x = 40 + i * abstand, y = 530 + (i % 2) * 22;
+      const x = 30 + i * abstand, y = 530 + (i % 2) * 22;
       zeichneSchafKoerper(x, y, s.farbe, 1, 0, false, 1);
       if (s.istSpieler) text('DU', x, y - 35, 13, '#ffd166');
     });
-    if (alarm) text('⚠️ LUFTSCHLEUSE ÖFFNET SICH ⚠️', 645, 180, 20, Math.floor(t * 6) % 2 ? '#ff6b6b' : '#ffd166');
+    if (alarm && t < RW.auf) text('⚠️ LUFTSCHLEUSE ÖFFNET SICH ⚠️', 645, 185, 18, Math.floor(t * 6) % 2 ? '#ff6b6b' : '#ffd166');
   } else {
     // ----- Teil 2: Draußen im All -----
-    const k = t - 2.6;
+    const k = t - RW.draussen, dauer = RW.pling - RW.draussen;
     zeichneSternenhimmel(k * 40);
     // Ein Planet
     ctx.strokeStyle = 'rgba(255,220,160,0.7)'; ctx.lineWidth = 6;
@@ -2589,12 +2619,22 @@ function zeichneLuftschleusenRauswurf(c) {
     ctx.fillStyle = '#e07b39'; ellipse(820, 470, 120, 120); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.18)'; ellipse(790, 440, 100, 18); ctx.fill(); ellipse(830, 500, 110, 14); ctx.fill();
     ctx.beginPath(); ctx.ellipse(820, 470, 190, 34, -0.25, 0, Math.PI); ctx.stroke();   // Ring vorne
+    // Ein Komet saust vorbei
+    if (k > 2.2 && k < 4.2) {
+      const f = (k - 2.2) / 2, kx = -50 + f * 1100, ky = 80 + f * 120;
+      const g = ctx.createLinearGradient(kx - 160, ky - 30, kx, ky);
+      g.addColorStop(0, 'rgba(125,249,255,0)'); g.addColorStop(1, 'rgba(125,249,255,0.8)');
+      ctx.strokeStyle = g; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(kx - 160, ky - 30); ctx.lineTo(kx, ky); ctx.stroke();
+      ctx.fillStyle = '#e8fbff'; ellipse(kx, ky, 9, 9); ctx.fill();
+    }
     // Das Raumschiff (links) – fliegt langsam weiter
     const rx = 10 - k * 25;
     ctx.fillStyle = '#9aa4b5';
     ctx.beginPath(); ctx.moveTo(rx, 330); ctx.lineTo(rx + 300, 330); ctx.quadraticCurveTo(rx + 400, 400, rx + 300, 470); ctx.lineTo(rx, 470); ctx.fill();
     ctx.fillStyle = '#5b6474'; ctx.fillRect(rx + 120, 300, 120, 30); ctx.fillRect(rx + 120, 470, 120, 30);   // Flügel
     ctx.fillStyle = '#05060f'; ctx.fillRect(rx + 330, 375, 12, 50);   // offene Schleuse
+    const flamme = 20 + Math.sin(zeit * 30) * 6;   // Triebwerk
+    ctx.fillStyle = '#ffb347'; dreieck(rx, 370, rx, 430, rx - flamme * 2, 400);
     text('MÄH', rx + 200, 455, 16, '#c0392b', 'center', false);
     // Die Herde schaut aus den Bullaugen
     const n = Math.min(5, c.herde.length);
@@ -2606,25 +2646,35 @@ function zeichneLuftschleusenRauswurf(c) {
       ctx.fillStyle = '#2b2b2b'; ellipse(bx + 2, by + 4, 6, 6); ctx.fill();
       if (c.herde[i].istSpieler) text('DU', bx, by - 30, 12, '#ffd166');
     }
-    // Das Schaf trudelt davon (immer kleiner, dreht sich)
-    const f = Math.min(1, k / 5);
-    const px = 330 + f * 420 + Math.sin(k * 2) * 20, py = 400 - f * 260 + Math.cos(k * 1.7) * 15, gr = 1.3 - f * 1.0;
-    ctx.save(); ctx.translate(px, py); ctx.rotate(k * 2.2);
-    if (istBoese && k > 0.6) text(r.istWolf ? '🐺' : '🐐', 0, 0, 60 * gr, '#fff', 'center', false);
-    else zeichneSchafKoerper(0, 0, r.farbe, 1, k * 20, true, gr);
-    ctx.restore();
-    // Enttarnt: Die Wolle fliegt in alle Richtungen weg!
-    if (istBoese && k > 0.4) {
-      const w = k - 0.4;
-      ctx.fillStyle = r.farbe;
-      for (let i = 0; i < 12; i++) { ellipse(px + Math.cos(i * 0.52) * w * 110, py + Math.sin(i * 0.52) * w * 110, 7, 7); ctx.fill(); }
+    // Das Schaf trudelt davon – in einer Kurve am Planeten vorbei, immer kleiner
+    const f = Math.min(1, k / dauer), weg = 1 - Math.pow(1 - f, 1.6);
+    const px = 330 + weg * 380 + Math.sin(k * 1.6) * 30 * (1 - f), py = 400 - weg * 120 + Math.cos(k * 1.3) * 25 * (1 - f), gr = Math.max(0.03, 1.4 - weg * 1.37);
+    if (t < RW.pling) {
+      ctx.save(); ctx.translate(px, py); ctx.rotate(k * 2.2);
+      if (istBoese && t > RW.enttarnt) text(r.istWolf ? '🐺' : '🐐', 0, 0, 60 * gr, '#fff', 'center', false);
+      else zeichneSchafKoerper(0, 0, r.farbe, 1, k * 20, true, gr);
+      ctx.restore();
+      if (k > 0.3 && k < 2.4) text(istBoese ? 'Auuuuu! 🐺' : 'Määääääh!', px + 50 * gr, py - 70 * gr, 20, '#fff');
     }
-    if (!istBoese && k > 1) text('😵', px + 30 * gr, py - 40 * gr, 22, '#fff', 'center', false);
+    // Enttarnt: Die Wolle fliegt in alle Richtungen weg!
+    if (istBoese && t > RW.enttarnt - 0.2 && t < RW.enttarnt + 2) {
+      const w = t - RW.enttarnt + 0.2;
+      ctx.fillStyle = r.farbe;
+      for (let i = 0; i < 12; i++) { ellipse(px + Math.cos(i * 0.52) * w * 110, py + Math.sin(i * 0.52) * w * 110, 7 * (1 - w / 2.2), 7 * (1 - w / 2.2)); ctx.fill(); }
+    }
+    if (!istBoese && k > 1 && t < RW.pling) text('😵', px + 30 * gr, py - 40 * gr, 22, '#fff', 'center', false);
+    // PLING! Ganz weit weg ein kleiner Stern
+    if (t > RW.pling - 0.05 && t < RW.pling + 1.2) {
+      const s2 = t - RW.pling, gr2 = s2 < 0.25 ? s2 * 4 : Math.max(0, 1 - (s2 - 0.25));
+      ctx.save(); ctx.translate(px, py); ctx.rotate(s2 * 3); ctx.fillStyle = '#fff8c0';
+      for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); dreieck(-4 * gr2, 0, 4 * gr2, 0, 0, -26 * gr2); }
+      ctx.restore();
+    }
   }
 }
 
 function zeichneRauswurfText(c) {
-  const t = c.t, r = c.raus;
+  const t = c.t - (KARTE.weltall ? RW.text : 0), r = c.raus;   // 🚀 Im Raumschiff kommt der Text später (die Animation ist länger)
   // Text, Buchstabe für Buchstabe
   if (t > 4) {
     let zeile1;
