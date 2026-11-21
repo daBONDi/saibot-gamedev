@@ -1889,6 +1889,29 @@ function baueGebaeudeMesh(art) {
     for (let k = 0; k < 4; k++) {   // Würste hängen zum Räuchern
       const w = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.35, 4, 8), mat(0x9a3a24)); w.position.set(1.0, 1.82, -0.3 + k * 0.2); w.castShadow = true; g.add(w);
     }
+  } else if (art === 'fahrsilo') {   // Silagesilo: Betonboden, zwei hohe Wände, vorne und hinten offen (zum Durchfahren!)
+    const beton = mat(0xa8a49a, { roughness: 1 });
+    kasten(g, 0, 0.08, 0, 10.6, 0.16, 18, beton);                                   // Boden
+    for (const sx of [-1, 1]) {
+      kasten(g, sx * 5.1, 1.4, 0, 0.4, 2.8, 18, beton);                             // Wand
+      for (let k = 0; k < 6; k++) kasten(g, sx * 5.31, 1.4, -7.5 + k * 3, 0.04, 2.8, 0.06, 0x8a867c, false);   // Fugen zwischen den Betonteilen
+      kasten(g, sx * 5.1, 2.83, 0, 0.42, 0.06, 18, 0xffd166, false);                // Gelbe Kante oben
+    }
+    // Der Haufen: von der Seite ein Trapez (vorne und hinten schräg – da fährst du hoch!), 1 Meter hoch – wird mit scale.y größer
+    const form = new THREE.Shape([new THREE.Vector2(-8.4, 0), new THREE.Vector2(8.4, 0), new THREE.Vector2(5.4, 1), new THREE.Vector2(-5.4, 1)]);
+    const haufenGeo = new THREE.ExtrudeGeometry(form, { depth: 9.4, bevelEnabled: false });
+    haufenGeo.translate(0, 0, -4.7); haufenGeo.rotateY(Math.PI / 2);
+    const haufen = new THREE.Mesh(haufenGeo, mat(GUETER.haeckselgut.farbe, { roughness: 1, flatShading: true }));
+    haufen.position.y = 0.16; haufen.receiveShadow = true; haufen.castShadow = true; haufen.visible = false; g.add(haufen);
+    const folie = new THREE.Mesh(haufenGeo, mat(0x1a1a1a, { roughness: 0.35, metalness: 0.1 }));   // Schwarze Silofolie
+    folie.position.y = 0.16; folie.scale.set(1.02, 1, 1.02); folie.visible = false; g.add(folie);
+    const reifen = new THREE.Group(); reifen.visible = false; g.add(reifen);       // Alte Autoreifen halten die Folie fest
+    const reifenGeo = new THREE.TorusGeometry(0.32, 0.13, 6, 14);
+    for (let k = 0; k < 12; k++) {
+      const r = new THREE.Mesh(reifenGeo, mat(0x161616)); r.rotation.x = Math.PI / 2;
+      r.position.set(-3 + (k % 3) * 3, 0.1, -4.5 + Math.floor(k / 3) * 3); r.castShadow = true; reifen.add(r);
+    }
+    g.userData.fs = { haufen, folie, reifen };
   } else if (GEBAEUDE_ARTEN[art].tier) {   // Ein rundes Gehege mit Holzzaun, Unterstand und Futtertrog
     const R = GEBAEUDE_ARTEN[art].r - 0.3, huhn = art === 'huehnerhof';
     const boden = new THREE.Mesh(new THREE.CircleGeometry(R, 32), mat(huhn ? 0x9b7b4a : 0x5f8f3a));
@@ -1944,10 +1967,145 @@ function gebaeudeHinzu(art, x, z, rot, inhalt = 0, daten = null) {
   if (OBST[art]) obstEinrichten(b);
   if (art === 'teich') teichEinrichten(b);
   if (GEBAEUDE_ARTEN[art].holz) waldPlotEinrichten(b);
+  if (art === 'fahrsilo') fahrsiloEinrichten(b);
   if (art === 'werkbank') { b.werkbank = true; b.schild = schild('🛠️ Werkbank · P', '#ffd166', 5); b.schild.position.set(x, 2.9, z); scene.add(b.schild); b.extra.push(b.schild); }
   if (art === 'teich' || art === 'gewaechshaus') grasWeg(x, z, GEBAEUDE_ARTEN[art].r + 0.3);
   if (daten) gebDatenSetzen(b, daten);
   gebaute.push(b);
+}
+
+// ===== Silagesilo: Häckselgut abladen (L) → festfahren → abdecken (P) → gären lassen → Silage! =====
+function fahrsiloEinrichten(b) {
+  b.fs = { inhalt: 0, fest: 0, zu: false, gaer: 0, fertig: false, takt: 0, geaendert: false };
+  b.h.r = -100;   // Man kann hineinfahren! Nur die Wände sind im Weg:
+  b.hx = [];
+  const c = Math.cos(b.rot), sn = Math.sin(b.rot);
+  for (const lx of [-5.1, 5.1]) for (let lz = -9; lz <= 9.01; lz += 1.5) {
+    const h = { x: b.x + lx * c + lz * sn, z: b.z - lx * sn + lz * c, r: 0.45 };
+    hindernisse.push(h); b.hx.push(h);
+  }
+  b.schild = schild('', '#fff', 8); b.schild.position.set(b.x, 5.2, b.z); scene.add(b.schild); b.extra.push(b.schild);
+  fahrsiloMalen(b);
+}
+function fahrsiloLokal(b, x, z, v = { x: 0, z: 0 }) {   // Wo ist dieser Punkt im Silo? (x = quer, z = längs)
+  const dx = x - b.x, dz = z - b.z, c = Math.cos(b.rot), sn = Math.sin(b.rot);
+  v.x = dx * c - dz * sn; v.z = dx * sn + dz * c;
+  return v;
+}
+const fahrsiloHoehe = b => b.fs.inhalt > 0 ? (0.15 + 2.25 * b.fs.inhalt / FAHRSILO_MAX) * (1 - 0.15 * b.fs.fest) : 0;   // Festgefahren = etwas flacher
+function fahrsiloBoden(b, x, z) {   // Wie hoch ist der Haufen an dieser Stelle? (null = nicht im Silo)
+  const l = fahrsiloLokal(b, x, z);
+  if (Math.abs(l.x) > 4.9 || Math.abs(l.z) > 9) return null;
+  return 0.16 + fahrsiloHoehe(b) * begrenzt((8.4 - Math.abs(l.z)) / 3, 0, 1);
+}
+function fahrsiloMalen(b) {
+  const F = b.fs, u = b.mesh.userData.fs, H = fahrsiloHoehe(b);
+  u.haufen.visible = F.inhalt > 0; u.haufen.scale.y = Math.max(0.01, H);
+  u.haufen.material.color.setHex(F.fertig ? GUETER.silage.farbe : GUETER.haeckselgut.farbe);
+  u.folie.visible = u.reifen.visible = F.zu && F.inhalt > 0;
+  u.folie.scale.y = H + 0.06; u.reifen.position.y = 0.16 + H + 0.06;
+  let text;
+  if (F.inhalt <= 0) text = '🟩 Silagesilo: leer';
+  else if (F.fertig) text = `🟫 Silage: ${kg(F.inhalt)}`;
+  else if (F.zu) text = F.gaer >= 1 ? '🟫 Silage fertig! P = Folie ab' : `⏳ Gärt … ${Math.floor(F.gaer * 100)} %`;
+  else text = `🌽 ${kg(F.inhalt)} · festgefahren ${Math.floor(F.fest * 100)} %`;
+  b.schild.userData.malen(text, F.fertig || F.gaer >= 1 ? '#ffd166' : '#b9f5a0');
+}
+function nahesFahrsilo() {   // Bist du mit einem Fahrzeug im (oder direkt vor dem) Silagesilo?
+  if (!aktiv) return null;
+  const p = aktiv.g.position;
+  return gebaute.find(b => { if (!b.fs) return false; const l = fahrsiloLokal(b, p.x, p.z); return Math.abs(l.x) < 6 && Math.abs(l.z) < 13; }) || null;
+}
+function fahrsiloAbladen(b) {   // L: Häckselgut vom Anhänger in das Silo kippen
+  const F = b.fs, gut = gutVon(aktiv);
+  if (!gut) { meldung('🌽 Du hast nichts dabei! Häcksel erst Mais mit dem Häcksler.'); sound.nein(); return; }
+  if (gut !== 'haeckselgut') { meldung(`🟩 Ins Silagesilo kommt nur Häckselgut (Mais)! ${gut === 'korn' ? 'Korn gehört ins Korn-Silo 🛢️.' : ''}`); sound.nein(); return; }
+  if (F.zu) { meldung('🟩 Das Silo ist schon zugedeckt und gärt!'); sound.nein(); return; }
+  if (F.fertig && F.inhalt > 0) { meldung('🟫 Da liegt noch fertige Silage! Hol sie erst raus (U).'); sound.nein(); return; }
+  const menge = Math.min(kornDrin(aktiv), FAHRSILO_MAX - F.inhalt);
+  if (menge <= 0) { meldung('🟩 Das Silagesilo ist voll! Fahr drüber (festfahren) und deck es dann zu (P).'); sound.nein(); return; }
+  kornWeg(aktiv, menge);
+  F.fest = F.inhalt > 0 ? F.fest * F.inhalt / (F.inhalt + menge) : 0;   // Neues lockeres Häckselgut obendrauf
+  F.inhalt += menge; F.fertig = false; F.gaer = 0;
+  fahrsiloMalen(b); gebSenden(b);
+  meldung(`🌽➡️🟩 ${kg(menge)} Häckselgut abgeladen! Jetzt mit einem Fahrzeug drüberfahren, bis es festgefahren ist.`, 4);
+  sound.korn();
+  for (let k = 0; k < 14; k++) staub(b.x + zufall(-3, 3), b.z + zufall(-3, 3), GUETER.haeckselgut.farbe, 1.5, -0.3);
+  speichern();
+}
+function fahrsiloP(b) {   // P: zudecken, Folie abnehmen
+  const F = b.fs;
+  if (F.inhalt <= 0) { meldung('🟩 Das Silagesilo ist leer. Häcksel Mais und kipp das Häckselgut hier ab (L)!'); sound.nein(); return; }
+  if (F.fertig) { meldung('🟫 Die Silage ist fertig! Fahr mit einem Anhänger rein und drück U zum Aufladen.'); return; }
+  if (F.zu) {
+    if (F.gaer < 1) { meldung(`⏳ Die Silage gärt noch (${Math.floor(F.gaer * 100)} %). Geduld!`); return; }
+    F.zu = false; F.fertig = true;
+    meldung('🎉🟫 Folie ab – die Silage ist fertig! Lade sie mit U auf und verkauf sie beim Landhandel (V) – oder füttere die Tiere damit (L).', 5);
+    sound.kasse();
+  } else {
+    if (F.fest < 1) { meldung(`🚜 Erst festfahren! Fahr mit einem Fahrzeug über den Haufen (${Math.floor(F.fest * 100)} %). Sonst schimmelt es!`, 3.5); sound.nein(); return; }
+    if (money < FOLIE_PREIS) { meldung(`💸 Die Silofolie kostet ${euro(FOLIE_PREIS)}!`); sound.nein(); return; }
+    money -= FOLIE_PREIS; F.zu = true; F.gaer = 0;
+    meldung(`⬛ Folie drauf und Reifen obendrauf (${euro(FOLIE_PREIS)})! Jetzt gärt das Häckselgut zu Silage.`, 4);
+    sound.bauen();
+  }
+  fahrsiloMalen(b); gebSenden(b); speichern();
+}
+function silageHolen(b) {   // U: fertige Silage auf den Anhänger laden
+  const F = b.fs;
+  if (!F.fertig || F.inhalt <= 0) { meldung(F.zu ? '⏳ Die Silage ist noch unter der Folie!' : '🟩 Hier ist noch keine fertige Silage!'); sound.nein(); return; }
+  if (!kornPlatz(aktiv)) { meldung('🚛 Da passt nichts rein – kuppel einen Kipper an (H)!'); sound.nein(); return; }
+  if (!gutPasst(aktiv, 'silage')) { meldung(`🚛 Da ist noch ${GUETER[gutVon(aktiv)].name} drin – erst leer machen!`); sound.nein(); return; }
+  const menge = Math.min(F.inhalt, kornPlatz(aktiv) - kornDrin(aktiv));
+  if (menge <= 0) { meldung('🚛 Schon voll!'); sound.nein(); return; }
+  kornDazu(aktiv, menge, 'silage'); F.inhalt -= menge;
+  if (F.inhalt <= 0) { F.inhalt = 0; F.fertig = false; F.fest = 0; F.gaer = 0; }
+  fahrsiloMalen(b); gebSenden(b);
+  meldung(`🟫 ${kg(menge)} Silage aufgeladen! Verkaufen beim Landhandel 🏪 (V) oder an die Tiere verfüttern (L).`, 4);
+  sound.korn(); speichern();
+}
+function fahrsiloHinweis(b) {
+  const F = b.fs;
+  if (F.inhalt <= 0) return aktiv && gutVon(aktiv) === 'haeckselgut' ? `🟩 L = Häckselgut abladen (${kg(kornDrin(aktiv))})` : '🟩 Silagesilo: Bring Häckselgut vom Häcksler und drück L!';
+  if (F.fertig) return aktiv ? '🟫 U = Silage aufladen' : `🟫 Fertige Silage: ${kg(F.inhalt)} – hol sie mit einem Anhänger (U)`;
+  if (F.zu) return F.gaer >= 1 ? '🟫 P = Folie abnehmen – die Silage ist fertig!' : `⏳ Unter der Folie gärt die Silage … ${Math.floor(F.gaer * 100)} %`;
+  if (aktiv && gutVon(aktiv) === 'haeckselgut' && F.inhalt < FAHRSILO_MAX) return `🟩 L = Häckselgut abladen · Festgefahren: ${Math.floor(F.fest * 100)} %`;
+  return F.fest >= 1 ? `⬛ P = Mit Folie zudecken (${euro(FOLIE_PREIS)})` : `🚜 Fahr über den Haufen zum Festfahren: ${Math.floor(F.fest * 100)} %`;
+}
+const fsTmp = { x: 0, z: 0 };
+function fahrsiloUpdate(dt) {
+  for (const b of gebaute) {
+    if (!b.fs) continue;
+    const F = b.fs;
+    if (F.zu && F.gaer < 1) {   // Gären
+      F.gaer = Math.min(1, F.gaer + dt / GAER_ZEIT);
+      F.takt -= dt;
+      if (F.takt <= 0 || F.gaer >= 1) { F.takt = 1; fahrsiloMalen(b); if (F.gaer >= 1) meldung('🟫 Die Silage ist fertig gegoren! Geh zum Silagesilo und drück P.', 4); }
+    }
+    // Festfahren: Mit einem Fahrzeug über den Haufen fahren
+    if (aktiv && F.inhalt > 0 && !F.zu && !F.fertig && F.fest < 1 && Math.abs(aktiv.speed) > 1) {
+      const l = fahrsiloLokal(b, aktiv.g.position.x, aktiv.g.position.z, fsTmp);
+      if (Math.abs(l.x) < 4.9 && Math.abs(l.z) < 8.4) {
+        F.fest = Math.min(1, F.fest + dt * aktiv.typ.groesse / (WALZ_ZEIT * Math.max(0.5, F.inhalt / 20000)));
+        F.geaendert = true;
+        if (F.fest >= 1) { meldung('✅ Festgefahren! Jetzt P drücken und mit Folie zudecken.', 4); sound.klick(); }
+        if (Math.random() < dt * 6) staub(aktiv.g.position.x + zufall(-1, 1), aktiv.g.position.z + zufall(-1, 1), GUETER.haeckselgut.farbe, fahrsiloHoehe(b) + 0.3, 0.4);
+      }
+    }
+    F.takt2 = (F.takt2 || 0) - dt;
+    if (F.geaendert && F.takt2 <= 0) { F.takt2 = 0.5; F.geaendert = false; fahrsiloMalen(b); gebSenden(b); }
+  }
+  // Fahrzeuge und Anhänger fahren auf den Haufen hinauf
+  for (const fz of fahrzeuge) {
+    let h = 0;
+    for (const b of gebaute) if (b.fs) { const y = fahrsiloBoden(b, fz.g.position.x, fz.g.position.z); if (y !== null) { h = Math.max(h, y - 0.16); } }
+    fz.g.position.y += (h - fz.g.position.y) * Math.min(1, dt * 6);
+  }
+  for (const a of anhaenger) {
+    let h = 0;
+    for (const b of gebaute) if (b.fs) { const y = fahrsiloBoden(b, a.g.position.x, a.g.position.z); if (y !== null) { h = Math.max(h, y - 0.16); } }
+    a.g.position.y = a.an ? h : a.g.position.y + (h - a.g.position.y) * Math.min(1, dt * 6);
+  }
 }
 
 // ===== Eigene Wälder: Holz hacken (X halten) – die Bäume wachsen nach =====
@@ -2636,6 +2794,7 @@ function gebDaten(b) {
   if (b.geh) return { n: b.geh.tiere.length, f: Math.round(b.geh.futter), l: Math.round(b.geh.lager * 10) / 10, s: Math.round(b.geh.salz) };
   if (b.teich) return { t: Math.round(b.teich.fische * 100) / 100 };
   if (b.wald) return { wa: b.wald.w.map(w => Math.round(w * 100) / 100) };
+  if (b.fs) { const F = b.fs; return { fs: [Math.round(F.inhalt), Math.round(F.fest * 1000) / 1000, F.zu ? 1 : 0, Math.round(F.gaer * 1000) / 1000, F.fertig ? 1 : 0] }; }
   return null;
 }
 function gebDatenSetzen(b, d) {
@@ -2644,6 +2803,7 @@ function gebDatenSetzen(b, d) {
   if (b.gh) { b.gh.art = GEMUESE[d.a] ? d.a : null; b.gh.w = d.w || 0; ghMalen(b); }
   if (b.geh) { tierZahl(b, Math.min(d.n || 0, TIERE[b.geh.tier].max)); b.geh.futter = d.f || 0; b.geh.lager = d.l || 0; b.geh.salz = d.s || 0; gehegeSchild(b); }
   if (b.teich) { b.teich.fische = d.t ?? TEICH_FISCHE_MAX; teichSchild(b); }
+  if (b.fs && Array.isArray(d.fs)) { const F = b.fs; F.inhalt = d.fs[0] || 0; F.fest = d.fs[1] || 0; F.zu = !!d.fs[2]; F.gaer = d.fs[3] || 0; F.fertig = !!d.fs[4]; fahrsiloMalen(b); }
   if (b.wald && Array.isArray(d.wa)) { d.wa.forEach((w, k) => { if (k < b.wald.w.length) b.wald.w[k] = w; }); waldPlotMalen(b); }
 }
 const gebSchluessel = b => `${b.x.toFixed(1)},${b.z.toFixed(1)}`;
@@ -2668,7 +2828,7 @@ function nahesHofGebaeude() {
   const p = wo();
   let bestes = null, bestD = Infinity;
   for (const b of gebaute) {
-    if (!b.gh && !b.geh && !b.obst && !b.teich && !b.werkbank) continue;
+    if (!b.gh && !b.geh && !b.obst && !b.teich && !b.werkbank && !b.fs) continue;
     const d = Math.hypot(p.x - b.x, p.z - b.z) - GEBAEUDE_ARTEN[b.art].r;
     if (d < 3.5 && d < bestD) { bestD = d; bestes = b; }
   }
@@ -3007,7 +3167,7 @@ function bearbeite(fz, x, z) {
   } else if (fz.werkzeug === 'maisgebiss') {   // Der Häcksler: Mais klein häckseln und in den Anhänger blasen
     if (c.z === 'gesaet' && c.a === 'mais' && c.w >= 1) {
       const ziel = haeckselZiel(fz);
-      if (!ziel) { meldungSelten(gutPasst(fz, 'haeckselgut') || !kornAnh(fz) ? '🚛 Wohin mit dem Häckselgut? Kuppel einen Kipper an (H) – oder ein Freund fährt mit Anhänger neben dir!' : '🚛 Im Anhänger ist noch was anderes drin – erst leer machen!'); return; }
+      if (!ziel) { meldungSelten(!kornAnh(fz) ? '🚛 Wohin mit dem Häckselgut? Kuppel einen Kipper an (H) – oder ein Freund fährt mit Anhänger neben dir!' : !gutPasst(fz, 'haeckselgut') ? '🚛 Im Anhänger ist noch was anderes drin – erst leer machen!' : '🚛 Der Anhänger ist voll! Ab zum Silagesilo 🟩 und mit L abladen.'); return; }
       if (ziel.a) { ziel.a.inhalt += MAIS_ERTRAG; ziel.a.gut = 'haeckselgut'; }
       else { kornDazu(ziel.fz, MAIS_ERTRAG, 'haeckselgut'); if (ziel.fz !== fz) mpEvent({ t: 'korn', id: ziel.fz.id, m: MAIS_ERTRAG, g: 'haeckselgut' }); }
       c.z = 'stoppeln'; c.w = 0; delete c.a; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0x7fae3a);
@@ -3787,7 +3947,7 @@ document.addEventListener('keydown', e => {
   if (building && (k === '.' || k === ',')) { const arten = Object.keys(GEBAEUDE_ARTEN), n = arten.length; bauArt = arten[(arten.indexOf(bauArt) + (k === '.' ? 1 : n - 1)) % n]; updateHUD(); }
   if (k === 'i') anleitungZu(!$('help').classList.contains('zu'));
   if (k === 'p' && werkbankOffen) werkbankZeigen(false);
-  else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
+  else if (k === 'p') { const nb = nahesHofGebaeude(); if (nb && nb.werkbank) { if (aktiv) { meldung('🛠️ Steig erst aus (E)!'); sound.nein(); } else werkbankZeigen(true); } else if (nb && nb.obst) obstPfluecken(nb); else if (nb && nb.teich) angeln(nb); else if (nb && nb.fs) fahrsiloP(nb); else if (panelGeb) panelZeigen(null); else { const b = nb; if (b) panelZeigen(b); else { meldung('🪴 Geh zu einem Gewächshaus, Tiergehege oder deiner Werkbank! (Bauen im Baumodus: B)'); sound.nein(); } } }
   if (k === 'o') ueberladen();
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
   if (k === 'escape') { haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
@@ -3838,6 +3998,7 @@ renderer.domElement.addEventListener('click', () => {
   sound.bauen();
   if (bauArt === 'silo') meldung('🛢️ Neues Silo! Fahr mit vollem Korntank hin und drück L zum Einlagern.', 3.5);
   if (OBST[bauArt]) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gepflanzt! Erst blüht er, dann wachsen die ${OBST[bauArt].name}. Wenn sie reif sind: P = pflücken.`, 4);
+  if (bauArt === 'fahrsilo') meldung('🟩 Neues Silagesilo! Häcksel Mais 🌽, kipp das Häckselgut hier ab (L), fahr drüber, deck es zu (P) – dann wird Silage daraus.', 5);
   if (bauArt === 'teich') meldung('🎣 Neuer Fischteich! Geh ans Ufer und drück P zum Angeln.', 4);
   if (bauArt === 'gewaechshaus') meldung('🪴 Neues Gewächshaus! Geh hin und drück P, um Gemüse zu pflanzen.', 4);
   if (GEBAEUDE_ARTEN[bauArt].tier) meldung(`${GEBAEUDE_ARTEN[bauArt].emoji} ${GEBAEUDE_ARTEN[bauArt].name} gebaut! Geh hin und drück P, um ${TIERE[GEBAEUDE_ARTEN[bauArt].tier].name} zu kaufen.`, 4);
@@ -4075,6 +4236,7 @@ function weltLaden(d) {   // Der Gast bekommt den Hof vom Gastgeber
   for (const b of gebaute) {
     scene.remove(b.mesh);
     const k = hindernisse.indexOf(b.h); if (k >= 0) hindernisse.splice(k, 1);
+    for (const h of b.hx || []) { const n = hindernisse.indexOf(h); if (n >= 0) hindernisse.splice(n, 1); }
     if (b.silo) { scene.remove(b.silo.schild); silos.splice(silos.indexOf(b.silo), 1); }
     for (const o of b.extra || []) scene.remove(o);   // Schilder und Tiere
   }
@@ -4212,7 +4374,7 @@ function mpTick(dt) {
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) {
     mp.felderTakt -= 1 / MP_RATE;
-    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'zeit', z: tageszeit }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
+    if (mp.felderTakt <= 0) { mp.felderTakt = 15; mpAnAlle({ t: 'felder', felder: felder.map(f => f.zellen.map(zellCode)) }); mpAnAlle({ t: 'zeit', z: tageszeit }); mpAnAlle({ t: 'gebStand', l: gebaute.filter(b => b.gh || b.geh || b.obst || b.teich || b.fs).map(b => ({ k: gebSchluessel(b), d: gebDaten(b) })) }); }
   }
 }
 const weltDa = () => mp.geldBasis !== null;
@@ -4340,6 +4502,7 @@ function zeitVorspulen(sek) {
     if (b.obst) { b.obst.w = Math.min(1, b.obst.w + sek / OBST[b.art].zeit); obstMalen(b); }
     if (b.gh && GEMUESE[b.gh.art]) { b.gh.w = Math.min(1, b.gh.w + sek / GEMUESE[b.gh.art].zeit); ghMalen(b); }
     if (b.teich) { b.teich.fische = Math.min(TEICH_FISCHE_MAX, b.teich.fische + sek / 30); teichSchild(b); }
+    if (b.fs && b.fs.zu) { b.fs.gaer = Math.min(1, b.fs.gaer + sek / GAER_ZEIT); fahrsiloMalen(b); }
     if (b.geh) {
       const geh = b.geh, T = TIERE[geh.tier], n = geh.tiere.length;
       if (n) {
