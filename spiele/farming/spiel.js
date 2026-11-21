@@ -2142,6 +2142,7 @@ function strohTextur() {   // Geflochtenes Stroh für den Hut
 }
 function baueFarmer(hemdFarbe) {   // Baut einen Bauern (für dich und für die anderen Spieler im Multiplayer)
   const player = new THREE.Group(), farmer = { phase: 0 };
+  player.rotation.order = 'YXZ';   // (Erst drehen, dann kippen – wichtig fürs Umfallen beim Ragdoll)
   const haut = mat(0xe8b896), jeans = mat(0x2f4f86), hemd = new THREE.MeshStandardMaterial({ map: karoTextur(hemdFarbe), roughness: 0.9 });
   farmer.hemd = hemd;
   const schwarz = mat(0x111111), weiss = mat(0xffffff), bart = mat(0x6b4423);
@@ -2270,6 +2271,82 @@ function farmerWerkzeug(t, saege, saegt, holz, angelt = 0) {
 }
 const meinFarmer = baueFarmer('#b3261e');
 const player = meinFarmer.g, farmer = meinFarmer.t;
+// ===== 💥 Ragdoll: Wer angefahren wird, fliegt weg, purzelt durch die Luft, bleibt kurz liegen und steht wieder auf =====
+let ragdoll = null;   // { vx, vy, vz, drehX, drehZ, t, liegt, huepfer, steht }
+function ragdollStart(vx, vy, vz) {
+  ragdoll = { vx, vy, vz, drehX: zufall(6, 11) * (Math.random() < 0.5 ? -1 : 1), drehZ: zufall(-5, 5), t: 0, liegt: false, huepfer: 0 };
+  saegeAn = false; saegt = false; amBoden = false;
+  if (angel) angelEnde(null);
+  sound.rumms();
+  tonGleiten(700, 250, 0.05, 0.4, 'square', 0.06);   // "Aaaah!"
+  meldung(['💥 Autsch! Du wurdest angefahren!', '💥 Wuuusch – flieg, Bauer, flieg!', '💥 Bonk! Pass auf die Fahrzeuge auf!'][Math.floor(Math.random() * 3)], 2.5);
+  for (let k = 0; k < 10; k++) staub(player.position.x + zufall(-0.5, 0.5), player.position.z + zufall(-0.5, 0.5), 0xb8a37a, 0.6, 1, 1);
+}
+function armeUndBeineFlattern(t, zeit, staerke = 1) {   // Arme und Beine wild durch die Luft wirbeln
+  t.armL.rotation.set(Math.sin(zeit * 17) * 2 * staerke, 0, 0.8 + Math.sin(zeit * 11) * 0.6 * staerke);
+  t.armR.rotation.set(Math.sin(zeit * 15 + 1) * 2 * staerke, 0, -0.8 - Math.sin(zeit * 13) * 0.6 * staerke);
+  t.beinL.rotation.set(Math.sin(zeit * 13) * 1.2 * staerke, 0, 0.3);
+  t.beinR.rotation.set(Math.sin(zeit * 12 + 2) * 1.2 * staerke, 0, -0.3);
+  t.kopf.rotation.set(Math.sin(zeit * 9) * 0.4 * staerke, Math.sin(zeit * 7) * 0.5 * staerke, 0);
+}
+function gliederGerade(t) { for (const g of [t.armL, t.armR, t.beinL, t.beinR, t.kopf]) g.rotation.set(0, 0, 0); }
+function ragdollUpdate(dt) {
+  const R = ragdoll, p = player.position;
+  R.t += dt;
+  if (!R.liegt) {   // Durch die Luft fliegen und purzeln
+    R.vy -= SCHWERKRAFT * dt;
+    const nx = p.x + R.vx * dt, nz = p.z + R.vz * dt;
+    if (!kollidiert(nx, nz, 0.4)) { p.x = nx; p.z = nz; } else { R.vx *= -0.4; R.vz *= -0.4; sound.rumms(); }   // An der Wand abprallen
+    p.y += R.vy * dt;
+    player.rotation.x += R.drehX * dt; player.rotation.z += R.drehZ * dt;
+    armeUndBeineFlattern(farmer, R.t);
+    if (p.y <= 0) {
+      p.y = 0;
+      if (R.vy < -3 && R.huepfer < 2) {   // Aufprallen und noch mal hochhüpfen (boing!)
+        R.vy *= -0.45; R.vx *= 0.6; R.vz *= 0.6; R.drehX *= 0.6; R.huepfer++;
+        ton(90, 0, 0.15, 'sine', 0.2);
+        for (let k = 0; k < 6; k++) staub(p.x + zufall(-0.6, 0.6), p.z + zufall(-0.6, 0.6), 0xb8a37a, 0.3, 0.8, 1);
+      } else {   // Liegen bleiben – auf dem Rücken
+        R.liegt = true; R.t = 0;
+        const voll = Math.PI * 2;
+        player.rotation.x = ((player.rotation.x % voll) + voll) % voll;
+        player.rotation.z = ((player.rotation.z % voll) + voll) % voll; if (player.rotation.z > Math.PI) player.rotation.z -= voll;
+        tonGleiten(300, 180, 0, 0.5, 'sine', 0.05);
+      }
+    }
+  } else if (R.t < 2.2) {   // Liegen ... (Sterne sehen 💫)
+    const f = Math.min(1, dt * 8);
+    player.rotation.x += (Math.PI / 2 - player.rotation.x) * f;
+    player.rotation.z += (0 - player.rotation.z) * f;
+    p.y += (0.16 - p.y) * f;
+    farmer.armL.rotation.set(0, 0, 1.3); farmer.armR.rotation.set(0, 0, -1.3);
+    farmer.beinL.rotation.set(0, 0, 0.35); farmer.beinR.rotation.set(0, 0, -0.35);
+    farmer.kopf.rotation.set(0, Math.sin(R.t * 4) * 0.4, 0);   // Kopf wackelt benommen
+    if (R.t > 0.6 && !R.steht) { R.steht = true; meldung('💫 Uff ... alles dreht sich ... gleich geht\'s wieder!', 1.8); }
+  } else {   // Wieder aufstehen
+    const f = Math.min(1, dt * 4);
+    player.rotation.x += (0 - player.rotation.x) * f; player.rotation.z *= 1 - f; p.y += (0 - p.y) * f;
+    gliederGerade(farmer);
+    if (Math.abs(player.rotation.x) < 0.03) {
+      player.rotation.x = 0; player.rotation.z = 0; p.y = 0;
+      ragdoll = null; spielerVy = 0; amBoden = true;
+    }
+  }
+}
+function angefahrenPruefen() {   // Fährt gerade ein Fahrzeug (von einem anderen Bauern oder einem Helfer) in dich hinein?
+  const p = player.position;
+  if (p.y > 2.5) return;
+  for (const fz of fahrzeuge) {
+    const v = Math.abs(fz.speed);
+    if (fz === aktiv || v < 2.5 || !(fremdGefahren(fz) || fz.helfer)) continue;
+    const dx = p.x - fz.g.position.x, dz = p.z - fz.g.position.z, d = Math.hypot(dx, dz) || 0.01;
+    if (d > fz.radius + 0.6) continue;
+    const vor = Math.sign(fz.speed), fx = -Math.sin(fz.g.rotation.y) * vor, fzz = -Math.cos(fz.g.rotation.y) * vor;
+    const kraft = v * 1.3;
+    ragdollStart(fx * kraft * 0.7 + dx / d * kraft * 0.6, 4 + v * 0.45, fzz * kraft * 0.7 + dz / d * kraft * 0.6);
+    return;
+  }
+}
 // ===== First-Person-Motorsäge: Säge und Hände direkt vor der Kamera (wie in Ego-Spielen) =====
 scene.add(camera);   // Damit man Sachen an die Kamera hängen kann
 const egoSaege = new THREE.Group();
@@ -5058,6 +5135,7 @@ document.addEventListener('keydown', e => {
   if (e.repeat) return;   // Gedrückt halten soll nicht ständig ein- und aussteigen
 
   if (k === 'e' && angel && angel.phase === 'kampf') { angelKurbeln(); return; }   // Beim Angeln: E = kurbeln!
+  if (ragdoll && !['f', 'm', 'j', 'i', 'c', 'tab', 'escape'].includes(k)) return;   // Beim Durch-die-Luft-Fliegen kannst du nichts machen!
   if (mitfahrt && !['e', 'f', 'm', 'j', 'i', 'c', 'tab', 'escape'].includes(k)) { if (k.length === 1) meldungSelten('🪑 Du bist Beifahrer – nur der Fahrer kann fahren. E = aussteigen'); return; }
   if (k === 'e') {
     if (aktiv) aussteigen();
@@ -5469,7 +5547,7 @@ function mpEmpfangen(d, vonGast) {
         vonGast.versionOk = true;
         if (d.v !== SPIEL_VERSION) meldung(`${ALTE_VERSION} (${vonGast.name})`, 12);
       }
-      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, bf: d.bf, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag }); } break;
+      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, bf: d.bf, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag, rx: d.rx || 0, rz: d.rz || 0, rd: d.rd }); } break;
     case 'fz': {
       const fz = fahrzeuge.find(f => f.id === d.id);
       if (fz && fz !== aktiv) {
@@ -5545,7 +5623,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt, g: a.gut }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : mitfahrt ? mitfahrt.id : null, bf: mitfahrt ? 1 : 0, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), v: SPIEL_VERSION });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : mitfahrt ? mitfahrt.id : null, bf: mitfahrt ? 1 : 0, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), rx: r2(player.rotation.x), rz: r2(player.rotation.z), rd: ragdoll && !ragdoll.liegt ? 1 : 0, v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) for (const fz of fahrzeuge) if (fz.helfer) mpFzSenden(fz, 'helfer');
   if (host) {
@@ -5580,8 +5658,11 @@ function mpAndereZeigen(dt) {
     while (d < -Math.PI) d += Math.PI * 2;
     o.ayaw += d * f;
     G.position.set(o.ax, o.ay, o.az);
-    G.rotation.set(0, o.ayaw, 0);
-    farmerPose(o.farmer.t, false, o.lf, dt, o.y > 0.05);
+    G.rotation.set(o.rx || 0, o.ayaw, o.rz || 0);
+    if (o.rd) armeUndBeineFlattern(o.farmer.t, spielZeit);   // Der andere Bauer fliegt gerade durch die Luft!
+    else if (Math.abs(o.rx || 0) > 0.3) { o.farmer.t.armL.rotation.set(0, 0, 1.3); o.farmer.t.armR.rotation.set(0, 0, -1.3); }   // ... und liegt
+    else { if (o.warRagdoll !== false) gliederGerade(o.farmer.t); farmerPose(o.farmer.t, false, o.lf, dt, o.y > 0.05); }
+    o.warRagdoll = Math.abs(o.rx || 0) > 0.03;
     farmerWerkzeug(o.farmer.t, !!o.sa, !!o.sg, o.ho || 0, o.ag || 0);
     if (o.sg && Math.random() < 0.4) staub(o.ax - Math.sin(o.ayaw) * 1.3, o.az - Math.cos(o.ayaw) * 1.3, 0xe8cf94, 0.8, 0.6, 0.35);   // Sägespäne
   }
@@ -5832,7 +5913,10 @@ function animate() {
   } else if (mitfahrt) {
     if (!fahrzeuge.includes(mitfahrt)) { mitfahrt = null; scene.add(player); player.scale.setScalar(1); player.position.set(0, 0, 10); }
     else farmerPose(farmer, true, false, dt);
+  } else if (ragdoll) {
+    ragdollUpdate(dt);
   } else {
+    angefahrenPruefen();
     // Zu Fuß: "Vorne" ist da, wo du hinschaust
     const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
