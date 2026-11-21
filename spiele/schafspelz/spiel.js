@@ -521,7 +521,8 @@ function macheDeko() {
     const kisten = [];
     for (let v = 0; v < 3000 && kisten.length < 16; v++) {
       const p = { x: 120 + Math.random() * (WELT_B - 240), y: 160 + Math.random() * (WELT_H - 260) };
-      if (freierPlatz(p) && kisten.every(b => dist(b, p) > 90)) kisten.push({ art: 'kiste', x: p.x, y: p.y, g: 0.8 + Math.random() * 0.4, f: zufall(['#e0a030', '#4a90d9', '#9b59b6', '#3fb37f']) });
+      const oben = { x: p.x, y: p.y - 30 };   // (Kisten sind hoch – nicht auf die Wege stellen)
+      if (freierPlatz(p) && ORTE.every(o => abstandZurLinie(oben, GLOCKE, o) > 65) && kisten.every(b => dist(b, p) > 90)) kisten.push({ art: 'kiste', x: p.x, y: p.y, g: 0.8 + Math.random() * 0.4, f: zufall(['#e0a030', '#4a90d9', '#9b59b6', '#3fb37f']) });
     }
     kisten.sort((a, b) => a.y - b.y);
     d.push(...kisten);
@@ -2332,8 +2333,8 @@ function zeichneLuftschleusenRauswurf(c) {
   if (t < 2.6) {
     // ----- Teil 1: In der Luftschleuse -----
     zeichneSternenhimmel(0);
-    ctx.fillStyle = '#4a5262'; ctx.fillRect(0, 0, 820, H);              // Wand vom Raumschiff
-    ctx.fillStyle = '#5b6474'; ctx.fillRect(0, 560, 820, 40);           // Boden
+    ctx.fillStyle = '#4a5262'; ctx.fillRect(0, 0, W, H);                // Wand vom Raumschiff
+    ctx.fillStyle = '#5b6474'; ctx.fillRect(0, 560, W, 40);             // Boden
     ctx.strokeStyle = '#3a4150'; ctx.lineWidth = 3;
     for (let x = 0; x < 820; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 560); ctx.stroke(); }
     ctx.fillStyle = '#2b3242'; ctx.fillRect(470, 230, 350, 330);         // Die Schleusen-Kammer
@@ -2346,7 +2347,6 @@ function zeichneLuftschleusenRauswurf(c) {
     const auf = begrenzt((t - 2.0) / 0.3, 0, 1);
     ctx.fillStyle = '#05060f'; ctx.fillRect(820, 230, 30, 330);
     ctx.fillStyle = '#9aa4b5'; ctx.fillRect(820, 230 - auf * 330, 30, 330);
-    ctx.fillStyle = '#4a5262'; ctx.fillRect(850, 0, W - 850, H);
     ctx.fillStyle = '#05060f'; ctx.fillRect(850, 230, W - 850, 330 * auf);   // Loch ins All
     if (auf > 0) { ctx.fillStyle = '#fff'; for (let i = 0; i < 12; i++) ctx.fillRect(855 + (i * 37) % 100, 240 + (i * 61) % 300 * auf, 2, 2); }
 
@@ -2381,11 +2381,13 @@ function zeichneLuftschleusenRauswurf(c) {
     const k = t - 2.6;
     zeichneSternenhimmel(k * 40);
     // Ein Planet
+    ctx.strokeStyle = 'rgba(255,220,160,0.7)'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.ellipse(820, 470, 190, 34, -0.25, Math.PI, Math.PI * 2); ctx.stroke();   // Ring hinten
     ctx.fillStyle = '#e07b39'; ellipse(820, 470, 120, 120); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.18)'; ellipse(790, 440, 100, 18); ctx.fill(); ellipse(830, 500, 110, 14); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,220,160,0.7)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.ellipse(820, 470, 190, 34, -0.25, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(820, 470, 190, 34, -0.25, 0, Math.PI); ctx.stroke();   // Ring vorne
     // Das Raumschiff (links) – fliegt langsam weiter
-    const rx = -60 - k * 25;
+    const rx = 10 - k * 25;
     ctx.fillStyle = '#9aa4b5';
     ctx.beginPath(); ctx.moveTo(rx, 330); ctx.lineTo(rx + 300, 330); ctx.quadraticCurveTo(rx + 400, 400, rx + 300, 470); ctx.lineTo(rx, 470); ctx.fill();
     ctx.fillStyle = '#5b6474'; ctx.fillRect(rx + 120, 300, 120, 30); ctx.fillRect(rx + 120, 470, 120, 30);   // Flügel
