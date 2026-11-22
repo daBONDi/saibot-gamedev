@@ -1482,10 +1482,10 @@ addEventListener('keydown', e => {
   tasten[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; }
   if (e.code === 'KeyE' && zustand === 'stadt') stadtBetretenTaste();
-  // 🤫 Geheimer Cheatcode: in der Stadt KLECKSKÖNIG (oder KLECKSKOENIG) tippen
+  // 🤫 Geheimer Cheatcode: in der Stadt KLECKSI tippen
   if (zustand === 'stadt' && e.key && e.key.length === 1) {
     cheatPuffer = (cheatPuffer + e.key.toUpperCase()).slice(-20);
-    if (cheatPuffer.endsWith('KLECKSKÖNIG') || cheatPuffer.endsWith('KLECKSKOENIG')) {
+    if (cheatPuffer.endsWith('KLECKSI')) {
       cheatPuffer = '';
       konto.muenzen += 10000; speichern();
       meldung('🤫 Cheat aktiviert: +10.000 Münzen! 🪙'); ton('sieg');
