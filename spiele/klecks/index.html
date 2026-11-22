@@ -92,7 +92,7 @@
     <h2>🎒 Deine Ausrüstung</h2><div class="ausr" id="menuAusruestung"></div>
     <button class="gross" id="start">▶ Los geht's!</button>
     <button class="gross" id="zuShops">🛒 Shops</button>
-    <h2>⚡ Deine Ulti</h2><div class="wahl" id="wahlUlti"></div>
+    <h2>💣 Deine Bombe</h2><div class="wahl" id="wahlBombe"></div>
     <details><summary>🎮 Steuerung</summary>
     <div class="steuerung">
       <span class="taste">W A S D</span><span>Laufen</span>
@@ -166,15 +166,19 @@ const NAMEN = [['Du', 'Blubb', 'Spritzi', 'Klacks'], ['Gloop', 'Schmatz', 'Plör
 const BASIS = [{ x: 80, y: H / 2 }, { x: W - 80, y: H / 2 }];
 
 const WAFFEN = {
-  spritzer: { name: 'Spritzer',   emoji: '🔫', info: 'Schnell & einfach',
+  spritzer: { name: 'Spritzer',   emoji: '🔫', info: 'Schnell & einfach', ulti: 'raketen',
               cd: 0.12, kosten: 1.5, speed: 650, bremse: 2, schaden: 24, klecks: 17, spur: 6, streu: 0.08, anzahl: 1, reichweite: 260 },
-  eimer:    { name: 'Farbeimer',  emoji: '🪣', info: 'Schwappt viel Farbe auf einmal',
+  doppel:   { name: 'Doppelspritzer', emoji: '✌️', info: 'Zwei Spritzer – blitzschnell, aber schwächer', ulti: 'schild', doppel: true,
+              cd: 0.07, kosten: 1.1, speed: 600, bremse: 2.4, schaden: 15, klecks: 13, spur: 5, streu: 0.12, anzahl: 1, reichweite: 220 },
+  eimer:    { name: 'Farbeimer',  emoji: '🪣', info: 'Schwappt viel Farbe auf einmal', ulti: 'welle',
               cd: 0.6, kosten: 7, speed: 520, bremse: 2.5, schaden: 22, klecks: 15, spur: 7, streu: 0.5, anzahl: 6, reichweite: 170 },
-  sniper:   { name: 'Farbsniper', emoji: '🎯', info: 'Halten zum Aufladen – weit & stark', reichweite: 520 },
-  roller:   { name: 'Farbroller', emoji: '🛞', info: 'Halten = rollen, Klicken = schwingen!', reichweite: 110,
+  kanone:   { name: 'Farbkanone', emoji: '💥', info: 'Dicke Farbkugeln, die beim Aufprall platzen', ulti: 'regen', gross: 2.2, platzen: { r: 45, schaden: 35 },
+              cd: 0.75, kosten: 8, speed: 560, bremse: 1.6, schaden: 40, klecks: 30, spur: 8, streu: 0.03, anzahl: 1, reichweite: 260 },
+  sniper:   { name: 'Farbsniper', emoji: '🎯', info: 'Halten zum Aufladen – weit & stark', ulti: 'laser', reichweite: 520 },
+  roller:   { name: 'Farbroller', emoji: '🛞', info: 'Halten = rollen, Klicken = schwingen!', ulti: 'wirbel', reichweite: 110,
               nah: { rollBreite: 22, rollSchaden: 8, rollTempo: 130, rollKosten: 3, schwingCd: 0.6, schwingDauer: 0.42, abwurf: 0.2, art: 'hoch' },
               schwung: { anzahl: 7, streu: 0.8, speed: 480, bremse: 2.6, schaden: 35, klecks: 16, spur: 7, kosten: 9 } },
-  pinsel:   { name: 'Riesenpinsel', emoji: '🖌️', info: 'Halten = schieben (schnell!), Klicken = schwingen', reichweite: 150,
+  pinsel:   { name: 'Riesenpinsel', emoji: '🖌️', info: 'Halten = schieben (schnell!), Klicken = schwingen', ulti: 'tornado', reichweite: 150,
               nah: { rollBreite: 14, rollSchaden: 3, rollTempo: 215, rollKosten: 1.5, schwingCd: 0.24, schwingDauer: 0.24, abwurf: 0.1, art: 'seite' },
               schwung: { anzahl: 4, streu: 0.5, speed: 430, bremse: 2.8, schaden: 24, klecks: 12, spur: 6, kosten: 3 } },
 };
@@ -183,10 +187,21 @@ const ULTIS = {
   raketen: { name: 'Raketenhagel', emoji: '🚀', info: '6 Farbraketen auf einmal' },
   schild:  { name: 'Blasenschild', emoji: '🛡️', info: '6 Sek. unverwundbar & schneller' },
   wirbel:  { name: 'Farbsturm',    emoji: '🌀', info: 'Hochspringen & riesiger Platscher' },
+  welle:   { name: 'Farbwelle',    emoji: '🌊', info: 'Eine riesige Welle rollt nach vorne' },
+  laser:   { name: 'Megalaser',    emoji: '🔆', info: '3 Sek. ein riesiger Farbstrahl' },
+  tornado: { name: 'Farbtornado',  emoji: '🌪️', info: 'Ein Wirbelsturm jagt die Gegner' },
+};
+// Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
+const BOMBEN = {
+  klecks:    { name: 'Farbbombe',  emoji: '💣', info: 'Platzt da, wo sie landet', kosten: 50, wurf: true },
+  klebe:     { name: 'Klebebombe', emoji: '🟢', info: 'Klebt fest und platzt nach 1 Sek. extra groß', kosten: 60, wurf: true },
+  sprinkler: { name: 'Sprinkler',  emoji: '⛲', info: 'Sprüht 8 Sek. lang Farbe im Kreis', kosten: 55, wurf: true },
+  mine:      { name: 'Farbmine',   emoji: '⚠️', info: 'Unsichtbare Falle vor deinen Füßen', kosten: 40, wurf: false },
+  wand:      { name: 'Farbwand',   emoji: '🧱', info: 'Hält 5 Sek. lang Gegner-Farbe ab', kosten: 60, wurf: false },
 };
 
 // ================== SHOP-SACHEN ==================
-const WAFFEN_PREIS = { spritzer: 0, eimer: 300, pinsel: 350, roller: 400, sniper: 500 };
+const WAFFEN_PREIS = { spritzer: 0, doppel: 250, eimer: 300, pinsel: 350, roller: 400, kanone: 450, sniper: 500 };
 const HEMDEN = {
   tshirt:   { name: 'Basic-T-Shirt', emoji: '👕', preis: 0,   info: 'Ganz normal, aber bequem', bonus: {}, farbe: '#f4f4f4', aermel: 'kurz' },
   streifen: { name: 'Ringelshirt',   emoji: '🦓', preis: 150, info: '🎨 Tinte sparen +6%', bonus: { tinte: 0.06 }, farbe: '#3b6fd8', streifen: '#ffffff', aermel: 'kurz' },
@@ -227,13 +242,13 @@ function bonusVon(an) {
   }
   return b;
 }
-function bombeKosten(e) { return 50 * (1 - e.bonus.bombe); }
+function bombeKosten(e) { return BOMBEN[e.bombe].kosten * (1 - e.bonus.bombe); }
 
 // ================== KONTEN (im Browser gespeichert) ==================
 function neuesKonto(name, haut, haar, frisur) {
   return { name, muenzen: 150, haut, haar, frisur,
     besitz: { waffe: ['spritzer'], hemd: ['tshirt'], schuhe: ['turnschuhe'], kopf: ['keine'] },
-    an: { waffe: 'spritzer', hemd: 'tshirt', schuhe: 'turnschuhe', kopf: 'keine', ulti: 'regen' },
+    an: { waffe: 'spritzer', hemd: 'tshirt', schuhe: 'turnschuhe', kopf: 'keine', bombe: 'klecks' },
     rekord: 0, runden: 0, siege: 0 };
 }
 // Falls gespeicherte Daten kaputt oder alt sind: alles Wichtige wieder richtig machen
@@ -247,7 +262,7 @@ function kontoReparieren(k) {
     if (k.besitz && Array.isArray(k.besitz[slot])) for (const id of k.besitz[slot]) if (hat(liste, id) && !v.besitz[slot].includes(id)) v.besitz[slot].push(id);
     if (k.an && hat(liste, k.an[slot]) && v.besitz[slot].includes(k.an[slot])) v.an[slot] = k.an[slot];
   }
-  if (k.an && hat(ULTIS, k.an.ulti)) v.an.ulti = k.an.ulti;
+  if (k.an && hat(BOMBEN, k.an.bombe)) v.an.bombe = k.an.bombe;
   return v;
 }
 const NAME_OK = /^[\p{L}\p{N} _\-]{2,14}$/u;
@@ -399,6 +414,8 @@ const SOUNDS = {
   plopp:   (t, v) => osz('sine', 200, 900, 0.12, 0.12 * v, t),
   kauf:    (t, v) => { osz('square', 988, 988, 0.08, 0.07 * v, t, sfxGain, 3000); osz('square', 1319, 1319, 0.3, 0.07 * v, t + 0.08, sfxGain, 3000); },
   nein:    (t, v) => osz('square', 220, 150, 0.2, 0.06 * v, t, sfxGain, 1500),
+  laser:   (t, v) => { osz('sawtooth', 150, 110, 3, 0.07 * v, t, sfxGain, 900); osz('sine', 900, 1300, 3, 0.03 * v, t); },
+  wellenrauschen: (t, v) => krach(500, 1.6, 0.25 * v, t),
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
   pfiff:   (t, v) => osz('sine', 1200, 1500, 0.6, 0.15 * v, t),
   sieg:    (t, v) => [60, 64, 67, 72, 76].forEach((n, i) => osz('square', NOTE(n), NOTE(n), i === 4 ? 0.6 : 0.15, 0.08 * v, t + i * 0.12, sfxGain, 3000)),
@@ -762,6 +779,27 @@ function baueWaffe(art, m, team) {
       ud.blitz = kugel(blitzMat, 2.5, 10.5, 6, 0); eimer.add(ud.blitz);
       break;
     }
+    case 'doppel': {   // zwei kleine Spritzer nebeneinander
+      const l = baueWaffe('spritzer', m, team), r = baueWaffe('spritzer', m, team);
+      l.position.z = -6; r.position.z = 6; l.scale.setScalar(0.85); r.scale.setScalar(0.85);
+      g.add(l, r); ud.teile = [l.userData, r.userData];
+      break;
+    }
+    case 'kanone': {
+      g.add(klotz(m, 10, 7, 6, 4, 0.5, 0), klotz(MAT_GRAU, 10.4, 1.2, 6.4, 4, -2.6, 0), klotz(mat('#ffd166'), 1.2, 7.2, 6.2, 8, 0.5, 0));
+      const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 1, -5.5, 0); griff.rotation.z = 0.25; g.add(griff);
+      abzugBauen(g, 5);
+      // großer Glastank oben
+      g.add(zylinderX(glasRohrMat, 3.6, 3.6, 10, 3, 7.4, 0), ringX(MAT_METALL, 3.6, 0.6, -2, 7.4, 0), ringX(MAT_METALL, 3.6, 0.6, 8, 7.4, 0));
+      const tank = new THREE.Group(); tank.position.set(-1.7, 7.4, 0); g.add(tank); ud.tinteFuell = tank;
+      tank.add(zylinderX(tinte, 3, 3, 9.4, 4.7, 0, 0));
+      // dicker Lauf mit Trichter
+      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
+      lauf.add(zylinderX(MAT_METALL, 3, 3, 12, 15, 1, 0), ringX(MAT_GRAU, 3.3, 0.7, 11, 1, 0), ringX(MAT_GRAU, 3.3, 0.7, 15, 1, 0), ringX(MAT_GRAU, 3.3, 0.7, 19, 1, 0));
+      lauf.add(zylinderX(m, 5, 3, 4, 23, 1, 0), klotz(MAT_GUMMI, 2, 6, 2, 13, -4, 0));
+      ud.blitz = kugel(blitzMat, 3.5, 26.5, 1, 0); lauf.add(ud.blitz);
+      break;
+    }
     case 'sniper': {
       g.add(klotz(m, 9, 5.5, 3.8, -4, -0.5, 0), klotz(MAT_GUMMI, 1.5, 6.5, 4.2, -9, -0.6, 0));   // Schaft + Polster
       g.add(klotz(MAT_GRAU, 11, 5, 4.4, 6, 0.5, 0), klotz(m, 6, 1.2, 4.6, 6, 3.1, 0));
@@ -851,6 +889,7 @@ function baueWaffe(art, m, team) {
 
 // Waffen-Teile bewegen sich (Tinte, Rückstoß, Walze, Ladung …)
 function animiereWaffe(ud, e, dt, vf) {
+  if (ud.teile) { for (const t of ud.teile) animiereWaffe(t, e, dt, vf); return; }
   if (ud.tinteFuell) ud.tinteFuell.scale.x = Math.max(0.02, e.tinte / 100);
   if (ud.stielTinte) ud.stielTinte.scale.y = Math.max(0.02, e.tinte / 100);
   if (ud.inhalt) ud.inhalt.position.y = -4.5 + 9 * e.tinte / 100;
@@ -869,6 +908,67 @@ function baueBombe(team) {
   g.add(kugel(teamMat[team], 8, 0, 0, 0), ringY(MAT_GRAU, 8.1, 1, 0, 0, 0));
   g.add(zylinder(MAT_GRAU, 2.5, 3, 3, 0, 8.5, 0), kugel(mat('#ff3b3b', { emissive: '#ff3b3b' }), 1.3, 0, 10.4, 0));
   g.add(kugel(mat(TEAMS[team].hell), 2, 4, 4, 5));
+  return g;
+}
+// Klebebombe: mit Saugnäpfen und schnell blinkendem Licht
+function baueKlebe(team) {
+  const g = new THREE.Group(), licht = mat('#5be37d', { emissive: '#5be37d', emissiveIntensity: 1 });
+  g.add(kugel(teamMat[team], 6.5, 0, 0, 0), kugel(licht, 1.5, 0, 6.6, 0));
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; g.add(zylinder(mat('#5be37d'), 1.6, 2.2, 1.4, Math.cos(a) * 6.4, 0, Math.sin(a) * 6.4)); }
+  g.userData.licht = licht;
+  return g;
+}
+// Sprinkler: Fuß, Stange und drehender Kopf mit zwei Düsen
+function baueSprinkler(team) {
+  const g = new THREE.Group();
+  g.add(zylinder(MAT_GRAU, 6, 7, 3, 0, 1.5, 0), zylinder(MAT_METALL, 1.2, 1.2, 10, 0, 8, 0));
+  const kopf = new THREE.Group(); kopf.position.y = 13; g.add(kopf);
+  kopf.add(kugel(teamMat[team], 3.2, 0, 0, 0), zylinderX(teamMat[team], 1, 1.4, 7, 4, 0, 0), zylinderX(teamMat[team], 1, 1.4, 7, -4, 0, 0));
+  kopf.children[2].rotation.z = Math.PI / 2;
+  g.userData.kopf = kopf;
+  return g;
+}
+// Farbmine: flache Scheibe mit rotem Licht (Gegner sehen sie nicht!)
+function baueMine(team) {
+  const g = new THREE.Group(), licht = mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 });
+  g.add(zylinder(teamMat[team], 7, 8, 2, 0, 1, 0), ringY(MAT_GRAU, 7.5, 0.6, 0, 2, 0), kugel(licht, 1.5, 0, 2.5, 0));
+  g.userData.licht = licht;
+  return g;
+}
+// Farbwand: durchsichtige Wand in Teamfarbe
+function baueFarbwand(team) {
+  const g = new THREE.Group();
+  const wm = new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.55, emissive: TEAMS[team].col, emissiveIntensity: 0.3, depthWrite: false });
+  const platte = new THREE.Mesh(new THREE.BoxGeometry(5, 46, 72), wm); platte.position.y = 23; g.add(platte);
+  g.add(klotz(MAT_GRAU, 6, 2, 74, 0, 46, 0), klotz(MAT_GRAU, 8, 3, 74, 0, 1.5, 0));
+  g.userData.wandMat = wm;
+  return g;
+}
+// Welle für die Farbwelle
+function baueWelle(team) {
+  const g = new THREE.Group();
+  const wm = new THREE.MeshStandardMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.75, emissive: TEAMS[team].col, emissiveIntensity: 0.25, roughness: 0.2 });
+  const koerper = new THREE.Mesh(new THREE.CylinderGeometry(15, 15, 180, 16, 1, false, 0, Math.PI), wm);
+  koerper.rotation.x = Math.PI / 2; koerper.rotation.y = Math.PI / 2; koerper.position.y = 0; g.add(koerper);
+  for (let i = 0; i < 9; i++) g.add(kugel(mat(TEAMS[team].hell), 4 + (i % 3), 2, 15 + (i % 2) * 2, -80 + i * 20));
+  return g;
+}
+// Wirbelsturm für den Farbtornado
+function baueTornado(team) {
+  const g = new THREE.Group();
+  const tm = new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.45, emissive: TEAMS[team].col, emissiveIntensity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+  const trichter = new THREE.Mesh(new THREE.CylinderGeometry(55, 10, 120, 18, 1, true), tm); trichter.position.y = 60; g.add(trichter);
+  for (let i = 0; i < 5; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(13 + i * 9, 2.5 + i * 0.6, 6, 18), tm); r.rotation.x = Math.PI / 2; r.position.y = 8 + i * 24; g.add(r); }
+  return g;
+}
+// Megalaser-Strahl (zeigt in +x, Länge 1 – wird gestreckt)
+function baueLaser(team) {
+  const g = new THREE.Group();
+  const kernGeo = new THREE.CylinderGeometry(2.5, 2.5, 1, 10); kernGeo.rotateZ(-Math.PI / 2); kernGeo.translate(0.5, 0, 0);
+  const huelleGeo = new THREE.CylinderGeometry(7, 7, 1, 14); huelleGeo.rotateZ(-Math.PI / 2); huelleGeo.translate(0.5, 0, 0);
+  g.add(new THREE.Mesh(kernGeo, new THREE.MeshBasicMaterial({ color: '#ffffff' })));
+  g.add(new THREE.Mesh(huelleGeo, new THREE.MeshBasicMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.5, depthWrite: false })));
+  g.visible = false;
   return g;
 }
 // Rakete für den Raketenhagel (zeigt in +z)
@@ -900,8 +1000,8 @@ const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 // ---------- Ich-Sicht-Waffe (hängt an der Kamera) ----------
 let haendeWaffe = null, swayX = 0, swayY = 0;
 const vmHalter = new THREE.Group(); kamera.add(vmHalter);
-const VM_POS = { spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
-const VM_HAENDE = { spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
+const VM_POS = { doppel: [0, -6, -9, 0.45], kanone: [5, -7, -10, 0.5], spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
+const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0], [13, -4, 0]], spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
   haendeWaffe = baueWaffe(art, teamMat[0], 0);
@@ -970,6 +1070,7 @@ glCv.addEventListener('click', () => { if (zustand === 'spiel' && document.point
 
 // ================== SPIELZUSTAND ==================
 let zustand = 'menu', zeit = 0, rest = RUNDE;
+let geraete = [], wellen = [], tornados = [];
 let kleckse = [], schuesse = [], bomben = [], wolken = [], strahlen = [], partikel = [], meldungen = [];
 let startCountdown = 0, letzteSek = 99, klatschCd = 0;
 let spieler = null, rotBlitz = 0, leerHinweis = 0, pfiff10 = false, bildZaehler = 0;
@@ -983,7 +1084,6 @@ function neuerKlecks(team, nr) {
   const e = {
     team, nr, spieler: sp, name: NAMEN[team][nr],
     waffe: sp ? konto.an.waffe : zufall(WAFFEN),
-    ultiArt: sp ? konto.an.ulti : zufall(ULTIS),
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0, pitch: 0,
     tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
     ladung: 0, laden: false, rollT: 0, rollt: false, schwingT: 0, schwingSeite: 1, haltT: 0, vorherSchiesst: false, schild: 0, slam: false, ulti: 0, rueck: 0,
@@ -998,6 +1098,8 @@ function neuerKlecks(team, nr) {
   const aussehen = sp ? kontoAussehen() : { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) };
   const an = sp ? konto.an : { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) };
   e.bonus = bonusVon(an);
+  e.ultiArt = WAFFEN[e.waffe].ulti;                       // jede Waffe hat ihre feste Ulti
+  e.bombe = sp ? konto.an.bombe : zufall(BOMBEN);
   e.koerper = baueJunge(e.mat, team, aussehen, an);
   e.waffenModell = baueWaffe(e.waffe, e.mat, team);
   e.koerper.userData.ober.add(e.waffenModell);           // Waffe bewegt sich mit dem Oberkörper
@@ -1007,12 +1109,14 @@ function neuerKlecks(team, nr) {
   e.schnorchel = baueSchnorchel(team); e.gruppe.add(e.schnorchel);
   e.welle = new THREE.Mesh(welleGeo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.7 }));
   e.blase = new THREE.Mesh(schildGeo, new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.35, emissive: TEAMS[team].col, emissiveIntensity: 0.4 }));
-  scene.add(e.gruppe, e.welle, e.blase);
+  e.laserMesh = baueLaser(team); e.laserT = 0; e.laserTick = 0;
+  scene.add(e.gruppe, e.welle, e.blase, e.laserMesh);
   return e;
 }
 
 function aufraeumen() {
-  for (const e of kleckse) scene.remove(e.gruppe, e.welle, e.blase);
+  for (const e of kleckse) scene.remove(e.gruppe, e.welle, e.blase, e.laserMesh);
+  for (const g of [...geraete, ...wellen, ...tornados]) scene.remove(g.mesh);
   for (const s of schuesse) scene.remove(s.mesh);
   for (const b of bomben) scene.remove(b.mesh);
   for (const w of wolken) scene.remove(w.mesh);
@@ -1025,6 +1129,7 @@ function neueRunde() {
   zaehler[0] = flaeche; zaehler[1] = zaehler[2] = 0;
   fctx.clearRect(0, 0, W, H);
   kleckse = []; schuesse = []; bomben = []; wolken = []; strahlen = []; partikel = []; meldungen = [];
+  geraete = []; wellen = []; tornados = [];
   for (let t = 0; t < 2; t++) {
     klecks(BASIS[t].x, BASIS[t].y, 110, t, null);
     for (let n = 0; n < 4; n++) kleckse.push(neuerKlecks(t, n));
@@ -1098,6 +1203,7 @@ function bewege(e, dx, dy, dt) {
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
+  if (e.laserT > 0) speed *= 0.5;
   const k = Math.min(1, dt * (amBoden ? 12 : 3));
   e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
   const nx = e.x + e.vx * dt; if (!kollidiert(nx, e.y, e.r)) e.x = nx; else e.vx = 0;
@@ -1119,7 +1225,7 @@ function bewege(e, dx, dy, dt) {
 function schiessen(e, dt) {
   e.schussCd -= dt;
   e.rollt = false;
-  if (e.tot) return;
+  if (e.tot || e.laserT > 0) return;
   const w = WAFFEN[e.waffe];
 
   if (e.waffe === 'sniper') {
@@ -1177,13 +1283,15 @@ function schiessen(e, dt) {
   if (!e.schiesst || e.taucht || e.schussCd > 0) return;
   if (e.tinte < w.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
   e.schussCd = w.cd; e.tinte -= w.kosten * (1 - e.bonus.tinte); e.rueck = 1;
+  let vx0 = 0, vy0 = 0;
+  if (w.doppel) { e.doppelSeite = -(e.doppelSeite || 1); vx0 = Math.cos(e.winkel + Math.PI / 2) * 6 * e.doppelSeite; vy0 = Math.sin(e.winkel + Math.PI / 2) * 6 * e.doppelSeite; }
   for (let i = 0; i < w.anzahl; i++) {
     const facher = w.anzahl > 1 ? (i / (w.anzahl - 1) - 0.5) * w.streu : 0;
     const a = e.winkel + facher + (Math.random() - 0.5) * (w.anzahl > 1 ? 0.08 : w.streu);
     const sp = w.speed * (w.anzahl > 1 ? 0.75 + Math.random() * 0.35 : 1);
     const p = e.pitch + (Math.random() - 0.5) * 0.04 + (w.anzahl > 1 ? Math.random() * 0.1 : 0);
     const vh = Math.cos(p) * sp;
-    const s = { x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, h: e.z + (e.spieler ? 30 : 24),
+    const s = { x: e.x + Math.cos(a) * 14 + vx0, y: e.y + Math.sin(a) * 14 + vy0, h: e.z + (e.spieler ? 30 : 24),
       vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp,
       team: e.team, wer: e, w, spurT: 0.04, leben: 3 };
     s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
@@ -1191,6 +1299,30 @@ function schiessen(e, dt) {
   }
   if (e.spieler) ton('schuss');
   else { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 350) ton('schuss', 0.6 * (1 - d / 350)); }
+}
+
+// Megalaser: ein langer Strahl, der malt und trifft (stoppt an Wänden)
+function laserUpdate(e, dt) {
+  e.laserT -= dt;
+  const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
+  let laenge = 700;
+  for (let d = 10; d <= 700; d += 6) if (istWand(e.x + c * d, e.y + s * d) || feindWand(e.x + c * d, e.y + s * d, 22, e.team)) { laenge = d; break; }
+  e.laserTick -= dt;
+  if (e.laserTick <= 0) {
+    e.laserTick = 0.05;
+    for (let d = 25; d < laenge; d += 18) klecks(e.x + c * d, e.y + s * d, 13, e.team, e, false);
+    for (const f of kleckse) {
+      if (f.team === e.team || f.tot) continue;
+      const dx = f.x - e.x, dy = f.y - e.y, laengs = dx * c + dy * s, quer = Math.abs(-dx * s + dy * c);
+      if (laengs > 0 && laengs < laenge && quer < 18) treffen(f, 11, e);
+    }
+    spritzer(e.x + c * laenge, e.y + s * laenge, 15, e.team, 4, 200);
+  }
+  const m = e.laserMesh;
+  m.visible = e.laserT > 0;
+  m.position.set(e.x + c * 14, e.z + (e.spieler ? 26 : 22), e.y + s * 14);
+  m.rotation.y = -e.winkel;
+  m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
 }
 
 // Beim Schwingen fliegt ein Fächer aus Farbtropfen nach vorne
@@ -1234,7 +1366,7 @@ function sniperSchuss(e) {
   let ende = laenge, opfer = null;
   aussen: for (let d = 16; d <= laenge; d += 5) {
     const px = e.x + dx * d, py = e.y + dy * d;
-    if (istWand(px, py)) { ende = d - 6; break; }
+    if (istWand(px, py) || feindWand(px, py, 20, e.team)) { ende = d - 6; break; }
     for (const f of kleckse) {
       if (f.team === e.team || f.tot) continue;
       if (Math.hypot(f.x - px, f.y - py) < f.r + 3) { opfer = f; ende = d; break aussen; }
@@ -1258,16 +1390,65 @@ function bombeWerfen(e, zx, zy, extra = {}) {
     if (e.tinte < bombeKosten(e) || e.tot || e.taucht) return false;
     e.tinte -= bombeKosten(e);
   }
+  const art = extra.ulti ? 'rakete' : e.bombe;
+  if (art === 'mine' || art === 'wand') {   // wird direkt hingestellt
+    const d = art === 'mine' ? 0 : 40;
+    geraetSetzen(art, e.x + Math.cos(e.winkel) * d, e.y + Math.sin(e.winkel) * d, e.team, e, e.winkel);
+    if (e.spieler) ton('klick');
+    return true;
+  }
   const d = Math.hypot(zx - e.x, zy - e.y), max = extra.max || 240;
   if (d > max) { zx = e.x + (zx - e.x) / d * max; zy = e.y + (zy - e.y) / d * max; }
   zx = Math.max(10, Math.min(W - 10, zx)); zy = Math.max(10, Math.min(H - 10, zy));
   const b = { sx: e.x, sy: e.y, zx, zy, x: e.x, y: e.y, h0: e.z + 20, t: 0, dauer: 0.6, hoehe: 70, r: 65, schaden: 90,
-    team: e.team, wer: e, ulti: false, ...extra };
-  b.mesh = b.ulti ? baueRakete(e.team) : baueBombe(e.team);
+    team: e.team, wer: e, ulti: false, art, ...extra };
+  b.mesh = b.ulti ? baueRakete(e.team) : art === 'klebe' ? baueKlebe(e.team) : art === 'sprinkler' ? baueSprinkler(e.team) : baueBombe(e.team);
   b.mesh.position.set(e.x, b.h0, e.y); scene.add(b.mesh);
   bomben.push(b);
   if (e.spieler && !b.ulti) ton('wurf');
   return true;
+}
+// Klebebombe, Sprinkler, Mine und Wand bleiben eine Weile liegen
+function geraetSetzen(art, x, y, team, wer, winkel, mesh) {
+  if (art !== 'klebe') {   // Sprinkler, Mine, Wand: jeder nur eins gleichzeitig
+    for (let i = geraete.length - 1; i >= 0; i--) if (geraete[i].wer === wer && geraete[i].art === art) { scene.remove(geraete[i].mesh); geraete.splice(i, 1); }
+  }
+  x = Math.max(10, Math.min(W - 10, x)); y = Math.max(10, Math.min(H - 10, y));
+  if (!mesh) mesh = art === 'mine' ? baueMine(team) : baueFarbwand(team);
+  mesh.position.set(x, art === 'klebe' ? 6 : 0, y); mesh.rotation.set(0, -winkel, 0); scene.add(mesh);
+  geraete.push({ art, x, y, team, wer, winkel, mesh, t: 0, spT: 0, dreh: 0, zuend: -1, treffer: 0 });
+}
+// Steht hier eine Farbwand vom anderen Team im Weg?
+function feindWand(x, y, h, team) {
+  if (h > 48) return null;
+  for (const g of geraete) {
+    if (g.art !== 'wand' || g.team === team) continue;
+    const dx = x - g.x, dy = y - g.y;
+    const laengs = dx * Math.cos(g.winkel + Math.PI / 2) + dy * Math.sin(g.winkel + Math.PI / 2);
+    const quer = dx * Math.cos(g.winkel) + dy * Math.sin(g.winkel);
+    if (Math.abs(laengs) < 37 && Math.abs(quer) < 5) return g;
+  }
+  return null;
+}
+// Platscher mit Schaden (Bomben, Kanone, Minen …)
+function explodieren(x, y, r, schaden, team, wer, ultiLaden = true) {
+  klecks(x, y, r, team, wer, ultiLaden);
+  spritzer(x, y, 5, team, Math.round(r * 0.6), 300);
+  for (const e of kleckse) {
+    if (e.team === team || e.tot) continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d < r + 15) treffen(e, schaden * (1 - d / (r + 45)), wer);
+  }
+  const d = Math.hypot(spieler.x - x, spieler.y - y);
+  if (d < 500) ton('platsch', Math.min(1, r / 60) * (1 - d / 600));
+}
+// Ein einzelner Farbtropfen (für Sprinkler)
+const SPRINKLER_TROPFEN = { bremse: 3, klecks: 11, spur: 0, schaden: 8 };
+function tropfen(x, y, h, winkel, pitch, speed, w, team, wer) {
+  const vh = Math.cos(pitch) * speed;
+  const s = { x, y, h, vx: Math.cos(winkel) * vh, vy: Math.sin(winkel) * vh, vz: Math.sin(pitch) * speed, team, wer, w, spurT: 9, leben: 3 };
+  s.mesh = new THREE.Mesh(geoTropfen, teamMat[team]); scene.add(s.mesh);
+  schuesse.push(s);
 }
 function bombenZiel(e) {
   const d = Math.max(60, Math.min(240, 150 + e.pitch * 260));
@@ -1304,6 +1485,22 @@ function ultiStarten(e, zx, zy) {
     case 'wirbel':
       e.vz = 560; e.z = Math.max(e.z, 1); e.slam = true;
       break;
+    case 'welle': {
+      const mesh = baueWelle(e.team); scene.add(mesh);
+      wellen.push({ x: e.x + Math.cos(e.winkel) * 25, y: e.y + Math.sin(e.winkel) * 25, winkel: e.winkel, t: 0, dauer: 1.7,
+        team: e.team, wer: e, malT: 0, getroffen: new Set(), mesh });
+      if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('wellenrauschen');
+      break;
+    }
+    case 'laser':
+      e.laserT = 3; e.laserTick = 0;
+      if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 700) ton('laser', e.spieler ? 1 : 0.5);
+      break;
+    case 'tornado': {
+      const mesh = baueTornado(e.team); scene.add(mesh);
+      tornados.push({ x: Math.max(30, Math.min(W - 30, zx)), y: Math.max(30, Math.min(H - 30, zy)), t: 7, team: e.team, wer: e, malT: 0, schadenT: 0, mesh });
+      break;
+    }
   }
 }
 function farbsturmLandung(e) {
@@ -1333,7 +1530,7 @@ function treffen(e, schaden, wer) {
 }
 
 function erwischt(e, wer) {
-  e.tot = true; e.wiederT = 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0;
+  e.tot = true; e.wiederT = 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0;
   const farbe = wer ? wer.team : 1 - e.team;
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
@@ -1393,10 +1590,12 @@ function ki(b, dt) {
 
   // Ulti benutzen
   if (b.ulti >= 1) {
-    if (feind && (b.ultiArt !== 'wirbel' || fd < 150)) ultiStarten(b, feind.x, feind.y);
-    else if (!feind && b.ultiArt !== 'schild' && b.ultiArt !== 'wirbel' && Math.random() < dt * 0.3) {
-      const z = k.ziel || { x: W / 2, y: H / 2 }; ultiStarten(b, z.x, z.y);
-    } else if (!feind && b.ultiArt === 'wirbel' && Math.random() < dt * 0.15 && besitzer(b.x, b.y) !== b.team + 1) ultiStarten(b, b.x, b.y);
+    const art = b.ultiArt;
+    const nurMitFeind = ['wirbel', 'laser', 'schild'].includes(art);
+    if (feind && (art !== 'wirbel' || fd < 150) && (art !== 'welle' || fd < 350)) ultiStarten(b, feind.x, feind.y);
+    else if (!feind && !nurMitFeind && Math.random() < dt * 0.3) {
+      const z = k.ziel || { x: W / 2, y: H / 2 }; b.winkel = Math.atan2(z.y - b.y, z.x - b.x); ultiStarten(b, z.x, z.y);
+    } else if (!feind && art === 'wirbel' && Math.random() < dt * 0.15 && besitzer(b.x, b.y) !== b.team + 1) ultiStarten(b, b.x, b.y);
   }
 
   if (feind && b.tinte > 3) {
@@ -1470,7 +1669,7 @@ function steuerung(p, dt) {
   if (sprungWunsch && p.z <= 0) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
   // Bombe: E halten = zielen, loslassen = werfen
   const z = bombenZiel(p);
-  zielRing.visible = !!tasten.KeyE && p.tinte >= bombeKosten(p) && !p.taucht;
+  zielRing.visible = !!tasten.KeyE && BOMBEN[p.bombe].wurf && p.tinte >= bombeKosten(p) && !p.taucht;
   zielRing.position.x = z.x; zielRing.position.z = z.y;
   if (bombeLos) bombeWerfen(p, z.x, z.y);
   if (ultiWunsch) {
@@ -1510,9 +1709,11 @@ function update(dt) {
     }
     if (e.spieler) steuerung(e, dt); else ki(e, dt);
     schiessen(e, dt);
+    if (e.laserT > 0) laserUpdate(e, dt);
     e.rueck = Math.max(0, e.rueck - dt * 8);
   }
   if (spieler.tot) zielRing.visible = false;
+  for (const e of kleckse) if (e.laserT <= 0 && e.laserMesh.visible) e.laserMesh.visible = false;
   bombeLos = ultiWunsch = sprungWunsch = false;
 
   // Farbtropfen fliegen
@@ -1532,6 +1733,8 @@ function update(dt) {
         if (!istWand(bx, by)) klecks(bx, by, 12, s.team, s.wer);
         spritzer(s.x, s.y, s.h, s.team, 4); weg = true; break;
       }
+      const fw = feindWand(s.x, s.y, s.h, s.team);
+      if (fw) { fw.treffer = 0.12; spritzer(s.x, s.y, s.h, s.team, 4); weg = true; break; }   // Farbwand hält den Tropfen ab
       for (const e of kleckse) {
         if (e.team === s.team || e.tot) continue;
         if (trifftKoerper(e, s.x, s.y, s.h)) {
@@ -1542,10 +1745,13 @@ function update(dt) {
     }
     if (!weg) {
       s.spurT -= dt;
-      if (s.spurT <= 0) { s.spurT = 0.05; if (!istWand(s.x, s.y)) klecks(s.x, s.y, w.spur, s.team, s.wer); }
+      if (s.spurT <= 0 && w.spur) { s.spurT = 0.05; if (!istWand(s.x, s.y)) klecks(s.x, s.y, w.spur, s.team, s.wer); }
       s.leben -= dt; if (s.leben <= 0) weg = true;
     }
-    if (weg) { scene.remove(s.mesh); schuesse.splice(i, 1); }
+    if (weg) {
+      if (w.platzen) explodieren(s.x - s.vx * 0.012, s.y - s.vy * 0.012, w.platzen.r, w.platzen.schaden, s.team, s.wer);   // Farbkanone
+      scene.remove(s.mesh); schuesse.splice(i, 1);
+    }
   }
 
   // Bomben & Raketen
@@ -1556,16 +1762,99 @@ function update(dt) {
     b.x = b.sx + (b.zx - b.sx) * f; b.y = b.sy + (b.zy - b.sy) * f;
     b.h = b.h0 * (1 - f) + Math.sin(f * Math.PI) * b.hoehe + 6;
     if (f >= 1) {
-      klecks(b.x, b.y, b.r, b.team, b.wer, !b.ulti);
-      spritzer(b.x, b.y, 5, b.team, 40, 300);
-      for (const e of kleckse) {
-        if (e.team === b.team || e.tot) continue;
-        const d = Math.hypot(e.x - b.x, e.y - b.y);
-        if (d < b.r + 15) treffen(e, b.schaden * (1 - d / (b.r + 45)), b.wer);
-      }
-      if (Math.hypot(spieler.x - b.x, spieler.y - b.y) < 500) ton('platsch');
-      scene.remove(b.mesh); bomben.splice(i, 1);
+      bomben.splice(i, 1);
+      if (b.art === 'klebe' || b.art === 'sprinkler') { geraetSetzen(b.art, b.x, b.y, b.team, b.wer, 0, b.mesh); continue; }
+      explodieren(b.x, b.y, b.r, b.schaden, b.team, b.wer, !b.ulti);
+      scene.remove(b.mesh);
     }
+  }
+
+  // Liegende Bomben: Klebebombe, Sprinkler, Mine, Farbwand
+  for (let i = geraete.length - 1; i >= 0; i--) {
+    const g = geraete[i], ud = g.mesh.userData;
+    g.t += dt; g.treffer = Math.max(0, g.treffer - dt);
+    let weg = false;
+    if (g.art === 'klebe') {
+      ud.licht.emissiveIntensity = Math.sin(g.t * (10 + g.t * 30)) > 0 ? 2 : 0.1;
+      g.mesh.scale.setScalar(1 + g.t * 0.3);
+      if (g.t >= 1) { explodieren(g.x, g.y, 85, 100, g.team, g.wer); weg = true; }
+    } else if (g.art === 'sprinkler') {
+      g.dreh += dt * 4; ud.kopf.rotation.y = -g.dreh;
+      g.spT -= dt;
+      if (g.spT <= 0) {
+        g.spT = 0.12;
+        for (const off of [0, Math.PI]) tropfen(g.x, g.y, 14, g.dreh + off, 0.45, 150 + Math.random() * 90, SPRINKLER_TROPFEN, g.team, g.wer);
+      }
+      if (g.t > 8) weg = true;
+    } else if (g.art === 'mine') {
+      g.mesh.visible = g.team === spieler.team || g.zuend >= 0;
+      ud.licht.emissiveIntensity = g.zuend >= 0 ? (Math.sin(g.t * 60) > 0 ? 3 : 0) : (Math.sin(g.t * 3) > 0.7 ? 1.5 : 0.2);
+      if (g.zuend < 0 && g.t > 0.5) {
+        for (const e of kleckse) if (e.team !== g.team && !e.tot && e.z < 10 && Math.hypot(e.x - g.x, e.y - g.y) < 40) {
+          g.zuend = 0.3; if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 300) ton('piep'); break;
+        }
+      }
+      if (g.zuend >= 0) { g.zuend -= dt; if (g.zuend < 0) { explodieren(g.x, g.y, 70, 95, g.team, g.wer); weg = true; } }
+      if (g.t > 40) weg = true;
+    } else if (g.art === 'wand') {
+      ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
+      ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
+      g.mesh.scale.y = Math.min(1, g.t * 6);
+      if (g.t > 5) weg = true;
+    }
+    if (weg) { scene.remove(g.mesh); geraete.splice(i, 1); }
+  }
+
+  // Farbwellen rollen nach vorne
+  for (let i = wellen.length - 1; i >= 0; i--) {
+    const w = wellen[i];
+    w.t += dt;
+    const c = Math.cos(w.winkel), s2 = Math.sin(w.winkel);
+    w.x += c * 270 * dt; w.y += s2 * 270 * dt;
+    w.malT -= dt;
+    if (w.malT <= 0) {
+      w.malT = 0.04;
+      for (let k = -3; k <= 3; k++) {
+        const px = w.x - s2 * k * 25, py = w.y + c * k * 25;
+        if (px > 0 && py > 0 && px < W && py < H && !istWand(px, py)) klecks(px, py, 18, w.team, w.wer, false);
+      }
+      for (const e of kleckse) {
+        if (e.team === w.team || e.tot || w.getroffen.has(e)) continue;
+        const dx = e.x - w.x, dy = e.y - w.y, laengs = dx * c + dy * s2, quer = -dx * s2 + dy * c;
+        if (Math.abs(laengs) < 28 && Math.abs(quer) < 95 && e.z < 40) { w.getroffen.add(e); treffen(e, 75, w.wer); }
+      }
+      spritzer(w.x - s2 * (Math.random() - 0.5) * 180, w.y + c * (Math.random() - 0.5) * 180, 30, w.team, 3, 120);
+    }
+    w.mesh.position.set(w.x, 0, w.y); w.mesh.rotation.y = -w.winkel;
+    w.mesh.scale.y = Math.max(0.05, Math.min(1.4, w.t * 6, (w.dauer - w.t) * 4));
+    if (w.t >= w.dauer) { scene.remove(w.mesh); wellen.splice(i, 1); }
+  }
+
+  // Farbtornados jagen Gegner
+  for (let i = tornados.length - 1; i >= 0; i--) {
+    const tn = tornados[i];
+    tn.t -= dt;
+    let ziel = null, zd = 450;
+    for (const e of kleckse) if (e.team !== tn.team && !e.tot) { const d = Math.hypot(e.x - tn.x, e.y - tn.y); if (d < zd) { zd = d; ziel = e; } }
+    if (ziel) {
+      const nx = tn.x + (ziel.x - tn.x) / zd * 85 * dt, ny = tn.y + (ziel.y - tn.y) / zd * 85 * dt;
+      if (!istWand(nx, ny)) { tn.x = nx; tn.y = ny; }
+    }
+    tn.malT -= dt; tn.schadenT -= dt;
+    while (tn.malT <= 0) {
+      tn.malT += 0.05;
+      const a = tn.t * 14;
+      const px = tn.x + Math.cos(a) * 28, py = tn.y + Math.sin(a) * 28;
+      if (!istWand(px, py)) klecks(px, py, 20, tn.team, tn.wer, false);
+      partikel.push({ x: px, y: py, h: 5, vx: -Math.sin(a) * 120, vy: Math.cos(a) * 120, vh: 250, leben: 0.6, team: tn.team, r: 2.5 });
+    }
+    if (tn.schadenT <= 0) {
+      tn.schadenT = 0.25;
+      for (const e of kleckse) if (e.team !== tn.team && !e.tot && Math.hypot(e.x - tn.x, e.y - tn.y) < 70) treffen(e, 12, tn.wer);
+    }
+    tn.mesh.position.set(tn.x, 0, tn.y); tn.mesh.rotation.y += dt * 9;
+    tn.mesh.scale.setScalar(Math.max(0.05, Math.min(1, (7 - tn.t) * 3, tn.t * 2)));
+    if (tn.t <= 0) { scene.remove(tn.mesh); tornados.splice(i, 1); }
   }
 
   // Regenwolken
@@ -1607,7 +1896,7 @@ function update(dt) {
 
 // ================== ANIMATION DER FARBTAUCHER ==================
 // [Schulter-Winkel, Ellbogen-Winkel, wie stark die Arme beim Zielen hoch/runter gehen]
-const HALTUNG = { spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0], pinsel: [0.75, 0.25, 0] };
+const HALTUNG = { doppel: [1.15, 0.45, 0.6], kanone: [1.1, 0.5, 0.6], spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0], pinsel: [0.75, 0.25, 0] };
 function animiereFigur(e, v, dt) {
   const ud = e.koerper.userData, inLuft = e.z > 0;
   const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
@@ -1695,7 +1984,7 @@ function welt3D(dt) {
     e.blase.position.set(e.x, e.z + 24, e.y);
   }
   for (const s of schuesse) {   // Tropfen sind länglich in Flugrichtung
-    s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); s.mesh.scale.set(0.8, 0.8, 1.7);
+    s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); const gr = s.w.gross || 1; s.mesh.scale.set(0.8 * gr, 0.8 * gr, 1.7 * gr);
   }
   for (const b of bomben) {
     if (b.ulti) {   // Rakete zeigt in Flugrichtung, Flamme flackert
@@ -1794,7 +2083,7 @@ function hud() {
   ctx.fillStyle = spieler.tinte < 15 ? '#ff6060' : TEAMS[0].col;
   if (fh > 1) { ctx.beginPath(); ctx.roundRect(tx, ty + 130 - fh, 44, fh, 10); ctx.fill(); }
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tx, ty + 65); ctx.lineTo(tx + 8, ty + 65); ctx.stroke();
-  ctx.font = '20px system-ui'; ctx.globalAlpha = spieler.tinte >= bombeKosten(spieler) ? 1 : 0.3; ctx.fillText('💣', tx + 56, ty + 22);
+  ctx.font = '20px system-ui'; ctx.globalAlpha = spieler.tinte >= bombeKosten(spieler) ? 1 : 0.3; ctx.fillText(BOMBEN[spieler.bombe].emoji, tx + 56, ty + 22);
   ctx.font = 'bold 11px system-ui'; ctx.fillStyle = '#ffd166'; ctx.fillText('E', tx + 84, ty + 20); ctx.globalAlpha = 1;
   ctx.font = '20px system-ui'; ctx.fillText('❤️', tx + 56, ty + 56);
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(tx + 84, ty + 44, 60, 10);
@@ -1996,9 +2285,11 @@ function menuZeigen() {
     const it = liste[konto.an[slot]], sp = document.createElement('span');
     sp.textContent = `${it.emoji} ${it.name}`; sp.title = it.info; ausr.append(sp);
   }
-  const ul = $('wahlUlti'); ul.innerHTML = '';
-  for (const [id, u] of Object.entries(ULTIS)) {
-    ul.append(knopf([['b', u.emoji], u.name, ['small', u.info]], () => { konto.an.ulti = id; speichern(); ton('klick'); menuZeigen(); }, konto.an.ulti === id ? 'an' : ''));
+  const u = ULTIS[WAFFEN[konto.an.waffe].ulti], us = document.createElement('span');
+  us.textContent = `⚡ Ulti: ${u.emoji} ${u.name}`; us.title = u.info; us.style.color = '#ffd166'; ausr.append(us);
+  const bo = $('wahlBombe'); bo.innerHTML = '';
+  for (const [id, b] of Object.entries(BOMBEN)) {
+    bo.append(knopf([['b', b.emoji], b.name, ['small', b.info]], () => { konto.an.bombe = id; speichern(); ton('klick'); menuZeigen(); }, konto.an.bombe === id ? 'an' : ''));
   }
   vorschauBauen();
 }
@@ -2029,7 +2320,8 @@ function shopZeigen() {
     karte.className = 'item' + (traegt ? ' an' : '') + (anprobe && anprobe.id === id ? ' vorschau' : '');
     const em = document.createElement('span'); em.className = 'em'; em.textContent = it.emoji;
     const nm = document.createElement('b'); nm.textContent = it.name;
-    const info = document.createElement('small'); info.textContent = it.info;
+    const info = document.createElement('small');
+    info.textContent = it.info + (shopTab === 'waffe' ? ` · Ulti: ${ULTIS[it.ulti].emoji} ${ULTIS[it.ulti].name}` : '');
     karte.append(em, nm, info);
     if (traegt) {
       const t = document.createElement('div'); t.textContent = shopTab === 'waffe' ? '✔ In der Hand' : '✔ Angezogen'; t.style.color = '#5be37d'; karte.append(t);
