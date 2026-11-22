@@ -1481,16 +1481,20 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   tasten[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; }
-  if (e.code === 'KeyE' && zustand === 'stadt') stadtBetretenTaste();
-  // 🤫 Geheimer Cheatcode: in der Stadt KLECKSI tippen
-  if (zustand === 'stadt' && e.key && e.key.length === 1) {
+  // 🤫 Geheimer Cheatcode: KLECKSI tippen (in der Stadt, im Menü oder im Laden)
+  let cheatTippen = false;
+  if (konto && ['stadt', 'menu', 'wahl'].includes(zustand) && e.key && e.key.length === 1) {
     cheatPuffer = (cheatPuffer + e.key.toUpperCase()).slice(-20);
+    cheatTippen = cheatPuffer.endsWith('KLE');            // das E gehört zum Cheat – dann keinen Laden öffnen
     if (cheatPuffer.endsWith('KLECKSI')) {
       cheatPuffer = '';
       konto.muenzen += 10000; speichern();
       meldung('🤫 Cheat aktiviert: +10.000 Münzen! 🪙'); ton('sieg');
+      if (!$('menu').classList.contains('hidden')) menuZeigen();       // Münzen im Menü gleich neu anzeigen
+      if (!$('shop').classList.contains('hidden')) shopZeigen();
     }
   }
+  if (e.code === 'KeyE' && zustand === 'stadt' && !cheatTippen) stadtBetretenTaste();
   if (e.code === 'Enter' && modus === 'lobby' && zustand === 'lobby' && !istGast()) neueRunde();   // Match starten (Bots füllen auf)
   if (e.code === 'KeyK' && modus === 'lobby' && zustand === 'lobby' && !istGast()) {
     const liste = ['zufall', ...Object.keys(ARENEN)];
