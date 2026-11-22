@@ -1427,6 +1427,21 @@ const FAHRZEUGE = {
     dieselMax: 500, tankMax: 20000, saatMax: 0, geraete: ['ernte'], motorTon: 0.85,
     faehigkeit: 'Nur Ernten – aber 6,7 m breit und mit Riesen-Korntank!',
   },
+  oldtimerdrescher: {
+    name: 'Oldtimer-Mähdrescher', emoji: '🕰️', preis: 60000, farbe: 0xc0392b, art: 'drescher', groesse: 0.8, tempo: 5.5, arbeit: 1.4, breite: 0.9,
+    dieselMax: 250, tankMax: 5000, saatMax: 0, geraete: ['ernte'], motorTon: 1.2, oldtimer: true, sparsam: 0.35,
+    faehigkeit: 'Klein, günstig und sparsam – mit offenem Sitz und Sonnenschirm! Schneidwerk 4 m',
+  },
+  raupendrescher: {
+    name: 'Raupen-Mähdrescher', emoji: '🐛', preis: 240000, farbe: 0x2a5fa8, art: 'drescher', groesse: 1, tempo: 6.1, arbeit: 1.8, breite: 1.6,
+    dieselMax: 600, tankMax: 18000, saatMax: 0, geraete: ['ernte'], motorTon: 0.75, raupe: true, allrad: true,
+    faehigkeit: 'Vorne Ketten statt Räder: dreht sich auf der Stelle! Schneidwerk 7,2 m',
+  },
+  riesendrescher: {
+    name: 'Riesen-Mähdrescher', emoji: '🦣', preis: 390000, farbe: 0xe8701e, art: 'drescher', groesse: 1.25, tempo: 6.4, arbeit: 2.2, breite: 2.1,
+    dieselMax: 900, tankMax: 40000, saatMax: 0, geraete: ['ernte'], motorTon: 0.6, riesen: true,
+    faehigkeit: 'Der Größte! Zwillingsräder, 9,5 m Schneidwerk und 40.000 kg Korntank',
+  },
   harvester: {
     name: 'Harvester', emoji: '🦾', preis: 150000, farbe: 0xd9531e, art: 'harvester', groesse: 1, tempo: 6.9, arbeit: 1, breite: 1,
     dieselMax: 400, tankMax: 0, saatMax: 0, geraete: [], motorTon: 0.9, allrad: true,
@@ -1832,23 +1847,84 @@ function baueTraktor(typ, K) {
   return { raeder, auspuff, sitz, radstand: typ.monster ? 2.5 : 2.3, frontgewicht: front, ...kabine };
 }
 function baueDrescher(typ, K) {
-  const gelb = typ.farbe;
+  const gelb = typ.farbe, dunkel = new THREE.Color(gelb).multiplyScalar(0.75).getHex();
+  const licht = new THREE.MeshBasicMaterial({ color: 0xfff6c0 });
   kasten(K, 0, 2.5, 0.6, 3.0, 2.8, 6.0, gelb);                    // Großer Körper
-  kasten(K, 0, 4.25, 1.4, 2.7, 0.9, 3.0, 0xc79a00);               // Korntank oben
+  kasten(K, 0, 4.25, 1.4, 2.7, 0.9, 3.0, dunkel);                 // Korntank oben
   kasten(K, 0, 1.3, -2.2, 2.2, 1.2, 1.6, 0x444444);               // Einzugskanal
-  kasten(K, 0, 3.75, -1.7, 1.9, 0.1, 1.9, gelb);                  // Kabine: Boden
-  kasten(K, 0, 5.15, -1.7, 2.0, 0.12, 2.0, 0xc79a00);             // Dach
-  for (const [x, z] of [[-0.9, -2.6], [0.9, -2.6], [-0.9, -0.8], [0.9, -0.8]]) kasten(K, x, 4.45, z, 0.1, 1.3, 0.1, 0x333333);
-  kasten(K, 0, 4.45, -1.7, 1.75, 1.25, 1.75, glasMat, false);
-  kasten(K, 0, 4.0, -1.3, 0.55, 0.12, 0.55, 0x222222, false);     // Sitz
-  const rohr = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 4.5, 10), mat(0xc79a00));   // Abtankrohr
-  rohr.rotation.z = Math.PI / 2; rohr.position.set(2.6, 4.2, 1.2); rohr.castShadow = true; K.add(rohr);
+  for (let k = 0; k < 8; k++) kasten(K, 1.51, 2.4 + (k % 2) * 0.5, 2.0 + Math.floor(k / 2) * 0.35, 0.02, 0.3, 0.25, 0x222222, false);   // Lüftungsgitter an der Seite
+  if (typ.oldtimer) {
+    // 🕰️ Oldtimer: keine Kabine – ein offener Sitz mit Lenkrad und einem bunten Sonnenschirm
+    kasten(K, 0, 3.75, -1.7, 2.0, 0.12, 2.0, dunkel);                                  // Fahrerstand
+    for (const sx of [-1, 1]) kasten(K, sx * 0.95, 4.15, -1.7, 0.06, 0.7, 1.9, 0x333333);   // Geländer
+    kasten(K, 0, 4.0, -1.2, 0.6, 0.12, 0.55, 0x5a3825, false); kasten(K, 0, 4.35, -0.95, 0.6, 0.6, 0.1, 0x5a3825, false);   // Holzsitz
+    const saeule = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.9, 8), mat(0x333333)); saeule.position.set(0, 4.2, -2.1); saeule.rotation.x = 0.5; K.add(saeule);
+    const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.035, 8, 22), mat(0x222222)); lenkrad.position.set(0, 4.62, -1.9); lenkrad.rotation.x = -1.1; K.add(lenkrad);
+    const stange = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.0, 8), mat(0xdddddd)); stange.position.set(0.8, 4.75, -1.0); K.add(stange);
+    for (let k = 0; k < 8; k++) {   // Sonnenschirm: abwechselnd rot und weiß
+      const teil = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.55, 8, 1, true, k / 8 * Math.PI * 2, Math.PI / 4), mat(k % 2 ? 0xffffff : 0xd8302a, { side: THREE.DoubleSide }));
+      teil.position.set(0.8, 5.9, -1.0); K.add(teil);
+    }
+    kasten(K, 0, 2.2, 0.6, 3.02, 0.25, 6.02, 0xf2f2f2, false);                       // weißer Zierstreifen
+    for (const sx of [-1, 1]) {   // runde Scheinwerfer auf Stielen
+      kasten(K, sx * 1.1, 4.2, -2.7, 0.06, 0.8, 0.06, 0x333333);
+      const s = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.15, 14), mat(0xc0c0c0, { metalness: 0.7 })); s.rotation.x = Math.PI / 2; s.position.set(sx * 1.1, 4.65, -2.72); K.add(s);
+      const glas = new THREE.Mesh(new THREE.CircleGeometry(0.15, 14), licht); glas.rotation.y = Math.PI; glas.position.set(sx * 1.1, 4.65, -2.8); K.add(glas);
+    }
+  } else {
+    kasten(K, 0, 3.75, -1.7, 1.9, 0.1, 1.9, gelb);                  // Kabine: Boden
+    kasten(K, 0, 5.15, -1.7, 2.0, 0.12, 2.0, dunkel);               // Dach
+    for (const [x, z] of [[-0.9, -2.6], [0.9, -2.6], [-0.9, -0.8], [0.9, -0.8]]) kasten(K, x, 4.45, z, 0.1, 1.3, 0.1, 0x333333);
+    kasten(K, 0, 4.45, -1.7, 1.75, 1.25, 1.75, glasMat, false);
+    kasten(K, 0, 4.0, -1.3, 0.55, 0.12, 0.55, 0x222222, false);     // Sitz
+    for (const x of [-0.5, 0.5]) kasten(K, x, 5.1, -2.71, 0.35, 0.15, 0.05, licht, false);
+  }
+  const rohrLang = typ.riesen ? 6.2 : 4.5;
+  const rohr = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, rohrLang, 10), mat(dunkel));   // Abtankrohr
+  rohr.rotation.z = Math.PI / 2; rohr.position.set(0.35 + rohrLang / 2, 4.2, 1.2); rohr.castShadow = true; K.add(rohr);
   kasten(K, 0.9, 5.4, 2.6, 0.2, 1.2, 0.2, 0x222222);              // Auspuff
-  for (const x of [-0.5, 0.5]) kasten(K, x, 5.1, -2.71, 0.35, 0.15, 0.05, new THREE.MeshBasicMaterial({ color: 0xfff6c0 }), false);
   const raeder = [];
-  for (const x of [-1.6, 1.6]) {
-    raeder.push(baueRad(K, x, 0.95, -1.4, 0.95, 0.7, 0));        // Vorne: riesig (der Mähdrescher trägt vorne das Schneidwerk)
-    raeder.push(baueRad(K, x * 0.9, 0.6, 3.0, 0.6, 0.45, -1));    // Hinten: lenkt! (wie bei echten Mähdreschern)
+  if (typ.raupe) {
+    // 🐛 Raupen-Mähdrescher: vorne zwei Kettenlaufwerke statt Räder (fährt auch auf matschigem Boden)
+    const kette = mat(0x1c1c1c, { roughness: 0.85 }), stollenMat = mat(0x2c2c2c, { roughness: 0.9 });
+    const profil = innen => {
+      const d = innen ? 0.12 : 0, pts = [];
+      const kreis = (u, v, r) => { for (let k = 0; k < 28; k++) { const w = k / 28 * Math.PI * 2; pts.push(new THREE.Vector2(u + Math.cos(w) * (r - d), v + Math.sin(w) * (r - d))); } };
+      kreis(2.5, 0.55, 0.5); kreis(0.1, 1.0, 0.85);
+      pts.push(new THREE.Vector2(2.1, 0.06 + d), new THREE.Vector2(0.4, 0.06 + d));
+      return huelle(pts);
+    };
+    const form = new THREE.Shape(profil(false)); form.holes.push(new THREE.Path(profil(true)));
+    const ketteGeo = new THREE.ExtrudeGeometry(form, { depth: 0.85, bevelEnabled: false, curveSegments: 4 }); ketteGeo.translate(0, 0, -0.425); ketteGeo.rotateY(Math.PI / 2);
+    for (const sx of [-1, 1]) {
+      const x = sx * 1.65;
+      const k = new THREE.Mesh(ketteGeo, kette); k.position.x = x; k.castShadow = true; K.add(k);
+      for (let n = 0; n < 9; n++) kasten(K, x, 0.06, -2.05 + n * 0.2, 0.85, 0.05, 0.08, stollenMat, false);   // Stollen unten
+      for (const [z, y, r] of [[-0.1, 1.0, 0.75], [-2.5, 0.55, 0.45], [-1.3, 0.35, 0.28], [-0.7, 0.35, 0.28]]) {   // Antriebsrad, Leitrad, Laufrollen
+        const lenker = new THREE.Group(); lenker.position.set(x, y, z); K.add(lenker);
+        const rad = new THREE.Group(); lenker.add(rad);
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.7, 18), mat(r > 0.6 ? gelb : 0x777777, { metalness: 0.4 })); s.rotation.z = Math.PI / 2; rad.add(s);
+        for (let n = 0; n < 6; n++) { const w = n / 6 * Math.PI * 2; const l = kasten(rad, 0, Math.cos(w) * r * 0.55, Math.sin(w) * r * 0.55, 0.74, r * 0.18, r * 0.18, 0x333333, false); l.rotation.x = -w; }
+        raeder.push({ lenker, rad, r, lenkt: 0 });
+      }
+    }
+  } else {
+    for (const x of [-1.6, 1.6]) {
+      raeder.push(baueRad(K, x, 0.95, -1.4, 0.95, 0.7, 0));          // Vorne: riesig (der Mähdrescher trägt vorne das Schneidwerk)
+      if (typ.riesen) raeder.push(baueRad(K, x * 1.47, 0.95, -1.4, 0.95, 0.7, 0));   // Riese: Zwillingsräder
+    }
+  }
+  for (const x of [-1.6, 1.6]) raeder.push(baueRad(K, x * 0.9, 0.6, 3.0, 0.6, 0.45, -1));   // Hinten: lenkt! (wie bei echten Mähdreschern)
+  if (typ.riesen) {
+    // 🦣 Riesen-Mähdrescher: Lichtleiste, Rundumleuchte, Tankaufsatz, Leiter und Kamera am Abtankrohr
+    for (let k = 0; k < 6; k++) kasten(K, -0.85 + k * 0.34, 5.32, -2.62, 0.22, 0.14, 0.1, licht, false);
+    const rundum = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.25, 12), new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff6a00, emissiveIntensity: 0.8 }));
+    rundum.position.set(0.7, 5.35, -1.1); K.add(rundum);
+    for (const sx of [-1, 1]) { const klappe = kasten(K, sx * 1.4, 4.95, 1.4, 0.08, 0.6, 3.0, dunkel); klappe.rotation.z = sx * -0.35; }   // Tankaufsatz (aufgeklappt)
+    for (let k = 0; k < 7; k++) kasten(K, -1.55, 1.0 + k * 0.4, -0.5, 0.06, 0.05, 0.5, 0x333333, false);   // Leiter
+    kasten(K, -1.56, 2.2, -0.75, 0.05, 2.6, 0.05, 0x333333, false); kasten(K, -1.56, 2.2, -0.25, 0.05, 2.6, 0.05, 0x333333, false);
+    kasten(K, 0.35 + rohrLang, 4.0, 1.2, 0.25, 0.2, 0.25, 0x222222, false);                       // Kamera am Rohr
+    kasten(K, 0, 3.4, 3.62, 2.4, 0.5, 0.05, 0xe0201e, false);                                      // Warnstreifen hinten
   }
   return { raeder, auspuff: [0.9, 6.0, 2.6], sitz: [0, 4.75, -1.15], radstand: 4.4 };
 }
@@ -2115,7 +2191,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
   for (const art of typ.geraete) {
     const m = baueGeraet(art), G = GERAETE[art];
     m.scale.set(typ.breite, typ.groesse, typ.groesse);
-    m.position.z = typ.art === 'drescher' ? -3.9 : typ.art === 'haecksler' ? -3.4 : (G.hinten ? 3.0 : -2.9) * typ.groesse;
+    m.position.z = typ.art === 'drescher' ? -3.9 * typ.groesse : typ.art === 'haecksler' ? -3.4 : (G.hinten ? 3.0 : -2.9) * typ.groesse;
     g.add(m);
     fz.geraete[art] = m;
   }
