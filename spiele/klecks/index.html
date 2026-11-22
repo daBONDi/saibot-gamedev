@@ -31,6 +31,7 @@
   .balken { display: flex; height: 2.5rem; border-radius: 1rem; overflow: hidden; margin: 1rem 0; font-weight: bold; }
   .balken div { display: flex; align-items: center; justify-content: center; transition: width 1.5s ease-out; width: 0; }
   .hidden { display: none !important; }
+  button.klein { background: #1b1f3a; color: #fff; border: 2px solid #3d4266; border-radius: 0.7rem; padding: 0.3rem 0.9rem; cursor: pointer; font: 0.95rem system-ui, sans-serif; margin-top: 0.6rem; }
   a { color: #c9c3ff; }
   a.zurueck { position: fixed; top: 0.6rem; left: 0.6rem; font-size: 0.9rem; z-index: 11; }
 </style>
@@ -44,7 +45,7 @@
   <div class="box">
     <h1>KLECKS-KRIEG 3D</h1>
     <p>Team <b style="color:#ff8a1f">Orange</b> gegen Team <b style="color:#a347ff">Lila</b>! Mal in 3 Minuten mehr Boden an als die Gegner.</p>
-    <p style="font-size:1.2rem">Du bist ein <b>Tintenfisch</b> 🦑 – such dir deine Ausrüstung aus!</p>
+    <p style="font-size:1.2rem">Du bist ein <b>Farbtaucher</b> 🤿 – mit Glashelm und Farbtank! Such dir deine Ausrüstung aus:</p>
     <h2>Deine Waffe</h2><div class="wahl" id="wahlWaffe"></div>
     <h2>Deine Ulti</h2><div class="wahl" id="wahlUlti"></div>
     <div class="steuerung">
@@ -56,9 +57,11 @@
       <span class="taste">E</span><span>Farbbombe (halten = zielen)</span>
       <span class="taste">Q</span><span>Ulti, wenn sie voll ist ⚡</span>
       <span class="taste">V</span><span>Ich-Sicht / Sicht von hinten</span>
+      <span class="taste">M</span><span>Musik an/aus 🎵</span>
     </div>
     <p style="margin-top:0.8rem">⚠️ In der Gegnerfarbe bist du langsam und verlierst Leben! Malen lädt deine Ulti auf.</p>
     <button class="gross" id="start">▶ Los geht's!</button>
+    <p><button class="klein" id="musikKnopf">🎵 Musik: an</button></p>
     <p style="margin-top:0.8rem"><a href="2d.html">🗺️ Alte 2D-Version spielen</a></p>
   </div>
 </div>
@@ -94,7 +97,7 @@ const CELL = 8;                    // Größe von einem "Farbkästchen"
 const GW = W / CELL, GH = H / CELL;
 const RUNDE = 180;                 // Rundenzeit in Sekunden
 const WAND_H = 80;                 // Wandhöhe
-const AUGE = 28;                   // Augenhöhe in der Ich-Sicht
+const AUGE = 38;                   // Augenhöhe in der Ich-Sicht
 const SCHWERKRAFT = 900;           // für Springen
 const G_SCHUSS = 500;              // Schwerkraft für Farbtropfen
 const ULTI_PUNKTE = 900;           // So viele Kästchen malen, bis die Ulti voll ist
@@ -198,39 +201,123 @@ function klecks(x, y, r, team, wer, ultiLaden = true) {
   }
 }
 
-// ================== SOUND ==================
-let ac = null, rauschen = null;
-function ton(art) {
+// ================== SOUND & MUSIK ==================
+// Alles wird mit Web Audio direkt im Browser erzeugt – keine Sound-Dateien nötig!
+let ac = null, rauschen = null, sfxGain = null, musikGain = null;
+let musikAn = true;
+try { musikAn = localStorage.getItem('klecks3d-musik') !== 'aus'; } catch (e) {}
+const MUSIK_LAUT = 0.32;
+function audioStart() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return true; }
   try {
-    if (!ac) {
-      ac = new AudioContext();
-      rauschen = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
-      const d = rauschen.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    const t = ac.currentTime, g = ac.createGain(); g.connect(ac.destination);
-    if (art === 'schuss' || art === 'platsch' || art === 'roll') {
-      const q = ac.createBufferSource(); q.buffer = rauschen;
-      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = { schuss: 1800, platsch: 600, roll: 300 }[art];
-      q.connect(f); f.connect(g);
-      const lang = { schuss: 0.06, platsch: 0.4, roll: 0.08 }[art];
-      g.gain.setValueAtTime({ schuss: 0.05, platsch: 0.4, roll: 0.05 }[art], t); g.gain.exponentialRampToValueAtTime(0.001, t + lang);
-      q.start(t); q.stop(t + lang);
-    } else {
-      const o = ac.createOscillator(); o.connect(g);
-      const [typ, f1, f2, lang, laut] = {
-        treffer: ['square', 500, 300, 0.08, 0.06],
-        ko: ['sawtooth', 600, 80, 0.5, 0.12],
-        pfiff: ['sine', 1200, 1500, 0.6, 0.15],
-        sniper: ['triangle', 1400, 200, 0.25, 0.15],
-        ulti: ['sine', 300, 1400, 0.5, 0.2],
-        sprung: ['sine', 300, 600, 0.12, 0.08],
-      }[art];
-      o.type = typ; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + lang);
-      g.gain.setValueAtTime(laut, t); g.gain.exponentialRampToValueAtTime(0.001, t + lang);
-      o.start(t); o.stop(t + lang);
-    }
-  } catch (e) { /* kein Sound, auch ok */ }
+    ac = new AudioContext();
+    rauschen = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = rauschen.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const haupt = ac.createGain(); haupt.gain.value = 0.8; haupt.connect(ac.destination);
+    sfxGain = ac.createGain(); sfxGain.connect(haupt);
+    musikGain = ac.createGain(); musikGain.gain.value = musikAn ? MUSIK_LAUT : 0; musikGain.connect(haupt);
+    return true;
+  } catch (e) { return false; }
 }
+// Ein Ton: Wellenform, Start- und Endfrequenz, Länge, Lautstärke
+function osz(typ, f1, f2, lang, laut, t, ziel = sfxGain, filter = 0) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = typ; o.frequency.setValueAtTime(f1, t);
+  if (f2 !== f1) o.frequency.exponentialRampToValueAtTime(f2, t + lang);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + lang);
+  if (filter) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filter; o.connect(f); f.connect(g); }
+  else o.connect(g);
+  g.connect(ziel); o.start(t); o.stop(t + lang + 0.05);
+}
+// Ein Rauschen (für Platscher, Schlagzeug …)
+function krach(freq, lang, laut, t, ziel = sfxGain, typ = 'lowpass') {
+  const q = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  q.buffer = rauschen; f.type = typ; f.frequency.value = freq;
+  g.gain.setValueAtTime(laut, t); g.gain.exponentialRampToValueAtTime(0.0001, t + lang);
+  q.connect(f); f.connect(g); g.connect(ziel); q.start(t); q.stop(t + lang + 0.02);
+}
+const SOUNDS = {
+  schuss:  (t, v) => krach(1800, 0.06, 0.05 * v, t),
+  klatsch: (t, v) => krach(900, 0.09, 0.06 * v, t),
+  platsch: (t, v) => { krach(600, 0.4, 0.4 * v, t); osz('sine', 200, 50, 0.3, 0.25 * v, t); },
+  roll:    (t, v) => krach(300, 0.08, 0.05 * v, t),
+  treffer: (t, v) => osz('square', 700, 900, 0.07, 0.06 * v, t),
+  aua:     (t, v) => osz('sawtooth', 320, 140, 0.15, 0.1 * v, t, sfxGain, 1500),
+  ko:      (t, v) => { osz('square', 900, 900, 0.08, 0.08 * v, t); osz('square', 1350, 1350, 0.15, 0.08 * v, t + 0.08); },
+  erwischt:(t, v) => osz('sawtooth', 600, 70, 0.6, 0.12 * v, t, sfxGain, 2000),
+  sniper:  (t, v) => osz('triangle', 1400, 200, 0.25, 0.15 * v, t),
+  ding:    (t, v) => osz('sine', 1760, 1760, 0.25, 0.1 * v, t),
+  ulti:    (t, v) => { osz('sine', 300, 1400, 0.5, 0.2 * v, t); osz('triangle', 450, 2100, 0.5, 0.08 * v, t + 0.1); },
+  sprung:  (t, v) => osz('sine', 300, 650, 0.12, 0.08 * v, t),
+  blubb:   (t, v) => { for (let i = 0; i < 3; i++) osz('sine', 350 + i * 120, 900 + i * 200, 0.06, 0.08 * v, t + i * 0.06); },
+  auf:     (t, v) => osz('sine', 900, 350, 0.12, 0.07 * v, t),
+  wurf:    (t, v) => krach(1300, 0.25, 0.09 * v, t, sfxGain, 'bandpass'),
+  piep:    (t, v) => osz('square', 880, 880, 0.12, 0.08 * v, t, sfxGain, 3000),
+  los:     (t, v) => osz('square', 1320, 1320, 0.4, 0.1 * v, t, sfxGain, 3000),
+  plopp:   (t, v) => osz('sine', 200, 900, 0.12, 0.12 * v, t),
+  klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
+  pfiff:   (t, v) => osz('sine', 1200, 1500, 0.6, 0.15 * v, t),
+  sieg:    (t, v) => [60, 64, 67, 72, 76].forEach((n, i) => osz('square', NOTE(n), NOTE(n), i === 4 ? 0.6 : 0.15, 0.08 * v, t + i * 0.12, sfxGain, 3000)),
+  niederlage: (t, v) => [67, 63, 60, 55].forEach((n, i) => osz('triangle', NOTE(n), NOTE(n) * (i === 3 ? 0.9 : 1), i === 3 ? 0.7 : 0.22, 0.12 * v, t + i * 0.22)),
+};
+function ton(art, v = 1) {
+  if (!audioStart() || v <= 0.01) return;
+  try { SOUNDS[art](ac.currentTime, v); } catch (e) { /* kein Sound, auch ok */ }
+}
+
+// ---------- Musik (eigene Melodie, wird live erzeugt) ----------
+const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);     // Notennummer -> Frequenz
+const AKKORDE = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];   // Am, F, C, G
+const BASS = [45, 41, 48, 43];
+const BASS_RHYTHMUS = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0];
+const MELODIE = [   // Zahl = welcher Akkord-Ton, -1 = Pause
+  [0, -1, 1, -1, 2, -1, 1, 0, 2, -1, 3, -1, 2, 1, 0, -1],
+  [2, -1, 1, -1, 0, -1, 1, 2, 3, -1, 2, -1, 1, -1, 0, -1],
+  [0, -1, 2, -1, 3, -1, 2, -1, 4, -1, 3, 2, 1, -1, 2, -1],
+  [3, -1, 2, -1, 1, -1, 2, 3, 4, -1, -1, 3, 5, -1, 4, -1],
+];
+let musikModus = 'aus', schritt = 0, naechsterSchritt = 0, musikTimer = null;
+function musikModusSetzen(m) {
+  musikModus = m;
+  if (!ac || musikTimer) return;
+  musikTimer = setInterval(musikPlanen, 25);
+}
+function musikPlanen() {
+  if (musikModus === 'aus') return;
+  const bpm = musikModus === 'menu' ? 100 : musikModus === 'eile' ? 152 : 128;
+  const sechzehntel = 60 / bpm / 4;
+  if (naechsterSchritt < ac.currentTime - 0.2) naechsterSchritt = ac.currentTime + 0.05;
+  while (naechsterSchritt < ac.currentTime + 0.12) {
+    musikSchritt(schritt, naechsterSchritt, sechzehntel);
+    naechsterSchritt += sechzehntel; schritt = (schritt + 1) % 64;
+  }
+}
+function musikSchritt(s, t, d) {
+  const takt = (s / 16) | 0, st = s % 16, ak = AKKORDE[takt], m = musikModus;
+  const menu = m === 'menu', eile = m === 'eile';
+  if (st === 0) for (const n of ak) osz('triangle', NOTE(n), NOTE(n), d * 16, menu ? 0.035 : 0.025, t, musikGain, 1200);  // Teppich
+  if (BASS_RHYTHMUS[st]) osz('sawtooth', NOTE(BASS[takt] + (st === 6 || st === 14 ? 12 : 0)), NOTE(BASS[takt]), d * 1.8, menu ? 0.06 : 0.09, t, musikGain, 600);
+  const mi = MELODIE[takt][st];
+  if (mi >= 0 && (!menu || takt % 2 === 0)) {
+    const toene = [...ak, ...ak.map(n => n + 12)];
+    osz('square', NOTE(toene[mi] + 12), NOTE(toene[mi] + 12), d * 1.7, menu ? 0.03 : 0.045, t, musikGain, eile ? 3500 : 2400);
+  }
+  if (!menu) {   // Schlagzeug
+    if (st % 4 === 0) osz('sine', 150, 40, 0.16, 0.5, t, musikGain);
+    if (st === 4 || st === 12) krach(1500, 0.13, 0.18, t, musikGain, 'highpass');
+    if (st % 2 === 1 || eile) krach(7000, 0.04, eile ? 0.07 : 0.05, t, musikGain, 'highpass');
+  }
+}
+function musikUmschalten() {
+  musikAn = !musikAn;
+  try { localStorage.setItem('klecks3d-musik', musikAn ? 'an' : 'aus'); } catch (e) {}
+  if (audioStart()) musikGain.gain.setTargetAtTime(musikAn ? MUSIK_LAUT : 0, ac.currentTime, 0.1);
+  document.getElementById('musikKnopf').textContent = '🎵 Musik: ' + (musikAn ? 'an' : 'aus');
+  meldung(musikAn ? '🎵 Musik an' : '🔇 Musik aus');
+}
+// Browser erlauben Sound erst nach dem ersten Klick
+addEventListener('pointerdown', () => { if (audioStart() && musikModus === 'aus' && zustand === 'menu') musikModusSetzen('menu'); });
 
 // ================== 3D-WELT (Three.js) ==================
 const glCv = document.getElementById('welt');
@@ -321,37 +408,58 @@ function zylinder(m, r1, r2, h, x, y, z) {
 }
 function auge(g, x, y, z, r) { g.add(kugel(MAT_WEISS, r, x, y, z), kugel(MAT_SCHWARZ, r * 0.5, x + r * 0.62, y, z)); }
 
-// Der Tintenfisch! Er schaut in Richtung +x
-function baueTintenfisch(m, team) {
+// Der Farbtaucher! Er schaut in Richtung +x
+const HAUTFARBEN = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
+const HAARFARBEN = ['#5a3825', '#2b1d14', '#e8c15a', '#b5522b', '#1b1f3a'];
+const glasMat = new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: 0.25, roughness: 0.05, metalness: 0.2, depthWrite: false });
+const MAT_STIEFEL = mat('#2b2f4a');
+function baueTaucher(m, team, haut, haar) {
   const k = new THREE.Group();
   const hell = mat(TEAMS[team].hell, { roughness: 0.35 });
-  // Kopf (etwas nach hinten gekippt)
-  const kopf = new THREE.Group(); kopf.rotation.z = 0.15; k.add(kopf);
-  kopf.add(kugel(m, 13, -1, 24, 0, 1, 1.35, 1));
-  // Flossen oben am Kopf
+  // Beine mit Stiefeln (drehen sich beim Laufen)
+  const beine = [];
   for (const s of [-1, 1]) {
-    const flosse = kugel(m, 7, -4, 37, s * 9, 0.45, 0.8, 1.3); flosse.rotation.x = s * 0.5; kopf.add(flosse);
+    const bein = new THREE.Group(); bein.position.set(0, 14, s * 4);
+    bein.add(zylinder(m, 3, 2.7, 12, 0, -6, 0), klotz(MAT_STIEFEL, 8, 3.5, 5, 1.5, -12.3, 0));
+    k.add(bein); beine.push(bein);
   }
-  // Punkte auf dem Rücken
-  for (const [x, y, z] of [[-11, 28, 4], [-10, 22, -5], [-7, 34, -2], [-12, 17, 2]]) kopf.add(kugel(hell, 2.4, x, y, z));
-  // Große Glubschaugen, Bäckchen und Mund
-  auge(k, 11, 22, -6, 5.5); auge(k, 11, 22, 6, 5.5);
-  k.add(kugel(mat('#ff8fb8'), 2.2, 11, 16, -9.5), kugel(mat('#ff8fb8'), 2.2, 11, 16, 9.5));
-  k.add(kugel(MAT_SCHWARZ, 1.6, 13, 14, 0, 0.6, 1, 1.6));
-  // 8 Arme, die beim Laufen wackeln
+  // Körper im Taucheranzug mit Gürtel und Abzeichen
+  k.add(zylinder(m, 7, 6, 16, 0, 22, 0), zylinder(MAT_GRAU, 6.4, 6.4, 2.2, 0, 15.5, 0));
+  k.add(klotz(hell, 1.5, 7, 6, 6.6, 23, 0));
+  // Arme mit Handschuhen
   const arme = [];
-  for (let i = 0; i < 8; i++) {
-    const a = i / 8 * Math.PI * 2;
-    const gelenk = new THREE.Group();
-    gelenk.position.set(Math.cos(a) * 8, 11, Math.sin(a) * 8);
-    gelenk.rotation.set(0, -a, 0.6);
-    gelenk.add(zylinder(m, 2.6, 1.4, 13, 0, -6.5, 0), kugel(hell, 1.7, 0, -13, 0));
-    k.add(gelenk); arme.push(gelenk);
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Group(); arm.position.set(0, 28, s * 8.5);
+    arm.add(zylinder(m, 2.6, 2.3, 11, 0, -5.5, 0), kugel(MAT_STIEFEL, 2.9, 0, -11.5, 0));
+    k.add(arm); arme.push(arm);
   }
-  k.userData.arme = arme;
-  // Tintentank auf dem Rücken
-  k.add(zylinder(hell, 5, 5, 14, -16, 22, 0), zylinder(MAT_GRAU, 2, 2, 3, -16, 30.5, 0));
+  // Kopf mit Gesicht und Haaren
+  k.add(kugel(mat(haut), 7.5, 0, 38, 0));
+  auge(k, 6, 39.5, -2.8, 2.2); auge(k, 6, 39.5, 2.8, 2.2);
+  k.add(kugel(MAT_SCHWARZ, 1.2, 7.1, 35.3, 0, 0.6, 0.5, 2));
+  k.add(kugel(mat(haar), 7.8, -2.5, 41.5, 0, 1, 0.55, 1));
+  // Glashelm mit Kragen und Lampe
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), glasMat); helm.position.y = 38; k.add(helm);
+  const kragen = new THREE.Mesh(new THREE.TorusGeometry(8, 1.8, 8, 20), MAT_GRAU);
+  kragen.rotation.x = Math.PI / 2; kragen.position.y = 29.5; k.add(kragen);
+  k.add(zylinder(MAT_GRAU, 1.6, 1.6, 2, 0, 49.5, 0), kugel(MAT_GLOW, 1.8, 0, 51, 0));
+  // Farbtank auf dem Rücken + Schlauch zum Helm
+  k.add(zylinder(hell, 5, 5, 17, -11, 24, 0), kugel(hell, 5, -11, 32.5, 0, 1, 0.5, 1), zylinder(MAT_GRAU, 1.5, 1.5, 3, -11, 35, 0));
+  const schlauch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-11, 36, 0), new THREE.Vector3(-11, 43, 0), new THREE.Vector3(-7, 48, 0), new THREE.Vector3(-3, 49, 0)]), 12, 1.1, 6), MAT_GRAU);
+  k.add(schlauch);
+  k.userData.beine = beine; k.userData.arme = arme;
   return k;
+}
+// Beim Abtauchen schaut nur der Schnorchel aus der Farbe
+function baueSchnorchel(team) {
+  const g = new THREE.Group(), m = mat(TEAMS[team].hell);
+  const bogen = zylinder(m, 1.6, 1.6, 5, 2, 12, 0); bogen.rotation.z = -Math.PI / 2;
+  g.add(zylinder(m, 1.6, 1.6, 12, 0, 6, 0), bogen, kugel(mat('#ffd166'), 2, 4.5, 12, 0));
+  const pg = new THREE.CircleGeometry(7, 16); pg.rotateX(-Math.PI / 2);
+  const pfuetze = new THREE.Mesh(pg, mat(TEAMS[team].dunkel)); pfuetze.position.y = 0.7; g.add(pfuetze);
+  g.visible = false;
+  return g;
 }
 
 function baueWaffe(art, m) {
@@ -381,11 +489,11 @@ function namensSchild(text, farbe) {
   x.strokeText(text, 64, 23); x.fillStyle = farbe; x.fillText(text, 64, 23);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: true, transparent: true }));
-  s.scale.set(48, 12, 1); s.position.y = 50; return s;
+  s.scale.set(48, 12, 1); s.position.y = 62; return s;
 }
 
 const welleGeo = new THREE.RingGeometry(8, 12, 20); welleGeo.rotateX(-Math.PI / 2);
-const schildGeo = new THREE.SphereGeometry(26, 20, 14);
+const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 
 // ---------- Ich-Sicht-Waffe (hängt an der Kamera) ----------
 let haendeWaffe = null;
@@ -395,6 +503,9 @@ function baueHaendeWaffe(art) {
   haendeWaffe.rotation.y = Math.PI / 2;                  // +x zeigt nach vorne (-z der Kamera)
   if (art === 'roller') { haendeWaffe.position.set(0, -13, -8); haendeWaffe.scale.setScalar(0.6); }
   else { haendeWaffe.position.set(6, -6, -10); haendeWaffe.scale.setScalar(0.5); }
+  // Handschuhe halten die Waffe
+  if (art === 'roller') haendeWaffe.add(kugel(MAT_STIEFEL, 3, 2, 4, -3), kugel(MAT_STIEFEL, 3, 9, 4, 3));
+  else haendeWaffe.add(kugel(MAT_STIEFEL, 3, 1, -4, 4), kugel(MAT_STIEFEL, 3, 11, -2, -4));
   haendeWaffe.userData.basis = haendeWaffe.position.clone();
   kamera.add(haendeWaffe);
 }
@@ -425,6 +536,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; }
   if (e.code === 'KeyQ') ultiWunsch = true;
   if (e.code === 'KeyV') ichSicht = !ichSicht;
+  if (e.code === 'KeyM') musikUmschalten();
 });
 addEventListener('keyup', e => { tasten[e.code] = false; if (e.code === 'KeyE') bombeLos = true; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; maus.links = maus.rechts = false; });
@@ -450,9 +562,11 @@ glCv.addEventListener('click', () => { if (zustand === 'spiel' && document.point
 // ================== SPIELZUSTAND ==================
 let zustand = 'menu', zeit = 0, rest = RUNDE;
 let kleckse = [], schuesse = [], bomben = [], wolken = [], strahlen = [], partikel = [], meldungen = [];
+let startCountdown = 0, letzteSek = 99, klatschCd = 0;
 let spieler = null, rotBlitz = 0, leerHinweis = 0, pfiff10 = false, bildZaehler = 0;
 
 function spawnPunkt(e) { return { x: BASIS[e.team].x, y: H / 2 + (e.nr - 1.5) * 70 }; }
+function zufallAus(liste) { return liste[(Math.random() * liste.length) | 0]; }
 function zufall(obj) { const k = Object.keys(obj); return k[(Math.random() * k.length) | 0]; }
 
 function neuerKlecks(team, nr) {
@@ -471,11 +585,13 @@ function neuerKlecks(team, nr) {
   // 3D-Modell
   e.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   e.gruppe = new THREE.Group();
-  e.koerper = baueTintenfisch(e.mat, team);
+  e.koerper = baueTaucher(e.mat, team, zufallAus(HAUTFARBEN), zufallAus(HAARFARBEN));
   e.waffenModell = baueWaffe(e.waffe, e.mat);
-  if (e.waffe === 'roller') e.waffenModell.position.set(4, 6, 0); else e.waffenModell.position.set(6, 14, 11);
+  if (e.waffe === 'roller') e.waffenModell.position.set(4, 6, 0); else e.waffenModell.position.set(8, 22, 3);
   e.gruppe.add(e.koerper, e.waffenModell);
-  if (!sp) e.gruppe.add(namensSchild(e.name, TEAMS[team].hell));
+  e.schildName = sp ? null : namensSchild(e.name, TEAMS[team].hell);
+  if (e.schildName) e.gruppe.add(e.schildName);
+  e.schnorchel = baueSchnorchel(team); e.gruppe.add(e.schnorchel);
   e.welle = new THREE.Mesh(welleGeo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.7 }));
   e.blase = new THREE.Mesh(schildGeo, new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.35, emissive: TEAMS[team].col, emissiveIntensity: 0.4 }));
   scene.add(e.gruppe, e.welle, e.blase);
@@ -504,8 +620,8 @@ function neueRunde() {
   baueHaendeWaffe(spieler.waffe);
   rest = RUNDE; zeit = 0; pfiff10 = false;
   zustand = 'spiel';
-  meldung('Los! Mal alles orange an! 🎨');
-  ton('pfiff');
+  startCountdown = 3; letzteSek = 99; ton('piep');
+  audioStart(); musikModusSetzen('spiel');
 }
 
 function meldung(text) { meldungen.push({ text, t: 3 }); if (meldungen.length > 4) meldungen.shift(); }
@@ -534,7 +650,7 @@ function spritzer(x, y, h, team, anzahl, kraft = 150) {
   }
 }
 function trifftKoerper(e, x, y, h, extra = 4) {
-  const oben = e.z + (e.taucht ? 10 : 38);
+  const oben = e.z + (e.taucht ? 10 : 50);
   return h >= e.z - 4 && h <= oben && Math.hypot(e.x - x, e.y - y) < e.r + extra;
 }
 // Wie steil muss ein Bot zielen, damit der Tropfen in Entfernung d auf Höhe zielH ankommt?
@@ -542,7 +658,7 @@ function botPitch(e, d, zielH) {
   const w = WAFFEN[e.waffe]; if (!w.speed) return 0;
   const q = Math.min(0.93, w.bremse * d / w.speed);
   const t = -Math.log(1 - q) / w.bremse;
-  const vh = (zielH - (e.z + 16) + G_SCHUSS * t * t / 2) / t;
+  const vh = (zielH - (e.z + 24) + G_SCHUSS * t * t / 2) / t;
   return Math.asin(Math.max(-0.9, Math.min(0.9, vh / w.speed)));
 }
 
@@ -559,7 +675,9 @@ function bewege(e, dx, dy, dt) {
   const amBoden = e.z <= 0;
   const unter = amBoden ? besitzer(e.x, e.y) : 0;
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
+  const vorher = e.taucht;
   e.taucht = e.willTauchen && eigen && amBoden;
+  if (e.spieler && vorher !== e.taucht) ton(e.taucht ? 'blubb' : 'auf');
   let speed = e.taucht ? 290 : feind ? 75 : 160;
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, 130);
@@ -590,7 +708,8 @@ function schiessen(e, dt) {
 
   if (e.waffe === 'sniper') {
     if (e.schiesst && !e.taucht && e.tinte >= 5) {
-      e.laden = true; e.ladung = Math.min(1, e.ladung + dt / 0.9);
+      e.laden = true; const vorher = e.ladung; e.ladung = Math.min(1, e.ladung + dt / 0.9);
+      if (e.spieler && vorher < 1 && e.ladung >= 1) ton('ding');
     } else if (e.laden) {
       e.laden = false;
       if (e.ladung > 0.15 && !e.taucht) sniperSchuss(e);
@@ -627,13 +746,14 @@ function schiessen(e, dt) {
     const sp = w.speed * (w.anzahl > 1 ? 0.75 + Math.random() * 0.35 : 1);
     const p = e.pitch + (Math.random() - 0.5) * 0.04 + (w.anzahl > 1 ? Math.random() * 0.1 : 0);
     const vh = Math.cos(p) * sp;
-    const s = { x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, h: e.z + (e.spieler ? 22 : 16),
+    const s = { x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, h: e.z + (e.spieler ? 30 : 24),
       vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp,
       team: e.team, wer: e, w, spurT: 0.04, leben: 3 };
     s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
     schuesse.push(s);
   }
   if (e.spieler) ton('schuss');
+  else { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 350) ton('schuss', 0.6 * (1 - d / 350)); }
 }
 
 function sniperSchuss(e) {
@@ -654,7 +774,7 @@ function sniperSchuss(e) {
   spritzer(e.x + dx * ende, e.y + dy * ende, 10, e.team, 10, 180);
   if (opfer) treffen(opfer, 35 + 85 * lad, e);
   // Leuchtstrahl
-  const h0 = e.z + (e.spieler ? 20 : 16);
+  const h0 = e.z + (e.spieler ? 28 : 24);
   const geo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(e.x + dx * 14, h0, e.y + dy * 14), new THREE.Vector3(e.x + dx * ende, h0, e.y + dy * ende)]);
   const linie = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: TEAMS[e.team].hell, transparent: true }));
@@ -675,6 +795,7 @@ function bombeWerfen(e, zx, zy, extra = {}) {
   b.mesh = new THREE.Mesh(geoBombe, b.ulti ? mat(TEAMS[e.team].col, { emissive: TEAMS[e.team].col, emissiveIntensity: 0.6 }) : teamMat[e.team]);
   b.mesh.castShadow = true; scene.add(b.mesh);
   bomben.push(b);
+  if (e.spieler && !b.ulti) ton('wurf');
   return true;
 }
 function bombenZiel(e) {
@@ -726,11 +847,17 @@ function farbsturmLandung(e) {
   if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('platsch');
 }
 
+function naheKlatsch(x, y) {
+  if (klatschCd > 0) return;
+  const d = Math.hypot(x - spieler.x, y - spieler.y);
+  if (d < 260) { ton('klatsch', 1 - d / 260); klatschCd = 0.06; }
+}
+
 function treffen(e, schaden, wer) {
   if (e.tot || e.schild > 0) return;
   e.hp -= schaden; e.letzterTreffer = 0;
   if (e.spieler) rotBlitz = Math.min(0.4, rotBlitz + schaden / 150);
-  if ((e.spieler || (wer && wer.spieler)) && schaden > 6) ton('treffer');
+  if (schaden > 6) { if (e.spieler) ton('aua'); else if (wer && wer.spieler) ton('treffer'); }
   if (e.hp <= 0) erwischt(e, wer);
 }
 
@@ -740,7 +867,7 @@ function erwischt(e, wer) {
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
   if (wer) wer.ko++;
-  if (e.spieler) { meldung(`💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('ko'); }
+  if (e.spieler) { meldung(`💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
   else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
   else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
 }
@@ -806,7 +933,7 @@ function ki(b, dt) {
     const a = Math.atan2(feind.y - b.y, feind.x - b.x);
     const zielA = a + Math.sin(zeit * 3 + b.nr * 7) * 0.12;   // Nicht ganz perfekt zielen
     b.winkel = drehe(b.winkel, zielA, dt * 5);
-    b.pitch = botPitch(b, fd, feind.z + 14);
+    b.pitch = botPitch(b, fd, feind.z + 22);
     const gutGezielt = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
     if (b.waffe === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
@@ -883,8 +1010,19 @@ function steuerung(p, dt) {
 
 // ================== UPDATE ==================
 function update(dt) {
-  zeit += dt; rest -= dt;
+  // 3 … 2 … 1 … LOS!
+  if (startCountdown > 0) {
+    const vorher = Math.ceil(startCountdown);
+    startCountdown -= dt;
+    const jetzt = Math.ceil(startCountdown);
+    if (jetzt !== vorher) ton(jetzt > 0 ? 'piep' : 'los');
+    if (startCountdown <= 0) meldung('LOS! Mal alles orange an! 🎨');
+    return;
+  }
+  zeit += dt; rest -= dt; klatschCd -= dt;
+  if (rest <= 30 && musikModus === 'spiel') { musikModusSetzen('eile'); meldung('🔥 Letzte 30 Sekunden!'); }
   if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung('⏰ Noch 10 Sekunden!'); }
+  if (rest <= 3 && Math.ceil(rest) !== letzteSek) { letzteSek = Math.ceil(rest); ton('piep'); }
   if (rest <= 0) { rest = 0; rundenEnde(); return; }
 
   for (const e of kleckse) {
@@ -894,6 +1032,7 @@ function update(dt) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
           winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0 });
+        if (e.spieler) ton('plopp');
       }
       continue;
     }
@@ -914,7 +1053,7 @@ function update(dt) {
       s.x += s.vx * dt / 3; s.y += s.vy * dt / 3; s.h += s.vz * dt / 3;
       if (s.h <= 0) {
         if (!istWand(s.x, s.y)) klecks(s.x, s.y, w.klecks, s.team, s.wer);
-        spritzer(s.x, s.y, 1, s.team, 3, 80); weg = true; break;
+        spritzer(s.x, s.y, 1, s.team, 3, 80); naheKlatsch(s.x, s.y); weg = true; break;
       }
       if ((istWand(s.x, s.y) && s.h < WAND_H) || s.x < 0 || s.y < 0 || s.x > W || s.y > H) {
         const bx = s.x - s.vx * 0.012, by = s.y - s.vy * 0.012;
@@ -1003,31 +1142,34 @@ function welt3D(dt) {
   for (const e of kleckse) {
     const g = e.gruppe;
     const istIch = e.spieler && ichSicht;
-    const versteckt = e.tot || istIch || (e.taucht && e.team !== spieler.team);
-    g.visible = !versteckt;
+    const v = Math.hypot(e.vx, e.vy);
+    const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
+    g.visible = !(e.tot || istIch || (e.taucht && e.team !== spieler.team && !feindNah));
     g.position.set(e.x, e.z, e.y);
     g.rotation.y = -e.winkel;
-    const v = Math.hypot(e.vx, e.vy);
-    if (e.taucht) g.scale.set(1.25, 0.18, 1.25);
-    else {
-      const wab = Math.sin(zeit * 14 + e.nr) * Math.min(1, v / 150) * 0.1;
-      g.scale.set(1 - wab, 1 + wab, 1 - wab);
-    }
+    e.koerper.visible = !e.taucht;
     e.waffenModell.visible = !e.taucht;
-    if (g.visible) {
-      const laeuft = v > 20;
-      e.koerper.userData.arme.forEach((arm, i) => {
-        arm.rotation.z = 0.6 + Math.sin(zeit * (laeuft ? 14 : 4) + i * 0.8) * (laeuft ? 0.3 : 0.1);
-      });
+    e.schnorchel.visible = e.taucht;
+    if (e.schildName) e.schildName.visible = !e.taucht;
+    if (e.taucht) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
+    else if (g.visible) {
+      // Laufen: Beine und Arme schwingen
+      const ud = e.koerper.userData, inLuft = e.z > 0;
+      const schwung = inLuft ? 0 : Math.sin(zeit * 13 + e.nr) * Math.min(1, v / 140) * 0.7;
+      ud.beine[0].rotation.z = inLuft ? 0.6 : schwung;
+      ud.beine[1].rotation.z = inLuft ? -0.3 : -schwung;
+      const arm = e.waffe === 'roller' ? 0.8 : 1.35;
+      ud.arme[0].rotation.z = arm + schwung * 0.12;
+      ud.arme[1].rotation.z = arm - schwung * 0.12;
     }
-    e.waffenModell.position.x = (e.waffe === 'roller' ? 4 : 6) - e.rueck * 3;
+    e.waffenModell.position.x = (e.waffe === 'roller' ? 4 : 8) - e.rueck * 3;
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
     e.welle.visible = !e.tot && e.taucht && e.team !== spieler.team && v > 60 && Math.sin(zeit * 16 + e.nr) > 0.4;
     e.welle.position.set(e.x, 0.8, e.y);
     e.welle.scale.setScalar(1 + (zeit * 3 % 1) * 0.6);
     e.blase.visible = !e.tot && e.schild > 0 && !istIch;
-    e.blase.position.set(e.x, e.z + 16, e.y);
+    e.blase.position.set(e.x, e.z + 24, e.y);
   }
   for (const s of schuesse) s.mesh.position.set(s.x, s.h, s.y);
   for (const b of bomben) { b.mesh.position.set(b.x, b.h, b.y); b.mesh.rotation.x += dt * 8; }
@@ -1058,9 +1200,9 @@ function welt3D(dt) {
     for (let d = 10; d <= 90; d += 5) {
       if (istWand(p.x - Math.cos(p.winkel) * d, p.y - Math.sin(p.winkel) * d)) { abstand = d - 10; break; }
     }
-    const hoehe = p.z + 45 - fy * 40;
+    const hoehe = p.z + 58 - fy * 40;
     kamera.position.set(p.x - Math.cos(p.winkel) * abstand, Math.max(8, hoehe), p.y - Math.sin(p.winkel) * abstand);
-    kamera.lookAt(p.x + fx * 200, p.z + 25 + fy * 200, p.y + fz * 200);
+    kamera.lookAt(p.x + fx * 200, p.z + 35 + fy * 200, p.y + fz * 200);
   }
   if (haendeWaffe) {
     haendeWaffe.visible = ichSicht && !p.taucht && !p.tot;
@@ -1077,6 +1219,14 @@ function hud() {
   const cw = hudCv.width, ch = hudCv.height;
   ctx.clearRect(0, 0, cw, ch);
   if (!spieler || zustand === 'menu') return;
+  // Blick durch den Glashelm
+  if (ichSicht && !spieler.taucht && !spieler.tot) {
+    const vg = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.42, cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
+    vg.addColorStop(0, 'rgba(170,225,255,0)'); vg.addColorStop(1, 'rgba(170,225,255,0.4)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, cw, ch);
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 16; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(cw / 2, ch / 2, Math.max(cw, ch) * 0.47, -2.65, -2.15); ctx.stroke(); ctx.lineCap = 'butt';
+  }
   if (spieler.taucht) { ctx.fillStyle = 'rgba(255,138,31,0.18)'; ctx.fillRect(0, 0, cw, ch); }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
@@ -1153,6 +1303,13 @@ function hud() {
     ctx.globalAlpha = 0.5 + (rest % 1) * 0.5; ctx.fillStyle = '#fff'; ctx.font = 'bold 120px system-ui';
     ctx.fillText(Math.ceil(rest), cw / 2, ch / 2 - 60); ctx.globalAlpha = 1;
   }
+  if (startCountdown > 0 && zustand === 'spiel') {
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1b1f3a'; ctx.lineWidth = 8; ctx.font = 'bold 140px system-ui'; ctx.textAlign = 'center';
+    const z = String(Math.ceil(startCountdown));
+    ctx.strokeText(z, cw / 2, ch / 2 + 40); ctx.fillText(z, cw / 2, ch / 2 + 40);
+  }
+  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffffffaa';
+  ctx.fillText(musikAn ? '🎵 M = Musik aus' : '🔇 M = Musik an', cw - 16, 22);
   // Fadenkreuz in der Mitte
   if (zustand === 'spiel' && !spieler.tot) {
     const x = cw / 2, y = ichSicht ? ch / 2 : ch / 2;
@@ -1174,9 +1331,11 @@ function rundenEnde() {
   zustand = 'ende';
   zielRing.visible = false;
   if (document.pointerLockElement) document.exitPointerLock();
-  ton('pfiff');
+  musikModusSetzen('aus');
   const pO = zaehler[1] / flaeche * 100, pL = zaehler[2] / flaeche * 100;
   const gewonnen = pO > pL;
+  ton(gewonnen ? 'sieg' : 'niederlage');
+  setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu'); }, 3000);
   document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : gewonnen ? '🏆 Orange gewinnt!' : '😵 Lila gewinnt!';
   const summe = pO + pL || 1;
   const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
@@ -1204,7 +1363,7 @@ function wahlKnoepfe(id, liste, schluessel) {
     b.append(em, v.name, sm);
     if (auswahl[schluessel] === k) b.classList.add('an');
     b.onclick = () => {
-      auswahl[schluessel] = k;
+      auswahl[schluessel] = k; ton('klick');
       try { localStorage.setItem('klecks3d-auswahl', JSON.stringify(auswahl)); } catch (e) {}
       wahlKnoepfe(id, liste, schluessel);
     };
@@ -1221,6 +1380,8 @@ function starten() {
   mausFangen();
 }
 document.getElementById('start').onclick = starten;
+document.getElementById('musikKnopf').onclick = () => musikUmschalten();
+document.getElementById('musikKnopf').textContent = '🎵 Musik: ' + (musikAn ? 'an' : 'aus');
 document.getElementById('nochmal').onclick = starten;
 document.getElementById('zumMenu').onclick = () => {
   document.getElementById('ende').classList.add('hidden');
