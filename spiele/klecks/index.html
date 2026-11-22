@@ -209,6 +209,25 @@ const WAFFEN = {
               nah: { rollBreite: 14, rollSchaden: 3, rollTempo: 215, rollKosten: 1.5, schwingCd: 0.24, schwingDauer: 0.24, abwurf: 0.1, art: 'seite' },
               schwung: { anzahl: 4, streu: 0.5, speed: 430, bremse: 2.8, schaden: 24, klecks: 12, spur: 6, kosten: 3 } },
 };
+// Neue Waffen: "typ" sagt, wie sie funktionieren (wie ein Roller, wie ein Sniper …)
+Object.assign(WAFFEN, {
+  breitroller: { typ: 'roller', name: 'Breitroller', emoji: '🧱', info: 'Riesig breite Walze – aber kaum Wurf', reichweite: 90, modell: { walzeBreite: 1.7 },
+    nah: { rollBreite: 34, rollSchaden: 9, rollTempo: 120, rollKosten: 3.5, schwingCd: 0.7, schwingDauer: 0.45, abwurf: 0.2, art: 'hoch' },
+    schwung: { anzahl: 4, streu: 0.6, speed: 330, bremse: 3, schaden: 28, klecks: 14, spur: 6, kosten: 7 } },
+  gigaroller: { typ: 'roller', name: 'Gigaroller', emoji: '🦣', info: 'Riesen-Wurf, aber langsames Rollen', reichweite: 170, modell: { ganz: 1.35 },
+    nah: { rollBreite: 26, rollSchaden: 10, rollTempo: 95, rollKosten: 4, schwingCd: 1.0, schwingDauer: 0.6, abwurf: 0.3, art: 'hoch' },
+    schwung: { anzahl: 11, streu: 1.0, speed: 560, bremse: 2.2, schaden: 45, klecks: 18, spur: 8, kosten: 14 } },
+  miniroller: { typ: 'roller', name: 'Miniroller', emoji: '🐭', info: 'Blitzschnell rollen und werfen – wenig Reichweite', reichweite: 80, modell: { ganz: 0.7 },
+    nah: { rollBreite: 15, rollSchaden: 5, rollTempo: 205, rollKosten: 1.8, schwingCd: 0.3, schwingDauer: 0.25, abwurf: 0.1, art: 'hoch' },
+    schwung: { anzahl: 5, streu: 0.6, speed: 330, bremse: 3.2, schaden: 22, klecks: 11, spur: 5, kosten: 4 } },
+  blubber: { typ: 'blubber', name: 'Blubberwerfer', emoji: '🫧', info: 'Blubberblasen, die über den Boden hüpfen', huepfen: 3, gross: 2.6,
+    cd: 0.35, kosten: 4, speed: 380, bremse: 1.2, schaden: 30, klecks: 16, spur: 0, streu: 0.06, anzahl: 1, reichweite: 220 },
+  miniliter: { typ: 'sniper', name: 'Farb-Miniliter', emoji: '🏹', info: 'Lädt superschnell – aber weniger Reichweite', reichweite: 330, modell: { ganz: 0.8 },
+    ladezeit: 0.45, laenge: [120, 260], schadenB: [30, 70] },
+  liter: { typ: 'sniper', name: 'Farb-Liter', emoji: '🔭', info: 'Riesige Reichweite – dafür langes Aufladen', reichweite: 720, modell: { ganz: 1.15 },
+    ladezeit: 1.5, laenge: [200, 650], schadenB: [45, 110] },
+});
+const typVon = id => (WAFFEN[id] && WAFFEN[id].typ) || id;
 const ULTIS = {
   regen:   { name: 'Farbregen',    emoji: '🌧️', info: 'Eine Wolke lässt Farbe regnen' },
   raketen: { name: 'Raketenhagel', emoji: '🚀', info: '6 Farbraketen auf einmal' },
@@ -217,6 +236,9 @@ const ULTIS = {
   welle:   { name: 'Farbwelle',    emoji: '🌊', info: 'Eine riesige Welle rollt nach vorne' },
   laser:   { name: 'Megalaser',    emoji: '🔆', info: '3 Sek. ein riesiger Farbstrahl' },
   tornado: { name: 'Farbtornado',  emoji: '🌪️', info: 'Ein Wirbelsturm jagt die Gegner' },
+  panzer:  { name: 'Farbpanzer',   emoji: '🦺', info: 'Dein ganzes Team bekommt eine Schutz-Rüstung' },
+  werfer:  { name: 'Raketenwerfer', emoji: '🧨', info: '4 Riesenraketen selbst zielen und abfeuern' },
+  kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Werde zur rollenden Riesen-Farbkugel – BUMM am Ende!' },
 };
 // Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
 const BOMBEN = {
@@ -238,6 +260,12 @@ const SET_DATEN = [
   ['roller',   'klecks', 'wirbel',  400,   'wand',      'raketen', 550],
   ['kanone',   'mine',   'regen',   450,   'klebe',     'wirbel',  600],
   ['sniper',   'wand',   'laser',   500,   'sprinkler', 'schild',  650],
+  ['miniroller', 'mine',  'kugel',   300,   'klecks',    'panzer',  450],
+  ['blubber',  'sprinkler', 'werfer', 400,  'klebe',     'kugel',   550],
+  ['miniliter', 'mine',   'panzer',  400,   'klecks',    'werfer',  550],
+  ['breitroller', 'klebe', 'panzer', 450,   'sprinkler', 'regen',   600],
+  ['gigaroller', 'klecks', 'werfer', 550,   'wand',      'kugel',   700],
+  ['liter',    'klebe',  'laser',   600,   'mine',      'panzer',  750],
 ];
 const SETS = {};
 for (const [w, b1, u1, p1, b2, u2, p2] of SET_DATEN) {
@@ -1103,9 +1131,22 @@ function abzugBauen(g, x) {
 }
 function baueWaffe(art, m, team, watzo = false) {
   const g = new THREE.Group(), ud = g.userData;
+  const typ = typVon(art);
   const tinte = tintenMaterial(team);
   const blitzMat = new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.85 });
-  switch (art) {
+  switch (typ) {
+    case 'blubber': {   // Blubberwerfer: Glaskugel voller Tinte und eine Trompeten-Düse
+      g.add(klotz(m, 10, 6, 5, 4, 0.5, 0), klotz(MAT_GRAU, 10.4, 1.2, 5.4, 4, -2.2, 0));
+      const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 1, -5.5, 0); griff.rotation.z = 0.25; g.add(griff);
+      abzugBauen(g, 5);
+      g.add(kugel(glasRohrMat, 5.5, 3, 7.5, 0)); ud.tinteKugel = kugel(tinte, 4.5, 3, 7.5, 0); g.add(ud.tinteKugel);
+      g.add(zylinder(MAT_METALL, 2, 2, 1.5, 3, 2.6, 0));
+      for (const [x, y, z, r] of [[7, 13, 2, 1.4], [5, 16, -1, 1], [9, 18, 1, 0.7]]) g.add(kugel(glasRohrMat, r, x, y, z));   // kleine Blasen
+      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
+      lauf.add(zylinderX(MAT_METALL, 1.8, 1.8, 6, 12, 1, 0), zylinderX(m, 5, 1.8, 6, 17, 1, 0), ringX(MAT_GOLD, 5, 0.6, 20, 1, 0));
+      ud.blitz = kugel(new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.6 }), 4, 23, 1, 0); lauf.add(ud.blitz);
+      break;
+    }
     case 'eimer': {
       // Der Eimer hängt am Henkel und schwappt beim Werfen nach vorne
       const schwing = new THREE.Group(); g.add(schwing); ud.schwing = schwing;
@@ -1227,6 +1268,10 @@ function baueWaffe(art, m, team, watzo = false) {
     }
   }
   if (ud.blitz) { ud.blitz.castShadow = false; ud.blitz.visible = false; }
+  // Varianten: Größe und Walzenbreite
+  const mod = WAFFEN[art] && WAFFEN[art].modell;
+  if (mod && mod.walzeBreite && ud.walze) { ud.walze.scale.z = mod.walzeBreite; g.add(zylinderZ(MAT_METALL, 0.9, 0.9, 28 * mod.walzeBreite + 3, 14, -10, 0)); }
+  if (mod && mod.ganz) g.scale.setScalar(mod.ganz);
   if (watzo && art !== 'doppel') g.add(kugel(MAT_GOLD, 1.6, 4, 3, 3.4), kugel(MAT_GOLD, 1.6, 4, 3, -3.4), ringX(MAT_GOLD, 1.2, 0.35, 4, 3, 3.6));   // goldene Watzo-Sterne
   return g;
 }
@@ -1234,6 +1279,7 @@ function baueWaffe(art, m, team, watzo = false) {
 // Waffen-Teile bewegen sich (Tinte, Rückstoß, Walze, Ladung …)
 function animiereWaffe(ud, e, dt, vf) {
   if (ud.teile) { for (const t of ud.teile) animiereWaffe(t, e, dt, vf); return; }
+  if (ud.tinteKugel) ud.tinteKugel.scale.setScalar(4.5 * Math.max(0.1, e.tinte / 100));
   if (ud.tinteFuell) ud.tinteFuell.scale.x = Math.max(0.02, e.tinte / 100);
   if (ud.stielTinte) ud.stielTinte.scale.y = Math.max(0.02, e.tinte / 100);
   if (ud.inhalt) ud.inhalt.position.y = -4.5 + 9 * e.tinte / 100;
@@ -1315,6 +1361,15 @@ function baueLaser(team) {
   g.visible = false;
   return g;
 }
+// Raketenwerfer (für die Ulti): dickes Rohr auf der Schulter
+function baueWerfer(m) {
+  const g = new THREE.Group();
+  g.add(zylinderX(MAT_GRAU, 4.2, 4.2, 30, 6, 4, 0), zylinderX(m, 5, 4.2, 4, 21, 4, 0), zylinderX(MAT_SCHWARZ, 3.2, 4.4, 3, -10, 4, 0));
+  g.add(klotz(MAT_GUMMI, 3, 7, 3, 2, -2, 0), klotz(MAT_GRAU, 6, 2.5, 2, 6, 9.5, 0), kugel(mat('#ff3b3b', { emissive: '#ff3b3b' }), 1, 9, 10.5, 0));
+  g.add(ringX(MAT_GOLD, 4.4, 0.5, 0, 4, 0), ringX(MAT_GOLD, 4.4, 0.5, 12, 4, 0));
+  g.visible = false;
+  return g;
+}
 // Rakete für den Raketenhagel (zeigt in +z)
 function baueRakete(team) {
   const g = new THREE.Group();
@@ -1342,21 +1397,26 @@ const welleGeo = new THREE.RingGeometry(8, 12, 20); welleGeo.rotateX(-Math.PI / 
 const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 
 // ---------- Ich-Sicht-Waffe (hängt an der Kamera) ----------
-let haendeWaffe = null, swayX = 0, swayY = 0;
+let haendeWaffe = null, haendeWerfer = null, swayX = 0, swayY = 0;
 const vmHalter = new THREE.Group(); kamera.add(vmHalter);
 const VM_POS = { doppel: [0, -6, -9, 0.45], kanone: [5, -7, -10, 0.5], spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
+const VM_EXTRA_POS = { blubber: [5, -7, -10, 0.5] }, VM_EXTRA_HAENDE = { blubber: [[1, -5.5, 0], [12, -3, 0]] };
 const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0], [13, -4, 0]], spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
-  haendeWaffe = baueWaffe(art, teamMat[0], 0, !!(SETS[an.waffe] && SETS[an.waffe].watzo));
-  const [x, y, z, sk] = VM_POS[art];
+  const tm = spieler ? spieler.team : 0;
+  haendeWaffe = baueWaffe(art, teamMat[tm], tm, !!(SETS[an.waffe] && SETS[an.waffe].watzo));
+  if (haendeWerfer) vmHalter.remove(haendeWerfer);
+  haendeWerfer = baueWerfer(teamMat[tm]); haendeWerfer.rotation.y = Math.PI / 2 + 0.07; haendeWerfer.position.set(6, -5, -10); haendeWerfer.scale.setScalar(0.55);
+  vmHalter.add(haendeWerfer);
+  const [x, y, z, sk] = VM_POS[art] || VM_EXTRA_POS[art] || VM_POS[typVon(art)];
   haendeWaffe.position.set(x, y, z); haendeWaffe.scale.setScalar(sk);
   haendeWaffe.rotation.y = Math.PI / 2 + 0.07;                 // zeigt nach vorne, leicht zur Mitte
   // Handschuhe + Ärmel vom Taucheranzug
-  for (const [hx, hy, hz] of VM_HAENDE[art]) {
+  for (const [hx, hy, hz] of VM_HAENDE[art] || VM_EXTRA_HAENDE[art] || VM_HAENDE[typVon(art)]) {
     const hemd = HEMDEN[an.hemd] || HEMDEN.tshirt, haut = mat(aussehen.haut, { roughness: 0.6 });
     const aermel = zylinderX(hemd.aermel === 'lang' ? mat(hemd.farbe) : haut, 2.5, 3, 16, hx - 8.5, hy - 2.2, hz); aermel.rotation.z = -Math.PI / 2 + 0.25;
-    haendeWaffe.add(kugel(haut, 3, hx, hy, hz), ringX(teamMat[0], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);   // Hand + Schweißband
+    haendeWaffe.add(kugel(haut, 3, hx, hy, hz), ringX(teamMat[tm], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);   // Hand + Schweißband
   }
   haendeWaffe.traverse(o => { o.castShadow = false; });
   vmHalter.add(haendeWaffe);
@@ -1628,9 +1688,9 @@ function mpSchnappschussSenden() {
   const s = {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
-      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte]),
-    s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.gross ? 1 : 0]),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss]),
+    s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.ulti ? 'rakete' : o.art)]),
     g: geraete.map(o => [objId(o), GERAET_ARTEN.indexOf(o.art), r0(o.x), r0(o.y), o.team, r2(o.winkel), r1(o.t), o.zuend >= 0 ? 1 : 0, o.treffer > 0 ? 1 : 0]),
     w: wellen.map(o => [objId(o), r0(o.x), r0(o.y), r2(o.winkel), r2(o.t), o.dauer, o.team]),
@@ -1695,11 +1755,12 @@ function mpSchnappschuss(d) {
   if (Array.isArray(d.e)) d.e.forEach((a, i) => {
     const e = kleckse[i];
     if (!e || !Array.isArray(a)) return;
-    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte] = a;
+    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte, panzer, werferT, kugelT, werferSchuss] = a;
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte });
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0,
+      schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
     if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
@@ -1710,7 +1771,7 @@ function mpSchnappschuss(d) {
       e.ziel = { x, y, z, w }; e.pitch = pi; e.vx = vx; e.vy = vy; e.taucht = !!(fl & 2); e.ulti = ulti;
     }
   });
-  schuesse = proxySync(schuesse, d.s, a => ({ mesh: new THREE.Mesh(geoTropfen, teamMat[a[7] ? 1 : 0]), team: a[7], w: { gross: a[8] ? WAFFEN.kanone.gross : 1 } }),
+  schuesse = proxySync(schuesse, d.s, a => ({ mesh: new THREE.Mesh(geoTropfen, teamMat[a[7] ? 1 : 0]), team: a[7], w: { gross: a[8] || 1 } }),
     (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.vx = a[4]; o.vy = a[5]; o.vz = a[6]; });
   bomben = proxySync(bomben, d.b, a => {
     const art = BOMBEN_ARTEN[a[5]] || 'klecks', team = a[4] ? 1 : 0;
@@ -1777,6 +1838,7 @@ function gastUpdate(dt) {
   for (const e of kleckse) {
     if (e !== p && e.ziel) { e.x += (e.ziel.x - e.x) * k; e.y += (e.ziel.y - e.y) * k; e.z += (e.ziel.z - e.z) * k; e.winkel += winkelDiff(e.winkel, e.ziel.w) * k; }
     if (e.laserT > 0) e.laserT -= dt;
+    if (e.kugelT > 0) e.kugelT -= dt;
     laserZeigen(e);
     e.rueck = Math.max(0, e.rueck - dt * 8);
     if (e.schwingT > 0) e.schwingT -= dt;
@@ -1917,12 +1979,20 @@ function neuerKlecks(team, nr, extra = {}) {
   e.welle = new THREE.Mesh(welleGeo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.7 }));
   e.blase = new THREE.Mesh(schildGeo, new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.35, emissive: TEAMS[team].col, emissiveIntensity: 0.4 }));
   e.laserMesh = baueLaser(team); e.laserT = 0; e.laserTick = 0;
-  scene.add(e.gruppe, e.welle, e.blase, e.laserMesh);
+  e.werferModell = baueWerfer(e.mat); e.koerper.userData.ober.add(e.werferModell);
+  e.kugelMesh = new THREE.Group();
+  e.kugelMesh.add(new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16), new THREE.MeshStandardMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.45, roughness: 0.1, emissive: TEAMS[team].col, emissiveIntensity: 0.2 })));
+  for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(30, 1.5, 6, 30), mat(TEAMS[team].hell)); r.rotation.set(i * 1.05, i * 0.7, 0); e.kugelMesh.add(r); }
+  e.kugelMesh.visible = false;
+  e.panzerMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(30, 1), new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, wireframe: true, transparent: true, opacity: 0.6 }));
+  e.panzerMesh.visible = false;
+  e.panzer = 0; e.panzerT = 0; e.werferT = 0; e.werferSchuss = 0; e.kugelT = 0;
+  scene.add(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh);
   return e;
 }
 
 function aufraeumen() {
-  for (const e of kleckse) scene.remove(e.gruppe, e.welle, e.blase, e.laserMesh);
+  for (const e of kleckse) scene.remove(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh);
   for (const g of [...geraete, ...wellen, ...tornados]) scene.remove(g.mesh);
   for (const s of schuesse) scene.remove(s.mesh);
   for (const b of bomben) scene.remove(b.mesh);
@@ -2087,13 +2157,14 @@ function bewege(e, dx, dy, dt) {
   e.boostCd = Math.max(0, (e.boostCd || 0) - dt);
   const feind = tauchenPruefen(e), amBoden = e.z <= 0;
   let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
-  if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
+  if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
   if (e.laserT > 0) speed *= 0.5;
+  if (e.kugelT > 0) speed = 270;
   const glatt = ARENEN[karte] && ARENEN[karte].glatt && modus === 'match' && !e.taucht && Math.hypot(e.x - BASIS[e.team].x, e.y - BASIS[e.team].y) > 120;
-  const k = Math.min(1, dt * (amBoden ? (glatt ? 1.6 : 12) : 3));     // auf Glatteis rutscht man
+  const k = Math.min(1, dt * (amBoden ? (glatt ? 1.6 : e.kugelT > 0 ? 5 : 12) : 3));     // auf Glatteis rutscht man
   e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
   let bx = 0, by = 0;
   if (zone && zone.art === 'band' && amBoden) bx = zone.dx;                 // Förderband schiebt
@@ -2116,7 +2187,7 @@ function tauchenPruefen(e) {
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
   const zone = zoneBei(e.x, e.y);
-  e.taucht = e.willTauchen && eigen && amBoden && !(zone && zone.art === 'sand');   // im Treibsand kann man nicht abtauchen
+  e.taucht = e.willTauchen && eigen && amBoden && !(zone && zone.art === 'sand') && !(e.kugelT > 0);   // im Treibsand kann man nicht abtauchen
   if (vorher !== e.taucht) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
@@ -2125,6 +2196,8 @@ function tauchenPruefen(e) {
 }
 // Tinte und Leben auffüllen (oder in Gegnerfarbe verlieren)
 function werte(e, dt, feind) {
+  if (e.panzerT > 0) { e.panzerT -= dt; if (e.panzerT <= 0) e.panzer = 0; }
+  if (e.werferT > 0) e.werferT -= dt;
   if (e.taucht) e.tinte = Math.min(100, e.tinte + 45 * dt);
   else if (!e.schiesst && !e.laden) e.tinte = Math.min(100, e.tinte + 5 * dt);
   // Leben
@@ -2138,12 +2211,25 @@ function werte(e, dt, feind) {
 function schiessen(e, dt) {
   e.schussCd -= dt;
   e.rollt = false;
-  if (e.tot || e.laserT > 0) return;
+  if (e.tot || e.laserT > 0 || e.kugelT > 0) return;
+  if (e.werferT > 0) {   // Raketenwerfer: Klick = Riesenrakete
+    if (e.schiesst && e.schussCd <= 0 && e.werferSchuss > 0) {
+      let zx, zy;
+      if (!e.spieler && !e.mensch && e.ki.zielPunkt) { zx = e.ki.zielPunkt.x; zy = e.ki.zielPunkt.y; }
+      else { const d = Math.max(120, Math.min(550, 250 + e.pitch * 500)); zx = e.x + Math.cos(e.winkel) * d; zy = e.y + Math.sin(e.winkel) * d; }
+      const d = Math.hypot(zx - e.x, zy - e.y);
+      bombeWerfen(e, zx, zy, { ulti: true, max: 600, dauer: 0.3 + d / 900, hoehe: 45, r: 70, schaden: 100 });
+      e.werferSchuss--; e.schussCd = 0.6; e.rueck = 2;
+      if (e.spieler || (spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500)) ton('wurf');
+      if (e.werferSchuss <= 0) e.werferT = 0;
+    }
+    return;
+  }
   const w = WAFFEN[e.waffe];
 
-  if (e.waffe === 'sniper') {
+  if (typVon(e.waffe) === 'sniper') {
     if (e.schiesst && !e.taucht && e.tinte >= 5) {
-      e.laden = true; const vorher = e.ladung; e.ladung = Math.min(1, e.ladung + dt / 0.9);
+      e.laden = true; const vorher = e.ladung; e.ladung = Math.min(1, e.ladung + dt / (w.ladezeit || 0.9));
       if (e.spieler && vorher < 1 && e.ladung >= 1) ton('ding');
     } else if (e.laden) {
       e.laden = false;
@@ -2165,17 +2251,18 @@ function schiessen(e, dt) {
       if (vorher > abwurf && e.schwingT <= abwurf) schwungWerfen(e, w);
       return;
     }
-    if (e.taucht || e.z > 0) return;
+    if (e.taucht) return;
     const steht = Math.hypot(e.vx, e.vy) < 30;
     // Klicken = schwingen (Pinsel: gedrückt halten im Stehen = immer weiter schwingen)
     if ((neuGedrueckt || (e.waffe === 'pinsel' && e.schiesst && steht)) && e.schussCd <= 0) {
       if (e.tinte < w.schwung.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
       e.schwingT = n.schwingDauer; e.schussCd = n.schwingCd; e.schwingSeite = -e.schwingSeite;
+      e.schwungArt = typVon(e.waffe) === 'roller' ? (e.z > 0 ? 'hoch' : 'seite') : n.art;   // Roller: am Boden waagrecht, im Sprung senkrecht
       if (e.spieler) ton('wusch');
       return;
     }
     // Gedrückt halten = rollen / schieben
-    if (!e.schiesst || e.haltT < 0.2 || (e.waffe === 'pinsel' && steht)) return;
+    if (!e.schiesst || e.haltT < 0.2 || e.z > 0 || (e.waffe === 'pinsel' && steht)) return;
     if (e.tinte < 0.5) { if (e.spieler) leerHinweis = 1.5; return; }
     e.rollt = true;
     e.tinte -= (n.rollKosten + Math.hypot(e.vx, e.vy) * 0.03) * (1 - e.bonus.tinte) * dt;
@@ -2238,14 +2325,28 @@ function laserUpdate(e, dt) {
   m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
 }
 
+// Tuffkugel: rollt, malt, rammt Gegner und platzt am Ende
+function kugelUpdate(e, dt) {
+  e.kugelT -= dt; e.kugelTick = (e.kugelTick || 0) - dt;
+  if (e.kugelTick <= 0) {
+    e.kugelTick = 0.05;
+    klecks(e.x, e.y, 30, e.team, e, false);
+    for (const f of kleckse) if (f.team !== e.team && !f.tot && Math.hypot(f.x - e.x, f.y - e.y) < 40) treffen(f, 9, e);
+    if (e.spieler && Math.random() < 0.3) ton('roll');
+  }
+  if (e.kugelT <= 0) { e.kugelT = 0; explodieren(e.x, e.y, 110, 120, e.team, e, false); spritzer(e.x, e.y, 30, e.team, 40, 350); }
+}
+
 // Beim Schwingen fliegt ein Fächer aus Farbtropfen nach vorne
 function schwungWerfen(e, w) {
   const sw = w.schwung;
   e.tinte = Math.max(0, e.tinte - sw.kosten * (1 - e.bonus.tinte)); e.rueck = 1;
   for (let i = 0; i < sw.anzahl; i++) {
-    const a = e.winkel + (i / (sw.anzahl - 1) - 0.5) * sw.streu + (Math.random() - 0.5) * 0.08;
-    const sp = sw.speed * (0.8 + Math.random() * 0.3);
-    const p = Math.max(-0.2, e.pitch) + 0.18 + Math.random() * 0.12;
+    const roller = typVon(e.waffe) === 'roller', senkrecht = roller && e.schwungArt === 'hoch';
+    const streu = sw.streu * (!roller ? 1 : senkrecht ? 0.4 : 1.35);           // senkrecht: schmal und weit · waagrecht: breit und kurz
+    const a = e.winkel + (i / (sw.anzahl - 1) - 0.5) * streu + (Math.random() - 0.5) * 0.08;
+    const sp = sw.speed * (0.8 + Math.random() * 0.3) * (!roller ? 1 : senkrecht ? 1.3 : 0.85);
+    const p = Math.max(-0.2, e.pitch) + (senkrecht ? 0.28 : 0.18) + Math.random() * 0.12;
     const vh = Math.cos(p) * sp;
     const s = { x: e.x + Math.cos(a) * 18, y: e.y + Math.sin(a) * 18, h: e.z + 20,
       vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp,
@@ -2265,7 +2366,7 @@ function schwungKurve(e) {
   const w = WAFFEN[e.waffe];
   if (!w.nah || !(e.schwingT > 0)) return { hoch: 0, seite: 0 };
   const f = 1 - e.schwingT / w.nah.schwingDauer;
-  if (w.nah.art === 'hoch') {
+  if ((e.schwungArt || w.nah.art) === 'hoch') {
     const hoch = f < 0.4 ? Math.sin(f / 0.4 * Math.PI / 2) * 2.4 : f < 0.6 ? 2.4 - (f - 0.4) / 0.2 * 2.8 : -0.4 * (1 - (f - 0.6) / 0.4);
     return { hoch, seite: 0 };
   }
@@ -2273,7 +2374,8 @@ function schwungKurve(e) {
 }
 
 function sniperSchuss(e) {
-  const lad = e.ladung, laenge = 150 + 450 * lad;
+  const sw0 = WAFFEN[e.waffe], [l0, l1] = sw0.laenge || [150, 450], [s0, s1] = sw0.schadenB || [35, 85];
+  const lad = e.ladung, laenge = l0 + l1 * lad;
   e.tinte = Math.max(0, e.tinte - (5 + 12 * lad) * (1 - e.bonus.tinte)); e.rueck = 1.5;
   const dx = Math.cos(e.winkel), dy = Math.sin(e.winkel);
   let ende = laenge, opfer = null;
@@ -2288,7 +2390,7 @@ function sniperSchuss(e) {
   for (let d = 40; d < ende; d += 14) klecks(e.x + dx * d, e.y + dy * d, 7, e.team, e);
   klecks(e.x + dx * ende, e.y + dy * ende, 18, e.team, e);
   spritzer(e.x + dx * ende, e.y + dy * ende, 10, e.team, 10, 180);
-  if (opfer) treffen(opfer, 35 + 85 * lad, e);
+  if (opfer) treffen(opfer, s0 + s1 * lad, e);
   // Leuchtstrahl
   const h0 = e.z + (e.spieler ? 28 : 24);
   strahlZeigen(e.x + dx * 14, e.y + dy * 14, e.x + dx * ende, e.y + dy * ende, h0, e.team);
@@ -2409,6 +2511,15 @@ function ultiStarten(e, zx, zy) {
       e.laserT = 3; e.laserTick = 0;
       if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 700) ton('laser', e.spieler ? 1 : 0.5);
       break;
+    case 'panzer':   // das ganze Team bekommt eine Rüstung
+      for (const f of kleckse) if (f.team === e.team && !f.tot) { f.panzer = 50; f.panzerT = 10; spritzer(f.x, f.y, 25, f.team, 12, 120); }
+      break;
+    case 'werfer':
+      e.werferT = 8; e.werferSchuss = 4; e.schussCd = 0.3;
+      break;
+    case 'kugel':
+      e.kugelT = 6; e.kugelTick = 0; e.taucht = false;
+      break;
     case 'tornado': {
       const mesh = baueTornado(e.team); scene.add(mesh);
       tornados.push({ x: Math.max(30, Math.min(W - 30, zx)), y: Math.max(30, Math.min(H - 30, zy)), t: 7, team: e.team, wer: e, malT: 0, schadenT: 0, mesh });
@@ -2436,6 +2547,10 @@ function naheKlatsch(x, y) {
 
 function treffen(e, schaden, wer) {
   if (e.tot || e.schild > 0) return;
+  if (e.panzer > 0) {   // Farbpanzer fängt Schaden ab
+    const ab = Math.min(e.panzer, schaden); e.panzer -= ab; schaden -= ab;
+    if (schaden <= 0) { if (e.spieler) ton('treffer'); return; }
+  }
   e.hp -= schaden * (1 - e.bonus.schutz); e.letzterTreffer = 0;
   if (e.spieler) rotBlitz = Math.min(0.4, rotBlitz + schaden / 150);
   if (schaden > 6) { if (e.spieler) ton('aua'); else if (wer && wer.spieler) ton('treffer'); mpEreignis({ k: 'tr', i: kleckse.indexOf(e), w: wer ? kleckse.indexOf(wer) : -1, s: r0(schaden) }); }
@@ -2443,7 +2558,7 @@ function treffen(e, schaden, wer) {
 }
 
 function erwischt(e, wer) {
-  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0;
+  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0;
   const farbe = wer ? wer.team : 1 - e.team;
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
@@ -2485,7 +2600,7 @@ function ausweichen(b, dx, dy) {
 
 function ki(b, dt) {
   const k = b.ki, w = WAFFEN[b.waffe];
-  const sichtweite = sandsturm() ? 150 : b.waffe === 'sniper' ? 560 : 330;
+  const sichtweite = sandsturm() ? 150 : typVon(b.waffe) === 'sniper' ? Math.max(330, w.reichweite + 40) : 330;
   let feind = null, fd = 1e9;
   for (const e of kleckse) {
     if (e.team === b.team || e.tot) continue;
@@ -2493,6 +2608,14 @@ function ki(b, dt) {
     if (d > sichtweite || ((e.taucht || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
     if (!sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
+  }
+  if (b.kugelT > 0) {   // als Tuffkugel einfach auf den nächsten Gegner zurollen
+    let z = feind;
+    if (!z) { let best = 1e9; for (const f of kleckse) if (f.team !== b.team && !f.tot) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < best) { best = d; z = f; } } }
+    z = z || k.ziel || { x: W / 2, y: H / 2 };
+    const l = Math.hypot(z.x - b.x, z.y - b.y) || 1;
+    const [rx, ry] = ausweichen(b, (z.x - b.x) / l, (z.y - b.y) / l);
+    b.schiesst = false; b.willTauchen = false; bewege(b, rx, ry, dt); return;
   }
   let dx = 0, dy = 0;
   b.schiesst = false; b.willTauchen = false;
@@ -2503,8 +2626,8 @@ function ki(b, dt) {
   // Ulti benutzen
   if (b.ulti >= 1) {
     const art = b.ultiArt;
-    const nurMitFeind = ['wirbel', 'laser', 'schild'].includes(art);
-    if (feind && (art !== 'wirbel' || fd < 150) && (art !== 'welle' || fd < 350)) ultiStarten(b, feind.x, feind.y);
+    const nurMitFeind = ['wirbel', 'laser', 'schild', 'panzer', 'werfer', 'kugel'].includes(art);
+    if (feind && (art !== 'wirbel' || fd < 150) && (art !== 'welle' || fd < 350) && (art !== 'kugel' || fd < 300)) ultiStarten(b, feind.x, feind.y);
     else if (!feind && !nurMitFeind && Math.random() < dt * 0.3) {
       const z = k.ziel || { x: W / 2, y: H / 2 }; b.winkel = Math.atan2(z.y - b.y, z.x - b.x); ultiStarten(b, z.x, z.y);
     } else if (!feind && art === 'wirbel' && Math.random() < dt * 0.15 && besitzer(b.x, b.y) !== b.team + 1) ultiStarten(b, b.x, b.y);
@@ -2517,7 +2640,8 @@ function ki(b, dt) {
     b.winkel = drehe(b.winkel, zielA, dt * 5);
     b.pitch = botPitch(b, fd, feind.z + 22);
     const gutGezielt = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
-    if (b.waffe === 'sniper') {
+    if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
+    else if (typVon(b.waffe) === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
     } else if (w.nah) {
       if (fd < 70) b.schiesst = true;                                   // drüberrollen / schieben
@@ -2548,7 +2672,7 @@ function ki(b, dt) {
       // Farbe verteilen
       b.winkel = drehe(b.winkel, a + (w.nah ? 0 : Math.sin(zeit * 4 + b.nr * 2) * 0.6), dt * 6);
       b.pitch = botPitch(b, 120, 0);
-      if (b.waffe === 'sniper') {
+      if (typVon(b.waffe) === 'sniper') {
         b.schiesst = !(b.laden && b.ladung > 0.35);
       } else b.schiesst = true;
     }
@@ -2624,7 +2748,7 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0 });
         if (e.spieler) ton('plopp');
       }
       continue;
@@ -2635,6 +2759,7 @@ function update(dt) {
     else ki(e, dt);
     schiessen(e, dt);
     if (e.laserT > 0) laserUpdate(e, dt);
+    if (e.kugelT > 0) kugelUpdate(e, dt);
     e.rueck = Math.max(0, e.rueck - dt * 8);
   }
   if (spieler.tot) zielRing.visible = false;
@@ -2651,7 +2776,9 @@ function update(dt) {
       s.x += s.vx * dt / 3; s.y += s.vy * dt / 3; s.h += s.vz * dt / 3;
       if (s.h <= 0) {
         if (!istWand(s.x, s.y)) klecks(s.x, s.y, w.klecks, s.team, s.wer);
-        spritzer(s.x, s.y, 1, s.team, 3, 80); naheKlatsch(s.x, s.y); weg = true; break;
+        spritzer(s.x, s.y, 1, s.team, 3, 80); naheKlatsch(s.x, s.y);
+        if (w.huepfen && (s.sprung || 0) < w.huepfen) { s.sprung = (s.sprung || 0) + 1; s.h = 0.5; s.vz = 230 - s.sprung * 40; s.vx *= 0.85; s.vy *= 0.85; continue; }   // Blase hüpft weiter
+        weg = true; break;
       }
       if ((istWand(s.x, s.y) && s.h < WAND_H) || s.x < 0 || s.y < 0 || s.x > W || s.y > H) {
         const bx = s.x - s.vx * 0.012, by = s.y - s.vy * 0.012;
@@ -2847,7 +2974,7 @@ function animiereFigur(e, v, dt) {
   ud.augen.scale.y = ((zeit + e.nr * 0.77) % 3.3) < 0.12 ? 0.1 : 1;
   ud.tankFuell.scale.y = Math.max(0.02, e.tinte / 100);
   // Arme halten die Waffe und zielen mit
-  const [a0, b0, pf] = HALTUNG[e.waffe];
+  const [a0, b0, pf] = HALTUNG[e.waffe] || HALTUNG[typVon(e.waffe)] || HALTUNG.kanone;
   const schwung = schwungKurve(e);
   const a = a0 + e.pitch * pf - (WAFFEN[e.waffe].nah ? 0 : e.rueck * 0.12) + (inLuft ? -0.2 : 0) + schwung.hoch * 0.8;
   ud.ober.rotation.y = schwung.seite * 0.4;   // Oberkörper dreht beim Pinsel-Schwung mit
@@ -2861,6 +2988,11 @@ function animiereFigur(e, v, dt) {
   w.rotation.z = (WAFFEN[e.waffe].nah ? schwung.hoch : e.pitch * pf + e.rueck * 0.2);
   w.rotation.y = schwung.seite;
   animiereWaffe(w.userData, e, dt, vf);
+  if (e.werferModell) {   // Raketenwerfer statt Waffe
+    const werfer = e.werferT > 0;
+    e.werferModell.visible = werfer; w.visible = !werfer;
+    e.werferModell.position.copy(w.position); e.werferModell.rotation.z = e.pitch * 0.6;
+  }
 }
 
 // ================== 3D-BILD AKTUALISIEREN ==================
@@ -2922,6 +3054,10 @@ function welt3D(dt) {
     e.welle.scale.setScalar(1 + (zeit * 3 % 1) * 0.6);
     e.blase.visible = !e.tot && e.schild > 0 && !istIch;
     e.blase.position.set(e.x, e.z + 24, e.y);
+    e.kugelMesh.visible = !e.tot && e.kugelT > 0;
+    if (e.kugelMesh.visible) { e.kugelMesh.position.set(e.x, e.z + 30, e.y); e.kugelMesh.rotation.x += e.vy * dt / 30; e.kugelMesh.rotation.z -= e.vx * dt / 30; }
+    e.panzerMesh.visible = !e.tot && e.panzer > 0 && !istIch;
+    if (e.panzerMesh.visible) { e.panzerMesh.position.set(e.x, e.z + 25, e.y); e.panzerMesh.rotation.y += dt; }
   }
   for (const s of schuesse) {   // Tropfen sind länglich in Flugrichtung
     s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); const gr = s.w.gross || 1; s.mesh.scale.set(0.8 * gr, 0.8 * gr, 1.7 * gr);
@@ -2951,7 +3087,7 @@ function welt3D(dt) {
 
   // Kamera
   const p = spieler;
-  const zielAuge = p.taucht ? 9 : AUGE;
+  const zielAuge = p.taucht ? 9 : p.kugelT > 0 ? 30 : AUGE;
   augenHoehe += (zielAuge - augenHoehe) * Math.min(1, dt * 12);
   const fx = Math.cos(p.winkel) * Math.cos(p.pitch), fy = Math.sin(p.pitch), fz = Math.sin(p.winkel) * Math.cos(p.pitch);
   if (kameraOverride) {
@@ -2986,7 +3122,8 @@ function welt3D(dt) {
     if (WAFFEN[p.waffe].nah) z -= p.rueck * 1.6;
     vmHalter.position.set(x - sx * 4 - sch.seite * 4, y + sy * 3 + sch.hoch * 3, z);   // Waffe schwingt beim Umschauen nach
     vmHalter.rotation.set(sy + (WAFFEN[p.waffe].nah ? sch.hoch * 0.55 : p.rueck * 0.1), sx + sch.seite * 0.6, Math.sin(ph) * 0.025 * amp + sch.seite * 0.2);
-    haendeWaffe.visible = ichSicht && !p.tot && p.tauchAnim < 0.9 && !kameraOverride;
+    haendeWaffe.visible = ichSicht && !p.tot && p.tauchAnim < 0.9 && !kameraOverride && !(p.werferT > 0) && !(p.kugelT > 0);
+    if (haendeWerfer) haendeWerfer.visible = ichSicht && !p.tot && !kameraOverride && p.werferT > 0;
     animiereWaffe(haendeWaffe.userData, p, dt, p.vx * Math.cos(p.winkel) + p.vy * Math.sin(p.winkel));
   }
   renderer.render(scene, kamera);
@@ -3008,6 +3145,12 @@ function hud() {
   if (z0 && z0.art === 'sand' && !spieler.tot) { ctx.fillStyle = 'rgba(156,122,60,0.25)'; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.taucht) { ctx.globalAlpha = 0.18; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1; }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
+  if (spieler.kugelT > 0) {
+    ctx.globalAlpha = 0.25; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1;
+    ctx.textAlign = 'center'; textMitRand(`🔮 TUFFKUGEL! BUMM in ${Math.ceil(spieler.kugelT)}`, cw / 2, ch * 0.75, 30, '#fff');
+  }
+  if (spieler.werferT > 0) { ctx.textAlign = 'center'; textMitRand(`🧨 ${spieler.werferSchuss} Raketen – Klick = Feuer! (${Math.ceil(spieler.werferT)} s)`, cw / 2, ch * 0.75, 26, '#ffd166'); }
+  if (spieler.panzer > 0) { ctx.strokeStyle = TEAMS[spieler.team].hell; ctx.globalAlpha = 0.5; ctx.lineWidth = 10; ctx.strokeRect(5, 5, cw - 10, ch - 10); ctx.globalAlpha = 1; }
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
 
   if (modus === 'lobby') lobbyHud(cw, ch);
@@ -3042,6 +3185,7 @@ function hud() {
   ctx.font = '20px system-ui'; ctx.fillText('❤️', tx + 56, ty + 56);
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(tx + 84, ty + 44, 60, 10);
   ctx.fillStyle = spieler.hp > 40 ? '#5be37d' : '#ff4d4d'; ctx.fillRect(tx + 84, ty + 44, 60 * Math.max(0, spieler.hp) / 100, 10);
+  if (spieler.panzer > 0) { ctx.fillStyle = '#9fe8ff'; ctx.fillRect(tx + 84, ty + 56, 60 * spieler.panzer / 50, 5); }   // Farbpanzer
   ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`🎯 ${spieler.ko}`, tx + 56, ty + 82);
   // Ulti-Kreis
   const ux = tx + 140, uy = ty + 100, voll = spieler.ulti >= 1;
