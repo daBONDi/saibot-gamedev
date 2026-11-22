@@ -43,7 +43,24 @@ const GUETER = {
   haeckselgut: { name: 'Häckselgut', emoji: '🌽', farbe: 0x7fae3a },
   silage: { name: 'Silage', emoji: '🟫', farbe: 0x9a8a3a },
   stroh: { name: 'Stroh', emoji: '🟨', farbe: 0xe8d27a },
+  kartoffeln: { name: 'Kartoffeln', emoji: '🥔', farbe: 0xc9a46a, preis: 0.9 },
+  rueben: { name: 'Zuckerrüben', emoji: '🟤', farbe: 0xe8dcc0, preis: 0.55 },
+  sonnenblumen: { name: 'Sonnenblumenkerne', emoji: '🌻', farbe: 0x3a3028, preis: 4.0 },
+  raps: { name: 'Raps', emoji: '🟡', farbe: 0x2a2a2a, preis: 3.6 },
 };
+// 🌱 Alle Feldfrüchte: was die Saat kostet, wie lange sie wächst, was die Ernte bringt und womit man erntet
+//   geraet: 'ernte' = Erntevorsatz/Mähdrescher · 'maisgebiss' = Häcksler · 'roder' = Roder (Taste 5)
+//   code: ein Buchstabe zum Speichern (nicht w, s, p, g, h benutzen!)
+const FRUECHTE = {
+  weizen:      { name: 'Getreide',     emoji: '🌾', saatPreis: SAAT_PREIS,      zeit: WACHS_ZEIT,      ertrag: ERTRAG_PRO_ZELLE, gut: 'korn',         geraet: 'ernte',      code: 'g', stroh: true },
+  mais:        { name: 'Mais',         emoji: '🌽', saatPreis: MAIS_SAAT_PREIS, zeit: MAIS_WACHS_ZEIT, ertrag: MAIS_ERTRAG,      gut: 'haeckselgut',  geraet: 'maisgebiss', code: 'm' },
+  kartoffel:   { name: 'Kartoffeln',   emoji: '🥔', saatPreis: 2.0,             zeit: 200,             ertrag: 400,              gut: 'kartoffeln',   geraet: 'roder',      code: 'k' },
+  ruebe:       { name: 'Zuckerrüben',  emoji: '🟤', saatPreis: 1.0,             zeit: 240,             ertrag: 600,              gut: 'rueben',       geraet: 'roder',      code: 'r' },
+  sonnenblume: { name: 'Sonnenblumen', emoji: '🌻', saatPreis: 1.2,             zeit: 160,             ertrag: 80,               gut: 'sonnenblumen', geraet: 'ernte',      code: 'n' },
+  raps:        { name: 'Raps',         emoji: '🟡', saatPreis: 0.9,             zeit: 140,             ertrag: 90,               gut: 'raps',         geraet: 'ernte',      code: 'x' },
+};
+const frucht = c => FRUECHTE[c.a] || FRUECHTE.weizen;   // Welche Frucht wächst in dieser Zelle? (kein a = Getreide)
+const EXTRA_FRUECHTE = ['kartoffel', 'ruebe', 'sonnenblume', 'raps'];   // die bekommen eigene Pflanzen-Modelle
 // 🌾 Stroh: Nach der Weizen-Ernte bleibt Stroh liegen. Die Ballenpresse (Taste 4) macht daraus runde Ballen.
 const ZELLEN_PRO_BALLEN = 1;     // So viele Feld-Stücke Stroh ergeben einen Ballen (1 = jedes Stück Strohspur gibt einen Ballen)
 const BALLEN_KG = 250;           // So schwer ist ein Strohballen
@@ -70,6 +87,7 @@ const GERAETE = {
   ernte: { name: 'Erntevorsatz', emoji: '🌾', taste: '3', breite: 4.5, hinten: false, arbeitsTempo: 4 },
   presse: { name: 'Ballenpresse', emoji: '🟨', taste: '4', breite: 2.4, hinten: true, arbeitsTempo: 5 },
   maisgebiss: { name: 'Maisgebiss', emoji: '🌽', taste: '', breite: 4.5, hinten: false, arbeitsTempo: 4.5 },   // Nur am Häcksler
+  roder: { name: 'Roder', emoji: '🥔', taste: '5', breite: 3, hinten: false, arbeitsTempo: 3.5 },   // Holt Kartoffeln und Rüben aus der Erde
 };
 // Was du im Baumodus bauen kannst (Taste 1, 2, 3)
 const GEBAEUDE_ARTEN = {
@@ -1094,8 +1112,8 @@ function filialeVerkaufen() {
     for (const k of Object.keys(vorrat)) if (verkaufbar(k)) { vorrat[k] -= Math.floor(vorrat[k]); if (vorrat[k] <= 0.001) delete vorrat[k]; }
   }
   const gut = aktiv ? gutVon(aktiv) : null;
-  if (gut === 'korn' || gut === 'silage') {   // Korn oder Silage vom Anhänger
-    const m = kornDrin(aktiv), e = Math.round(m * (gut === 'korn' ? kornPreis() : SILAGE_PREIS) * FILIALE_KORN_BONUS);
+  if (gut === 'korn' || gut === 'silage' || (gut && GUETER[gut].preis)) {   // Korn, Silage, Kartoffeln, Rüben … vom Anhänger
+    const m = kornDrin(aktiv), e = Math.round(m * (GUETER[gut].preis || (gut === 'korn' ? kornPreis() : SILAGE_PREIS)) * FILIALE_KORN_BONUS);
     kornWeg(aktiv, m); wert += e; text.push(`${GUETER[gut].emoji} ${kg(m)} ${GUETER[gut].name}`);
   }
   if (wert <= 0) { meldung(`🏬 Du hast nichts zum Verkaufen! Der Großmarkt kauft Honig, Milch, Eier, Gemüse, Obst, Wurst … und Korn oder Silage vom Anhänger. ⭐ Heute besonders gesucht: ${PRODUKTE[angebotHeute()].emoji} ${PRODUKTE[angebotHeute()].name}!`, 5); sound.nein(); return; }
@@ -1134,6 +1152,61 @@ const maisGeo = (() => {
   return mergeGeometries(teile);
 })();
 const maisMat = windMaterial(mat(0xffffff, { roughness: 0.8 }), 0.4);
+// Neue Feldfrüchte: jedes Teil bekommt seine eigene Farbe (grüne Blätter, gelbe Blüten …)
+function farbig(geo, farbe) {
+  const c = new THREE.Color(farbe), n = geo.attributes.position.count, f = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) { f[k * 3] = c.r; f[k * 3 + 1] = c.g; f[k * 3 + 2] = c.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(f, 3));
+  return geo.index ? geo.toNonIndexed() : geo;
+}
+const blattBox = (w, h, d, farbe) => farbig(new THREE.BoxGeometry(w, h, d).toNonIndexed(), farbe);
+const FRUCHT_GEO = {
+  kartoffel: (() => {   // Buschige Kartoffelpflanze mit kleinen weiß-lila Blüten
+    const t = [];
+    for (let k = 0; k < 9; k++) {
+      const w = k * 0.7, r = 0.1 + (k % 3) * 0.12, y = 0.2 + (k % 4) * 0.1;
+      t.push(blattBox(0.28, 0.04, 0.18, k % 2 ? '#3f8a2a' : '#4fa035').rotateZ(0.3).rotateY(w).translate(Math.cos(w) * r, y, Math.sin(w) * r));
+      t.push(blattBox(0.03, y, 0.03, '#3a7a24').translate(Math.cos(w) * r * 0.5, y / 2, Math.sin(w) * r * 0.5));
+    }
+    for (let k = 0; k < 4; k++) t.push(blattBox(0.06, 0.06, 0.06, k % 2 ? '#ffffff' : '#c9a0ff').translate(Math.cos(k * 1.6) * 0.15, 0.58, Math.sin(k * 1.6) * 0.15));
+    return mergeGeometries(t);
+  })(),
+  ruebe: (() => {   // Zuckerrübe: Rosette aus großen Blättern, oben schaut die weiße Rübe raus
+    const t = [blattBox(0.2, 0.16, 0.2, '#efe6cc').translate(0, 0.08, 0)];
+    for (let k = 0; k < 8; k++) t.push(blattBox(0.42, 0.03, 0.2, k % 2 ? '#2f7a2a' : '#3d8f32').translate(0.22, 0, 0).rotateZ(0.6 + (k % 3) * 0.15).rotateY(k * 0.8).translate(0, 0.16, 0));
+    return mergeGeometries(t);
+  })(),
+  sonnenblume: (() => {   // Hohe Sonnenblume: Stängel, Blätter und ein großer Blütenkopf mit gelben Blättern
+    const t = [blattBox(0.06, 1.8, 0.06, '#4f8f2a').translate(0, 0.9, 0)];
+    for (let k = 0; k < 4; k++) t.push(blattBox(0.34, 0.02, 0.24, '#3f7f24').translate(0.18, 0, 0).rotateZ(-0.3).rotateY(k * 1.7).translate(0, 0.5 + k * 0.28, 0));
+    const kopf = farbig(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 14), '#5a3a1a').rotateZ(Math.PI / 2 - 0.4).translate(0.06, 1.85, 0);
+    t.push(kopf);
+    for (let k = 0; k < 12; k++) {
+      const w = k / 12 * Math.PI * 2;
+      t.push(blattBox(0.03, 0.18, 0.08, '#ffcc1a').translate(0, 0.27, 0).rotateX(w).rotateZ(-0.4).translate(0.04, 1.85, 0));
+    }
+    return mergeGeometries(t);
+  })(),
+  raps: (() => {   // Raps: viele dünne Stängel mit leuchtend gelben Blütentrauben
+    const t = [];
+    for (let k = 0; k < 6; k++) {
+      const w = k * 1.1, r = 0.05 + (k % 3) * 0.1, hh = 0.9 + (k % 2) * 0.2, x = Math.cos(w) * r, z = Math.sin(w) * r;
+      t.push(blattBox(0.03, hh, 0.03, '#4f8f2a').translate(x, hh / 2, z));
+      t.push(blattBox(0.14, 0.16, 0.14, k % 2 ? '#ffe11a' : '#f7d000').translate(x, hh + 0.06, z));
+      t.push(blattBox(0.22, 0.02, 0.1, '#3f7f24').rotateZ(0.4).rotateY(w).translate(x, 0.25 + (k % 3) * 0.12, z));
+    }
+    return mergeGeometries(t);
+  })(),
+};
+const FRUCHT_MAT = {};
+for (const k of EXTRA_FRUECHTE) FRUCHT_MAT[k] = windMaterial(mat(0xffffff, { roughness: 0.8, vertexColors: true }), k === 'sonnenblume' ? 0.5 : 0.8);
+// So sehen sie aus: [Größe beim Keimen, Größe wenn reif, Farbe jung, Farbe reif]
+const FRUCHT_LOOK = {
+  kartoffel:   [0.25, 1.1, '#ffffff', '#c9b56a'],   // reife Kartoffeln: das Kraut wird gelb-braun
+  ruebe:       [0.25, 1.3, '#ffffff', '#e6f0c0'],
+  sonnenblume: [0.12, 1.15, '#ffffff', '#d9a860'],  // reif: die Köpfe werden dunkler
+  raps:        [0.2, 1.15, '#ffffff', '#b9a060'],   // reif: braune Schoten statt gelber Blüten
+};
 const maisGruen = new THREE.Color('#3f8f2a'), maisReif = new THREE.Color('#9aa83a');
 const felder = FELDER.map((F, nr) => {
   const nx = Math.floor(F.b / ZELLE), nz = Math.floor(F.t / ZELLE);
@@ -1155,6 +1228,14 @@ const felder = FELDER.map((F, nr) => {
   f.mais = new THREE.InstancedMesh(maisGeo, maisMat, nx * nz * 2);
   f.mais.castShadow = false; f.mais.receiveShadow = true; f.mais.frustumCulled = false;
   scene.add(f.mais);
+  // Kartoffeln, Rüben, Sonnenblumen und Raps: je 2 Pflanzen pro Zelle
+  f.extra = {};
+  for (const k of EXTRA_FRUECHTE) {
+    const m = new THREE.InstancedMesh(FRUCHT_GEO[k], FRUCHT_MAT[k], nx * nz * 2);
+    m.castShadow = false; m.receiveShadow = true; m.frustumCulled = false;
+    m.setColorAt(0, new THREE.Color(1, 1, 1));
+    scene.add(m); f.extra[k] = m;
+  }
   // Das erste Feld ist am Anfang schon reif – dann kannst du gleich ernten!
   for (let k = 0; k < nx * nz; k++) f.zellen.push(f.gekauft ? { z: 'gesaet', w: 1 } : { z: 'wiese', w: 0 });
   f.schild = schild('', '#fff', 9);
@@ -1247,7 +1328,22 @@ function malZelle(f, i, j) {
   f.mais.instanceMatrix.needsUpdate = true;
   f.mais.instanceColor.needsUpdate = true;
   // Die Pflanzen in dieser Zelle: Größe je nach Wachstum, grün -> gold, wenn reif
-  const h = c.z === 'gesaet' && !mais ? 0.12 + Math.min(1, c.w) * 1.1 : 0;
+  // Kartoffeln, Rüben, Sonnenblumen, Raps
+  for (const k of EXTRA_FRUECHTE) {
+    const m = f.extra[k], da = c.z === 'gesaet' && c.a === k, [s0, s1, jung, reif] = FRUCHT_LOOK[k];
+    const gr = da ? s0 + Math.min(1, c.w) * (s1 - s0) : 0;
+    farbeTmp.set(jung).lerp(new THREE.Color(reif), c.w >= 1 ? 1 : Math.max(0, (c.w - 0.7) / 0.3) * 0.5);
+    for (let n = 0; n < 2; n++) {
+      const idx = (j * f.nx + i) * 2 + n;
+      dummy.position.set(f.x0 + (i + 0.28 + n * 0.44) * ZELLE, 0.16, f.z0 + (j + 0.3 + n * 0.4) * ZELLE);
+      dummy.rotation.y = k === 'sonnenblume' ? 0.3 : (idx * 2.1) % 6;   // Sonnenblumen schauen alle in die gleiche Richtung (zur Sonne!)
+      dummy.scale.setScalar(gr || 0.0001);
+      dummy.updateMatrix();
+      m.setMatrixAt(idx, dummy.matrix); m.setColorAt(idx, farbeTmp);
+    }
+    m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true;
+  }
+  const h = c.z === 'gesaet' && !c.a ? 0.12 + Math.min(1, c.w) * 1.1 : 0;
   const reife = c.w >= 1 ? 1 : Math.max(0, (c.w - 0.55) / 0.45) * 0.8;   // Erst grün, kurz vor der Ernte gelb, reif = golden
   farbeTmp.copy(gruen).lerp(gold, reife);
   for (let k = 0; k < 4; k++) {
@@ -1288,42 +1384,42 @@ function feldBei(x, z, rand = 0) {
 const FAHRZEUGE = {
   fendt: {
     name: 'Fendt', emoji: '🚜', preis: 0, farbe: 0x16852c, felge: 0xc8ccd0,  groesse: 1, tempo: 11.1, arbeit: 1, breite: 1,
-    dieselMax: DIESEL_MAX, tankMax: TANK_MAX, saatMax: SAAT_MAX, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 1,
+    dieselMax: DIESEL_MAX, tankMax: TANK_MAX, saatMax: SAAT_MAX, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 1,
     faehigkeit: 'Allrounder – kann pflügen, säen und ernten',
   },
   flitzer: {
     name: 'Flitzer', emoji: '🏎️', preis: 40000, farbe: 0xd9442b, felge: 0x1a1a1a,  groesse: 0.8, tempo: 13.9, arbeit: 0.9, breite: 0.8,
-    dieselMax: 150, tankMax: 4000, saatMax: 1000, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 1.4, turbo: true,
+    dieselMax: 150, tankMax: 4000, saatMax: 1000, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 1.4, turbo: true,
     faehigkeit: 'TURBO mit Shift (bis 70 km/h)! Klein, aber flink',
   },
   kraftprotz: {
     name: 'Kraftprotz', emoji: '💪', preis: 120000, farbe: 0x2457a6, felge: 0xf2c200,  groesse: 1.35, tempo: 9.7, arbeit: 1.5, breite: 1.6,
-    dieselMax: 600, tankMax: 12000, saatMax: 4000, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 0.75, allrad: true,
+    dieselMax: 600, tankMax: 12000, saatMax: 4000, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 0.75, allrad: true,
     faehigkeit: 'Allrad: wird nie träge · extra breite Geräte · schnell auf dem Feld',
   },
   oldtimer: {
     name: 'Oldtimer', emoji: '🧓', preis: 15000, farbe: 0xc8321e, felge: 0xf2f2f2, groesse: 0.85, tempo: 7, arbeit: 0.8, breite: 0.8,
-    dieselMax: 120, tankMax: 3000, saatMax: 800, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 0.6, oldtimer: true, sparsam: 0.35,
+    dieselMax: 120, tankMax: 3000, saatMax: 800, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 0.6, oldtimer: true, sparsam: 0.35,
     faehigkeit: 'Superbillig und sparsam: braucht nur ein Drittel Diesel! Ohne Kabine – der Wind weht dir um die Nase',
   },
   elektro: {
     name: 'E-Traktor', emoji: '⚡', preis: 90000, farbe: 0x1e9aa8, felge: 0xf2f2f2, groesse: 1, tempo: 12.5, arbeit: 1.1, breite: 1,
-    dieselMax: 100, tankMax: 8000, saatMax: 2500, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 3.2, elektro: true,
+    dieselMax: 100, tankMax: 8000, saatMax: 2500, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 3.2, elektro: true,
     faehigkeit: 'Fährt mit Strom: Das Solardach lädt den Akku in der Sonne von allein! Aufladen (T) kostet fast nichts – und kein Rauch',
   },
   gps: {
     name: 'GPS-Profi', emoji: '🛰️', preis: 140000, farbe: 0xe8741e, felge: 0x2a2a2a, groesse: 1.15, tempo: 11.1, arbeit: 1.3, breite: 1.3,
-    dieselMax: 450, tankMax: 14000, saatMax: 6000, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 0.9, gps: true,
+    dieselMax: 450, tankMax: 14000, saatMax: 6000, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 0.9, gps: true,
     faehigkeit: 'Autopilot: Auf dem Feld lenkt er von allein schnurgerade, wenn du nicht lenkst! Riesiger Saattank',
   },
   raupe: {
     name: 'Raupe', emoji: '🐛', preis: 200000, farbe: 0x6b8f2a, felge: 0xd9b400, groesse: 1.3, tempo: 8.3, arbeit: 1.4, breite: 2,
-    dieselMax: 700, tankMax: 10000, saatMax: 6000, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 0.65, raupe: true, allrad: true,
+    dieselMax: 700, tankMax: 10000, saatMax: 6000, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 0.65, raupe: true, allrad: true,
     faehigkeit: 'Kettenfahrzeug: dreht sich auf der Stelle und hat die breitesten Geräte (fast 7 m)! Wird nie träge',
   },
   monster: {
     name: 'Monster-Traktor', emoji: '🦖', preis: 100000, farbe: 0x7a2ad8, felge: 0x9aff3a, groesse: 1, tempo: 15.3, arbeit: 0.9, breite: 1,
-    dieselMax: 300, tankMax: 6000, saatMax: 1500, geraete: ['pflug', 'saat', 'ernte', 'presse'], motorTon: 0.55, monster: true, allrad: true,
+    dieselMax: 300, tankMax: 6000, saatMax: 1500, geraete: ['pflug', 'saat', 'ernte', 'presse', 'roder'], motorTon: 0.55, monster: true, allrad: true,
     faehigkeit: 'Riesenräder und 55 km/h! Shift = SPRINGEN – sogar über Zäune und Bäume!',
   },
   drescher: {
@@ -1487,7 +1583,7 @@ function malBildschirm(fz) {   // Der Bildschirm in der Kabine
   balkenMalen(36, fz.diesel / fz.typ.dieselMax, fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0', fz.typ.elektro ? `⚡ ${Math.round(fz.diesel)} %` : `⛽ ${Math.round(fz.diesel)} l`);
   balkenMalen(70, kornPlatz(fz) ? kornDrin(fz) / kornPlatz(fz) : 0, '#' + (GUETER[gutVon(fz)] || GUETER.korn).farbe.toString(16).padStart(6, '0'), gutText(fz));
   g.fillStyle = '#ffffff'; g.font = '13px Arial';
-  if (fz.typ.saatMax) g.fillText(`${fz.saatArt === 'mais' ? '🌽' : '🌱'} ${kg(fz.saat)}`, 10, 80);
+  if (fz.typ.saatMax) g.fillText(`${(FRUECHTE[fz.saatArt] || FRUECHTE.weizen).emoji} ${kg(fz.saat)}`, 10, 80);
   g.fillStyle = '#7cf5a0'; g.fillText(fz.typ.name, 10, 104);
   fz.bildTex.needsUpdate = true;
 }
@@ -1970,6 +2066,17 @@ function baueGeraet(art) {
       const r = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 16), mat(0x1b1b1b)); r.rotation.z = Math.PI / 2; r.position.set(sx * 1.0, 0.42, 0.2); g.add(r);
       kasten(g, sx * 0.86, 1.6, 0.9, 0.03, 0.18, 0.03, new THREE.MeshBasicMaterial({ color: 0xe0201e }), false);
     }
+  } else if (art === 'roder') {   // Roder: Schare graben die Knollen aus, ein Siebband schüttelt die Erde ab
+    const blau = mat(0x2a6fb0, { roughness: 0.5, metalness: 0.2 });
+    const rahmen = new THREE.Mesh(new THREE.BoxGeometry(3, 0.9, 1.4), blau); rahmen.position.set(0, 0.85, 0.1); rahmen.castShadow = true; g.add(rahmen);
+    kasten(g, 0, 1.4, 0.1, 3.1, 0.12, 1.5, 0xf0c020);                                   // gelbe Kante
+    for (let k = 0; k < 6; k++) {                                                          // Schare (graben in den Boden)
+      const schar = kasten(g, -1.25 + k * 0.5, 0.25, -0.75, 0.32, 0.08, 0.55, 0xb0b0b0); schar.rotation.x = 0.35;
+    }
+    const band = new THREE.Group(); band.position.set(0, 0.55, -0.2); g.add(band);         // Siebband (läuft beim Roden)
+    for (let k = 0; k < 10; k++) kasten(band, 0, 0, -0.6 + k * 0.13, 2.8, 0.05, 0.05, 0x222222, false);
+    g.userData.haspel = band;
+    for (const sx of [-1, 1]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.25, 14), mat(0x1b1b1b)); r.rotation.z = Math.PI / 2; r.position.set(sx * 1.6, 0.3, 0.5); g.add(r); }
   } else if (art === 'maisgebiss') {   // Maisgebiss: viele grüne Spitzen, die zwischen die Maisreihen fahren
     kasten(g, 0, 0.55, 0.1, 4.5, 0.6, 1.1, 0x2f9a4a);
     kasten(g, 0, 0.3, -0.2, 4.5, 0.12, 1.2, 0x555555, false);
@@ -2003,7 +2110,7 @@ function neuesFahrzeug(typName, x, z, rot = 0, daten = {}) {
     radius: (typ.art === 'drescher' ? 2.8 : typ.art === 'harvester' || typ.art === 'haecksler' ? 2.4 : typ.art === 'lkw' ? 2.6 : 1.8) * typ.groesse,
     werkzeug: typ.geraete.includes(daten.werkzeug) ? daten.werkzeug : typ.geraete[typ.geraete.length - 1],
     diesel: daten.diesel ?? typ.dieselMax, tank: daten.tank ?? 0, saat: daten.saat ?? typ.saatMax,
-    gut: GUETER[daten.gut] ? daten.gut : 'korn', saatArt: daten.saatArt === 'mais' ? 'mais' : 'weizen',
+    gut: GUETER[daten.gut] ? daten.gut : 'korn', saatArt: FRUECHTE[daten.saatArt] ? daten.saatArt : 'weizen',
   };
   for (const art of typ.geraete) {
     const m = baueGeraet(art), G = GERAETE[art];
@@ -4307,7 +4414,7 @@ function updateHUD() {
     $('tempo').textContent = Math.round(Math.abs(fz.speed) * 3.6);
     balken('diesel', fz.diesel, fz.typ.dieselMax, fz.typ.elektro ? `⚡ ${Math.round(fz.diesel)} % Akku${tagHell > 0.5 ? ' ☀️ lädt' : ''}` : `${Math.round(fz.diesel)} Liter`);
     $('diesel').style.background = fz.diesel < fz.typ.dieselMax * 0.15 ? '#ff6b6b' : '#5aa0e0';
-    balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? `${fz.saatArt === 'mais' ? '🌽' : '🌾'} ${kg(fz.saat)}` : '– (kann nicht säen)');
+    balken('saat', fz.saat, fz.typ.saatMax, fz.typ.saatMax ? `${(FRUECHTE[fz.saatArt] || FRUECHTE.weizen).emoji} ${kg(fz.saat)}` : '– (kann nicht säen)');
     balken('tank', kornDrin(fz), kornPlatz(fz), kornPlatz(fz) ? `${gutText(fz)}${kornAnh(fz) ? ` (mit ${fz.anh.typ.name})` : ''}` : fz.typ.art === 'haecksler' ? '– Anhänger ankuppeln (H)!' : '– (kein Korntank)');
     $('tank').style.background = '#' + (GUETER[gutVon(fz)] || GUETER.korn).farbe.toString(16).padStart(6, '0');
   }
@@ -4345,9 +4452,9 @@ function bearbeite(fz, x, z) {
     else if (c.z === 'gesaet') meldungSelten('🌾 Hier wächst schon was! Erst ernten (Taste 3), dann pflügen.');
   } else if (fz.werkzeug === 'saat') {
     if (c.z === 'gepfluegt') {
-      if (fz.saat < SAAT_PRO_ZELLE) { meldungSelten('🌱 Die Saat ist leer! Fahr zum Landhandel 🏪 und drück G.'); return; }
+      if (fz.saat < SAAT_PRO_ZELLE) { meldungSelten('🌱 Die Saat ist leer! Fahr zum Landhandel 🏪 – G = Getreide, Y = Saatgut-Laden.'); return; }
       fz.saat -= SAAT_PRO_ZELLE; c.z = 'gesaet'; c.w = 0;
-      if (fz.saatArt === 'mais') c.a = 'mais'; else delete c.a;
+      if (FRUECHTE[fz.saatArt] && fz.saatArt !== 'weizen') c.a = fz.saatArt; else delete c.a;
       malBoden(f, i, j); mpZelle(f, i, j);
     } else if (c.z === 'wiese' || c.z === 'stoppeln') meldungSelten('🟫 Erst pflügen (Taste 1), dann säen!');
   } else if (fz.werkzeug === 'presse') {   // Ballenpresse: Stroh einsammeln, alle paar Stücke kommt ein Ballen raus
@@ -4367,14 +4474,25 @@ function bearbeite(fz, x, z) {
       c.z = 'stoppeln'; c.w = 0; delete c.a; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0x7fae3a);
       if (!ziel.fsB) haeckselStrahl(fz, ziel);
     } else if (c.z === 'gesaet' && c.a === 'mais') meldungSelten('⏳ Der Mais ist noch nicht reif – warte, bis er groß und gelblich ist!');
-    else if (c.z === 'gesaet' && c.w >= 1) meldungSelten('🌾 Getreide erntest du mit dem Erntevorsatz (Traktor) oder dem Mähdrescher – der Häcksler ist für Mais!');
-  } else if (fz.werkzeug === 'ernte') {
-    if (c.z === 'gesaet' && c.a === 'mais') { if (c.w >= 1) meldungSelten('🌽 Der Mais ist zu groß für das Schneidwerk – dafür brauchst du den Häcksler! (N = Händler)'); return; }
-    if (c.z === 'gesaet' && c.w >= 1 && !gutPasst(fz, 'korn')) { meldungSelten(`🚛 Da ist schon ${GUETER[gutVon(fz)].name} drin – Korn passt da nicht dazu!`); return; }
-    if (c.z === 'gesaet' && c.w >= 1) {
-      if (kornDrin(fz) + ERTRAG_PRO_ZELLE > kornPlatz(fz)) { meldungSelten(fz.typ.art === 'drescher' ? '🚛 Der Korntank ist voll! Lade mit O in einen Anhänger über – oder ab zum Silo (L)!' : '🚛 Alles voll! Ab zum Silo 🛢️ (L) oder zum Landhandel 🏪 (V).'); return; }
-      kornDazu(fz, ERTRAG_PRO_ZELLE); c.z = 'stoppeln'; c.w = 0; c.stroh = true; malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, 0xe3c46a);
-    } else if (c.z === 'gesaet') meldungSelten('⏳ Das Getreide ist noch nicht reif – warte, bis es golden ist!');
+    else if (c.z === 'gesaet' && c.w >= 1) meldungSelten(`${frucht(c).emoji} ${frucht(c).name} erntest du ${frucht(c).geraet === 'roder' ? 'mit dem Roder (Taste 5 am Traktor)' : 'mit dem Erntevorsatz oder dem Mähdrescher'} – der Häcksler ist für Mais!`);
+  } else if (fz.werkzeug === 'ernte' || fz.werkzeug === 'roder') {   // Erntevorsatz (Getreide, Raps, Sonnenblumen) oder Roder (Kartoffeln, Rüben)
+    if (c.z !== 'gesaet') return;
+    const F = frucht(c), werkzeugName = fz.werkzeug === 'roder' ? 'Roder' : 'Erntevorsatz';
+    if (F.geraet !== fz.werkzeug) {
+      if (c.w >= 1) meldungSelten(F.geraet === 'maisgebiss' ? '🌽 Der Mais ist zu groß für das Schneidwerk – dafür brauchst du den Häcksler! (N = Händler)'
+        : F.geraet === 'roder' ? `${F.emoji} ${F.name} stecken in der Erde – dafür brauchst du den Roder (Taste 5)!` : `${F.emoji} ${F.name} kann der Roder nicht ernten – nimm den Erntevorsatz (Taste 3) oder den Mähdrescher!`);
+      return;
+    }
+    if (c.w < 1) { meldungSelten(`⏳ ${F.emoji} ${F.name} sind noch nicht reif – warte noch ein bisschen!`); return; }
+    if (!gutPasst(fz, F.gut) || kornDrin(fz) + F.ertrag > kornPlatz(fz)) {
+      if (fz.helfer) helferAbliefern(fz.helfer, fz);   // Helfer bringen die Ernte weg und machen weiter
+      else if (!gutPasst(fz, F.gut)) { meldungSelten(`🚛 Da ist schon ${GUETER[gutVon(fz)].name} drin – ${GUETER[F.gut].name} passt da nicht dazu!`); return; }
+      else { meldungSelten(fz.typ.art === 'drescher' ? '🚛 Der Korntank ist voll! Lade mit O in einen Anhänger über – oder ab zum Silo (L)!' : `🚛 Alles voll! Ab zum Landhandel 🏪 (V)${F.gut === 'korn' ? ' oder zum Silo 🛢️ (L)' : ''}.`); return; }
+    }
+    kornDazu(fz, F.ertrag, F.gut); c.z = 'stoppeln'; c.w = 0; delete c.a;
+    if (F.stroh) c.stroh = true;
+    malBoden(f, i, j); mpZelle(f, i, j); staub(x, z, fz.werkzeug === 'roder' ? 0x6b4a2b : GUETER[F.gut].farbe);
+    if (fz.werkzeug === 'roder' && fz === aktiv && Math.random() < 0.15) meldungSelten(`${F.emoji} ${F.name} geerntet! (${werkzeugName})`);
   }
 }
 // Wohin bläst der Häcksler? 1. in den eigenen Anhänger, 2. in ein Fahrzeug/einen Anhänger daneben (bis 12 m)
@@ -4486,7 +4604,7 @@ function wachsen(dt) {
     for (let j = 0; j < f.nz; j++) for (let i = 0; i < f.nx; i++) {
       const c = f.zellen[j * f.nx + i];
       if (c.z !== 'gesaet' || c.w >= 1) continue;
-      c.w = Math.min(1, c.w + 0.5 * jahreszeit().wachsen / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
+      c.w = Math.min(1, c.w + 0.5 * jahreszeit().wachsen / frucht(c).zeit);
       malZelle(f, i, j);
     }
   }
@@ -4516,7 +4634,7 @@ function verkaufen() {
   const drin = kornDrin(aktiv), gut = gutVon(aktiv);
   if (drin <= 0) { meldung('Der Korntank ist leer. Ernte zuerst etwas – oder hol Korn aus dem Silo! 🌾'); sound.nein(); return; }
   if (gut === 'haeckselgut') { meldung('🌽 Frisches Häckselgut kauft keiner! Fahr es ins Silagesilo 🟩 (L) und mach Silage daraus.', 4); sound.nein(); return; }
-  const erloes = Math.round(drin * (gut === 'silage' ? SILAGE_PREIS : gut === 'stroh' ? STROH_PREIS : kornPreis()));
+  const erloes = Math.round(drin * (GUETER[gut].preis || (gut === 'silage' ? SILAGE_PREIS : gut === 'stroh' ? STROH_PREIS : kornPreis())));
   money += erloes;
   meldung(`💶 ${kg(drin)} ${GUETER[gut].name} verkauft für ${euro(erloes)}!`, 3.5);
   kornWeg(aktiv, drin);
@@ -4527,10 +4645,10 @@ function saatKaufen(art = 'weizen') {   // G = Getreide-Saat, Y = Mais-Saat
   if (brauchtFahrzeug('Saat zu laden')) return;
   if (!imLaden()) { meldung('🏪 Fahr auf den gelben Platz beim Landhandel!'); sound.nein(); return; }
   if (!aktiv.typ.saatMax) { meldung(`🌱 Der ${aktiv.typ.name} kann nicht säen!`); sound.nein(); return; }
-  const preis = art === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS, name = art === 'mais' ? '🌽 Mais-Saat' : '🌾 Getreide-Saat';
+  const F = FRUECHTE[art] || FRUECHTE.weizen, preis = F.saatPreis, name = `${F.emoji} ${F.name}-Saat`;
   let rueck = 0;
   if (aktiv.saatArt !== art) {   // Andere Saat? Die alte gibst du zurück und bekommst das Geld wieder
-    rueck = Math.round(aktiv.saat * (aktiv.saatArt === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS));
+    rueck = Math.round(aktiv.saat * (FRUECHTE[aktiv.saatArt] || FRUECHTE.weizen).saatPreis);
     money += rueck; aktiv.saat = 0; aktiv.saatArt = art;
   }
   const menge = aktiv.typ.saatMax - aktiv.saat, kosten = Math.round(menge * preis);
@@ -4540,6 +4658,25 @@ function saatKaufen(art = 'weizen') {   // G = Getreide-Saat, Y = Mais-Saat
   meldung(`${name}: ${kg(menge)} gekauft für ${euro(kosten)}${rueck ? ` (alte Saat zurückgegeben: +${euro(rueck)})` : ''}`, 3);
   sound.kasse();
   speichern();
+  if ($('saatpanel').style.display === 'block') saatPanelZeigen(true);
+}
+// 🌱 Saatgut-Laden beim Landhandel (Y)
+function saatPanelZeigen(an) {
+  if (an && !imLaden()) { meldung('🏪 Fahr mit einem Traktor auf den gelben Platz beim Landhandel!'); sound.nein(); an = false; }
+  $('saatpanel').style.display = an ? 'block' : 'none';
+  if (!an) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  const liste = $('saatListe'); liste.innerHTML = '';
+  for (const [art, F] of Object.entries(FRUECHTE)) {
+    const G = GUETER[F.gut], womit = F.geraet === 'roder' ? '🥔 Roder (Taste 5)' : F.geraet === 'maisgebiss' ? '🌽 Häcksler' : '🌾 Erntevorsatz / Mähdrescher';
+    const wert = G.preis ? `${euro(Math.round(F.ertrag * G.preis))} pro Stück` : F.gut === 'korn' ? `${euro(Math.round(F.ertrag * KORN_PREIS))} pro Stück + Stroh` : 'als Silage';
+    const zeile = document.createElement('div'); zeile.className = 'angebot';
+    zeile.innerHTML = `<b>${F.emoji} ${F.name}</b>${aktiv && aktiv.saatArt === art ? ' <span class="klein">(geladen)</span>' : ''}<br>
+      <span class="klein">🌱 ${euro(F.saatPreis * SAAT_PRO_ZELLE)} Saat pro Feld-Stück · ⏳ ${Math.round(F.zeit / 60 * 10) / 10} min · 💶 ${wert}<br>🚜 Ernten mit: ${womit}</span><br>`;
+    const knopf = document.createElement('button'); knopf.textContent = '🛒 Saat laden';
+    knopf.addEventListener('click', () => saatKaufen(art));
+    zeile.appendChild(knopf); liste.appendChild(zeile);
+  }
 }
 function anHofTankstelle() { return !!aktiv && Math.hypot(aktiv.g.position.x - TANKSTELLE.x, aktiv.g.position.z - TANKSTELLE.z) < aktiv.radius + 3.5; }
 function tanken() {
@@ -5037,11 +5174,13 @@ function naechstesFahrzeug() {
 
 // ===== Speichern (im Browser) =====
 const ZUSTAND_KURZ = { wiese: 'w', stoppeln: 's', gepfluegt: 'p', gesaet: 'g' };
-const ZUSTAND_LANG = { w: 'wiese', s: 'stoppeln', p: 'gepfluegt', g: 'gesaet', m: 'gesaet', h: 'stoppeln' };   // m = Mais gesät · h = Stoppeln mit Stroh
-const zellCode = c => (c.z === 'gesaet' && c.a === 'mais' ? 'm' : c.z === 'stoppeln' && c.stroh ? 'h' : ZUSTAND_KURZ[c.z]) + (c.z === 'gesaet' ? Math.round(c.w * 100) : '');
+const ZUSTAND_LANG = { w: 'wiese', s: 'stoppeln', p: 'gepfluegt', g: 'gesaet', h: 'stoppeln' };   // h = Stoppeln mit Stroh
+for (const F of Object.values(FRUECHTE)) ZUSTAND_LANG[F.code] = 'gesaet';   // m = Mais, k = Kartoffeln, r = Rüben …
+const zellCode = c => (c.z === 'gesaet' && FRUECHTE[c.a] ? FRUECHTE[c.a].code : c.z === 'stoppeln' && c.stroh ? 'h' : ZUSTAND_KURZ[c.z]) + (c.z === 'gesaet' ? Math.round(c.w * 100) : '');
 const zelleAusCode = code => {
   const z = ZUSTAND_LANG[code[0]] || 'wiese', c = { z, w: z === 'gesaet' ? Number(code.slice(1)) / 100 : 0 };
-  if (code[0] === 'm') c.a = 'mais';
+  const art = Object.keys(FRUECHTE).find(k => k !== 'weizen' && FRUECHTE[k].code === code[0]);
+  if (art) c.a = art;
   if (code[0] === 'h') c.stroh = true;
   return c;
 };
@@ -5143,6 +5282,7 @@ $('btn-bau').addEventListener('click', buildMode);
 $('btn-neu').addEventListener('click', neuesSpiel);
 $('btn-haendler').addEventListener('click', () => haendlerZeigen(true));
 $('haendler-zu').addEventListener('click', () => haendlerZeigen(false));
+$('saat-zu').addEventListener('click', () => saatPanelZeigen(false));
 $('hofpanel-zu').addEventListener('click', () => panelZeigen(null));
 
 // ===== Die Anleitung: verschieben (oben an der Leiste ziehen) und einklappen (➖ oder Taste I) =====
@@ -5223,7 +5363,7 @@ document.addEventListener('keydown', e => {
   if (k === 'j') { musikAn = !musikAn; meldung(musikAn ? '🎵 Musik an' : '🔇 Musik aus', 1.5); }
   if (k === 'v') verkaufen();
   if (k === 'g') saatKaufen('weizen');
-  if (k === 'y') saatKaufen('mais');
+  if (k === 'y') saatPanelZeigen($('saatpanel').style.display !== 'block');
   if (k === 't') tanken();
   if (k === 'l') einlagern();
   if (k === 'u') ausSiloHolen();
@@ -5240,11 +5380,11 @@ document.addEventListener('keydown', e => {
   if (k === 'o') ueberladen();
   if (k === 'tab') helferZeigen($('helferpanel').style.display !== 'block');
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
-  if (k === 'escape') { helferZeigen(false); haendlerZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
+  if (k === 'escape') { helferZeigen(false); haendlerZeigen(false); saatPanelZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
   if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; if (entfernen) entfernenUmschalten(false); updateHUD(); }
   if (k === 'delete') entfernenUmschalten();   // Entf-Taste
-  else if (['1', '2', '3', '4'].includes(k) && aktiv) geraetWaehlen(Object.keys(GERAETE)[Number(k) - 1]);
+  else if (['1', '2', '3', '4', '5'].includes(k) && aktiv) { const art = Object.keys(GERAETE).find(a => GERAETE[a].taste === k); if (art) geraetWaehlen(art); }
   updateHUD();
 });
 document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -5606,7 +5746,7 @@ function mpEmpfangen(d, vonGast) {
         if (!f) return;
         codes.forEach((code, n) => {
           const c = f.zellen[n], neu = zelleAusCode(code);
-          if (c.z !== neu.z || Math.abs(c.w - neu.w) > 0.05) { f.zellen[n] = neu; malBoden(f, n % f.nx, Math.floor(n / f.nx)); }
+          if (c.z !== neu.z || Math.abs(c.w - neu.w) > 0.05 || (c.a || '') !== (neu.a || '')) { f.zellen[n] = neu; malBoden(f, n % f.nx, Math.floor(n / f.nx)); }
         });
       });
       return;
@@ -5623,7 +5763,7 @@ function mpEmpfangen(d, vonGast) {
         fz.werkzeug = fz.typ.geraete.includes(d.wz) ? d.wz : fz.werkzeug;
         fz.diesel = d.di; fz.tank = d.ta; fz.saat = d.sa;
         if (GUETER[d.gu]) fz.gut = d.gu;
-        if (d.sart) fz.saatArt = d.sart;
+        if (FRUECHTE[d.sart]) fz.saatArt = d.sart;
         // Anhänger: an- oder abgekuppelt?
         if ((fz.anh ? fz.anh.id : null) !== (d.an || null)) {
           abkuppeln(fz);
@@ -5868,7 +6008,7 @@ const uhrText = () => `${String(Math.floor(tageszeit)).padStart(2, '0')}:${Strin
 let schlaeft = false;
 function zeitVorspulen(sek) {
   for (const f of felder) {
-    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek * jahreszeit().wachsen / (c.a === 'mais' ? MAIS_WACHS_ZEIT : WACHS_ZEIT));
+    for (const c of f.zellen) if (c.z === 'gesaet' && c.w < 1) c.w = Math.min(1, c.w + sek * jahreszeit().wachsen / frucht(c).zeit);
     malFeld(f);
   }
   for (const b of gebaute) {
@@ -6085,7 +6225,7 @@ function animate() {
   else if (wh) zeigeHinweis(wh);
   else if (hh) zeigeHinweis(hh);
   else if (anHofTankstelle()) zeigeHinweis(`⛽ Hof-Tankstelle: T = Tanken (${Math.round(aktiv.diesel)} von ${aktiv.typ.dieselMax} Liter)`);
-  else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = verkaufen (${gutText(aktiv)}) · G = Getreide-Saat · Y = Mais-Saat · T = Tanken · N = Händler`);
+  else if (imLaden()) zeigeHinweis(`🏪 Landhandel: V = verkaufen (${gutText(aktiv)}) · G = Getreide-Saat · Y = Saatgut-Laden (Mais, Kartoffeln, Rüben, Sonnenblumen, Raps) · T = Tanken · N = Händler`);
   else if (aktiv && naheBallen(aktiv).length && (!gutVon(aktiv) || gutVon(aktiv) === 'stroh') && kornPlatz(aktiv) - kornDrin(aktiv) >= BALLEN_KG) zeigeHinweis(`🟨 L = ${Math.min(naheBallen(aktiv).length, Math.floor((kornPlatz(aktiv) - kornDrin(aktiv)) / BALLEN_KG))} Strohballen aufladen`);
   else if (silo) zeigeHinweis(silo.gut === 'futter' ? `🐄 Futtersilo (${kg(silo.inhalt)}): L = Korn oder Silage einfüllen – füttert die Tiere in der Nähe automatisch`
     : silo.gut === 'silage' ? `🗼 Silage-Hochsilo (${kg(silo.inhalt - silo.roh)} fertig${silo.roh > 0 ? `, ${kg(silo.roh)} gärt noch` : ''}): L = Häckselgut einfüllen · U = Silage holen`
@@ -6191,7 +6331,12 @@ const HELFER_AUFGABEN = {
   pflug: { name: 'Pflügen', emoji: '🟫', geraet: 'pflug', zelle: c => c.z === 'wiese' || c.z === 'stoppeln' },
   saat: { name: 'Getreide säen', emoji: '🌱', geraet: 'saat', saatArt: 'weizen', zelle: c => c.z === 'gepfluegt' },
   mais: { name: 'Mais säen', emoji: '🌽', geraet: 'saat', saatArt: 'mais', zelle: c => c.z === 'gepfluegt' },
-  ernte: { name: 'Getreide ernten', emoji: '🌾', geraet: 'ernte', zelle: c => c.z === 'gesaet' && c.a !== 'mais' && c.w >= 1 },
+  kartoffel: { name: 'Kartoffeln legen', emoji: '🥔', geraet: 'saat', saatArt: 'kartoffel', zelle: c => c.z === 'gepfluegt' },
+  ruebe: { name: 'Rüben säen', emoji: '🟤', geraet: 'saat', saatArt: 'ruebe', zelle: c => c.z === 'gepfluegt' },
+  sonnenblume: { name: 'Sonnenblumen säen', emoji: '🌻', geraet: 'saat', saatArt: 'sonnenblume', zelle: c => c.z === 'gepfluegt' },
+  raps: { name: 'Raps säen', emoji: '🟡', geraet: 'saat', saatArt: 'raps', zelle: c => c.z === 'gepfluegt' },
+  ernte: { name: 'Ernten (Getreide, Raps, Sonnenblumen)', emoji: '🌾', geraet: 'ernte', zelle: c => c.z === 'gesaet' && frucht(c).geraet === 'ernte' && c.w >= 1 },
+  roden: { name: 'Roden (Kartoffeln, Rüben)', emoji: '🥔', geraet: 'roder', zelle: c => c.z === 'gesaet' && frucht(c).geraet === 'roder' && c.w >= 1 },
   presse: { name: 'Stroh pressen', emoji: '🟨', geraet: 'presse', zelle: c => !!c.stroh },
   haecksel: { name: 'Mais häckseln', emoji: '🚜', geraet: 'maisgebiss', zelle: c => c.z === 'gesaet' && c.a === 'mais' && c.w >= 1 },
 };
@@ -6227,7 +6372,7 @@ function fahrzeugFuer(A, f) {
   for (const fz of fahrzeuge) {
     if (fz === aktiv || fz.helfer || fremdGefahren(fz) || !fz.typ.geraete.includes(A.geraet)) continue;
     if (GERAETE[A.geraet].hinten && fz.anh) continue;   // Pflug und Sämaschine gehen nicht mit Anhänger
-    if (A.geraet === 'ernte' && !gutPasst(fz, 'korn')) continue;   // Da ist noch Silage oder Häckselgut drin
+    if ((A.geraet === 'ernte' || A.geraet === 'roder') && ['haeckselgut', 'silage', 'stroh'].includes(gutVon(fz))) continue;   // Da ist noch Silage oder Häckselgut drin
     let d = Math.hypot(fz.g.position.x - f.x, fz.g.position.z - f.z);
     if (A.geraet === 'ernte' && fz.typ.art === 'drescher') d -= 1000;   // Zum Ernten am liebsten den Mähdrescher
     if (d < bestD) { bestD = d; bestes = fz; }
@@ -6272,6 +6417,15 @@ function feldJobStarten(h, feldNr, aufgabe) {
   sound.tuer(); helferMalen();
 }
 function helferAbliefern(h, fz) {   // Tank voll: Der Helfer bringt das Korn ins Silo (oder verkauft es, wenn alle Silos voll sind)
+  const gut = gutVon(fz);
+  if (!gut) return;
+  if (gut !== 'korn') {   // Kartoffeln, Rüben, Raps, Sonnenblumen: gleich beim Landhandel verkaufen
+    const m = kornDrin(fz), e = Math.round(m * (GUETER[gut].preis || SILAGE_PREIS));
+    money += e; kornWeg(fz, m);
+    h.status = `📦 Hat ${kg(m)} ${GUETER[gut].name} verkauft (${euro(e)})`;
+    meldung(`👷 ${h.name} hat ${kg(m)} ${GUETER[gut].emoji} ${GUETER[gut].name} verkauft: ${euro(e)}!`, 3);
+    return;
+  }
   let m = kornDrin(fz);
   for (const s of silos) { if (s.gut !== 'korn') continue; const rein = Math.min(m, s.max - s.inhalt); if (rein > 0) { s.inhalt += rein; m -= rein; siloSchild(s); } }
   let text = `${kg(kornDrin(fz) - m)} Korn ins Silo gebracht`;
@@ -6286,10 +6440,10 @@ function feldJobUpdate(h, dt) {
   // Diesel und Saat holt der Helfer automatisch (das kostet Geld!)
   if (fz.diesel < 20) { const k = Math.round((fz.typ.dieselMax - fz.diesel) * DIESEL_PREIS); if (money < k) { jobEnde(h, '💸 Kein Geld für Diesel!'); return; } money -= k; fz.diesel = fz.typ.dieselMax; }
   if (A.saatArt) {
-    if (fz.saatArt !== A.saatArt) { money += Math.round(fz.saat * (fz.saatArt === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS)); fz.saat = 0; fz.saatArt = A.saatArt; }
-    if (fz.saat < SAAT_PRO_ZELLE * 8) { const k = Math.round((fz.typ.saatMax - fz.saat) * (A.saatArt === 'mais' ? MAIS_SAAT_PREIS : SAAT_PREIS)); if (money < k) { jobEnde(h, '💸 Kein Geld für Saat!'); return; } money -= k; fz.saat = fz.typ.saatMax; }
+    if (fz.saatArt !== A.saatArt) { money += Math.round(fz.saat * (FRUECHTE[fz.saatArt] || FRUECHTE.weizen).saatPreis); fz.saat = 0; fz.saatArt = A.saatArt; }
+    if (fz.saat < SAAT_PRO_ZELLE * 8) { const k = Math.round((fz.typ.saatMax - fz.saat) * FRUECHTE[A.saatArt].saatPreis); if (money < k) { jobEnde(h, '💸 Kein Geld für Saat!'); return; } money -= k; fz.saat = fz.typ.saatMax; }
   }
-  if (A.geraet === 'ernte' && kornDrin(fz) + ERTRAG_PRO_ZELLE * 12 > kornPlatz(fz)) helferAbliefern(h, fz);
+  if ((A.geraet === 'ernte' || A.geraet === 'roder') && kornDrin(fz) + 600 * 6 > kornPlatz(fz)) helferAbliefern(h, fz);
   const wp = J.wege[J.n];
   if (!wp) { jobEnde(h, `✅ Fertig mit Feld ${J.feld.nr + 1}!`, true); return; }
   const p = fz.g.position, dx = wp.x - p.x, dz = wp.z - p.z, d = Math.hypot(dx, dz);
