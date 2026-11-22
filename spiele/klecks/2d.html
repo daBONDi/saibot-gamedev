@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klecks-Krieg 2D</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #14172e; font-family: system-ui, sans-serif; }
+  canvas { display: block; cursor: none; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #14172ecc; color: #fff; padding: 1rem; box-sizing: border-box; }
+  .box { background: #2a2f55; padding: 2rem; border-radius: 1.5rem; max-width: 36rem; width: 100%;
+    text-align: center; box-shadow: 0 10px 40px #0008; }
+  h1 { font-size: 3rem; margin: 0 0 0.3rem; font-family: 'Arial Black', Impact, sans-serif;
+    background: linear-gradient(90deg, #ff8a1f, #ff5fa2, #a347ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p { color: #c9c3ff; }
+  button { background: linear-gradient(90deg, #ff8a1f, #a347ff); color: #fff; border: none; border-radius: 1rem;
+    padding: 0.8rem 2rem; font: bold 1.4rem system-ui, sans-serif; cursor: pointer; margin-top: 1rem; transition: transform .15s; }
+  button:hover { transform: scale(1.07); }
+  .steuerung { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; text-align: left; margin: 1rem auto; max-width: 26rem; }
+  .taste { background: #ffd166; color: #1b1f3a; border-radius: 0.4rem; padding: 0.1rem 0.5rem; font-weight: bold; text-align: center; }
+  .balken { display: flex; height: 2.5rem; border-radius: 1rem; overflow: hidden; margin: 1rem 0; font-weight: bold; }
+  .balken div { display: flex; align-items: center; justify-content: center; transition: width 1.5s ease-out; width: 0; }
+  .hidden { display: none; }
+  a.zurueck { position: fixed; top: 0.6rem; left: 0.6rem; color: #c9c3ff; font-size: 0.9rem; z-index: 5; }
+</style>
+</head>
+<body>
+<canvas id="spiel"></canvas>
+<a class="zurueck" href="./">⬅ Zur 3D-Version</a>
+
+<div id="menu" class="overlay">
+  <div class="box">
+    <h1>KLECKS-KRIEG</h1>
+    <p>Team <b style="color:#ff8a1f">Orange</b> gegen Team <b style="color:#a347ff">Lila</b>!<br>
+       Mal in 3 Minuten mehr Boden an als die Gegner.</p>
+    <div class="steuerung">
+      <span class="taste">W A S D</span><span>Laufen</span>
+      <span class="taste">Maus</span><span>Zielen</span>
+      <span class="taste">Linksklick</span><span>Farbe spritzen</span>
+      <span class="taste">Shift / Rechtsklick</span><span>In eigene Farbe abtauchen: schnell, unsichtbar, Tinte auffüllen</span>
+      <span class="taste">Leertaste</span><span>Farbbombe werfen (kostet halben Tank)</span>
+    </div>
+    <p>⚠️ In der Gegnerfarbe bist du langsam und verlierst Leben!</p>
+    <button id="start">▶ Los geht's!</button>
+  </div>
+</div>
+
+<div id="ende" class="overlay hidden">
+  <div class="box">
+    <h1 id="sieger">…</h1>
+    <div class="balken"><div id="balkenO" style="background:#ff8a1f"></div><div id="balkenL" style="background:#a347ff"></div></div>
+    <p id="statistik"></p>
+    <button id="nochmal">🔁 Nochmal</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ================== GRUNDWERTE ==================
+const W = 1600, H = 1000;          // Größe der Arena
+const CELL = 8;                    // Größe von einem "Farbkästchen"
+const GW = W / CELL, GH = H / CELL;
+const RUNDE = 180;                 // Rundenzeit in Sekunden
+const TEAMS = [
+  { name: 'Orange', col: '#ff8a1f', hell: '#ffb36b', dunkel: '#b85400' },
+  { name: 'Lila',   col: '#a347ff', hell: '#c994ff', dunkel: '#6418b8' },
+];
+const NAMEN = [['Du', 'Blubb', 'Spritzi', 'Klacks'], ['Gloop', 'Schmatz', 'Plörre', 'Kleckerich']];
+const BASIS = [{ x: 80, y: H / 2 }, { x: W - 80, y: H / 2 }];
+
+const cv = document.getElementById('spiel');
+const ctx = cv.getContext('2d');
+let zoom = 1;
+function groesse() {
+  cv.width = innerWidth; cv.height = innerHeight;
+  zoom = Math.min(innerWidth / 1000, innerHeight / 640);
+}
+addEventListener('resize', groesse); groesse();
+
+// ================== WÄNDE ==================
+const waende = [];
+function wand(x, y, w, h, spiegeln = true) {
+  waende.push({ x, y, w, h });
+  if (spiegeln) waende.push({ x: W - x - w, y, w, h });   // Die Arena ist für beide Teams gleich (gespiegelt)
+}
+wand(740, 430, 120, 140, false);   // Mitte
+wand(400, 140, 60, 260); wand(400, 600, 60, 260);
+wand(600, 190, 170, 40); wand(600, 770, 170, 40);
+wand(230, 290, 40, 120); wand(230, 590, 40, 120);
+wand(560, 440, 40, 120);
+
+// ================== FARB-FELD ==================
+// 0 = leer, 1 = orange, 2 = lila, 255 = Wand
+const feld = new Uint8Array(GW * GH);
+const zaehler = [0, 0, 0];
+let flaeche = 0;
+for (let cy = 0; cy < GH; cy++) for (let cx = 0; cx < GW; cx++) {
+  const x = cx * CELL + CELL / 2, y = cy * CELL + CELL / 2;
+  const inWand = waende.some(w => x > w.x && x < w.x + w.w && y > w.y && y < w.y + w.h);
+  if (inWand) feld[cy * GW + cx] = 255; else flaeche++;
+}
+function besitzer(x, y) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return 255;
+  return feld[((y / CELL) | 0) * GW + ((x / CELL) | 0)];
+}
+function istWand(x, y) { return besitzer(x, y) === 255; }
+
+// Bilder, die wir nur einmal malen
+function neueLeinwand() { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+const bodenCv = neueLeinwand(), farbCv = neueLeinwand(), wandCv = neueLeinwand();
+const fctx = farbCv.getContext('2d');
+(function bodenMalen() {
+  const b = bodenCv.getContext('2d');
+  b.fillStyle = '#d8d3c6'; b.fillRect(0, 0, W, H);
+  b.strokeStyle = '#c8c2b3'; b.lineWidth = 2;
+  for (let x = 0; x <= W; x += 80) { b.beginPath(); b.moveTo(x, 0); b.lineTo(x, H); b.stroke(); }
+  for (let y = 0; y <= H; y += 80) { b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke(); }
+  const w = wandCv.getContext('2d');
+  for (const r of waende) {
+    w.fillStyle = '#0005'; w.fillRect(r.x + 6, r.y + 8, r.w, r.h);       // Schatten
+    w.fillStyle = '#3d4266'; w.fillRect(r.x, r.y, r.w, r.h);
+    w.fillStyle = '#5a6091'; w.fillRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8);
+  }
+  w.strokeStyle = '#3d4266'; w.lineWidth = 12; w.strokeRect(0, 0, W, H);  // Rand
+})();
+
+// Farbe spritzen! Malt einen Klecks auf das Bild UND merkt sich im Feld, wem der Boden gehört.
+function klecks(x, y, r, team, wer) {
+  fctx.fillStyle = TEAMS[team].col;
+  fctx.beginPath(); fctx.arc(x, y, r, 0, 7); fctx.fill();
+  for (let i = 0; i < 3; i++) {
+    const a = Math.random() * 7, d = r * (0.6 + Math.random() * 0.5);
+    fctx.beginPath(); fctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, r * (0.2 + Math.random() * 0.25), 0, 7); fctx.fill();
+  }
+  const id = team + 1;
+  const x0 = Math.max(0, ((x - r) / CELL) | 0), x1 = Math.min(GW - 1, ((x + r) / CELL) | 0);
+  const y0 = Math.max(0, ((y - r) / CELL) | 0), y1 = Math.min(GH - 1, ((y + r) / CELL) | 0);
+  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+    const mx = cx * CELL + CELL / 2 - x, my = cy * CELL + CELL / 2 - y;
+    if (mx * mx + my * my > r * r) continue;
+    const i = cy * GW + cx, alt = feld[i];
+    if (alt === 255 || alt === id) continue;
+    zaehler[alt]--; zaehler[id]++; feld[i] = id;
+    if (wer) wer.punkte++;
+  }
+}
+
+// ================== SOUND ==================
+let ac = null, rauschen = null;
+function ton(art) {
+  try {
+    if (!ac) {
+      ac = new AudioContext();
+      rauschen = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+      const d = rauschen.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const t = ac.currentTime, g = ac.createGain(); g.connect(ac.destination);
+    if (art === 'schuss' || art === 'platsch') {
+      const q = ac.createBufferSource(); q.buffer = rauschen;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = art === 'schuss' ? 1800 : 600;
+      q.connect(f); f.connect(g);
+      const lang = art === 'schuss' ? 0.06 : 0.4;
+      g.gain.setValueAtTime(art === 'schuss' ? 0.05 : 0.4, t); g.gain.exponentialRampToValueAtTime(0.001, t + lang);
+      q.start(t); q.stop(t + lang);
+    } else {
+      const o = ac.createOscillator(); o.connect(g);
+      const [typ, f1, f2, lang, laut] = {
+        treffer: ['square', 500, 300, 0.08, 0.06],
+        ko: ['sawtooth', 600, 80, 0.5, 0.12],
+        pfiff: ['sine', 1200, 1500, 0.6, 0.15],
+      }[art];
+      o.type = typ; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + lang);
+      g.gain.setValueAtTime(laut, t); g.gain.exponentialRampToValueAtTime(0.001, t + lang);
+      o.start(t); o.stop(t + lang);
+    }
+  } catch (e) { /* kein Sound, auch ok */ }
+}
+
+// ================== EINGABE ==================
+const tasten = {};
+let maus = { x: 0, y: 0, links: false, rechts: false }, bombeWunsch = false;
+addEventListener('keydown', e => {
+  tasten[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); bombeWunsch = true; }
+});
+addEventListener('keyup', e => { tasten[e.code] = false; });
+addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; maus.links = maus.rechts = false; });
+cv.addEventListener('mousemove', e => { maus.x = e.clientX; maus.y = e.clientY; });
+cv.addEventListener('mousedown', e => { if (e.button === 0) maus.links = true; if (e.button === 2) maus.rechts = true; });
+addEventListener('mouseup', e => { if (e.button === 0) maus.links = false; if (e.button === 2) maus.rechts = false; });
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+// ================== SPIELZUSTAND ==================
+let zustand = 'menu', zeit = 0, rest = RUNDE;
+let kleckse = [], schuesse = [], bomben = [], partikel = [], meldungen = [];
+let spieler = null, kamX = W / 2, kamY = H / 2, rotBlitz = 0, leerHinweis = 0, pfiff10 = false;
+
+function spawnPunkt(e) { return { x: BASIS[e.team].x, y: H / 2 + (e.nr - 1.5) * 70 }; }
+
+function neuerKlecks(team, nr) {
+  const e = {
+    team, nr, spieler: team === 0 && nr === 0, name: NAMEN[team][nr],
+    x: 0, y: 0, vx: 0, vy: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0,
+    tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
+    letzterTreffer: 9, ko: 0, tode: 0, punkte: 0,
+    ki: { ziel: null, zielT: 0, stuckT: 0, lastX: 0, lastY: 0, tanken: false, strafe: 1, strafeT: 0, seite: 1, umwegT: 0, umwegA: 0 },
+  };
+  const p = spawnPunkt(e); e.x = p.x; e.y = p.y;
+  return e;
+}
+
+function neueRunde() {
+  for (let i = 0; i < feld.length; i++) if (feld[i] !== 255) feld[i] = 0;
+  zaehler[0] = flaeche; zaehler[1] = zaehler[2] = 0;
+  fctx.clearRect(0, 0, W, H);
+  kleckse = []; schuesse = []; bomben = []; partikel = []; meldungen = [];
+  for (let t = 0; t < 2; t++) {
+    klecks(BASIS[t].x, BASIS[t].y, 110, t, null);
+    for (let n = 0; n < 4; n++) kleckse.push(neuerKlecks(t, n));
+  }
+  spieler = kleckse[0];
+  rest = RUNDE; zeit = 0; pfiff10 = false;
+  zustand = 'spiel';
+  meldung('Los! Mal alles orange an! 🎨');
+  ton('pfiff');
+}
+
+function meldung(text) { meldungen.push({ text, t: 3 }); if (meldungen.length > 4) meldungen.shift(); }
+
+// ================== HILFSFUNKTIONEN ==================
+function kollidiert(x, y, r) {
+  if (x < r || y < r || x > W - r || y > H - r) return true;
+  for (const w of waende) {
+    const cx = Math.max(w.x, Math.min(x, w.x + w.w)), cy = Math.max(w.y, Math.min(y, w.y + w.h));
+    if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return true;
+  }
+  return false;
+}
+function sicht(x1, y1, x2, y2) {
+  const d = Math.hypot(x2 - x1, y2 - y1), n = Math.ceil(d / 8);
+  for (let i = 1; i < n; i++) if (istWand(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n)) return false;
+  return true;
+}
+function winkelDiff(a, b) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+function drehe(a, ziel, max) { const d = winkelDiff(a, ziel); return a + Math.max(-max, Math.min(max, d)); }
+function spritzer(x, y, team, anzahl, kraft = 150) {
+  for (let i = 0; i < anzahl; i++) {
+    const a = Math.random() * 7, v = kraft * (0.3 + Math.random());
+    partikel.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, leben: 0.3 + Math.random() * 0.3, farbe: TEAMS[team].col, r: 2 + Math.random() * 3 });
+  }
+}
+
+// ================== BEWEGEN, SCHIESSEN, BOMBEN ==================
+function bewege(e, dx, dy, dt) {
+  const unter = besitzer(e.x, e.y);
+  const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
+  e.taucht = e.willTauchen && eigen;
+  let speed = e.taucht ? 290 : feind ? 75 : 160;
+  if (e.schiesst && !e.taucht) speed *= 0.8;
+  const k = Math.min(1, dt * 12);
+  e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
+  const nx = e.x + e.vx * dt; if (!kollidiert(nx, e.y, e.r)) e.x = nx; else e.vx = 0;
+  const ny = e.y + e.vy * dt; if (!kollidiert(e.x, ny, e.r)) e.y = ny; else e.vy = 0;
+  // Die gegnerische Basis ist verboten!
+  const gb = BASIS[1 - e.team], gd = Math.hypot(e.x - gb.x, e.y - gb.y);
+  if (gd < 100) { e.x = gb.x + (e.x - gb.x) / gd * 100; e.y = gb.y + (e.y - gb.y) / gd * 100; }
+  // Tinte auffüllen
+  if (e.taucht) e.tinte = Math.min(100, e.tinte + 45 * dt);
+  else if (!e.schiesst) e.tinte = Math.min(100, e.tinte + 5 * dt);
+  // Leben
+  e.letzterTreffer += dt;
+  if (feind) { if (e.hp > 30) e.hp -= 12 * dt; }
+  else if (e.letzterTreffer > 2) e.hp = Math.min(100, e.hp + 30 * dt);
+}
+
+function schiessen(e, dt) {
+  e.schussCd -= dt;
+  if (!e.schiesst || e.taucht || e.schussCd > 0) return;
+  if (e.tinte < 1.5) { if (e.spieler) leerHinweis = 1.5; return; }
+  e.schussCd = 0.12; e.tinte -= 1.5;
+  const a = e.winkel + (Math.random() - 0.5) * 0.14, sp = 620;
+  schuesse.push({ x: e.x + Math.cos(a) * 22, y: e.y + Math.sin(a) * 22, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+    team: e.team, wer: e, leben: 0.42, spurT: 0.03 });
+  if (e.spieler) ton('schuss');
+}
+
+function bombeWerfen(e, zx, zy) {
+  if (e.tinte < 50 || e.tot || e.taucht) return false;
+  e.tinte -= 50;
+  const d = Math.hypot(zx - e.x, zy - e.y), max = 230;
+  if (d > max) { zx = e.x + (zx - e.x) / d * max; zy = e.y + (zy - e.y) / d * max; }
+  zx = Math.max(10, Math.min(W - 10, zx)); zy = Math.max(10, Math.min(H - 10, zy));
+  bomben.push({ sx: e.x, sy: e.y, zx, zy, t: 0, dauer: 0.6, team: e.team, wer: e, x: e.x, y: e.y });
+  return true;
+}
+
+function treffen(e, schaden, wer) {
+  if (e.tot) return;
+  e.hp -= schaden; e.letzterTreffer = 0;
+  if (e.spieler) rotBlitz = 0.3;
+  if (e.spieler || (wer && wer.spieler)) ton('treffer');
+  if (e.hp <= 0) erwischt(e, wer);
+}
+
+function erwischt(e, wer) {
+  e.tot = true; e.wiederT = 4; e.tode++; e.taucht = false;
+  const farbe = wer ? wer.team : 1 - e.team;
+  klecks(e.x, e.y, 45, farbe, wer);
+  spritzer(e.x, e.y, farbe, 30, 260);
+  if (wer) wer.ko++;
+  if (e.spieler) { meldung(`💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('ko'); }
+  else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
+  else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
+}
+
+// ================== COMPUTER-GEGNER (KI) ==================
+function neuesZiel(b) {
+  const k = b.ki, gb = BASIS[1 - b.team];
+  let best = null, bs = -1e9;
+  for (let i = 0; i < 40; i++) {
+    const cx = (Math.random() * GW) | 0, cy = (Math.random() * GH) | 0, v = feld[cy * GW + cx];
+    if (v === 255) continue;
+    const x = cx * CELL + CELL / 2, y = cy * CELL + CELL / 2;
+    if (Math.hypot(x - gb.x, y - gb.y) < 130) continue;
+    const d = Math.hypot(x - b.x, y - b.y);
+    let s;
+    if (k.tanken) { if (v !== b.team + 1) continue; s = -d; }
+    else {
+      const vorwaerts = b.team === 0 ? x : W - x;
+      s = (v === b.team + 1 ? -400 : v === 0 ? 0 : 150) - d * 0.5 + vorwaerts * 0.15 + Math.random() * 100;
+    }
+    if (s > bs) { bs = s; best = { x, y }; }
+  }
+  k.ziel = best || { x: W / 2, y: H / 2 + (Math.random() - 0.5) * 400 };
+  k.zielT = 4; k.seite = Math.random() < 0.5 ? 1 : -1;
+}
+
+function ausweichen(b, dx, dy) {
+  const basis = Math.atan2(dy, dx);
+  for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) {
+    const a = basis + off * b.ki.seite;
+    if (!kollidiert(b.x + Math.cos(a) * 26, b.y + Math.sin(a) * 26, b.r)) return [Math.cos(a), Math.sin(a)];
+  }
+  return [dx, dy];
+}
+
+function ki(b, dt) {
+  const k = b.ki;
+  let feind = null, fd = 1e9;
+  for (const e of kleckse) {
+    if (e.team === b.team || e.tot) continue;
+    const d = Math.hypot(e.x - b.x, e.y - b.y);
+    if (d > 320 || (e.taucht && d > 90)) continue;     // Abgetauchte Gegner sieht man fast nicht!
+    if (!sicht(b.x, b.y, e.x, e.y)) continue;
+    if (d < fd) { fd = d; feind = e; }
+  }
+  let dx = 0, dy = 0;
+  b.schiesst = false; b.willTauchen = false;
+  if (b.tinte < 10) { if (!k.tanken) { k.tanken = true; k.ziel = null; } }
+  if (k.tanken && b.tinte > 85) { k.tanken = false; k.ziel = null; }
+
+  if (feind && b.tinte > 3) {
+    // Kämpfen!
+    const a = Math.atan2(feind.y - b.y, feind.x - b.x);
+    const zielA = a + Math.sin(zeit * 3 + b.nr * 7) * 0.15;   // Nicht ganz perfekt zielen
+    b.winkel = drehe(b.winkel, zielA, dt * 5);
+    b.schiesst = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
+    k.strafeT -= dt;
+    if (k.strafeT <= 0) { k.strafeT = 0.7 + Math.random(); k.strafe = Math.random() < 0.5 ? 1 : -1; }
+    const vor = fd > 200 ? 1 : fd < 130 ? -1 : 0;
+    dx = Math.cos(a) * vor + Math.cos(a + Math.PI / 2) * k.strafe * 0.8;
+    dy = Math.sin(a) * vor + Math.sin(a + Math.PI / 2) * k.strafe * 0.8;
+    b.bombeCd -= dt;
+    if (b.bombeCd <= 0 && b.tinte > 60 && fd > 110 && fd < 230 && Math.random() < dt * 0.6) {
+      if (bombeWerfen(b, feind.x, feind.y)) b.bombeCd = 7;
+    }
+  } else {
+    if (!k.ziel || k.zielT <= 0 || Math.hypot(k.ziel.x - b.x, k.ziel.y - b.y) < 25) neuesZiel(b);
+    k.zielT -= dt;
+    const a = Math.atan2(k.ziel.y - b.y, k.ziel.x - b.x);
+    dx = Math.cos(a); dy = Math.sin(a);
+    const hier = besitzer(b.x, b.y), vorne = besitzer(b.x + dx * 50, b.y + dy * 50);
+    if (k.tanken) {
+      b.willTauchen = true;
+      if (hier === b.team + 1) { dx *= 0.2; dy *= 0.2; }
+    } else if (hier === b.team + 1 && vorne === b.team + 1 && Math.hypot(k.ziel.x - b.x, k.ziel.y - b.y) > 80) {
+      b.willTauchen = true;                    // Durch eigene Farbe schnell schwimmen
+    } else {
+      b.schiesst = true;                       // Farbe verteilen
+      b.winkel = drehe(b.winkel, a + Math.sin(zeit * 4 + b.nr * 2) * 0.6, dt * 6);
+    }
+    b.bombeCd -= dt;
+    if (!k.tanken && b.bombeCd <= 0 && b.tinte > 90 && Math.random() < dt * 0.15) {
+      if (bombeWerfen(b, b.x + dx * 200, b.y + dy * 200)) b.bombeCd = 8;
+    }
+  }
+  // Festgesteckt? Dann einen Umweg probieren
+  k.stuckT += dt;
+  if (k.stuckT > 0.8) {
+    if (Math.hypot(b.x - k.lastX, b.y - k.lastY) < 12 && (dx || dy)) {
+      k.ziel = null; k.umwegT = 0.6; k.umwegA = Math.random() * 7;
+    }
+    k.stuckT = 0; k.lastX = b.x; k.lastY = b.y;
+  }
+  if (k.umwegT > 0) { k.umwegT -= dt; dx = Math.cos(k.umwegA); dy = Math.sin(k.umwegA); }
+  else if (dx || dy) [dx, dy] = ausweichen(b, dx, dy);
+  bewege(b, dx, dy, dt);
+}
+
+// ================== SPIELER ==================
+function mausWelt() {
+  return { x: (maus.x - cv.width / 2) / zoom + kamX, y: (maus.y - cv.height / 2) / zoom + kamY };
+}
+function steuerung(p, dt) {
+  let dx = (tasten.KeyD || tasten.ArrowRight ? 1 : 0) - (tasten.KeyA || tasten.ArrowLeft ? 1 : 0);
+  let dy = (tasten.KeyS || tasten.ArrowDown ? 1 : 0) - (tasten.KeyW || tasten.ArrowUp ? 1 : 0);
+  const l = Math.hypot(dx, dy); if (l) { dx /= l; dy /= l; }
+  p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || maus.rechts;
+  const m = mausWelt();
+  p.winkel = Math.atan2(m.y - p.y, m.x - p.x);
+  p.schiesst = maus.links;
+  if (bombeWunsch) { bombeWerfen(p, m.x, m.y); }
+  bewege(p, dx, dy, dt);
+}
+
+// ================== UPDATE ==================
+function update(dt) {
+  zeit += dt; rest -= dt;
+  if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung('⏰ Noch 10 Sekunden!'); }
+  if (rest <= 0) { rest = 0; rundenEnde(); return; }
+
+  for (const e of kleckse) {
+    if (e.tot) {
+      e.wiederT -= dt;
+      if (e.wiederT <= 0) {
+        const p = spawnPunkt(e);
+        Object.assign(e, { x: p.x, y: p.y, vx: 0, vy: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9 });
+      }
+      continue;
+    }
+    if (e.spieler) steuerung(e, dt); else ki(e, dt);
+    schiessen(e, dt);
+  }
+  bombeWunsch = false;
+
+  // Farbschüsse
+  for (let i = schuesse.length - 1; i >= 0; i--) {
+    const s = schuesse[i];
+    let weg = false;
+    for (let k = 0; k < 3 && !weg; k++) {
+      s.x += s.vx * dt / 3; s.y += s.vy * dt / 3;
+      if (istWand(s.x, s.y)) {
+        klecks(s.x - s.vx * 0.01, s.y - s.vy * 0.01, 12, s.team, s.wer);
+        spritzer(s.x, s.y, s.team, 4); weg = true; break;
+      }
+      for (const e of kleckse) {
+        if (e.team === s.team || e.tot) continue;
+        if (Math.hypot(e.x - s.x, e.y - s.y) < e.r + 4) {
+          treffen(e, 24, s.wer); klecks(s.x, s.y, 10, s.team, s.wer);
+          spritzer(s.x, s.y, s.team, 6); weg = true; break;
+        }
+      }
+    }
+    if (!weg) {
+      s.spurT -= dt;
+      if (s.spurT <= 0) { s.spurT = 0.05; klecks(s.x, s.y, 6, s.team, s.wer); }
+      s.leben -= dt;
+      if (s.leben <= 0) { klecks(s.x, s.y, 17, s.team, s.wer); spritzer(s.x, s.y, s.team, 3, 80); weg = true; }
+    }
+    if (weg) schuesse.splice(i, 1);
+  }
+
+  // Farbbomben
+  for (let i = bomben.length - 1; i >= 0; i--) {
+    const b = bomben[i];
+    b.t += dt;
+    const f = Math.min(1, b.t / b.dauer);
+    b.x = b.sx + (b.zx - b.sx) * f; b.y = b.sy + (b.zy - b.sy) * f;
+    if (f >= 1) {
+      klecks(b.x, b.y, 65, b.team, b.wer);
+      spritzer(b.x, b.y, b.team, 40, 300);
+      for (const e of kleckse) {
+        if (e.team === b.team || e.tot) continue;
+        const d = Math.hypot(e.x - b.x, e.y - b.y);
+        if (d < 80) treffen(e, 90 * (1 - d / 110), b.wer);
+      }
+      const dSp = Math.hypot(spieler.x - b.x, spieler.y - b.y);
+      if (dSp < 500) ton('platsch');
+      bomben.splice(i, 1);
+    }
+  }
+
+  // Spritzer-Teilchen
+  for (let i = partikel.length - 1; i >= 0; i--) {
+    const p = partikel[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.9; p.vy *= 0.9; p.leben -= dt;
+    if (p.leben <= 0) partikel.splice(i, 1);
+  }
+  for (const m of meldungen) m.t -= dt;
+  meldungen = meldungen.filter(m => m.t > 0);
+  rotBlitz = Math.max(0, rotBlitz - dt); leerHinweis = Math.max(0, leerHinweis - dt);
+
+  // Kamera folgt dir weich
+  kamX += (spieler.x - kamX) * Math.min(1, dt * 8);
+  kamY += (spieler.y - kamY) * Math.min(1, dt * 8);
+}
+
+// ================== ZEICHNEN ==================
+function zeichneKlecks(e) {
+  if (e.tot) return;
+  const t = TEAMS[e.team];
+  const v = Math.hypot(e.vx, e.vy);
+  if (e.taucht) {
+    if (e.team !== spieler.team) {
+      // Gegner unter Wasser: nur ab und zu ein kleiner Wellenring
+      if (v > 60 && Math.sin(zeit * 18 + e.nr) > 0.5) {
+        ctx.strokeStyle = t.hell; ctx.globalAlpha = 0.5; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(e.x, e.y, 10 + Math.sin(zeit * 10) * 3, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      return;
+    }
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = t.dunkel;
+    ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * 1.1, e.r * 0.55, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e.x + s * 5, e.y - 3, 3.5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(e.x + s * 5 + Math.cos(e.winkel) * 1.5, e.y - 3 + Math.sin(e.winkel) * 1.5, 1.8, 0, 7); ctx.fill();
+    }
+    return;
+  }
+  const w = Math.sin(zeit * 14 + e.nr) * Math.min(1, v / 150) * 0.14;
+  // Schatten
+  ctx.fillStyle = '#0003'; ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r * 0.8, e.r, e.r * 0.4, 0, 0, 7); ctx.fill();
+  // Spritzpistole
+  ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.winkel);
+  ctx.fillStyle = '#4a4f73'; ctx.fillRect(8, -4, 18, 8);
+  ctx.fillStyle = t.dunkel; ctx.fillRect(22, -5, 6, 10);
+  ctx.restore();
+  // Körper (wabbelt beim Laufen)
+  ctx.fillStyle = e.letzterTreffer < 0.1 ? '#fff' : t.col;
+  ctx.strokeStyle = t.dunkel; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * (1 + w), e.r * (1 - w), 0, 0, 7); ctx.fill(); ctx.stroke();
+  // Tropfen oben drauf
+  ctx.fillStyle = t.col;
+  ctx.beginPath(); ctx.arc(e.x + 4, e.y - e.r + 1, 5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff7'; ctx.beginPath(); ctx.ellipse(e.x - 6, e.y - 6, 4, 2.5, -0.5, 0, 7); ctx.fill();
+  // Augen schauen dahin, wo gezielt wird
+  const lx = Math.cos(e.winkel) * 2.2, ly = Math.sin(e.winkel) * 2.2;
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e.x + s * 6, e.y - 2, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1b1f3a'; ctx.beginPath(); ctx.arc(e.x + s * 6 + lx, e.y - 2 + ly, 2.6, 0, 7); ctx.fill();
+  }
+  // Name & Leben
+  ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center';
+  ctx.fillStyle = e.spieler ? '#fff' : t.dunkel;
+  if (e.spieler) { ctx.fillStyle = '#1b1f3a'; ctx.fillText('▼ DU', e.x, e.y - e.r - 14); }
+  else ctx.fillText(e.name, e.x, e.y - e.r - 14);
+  if (e.hp < 100) {
+    ctx.fillStyle = '#0006'; ctx.fillRect(e.x - 16, e.y - e.r - 10, 32, 4);
+    ctx.fillStyle = e.hp > 40 ? '#5be37d' : '#ff4d4d'; ctx.fillRect(e.x - 16, e.y - e.r - 10, 32 * Math.max(0, e.hp) / 100, 4);
+  }
+}
+
+function zeichnen() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#14172e'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(zoom, 0, 0, zoom, cv.width / 2 - kamX * zoom, cv.height / 2 - kamY * zoom);
+  ctx.drawImage(bodenCv, 0, 0);
+  ctx.drawImage(farbCv, 0, 0);
+  // Basen
+  for (let t = 0; t < 2; t++) {
+    ctx.strokeStyle = TEAMS[t].dunkel; ctx.lineWidth = 5; ctx.setLineDash([12, 8]);
+    ctx.beginPath(); ctx.arc(BASIS[t].x, BASIS[t].y, 100, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.drawImage(wandCv, 0, 0);
+
+  if (spieler) {
+    // Schüsse
+    for (const s of schuesse) {
+      ctx.fillStyle = TEAMS[s.team].col; ctx.strokeStyle = TEAMS[s.team].dunkel; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    for (const k of [...kleckse].sort((a, b) => a.y - b.y)) zeichneKlecks(k);
+    // Bomben fliegen im Bogen
+    for (const b of bomben) {
+      const f = b.t / b.dauer, hoehe = Math.sin(f * Math.PI) * 60;
+      ctx.fillStyle = '#0003'; ctx.beginPath(); ctx.ellipse(b.x, b.y, 9, 4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = TEAMS[b.team].col; ctx.strokeStyle = TEAMS[b.team].dunkel; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(b.x, b.y - hoehe, 10, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff8'; ctx.beginPath(); ctx.arc(b.x - 3, b.y - hoehe - 3, 3, 0, 7); ctx.fill();
+    }
+    for (const p of partikel) {
+      ctx.globalAlpha = Math.min(1, p.leben * 3); ctx.fillStyle = p.farbe;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // Bomben-Vorschau beim Zielen
+    if (zustand === 'spiel' && !spieler.tot && spieler.tinte >= 50 && !spieler.taucht) {
+      const m = mausWelt(); let zx = m.x, zy = m.y; const d = Math.hypot(zx - spieler.x, zy - spieler.y);
+      if (d > 230) { zx = spieler.x + (zx - spieler.x) / d * 230; zy = spieler.y + (zy - spieler.y) / d * 230; }
+      ctx.strokeStyle = TEAMS[0].col; ctx.globalAlpha = 0.35; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(zx, zy, 65, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+  }
+  hud();
+}
+
+function hud() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const cw = cv.width, ch = cv.height;
+  if (!spieler) return;
+  if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,60,60,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
+
+  // Zeit + Farbanteil oben
+  const pO = zaehler[1] / flaeche, pL = zaehler[2] / flaeche;
+  const bw = Math.min(420, cw - 40), bx = (cw - bw) / 2;
+  ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx - 10, 8, bw + 20, 66, 14); ctx.fill();
+  const min = Math.floor(Math.ceil(rest) / 60), sek = Math.ceil(rest) % 60;
+  ctx.fillStyle = rest <= 10 ? '#ff6060' : '#fff'; ctx.font = 'bold 26px system-ui'; ctx.textAlign = 'center';
+  ctx.fillText(`${min}:${String(sek).padStart(2, '0')}`, cw / 2, 38);
+  ctx.fillStyle = '#ffffff22'; ctx.fillRect(bx, 48, bw, 16);
+  ctx.fillStyle = TEAMS[0].col; ctx.fillRect(bx, 48, bw * pO, 16);
+  ctx.fillStyle = TEAMS[1].col; ctx.fillRect(bx + bw - bw * pL, 48, bw * pL, 16);
+  ctx.font = 'bold 12px system-ui'; ctx.fillStyle = '#fff';
+  ctx.textAlign = 'left'; ctx.fillText(Math.round(pO * 100) + '%', bx + 4, 61);
+  ctx.textAlign = 'right'; ctx.fillText(Math.round(pL * 100) + '%', bx + bw - 4, 61);
+
+  // Tinten-Tank + Leben unten links
+  const tx = 20, ty = ch - 150;
+  ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(tx - 8, ty - 30, 120, 168, 14); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'left'; ctx.fillText('TINTE', tx + 4, ty - 12);
+  ctx.fillStyle = '#ffffff22'; ctx.beginPath(); ctx.roundRect(tx, ty, 44, 130, 10); ctx.fill();
+  const fh = 130 * spieler.tinte / 100;
+  ctx.fillStyle = spieler.tinte < 15 ? '#ff6060' : TEAMS[0].col;
+  ctx.beginPath(); ctx.roundRect(tx, ty + 130 - fh, 44, fh, 10); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tx, ty + 65); ctx.lineTo(tx + 8, ty + 65); ctx.stroke();
+  ctx.font = '22px system-ui'; ctx.globalAlpha = spieler.tinte >= 50 ? 1 : 0.3; ctx.fillText('💣', tx + 56, ty + 30); ctx.globalAlpha = 1;
+  ctx.font = '22px system-ui'; ctx.fillText('❤️', tx + 56, ty + 80);
+  ctx.fillStyle = '#ffffff22'; ctx.fillRect(tx + 56, ty + 92, 44, 8);
+  ctx.fillStyle = spieler.hp > 40 ? '#5be37d' : '#ff4d4d'; ctx.fillRect(tx + 56, ty + 92, 44 * Math.max(0, spieler.hp) / 100, 8);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 12px system-ui'; ctx.fillText(`🎯 ${spieler.ko}`, tx + 56, ty + 124);
+
+  // Mini-Karte unten rechts
+  const mw = Math.min(220, cw * 0.28), mh = mw * H / W, mx = cw - mw - 16, my = ch - mh - 16;
+  ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12);
+  ctx.drawImage(bodenCv, mx, my, mw, mh); ctx.drawImage(farbCv, mx, my, mw, mh); ctx.drawImage(wandCv, mx, my, mw, mh);
+  for (const e of kleckse) {
+    if (e.tot || e.team !== 0) continue;
+    ctx.fillStyle = e.spieler ? '#fff' : TEAMS[0].dunkel;
+    ctx.beginPath(); ctx.arc(mx + e.x / W * mw, my + e.y / H * mh, e.spieler ? 4 : 3, 0, 7); ctx.fill();
+  }
+
+  // Meldungen
+  ctx.textAlign = 'center'; ctx.font = 'bold 18px system-ui';
+  meldungen.forEach((m, i) => {
+    ctx.globalAlpha = Math.min(1, m.t); ctx.fillStyle = '#1b1f3a';
+    ctx.fillText(m.text, cw / 2 + 1, 106 + i * 26); ctx.fillStyle = '#fff'; ctx.fillText(m.text, cw / 2, 105 + i * 26);
+  });
+  ctx.globalAlpha = 1;
+  if (leerHinweis > 0) { ctx.fillStyle = '#ff6060'; ctx.font = 'bold 22px system-ui'; ctx.fillText('Tinte leer! Halte SHIFT in deiner Farbe 🌊', cw / 2, ch - 60); }
+  if (spieler.tot && zustand === 'spiel') {
+    ctx.fillStyle = '#1b1f3aaa'; ctx.fillRect(0, ch / 2 - 50, cw, 100);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 34px system-ui';
+    ctx.fillText(`💦 Erwischt! Zurück in ${Math.ceil(spieler.wiederT)} …`, cw / 2, ch / 2 + 12);
+  }
+  if (rest <= 10 && zustand === 'spiel') {
+    ctx.globalAlpha = 0.5 + (rest % 1) * 0.5; ctx.fillStyle = '#fff'; ctx.font = 'bold 120px system-ui';
+    ctx.fillText(Math.ceil(rest), cw / 2, ch / 2 - 60); ctx.globalAlpha = 1;
+  }
+  // Fadenkreuz
+  if (zustand === 'spiel') {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(maus.x, maus.y, 10, 0, 7); ctx.stroke();
+    ctx.strokeStyle = TEAMS[0].col; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(maus.x, maus.y, 10, 0, 7); ctx.moveTo(maus.x - 16, maus.y); ctx.lineTo(maus.x - 5, maus.y);
+    ctx.moveTo(maus.x + 5, maus.y); ctx.lineTo(maus.x + 16, maus.y); ctx.moveTo(maus.x, maus.y - 16); ctx.lineTo(maus.x, maus.y - 5);
+    ctx.moveTo(maus.x, maus.y + 5); ctx.lineTo(maus.x, maus.y + 16); ctx.stroke();
+  }
+}
+
+// ================== RUNDEN-ENDE ==================
+function rundenEnde() {
+  zustand = 'ende';
+  ton('pfiff');
+  const pO = zaehler[1] / flaeche * 100, pL = zaehler[2] / flaeche * 100;
+  const gewonnen = pO > pL;
+  document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : gewonnen ? '🏆 Orange gewinnt!' : '😵 Lila gewinnt!';
+  const summe = pO + pL || 1;
+  const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
+  bO.style.width = bL.style.width = '0';
+  bO.textContent = pO.toFixed(1) + '%'; bL.textContent = pL.toFixed(1) + '%';
+  let rekord = 0;
+  try { rekord = +localStorage.getItem('klecks-rekord') || 0; } catch (e) {}
+  const neu = spieler.punkte > rekord;
+  if (neu) try { localStorage.setItem('klecks-rekord', spieler.punkte); } catch (e) {}
+  document.getElementById('statistik').innerHTML =
+    `🎨 Du hast <b>${spieler.punkte}</b> Farbkästchen gemalt ${neu ? '– <b>NEUER REKORD!</b> 🌟' : `(Rekord: ${rekord})`}<br>` +
+    `🎯 Erwischt: <b>${spieler.ko}</b> &nbsp; 💦 Selbst erwischt worden: <b>${spieler.tode}</b>`;
+  document.getElementById('ende').classList.remove('hidden');
+  setTimeout(() => { bO.style.width = (pO / summe * 100) + '%'; bL.style.width = (pL / summe * 100) + '%'; }, 100);
+}
+
+// ================== START ==================
+function starten() {
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('ende').classList.add('hidden');
+  neueRunde();
+}
+document.getElementById('start').onclick = starten;
+document.getElementById('nochmal').onclick = starten;
+
+let letzt = performance.now();
+function schleife(t) {
+  const dt = Math.min(0.05, (t - letzt) / 1000); letzt = t;
+  if (zustand === 'spiel') update(dt);
+  zeichnen();
+  requestAnimationFrame(schleife);
+}
+requestAnimationFrame(schleife);
+</script>
+</body>
+</html>
