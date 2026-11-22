@@ -398,15 +398,25 @@ const MAT_WEISS = mat('#ffffff'), MAT_SCHWARZ = mat('#1b1f3a'), MAT_GRAU = mat('
 const MAT_CREME = mat('#f3e7cf'), MAT_GLOW = mat('#6fe3ff', { emissive: '#6fe3ff' });
 const teamMat = TEAMS.map(t => mat(t.col, { roughness: 0.35 }));
 function kugel(m, r, x, y, z, sx = 1, sy = 1, sz = 1) {
-  const k = new THREE.Mesh(geoKugel, m); k.scale.set(r * sx, r * sy, r * sz); k.position.set(x, y, z); k.castShadow = true; return k;
+  const k = new THREE.Mesh(geoKugel, m); k.scale.set(r * sx, r * sy, r * sz); k.position.set(x, y, z); k.castShadow = r > 2.5; return k;
 }
 function klotz(m, w, h, d, x, y, z) {
-  const k = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); k.position.set(x, y, z); k.castShadow = true; return k;
+  const k = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); k.position.set(x, y, z); k.castShadow = Math.max(w, h, d) > 4; return k;
 }
 function zylinder(m, r1, r2, h, x, y, z) {
-  const k = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 14), m); k.position.set(x, y, z); k.castShadow = true; return k;
+  const k = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 14), m); k.position.set(x, y, z); k.castShadow = h > 4 && Math.max(r1, r2) > 1.5; return k;
 }
 function auge(g, x, y, z, r) { g.add(kugel(MAT_WEISS, r, x, y, z), kugel(MAT_SCHWARZ, r * 0.5, x + r * 0.62, y, z)); }
+
+// Weitere Materialien und Bauteile
+const MAT_METALL = mat('#c9cfe6', { roughness: 0.25, metalness: 0.8 });
+const MAT_GUMMI = mat('#23263d', { roughness: 0.9 });
+const glasRohrMat = new THREE.MeshStandardMaterial({ color: '#e8f6ff', transparent: true, opacity: 0.35, roughness: 0.05, depthWrite: false });
+function zylinderX(m, r1, r2, h, x, y, z) { const k = zylinder(m, r1, r2, h, x, y, z); k.rotation.z = -Math.PI / 2; return k; }   // liegt nach vorne
+function zylinderZ(m, r1, r2, h, x, y, z) { const k = zylinder(m, r1, r2, h, x, y, z); k.rotation.x = Math.PI / 2; return k; }    // liegt quer
+function ringX(m, r, dicke, x, y, z) { const k = new THREE.Mesh(new THREE.TorusGeometry(r, dicke, 6, 18), m); k.rotation.y = Math.PI / 2; k.position.set(x, y, z); return k; }
+function ringY(m, r, dicke, x, y, z) { const k = new THREE.Mesh(new THREE.TorusGeometry(r, dicke, 6, 20), m); k.rotation.x = Math.PI / 2; k.position.set(x, y, z); return k; }
+function tintenMaterial(team, glanz = 0.25) { return mat(TEAMS[team].col, { emissive: TEAMS[team].col, emissiveIntensity: glanz, roughness: 0.2 }); }
 
 // Der Farbtaucher! Er schaut in Richtung +x
 const HAUTFARBEN = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
@@ -416,39 +426,59 @@ const MAT_STIEFEL = mat('#2b2f4a');
 function baueTaucher(m, team, haut, haar) {
   const k = new THREE.Group();
   const hell = mat(TEAMS[team].hell, { roughness: 0.35 });
-  // Beine mit Stiefeln (drehen sich beim Laufen)
+  const dunkel = mat(TEAMS[team].dunkel, { roughness: 0.5 });
+  // Beine: Oberschenkel -> Knie -> Unterschenkel -> Stiefel mit Schwimmflosse
   const beine = [];
   for (const s of [-1, 1]) {
-    const bein = new THREE.Group(); bein.position.set(0, 14, s * 4);
-    bein.add(zylinder(m, 3, 2.7, 12, 0, -6, 0), klotz(MAT_STIEFEL, 8, 3.5, 5, 1.5, -12.3, 0));
-    k.add(bein); beine.push(bein);
+    const huefte = new THREE.Group(); huefte.position.set(0, 14, s * 4);
+    huefte.add(zylinder(m, 3.1, 2.8, 7, 0, -3.5, 0));
+    const knie = new THREE.Group(); knie.position.y = -7;
+    knie.add(kugel(dunkel, 2.9, 0, 0, 0), zylinder(m, 2.8, 2.5, 6, 0, -3, 0));
+    knie.add(klotz(MAT_STIEFEL, 7, 3, 5, 1, -5.6, 0), klotz(dunkel, 7, 0.7, 6.5, 7, -6.8, 0));
+    huefte.add(knie);
+    k.add(huefte); beine.push({ huefte, knie });
   }
-  // Körper im Taucheranzug mit Gürtel und Abzeichen
-  k.add(zylinder(m, 7, 6, 16, 0, 22, 0), zylinder(MAT_GRAU, 6.4, 6.4, 2.2, 0, 15.5, 0));
-  k.add(klotz(hell, 1.5, 7, 6, 6.6, 23, 0));
-  // Arme mit Handschuhen
+  // Oberkörper (kann sich vorbeugen, wippen, zucken)
+  const ober = new THREE.Group(); ober.position.y = 14; k.add(ober);
+  ober.add(zylinder(m, 7, 6, 16, 0, 8, 0), zylinder(MAT_GRAU, 6.4, 6.4, 2.2, 0, 1.5, 0));
+  ober.add(klotz(MAT_METALL, 1, 2.4, 3, 6.3, 1.5, 0));                    // Gürtelschnalle
+  ober.add(klotz(hell, 1.5, 6, 5, 6.6, 9.5, 0));                          // Abzeichen
+  ober.add(kugel(hell, 1.3, 7.3, 9.5, 0));
+  ober.add(kugel(hell, 3.4, 0, 14, -7.3, 1, 0.8, 1), kugel(hell, 3.4, 0, 14, 7.3, 1, 0.8, 1));   // Schulterpolster
+  // Arme: Schulter -> Ellbogen -> Unterarm -> Handschuh
   const arme = [];
   for (const s of [-1, 1]) {
-    const arm = new THREE.Group(); arm.position.set(0, 28, s * 8.5);
-    arm.add(zylinder(m, 2.6, 2.3, 11, 0, -5.5, 0), kugel(MAT_STIEFEL, 2.9, 0, -11.5, 0));
-    k.add(arm); arme.push(arm);
+    const schulter = new THREE.Group(); schulter.position.set(0, 14, s * 8.5); schulter.rotation.y = s * 0.5;
+    schulter.add(zylinder(m, 2.6, 2.4, 6, 0, -3, 0));
+    const ellbogen = new THREE.Group(); ellbogen.position.y = -6;
+    ellbogen.add(kugel(m, 2.4, 0, 0, 0), zylinder(m, 2.4, 2.2, 5, 0, -2.5, 0), ringY(MAT_GRAU, 2.4, 0.6, 0, -4.8, 0), kugel(MAT_STIEFEL, 2.9, 0, -6, 0));
+    schulter.add(ellbogen);
+    ober.add(schulter); arme.push({ schulter, ellbogen });
   }
-  // Kopf mit Gesicht und Haaren
-  k.add(kugel(mat(haut), 7.5, 0, 38, 0));
-  auge(k, 6, 39.5, -2.8, 2.2); auge(k, 6, 39.5, 2.8, 2.2);
-  k.add(kugel(MAT_SCHWARZ, 1.2, 7.1, 35.3, 0, 0.6, 0.5, 2));
-  k.add(kugel(mat(haar), 7.8, -2.5, 41.5, 0, 1, 0.55, 1));
-  // Glashelm mit Kragen und Lampe
-  const helm = new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), glasMat); helm.position.y = 38; k.add(helm);
+  // Kopf mit Gesicht (kann nach oben/unten schauen und blinzeln)
+  const kopf = new THREE.Group(); kopf.position.y = 24; ober.add(kopf);
+  kopf.add(kugel(mat(haut), 7.5, 0, 0, 0));
+  const augen = new THREE.Group(); augen.position.set(6, 1.5, 0); kopf.add(augen);
+  auge(augen, 0, 0, -2.8, 2.2); auge(augen, 0, 0, 2.8, 2.2);
+  kopf.add(klotz(mat(haar), 0.8, 0.8, 2.6, 6.5, 4.4, -2.8), klotz(mat(haar), 0.8, 0.8, 2.6, 6.5, 4.4, 2.8));   // Augenbrauen
+  kopf.add(kugel(MAT_SCHWARZ, 1.2, 7.1, -2.7, 0, 0.6, 0.5, 2));          // Mund
+  kopf.add(kugel(mat(haar), 7.8, -2.5, 3.5, 0, 1, 0.55, 1));             // Haare
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), glasMat); kopf.add(helm);
+  kopf.add(zylinder(MAT_GRAU, 1.6, 1.6, 2, 0, 11.5, 0), kugel(MAT_GLOW, 1.8, 0, 13, 0));   // Lampe
+  kopf.add(ringX(MAT_GRAU, 3.5, 0.6, 9.6, 2, 0));                        // Sichtfenster-Rahmen
   const kragen = new THREE.Mesh(new THREE.TorusGeometry(8, 1.8, 8, 20), MAT_GRAU);
-  kragen.rotation.x = Math.PI / 2; kragen.position.y = 29.5; k.add(kragen);
-  k.add(zylinder(MAT_GRAU, 1.6, 1.6, 2, 0, 49.5, 0), kugel(MAT_GLOW, 1.8, 0, 51, 0));
-  // Farbtank auf dem Rücken + Schlauch zum Helm
-  k.add(zylinder(hell, 5, 5, 17, -11, 24, 0), kugel(hell, 5, -11, 32.5, 0, 1, 0.5, 1), zylinder(MAT_GRAU, 1.5, 1.5, 3, -11, 35, 0));
+  kragen.rotation.x = Math.PI / 2; kragen.position.y = 15.5; ober.add(kragen);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; ober.add(kugel(MAT_METALL, 0.7, Math.cos(a) * 8, 17, Math.sin(a) * 8)); }  // Schrauben
+  // Farbtank auf dem Rücken mit Sichtfenster (zeigt, wie viel Tinte du hast!)
+  ober.add(zylinder(hell, 5, 5, 17, -11, 10, 0), kugel(hell, 5, -11, 18.5, 0, 1, 0.5, 1), kugel(hell, 5, -11, 1.5, 0, 1, 0.5, 1));
+  ober.add(zylinder(MAT_GRAU, 1.5, 1.5, 3, -11, 21, 0), ringY(MAT_GRAU, 5.1, 0.6, -11, 5, 0), ringY(MAT_GRAU, 5.1, 0.6, -11, 15, 0));
+  ober.add(klotz(glasRohrMat, 0.6, 13, 3, -16.2, 10, 0));
+  const fuellGeo = new THREE.BoxGeometry(0.8, 12, 2.4); fuellGeo.translate(0, 6, 0);
+  const tankFuell = new THREE.Mesh(fuellGeo, tintenMaterial(team, 0.4)); tankFuell.position.set(-16.05, 4, 0); ober.add(tankFuell);
   const schlauch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-11, 36, 0), new THREE.Vector3(-11, 43, 0), new THREE.Vector3(-7, 48, 0), new THREE.Vector3(-3, 49, 0)]), 12, 1.1, 6), MAT_GRAU);
-  k.add(schlauch);
-  k.userData.beine = beine; k.userData.arme = arme;
+    new THREE.Vector3(-11, 22, 0), new THREE.Vector3(-11, 29, 0), new THREE.Vector3(-7, 34, 0), new THREE.Vector3(-3, 35, 0)]), 12, 1.1, 6), MAT_GRAU);
+  ober.add(schlauch);
+  k.userData = { beine, arme, ober, kopf, augen, tankFuell };
   return k;
 }
 // Beim Abtauchen schaut nur der Schnorchel aus der Farbe
@@ -462,24 +492,132 @@ function baueSchnorchel(team) {
   return g;
 }
 
-function baueWaffe(art, m) {
-  const g = new THREE.Group();
+// Alle Waffen zeigen nach vorne (+x). Der Ursprung (0,0,0) ist da, wo die Hand greift.
+function abzugBauen(g, x) {
+  const buegel = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.45, 6, 12, Math.PI), MAT_GRAU);
+  buegel.rotation.z = Math.PI; buegel.position.set(x, -2.2, 0);
+  g.add(buegel, klotz(MAT_METALL, 0.8, 2.6, 1, x, -2.6, 0));
+}
+function baueWaffe(art, m, team) {
+  const g = new THREE.Group(), ud = g.userData;
+  const tinte = tintenMaterial(team);
+  const blitzMat = new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.85 });
   switch (art) {
-    case 'eimer':
-      g.add(zylinder(m, 7, 5, 11, 8, 0, 0), zylinder(MAT_GRAU, 7.3, 7.3, 1.5, 8, 5.5, 0), klotz(MAT_GRAU, 2, 2, 12, 8, 8, 0));
-      break;
-    case 'sniper':
-      g.add(klotz(MAT_GRAU, 34, 4, 4, 14, 0, 0), klotz(m, 12, 7, 7, 2, 0, 0), kugel(MAT_GLOW, 2.2, 12, 3.5, 0), klotz(MAT_GRAU, 4, 8, 3, -2, -5, 0));
-      break;
-    case 'roller': {
-      const walze = zylinder(m, 6, 6, 28, 18, 0, 0); walze.rotation.x = Math.PI / 2;
-      g.add(walze, klotz(MAT_GRAU, 16, 2.5, 2.5, 6, 4, 0), zylinder(MAT_GRAU, 1.5, 1.5, 28, 18, 0, 0));
-      g.children[2].rotation.x = Math.PI / 2;
+    case 'eimer': {
+      // Der Eimer hängt am Henkel und schwappt beim Werfen nach vorne
+      const schwing = new THREE.Group(); g.add(schwing); ud.schwing = schwing;
+      schwing.add(zylinderX(MAT_GUMMI, 1.3, 1.3, 4, 0, 0, 0));                         // Griff
+      const eimer = new THREE.Group(); eimer.position.y = -12.9; schwing.add(eimer);
+      eimer.add(new THREE.Mesh(new THREE.CylinderGeometry(7, 5.5, 11, 20, 1, true), mat(TEAMS[team].col, { side: THREE.DoubleSide, roughness: 0.4 })));
+      eimer.add(zylinder(MAT_GRAU, 5.5, 5.5, 0.8, 0, -5.3, 0));
+      eimer.add(ringY(MAT_METALL, 7.1, 0.7, 0, 5.5, 0), ringY(MAT_GRAU, 6.6, 0.45, 0, 2, 0), ringY(MAT_GRAU, 6, 0.45, 0, -2.5, 0));
+      const henkel = new THREE.Mesh(new THREE.TorusGeometry(7.4, 0.55, 6, 18, Math.PI), MAT_METALL); henkel.position.y = 5.5; eimer.add(henkel);
+      eimer.add(kugel(MAT_METALL, 1, 7.4, 5.5, 0), kugel(MAT_METALL, 1, -7.4, 5.5, 0));
+      ud.inhalt = zylinder(tinte, 6.3, 6.3, 0.6, 0, 0, 0); eimer.add(ud.inhalt);       // Tinte im Eimer
+      const ausguss = zylinderX(m, 1.4, 2.6, 4, 7.8, 3.6, 0); ausguss.rotation.z += 0.5; eimer.add(ausguss);
+      eimer.add(kugel(tinte, 1, 6.6, 1, 3, 1, 1.9, 1), kugel(tinte, 0.8, 6.1, -1.5, -3.6, 1, 2.1, 1), kugel(tinte, 1.1, 5.8, 5.9, 3.8));  // Tropfen
+      ud.blitz = kugel(blitzMat, 2.5, 10.5, 6, 0); eimer.add(ud.blitz);
       break;
     }
-    default: // spritzer
-      g.add(klotz(MAT_GRAU, 16, 6, 6, 8, 0, 0), klotz(m, 5, 8, 8, 16, 0, 0), klotz(MAT_GRAU, 4, 8, 4, 2, -5, 0));
+    case 'sniper': {
+      g.add(klotz(m, 9, 5.5, 3.8, -4, -0.5, 0), klotz(MAT_GUMMI, 1.5, 6.5, 4.2, -9, -0.6, 0));   // Schaft + Polster
+      g.add(klotz(MAT_GRAU, 11, 5, 4.4, 6, 0.5, 0), klotz(m, 6, 1.2, 4.6, 6, 3.1, 0));
+      const griff = klotz(MAT_GUMMI, 3, 7, 3.6, 2.5, -4.5, 0); griff.rotation.z = 0.3; g.add(griff);
+      abzugBauen(g, 5.5);
+      // Ladekammer: leuchtet beim Aufladen immer heller
+      ud.ladeMat = tintenMaterial(team, 0.2);
+      g.add(zylinderX(glasRohrMat, 2.5, 2.5, 12, 17, 0.5, 0), zylinderX(ud.ladeMat, 1.3, 1.3, 11.6, 17, 0.5, 0));
+      g.add(zylinderX(MAT_METALL, 2.8, 2.8, 1, 10.7, 0.5, 0), zylinderX(MAT_METALL, 2.8, 2.8, 1, 23.3, 0.5, 0));
+      const spulen = new THREE.Group(); spulen.position.set(17, 0.5, 0); g.add(spulen); ud.spulen = spulen;
+      for (let i = 0; i < 4; i++) spulen.add(ringX(MAT_METALL, 2.6, 0.35, -4.5 + i * 3, 0, 0), klotz(MAT_METALL, 0.6, 0.9, 0.6, -4.5 + i * 3, 2.8, 0));
+      // Lauf mit Mündungsbremse
+      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
+      lauf.add(zylinderX(MAT_METALL, 1.2, 1.3, 20, 34, 0.5, 0), ringX(MAT_GRAU, 1.5, 0.4, 28, 0.5, 0), ringX(MAT_GRAU, 1.5, 0.4, 32, 0.5, 0));
+      lauf.add(zylinderX(MAT_GRAU, 2, 2, 3.5, 44, 0.5, 0), klotz(MAT_SCHWARZ, 1, 0.6, 4.2, 43.5, 0.5, 0), klotz(MAT_SCHWARZ, 1, 0.6, 4.2, 45, 0.5, 0));
+      ud.blitz = kugel(blitzMat, 2.6, 47, 0.5, 0); lauf.add(ud.blitz);
+      // Zielfernrohr mit leuchtender Linse
+      g.add(zylinderX(MAT_GRAU, 1.6, 1.6, 12, 7, 5.8, 0), zylinderX(MAT_GRAU, 2.1, 1.6, 2.5, 13.5, 5.8, 0), zylinderX(MAT_GRAU, 1.6, 2, 2, 0.5, 5.8, 0));
+      g.add(klotz(MAT_GRAU, 1.5, 2, 1.5, 4, 3.9, 0), klotz(MAT_GRAU, 1.5, 2, 1.5, 10, 3.9, 0), zylinderZ(MAT_METALL, 0.6, 0.6, 1.5, 7, 7.5, 0));
+      g.add(zylinderX(mat('#6fe3ff', { emissive: '#3aa8d8', emissiveIntensity: 0.7, metalness: 0.5, roughness: 0.1 }), 1.8, 1.8, 0.3, 14.8, 5.8, 0));
+      // Laser unter dem Lauf
+      g.add(klotz(MAT_GRAU, 3, 1.5, 1.5, 26, -1.3, 1.6), kugel(mat('#ff3b3b', { emissive: '#ff3b3b' }), 0.6, 27.6, -1.3, 1.6));
+      break;
+    }
+    case 'roller': {
+      // Stiel geht von den Händen schräg nach unten zur Walze
+      const ende = { x: 14, y: -10 }, len = Math.hypot(ende.x, ende.y);
+      const stiel = new THREE.Group(); stiel.rotation.z = Math.atan2(-ende.x, ende.y); g.add(stiel);
+      stiel.add(zylinder(MAT_METALL, 0.9, 0.9, len, 0, len / 2, 0));
+      stiel.add(zylinder(MAT_GUMMI, 1.4, 1.4, 5, 0, 1.5, 0), zylinder(MAT_GUMMI, 1.4, 1.4, 4, 0, 7.5, 0));
+      stiel.add(zylinder(glasRohrMat, 1.9, 1.9, 4, 0, 12.5, 0));
+      const stielTinte = new THREE.Group(); stielTinte.position.y = 10.6; stiel.add(stielTinte);
+      stielTinte.add(zylinder(tinte, 1.5, 1.5, 3.8, 0, 1.9, 0)); ud.stielTinte = stielTinte;
+      // Bügel und Walze
+      g.add(zylinderZ(MAT_METALL, 0.9, 0.9, 31, ende.x, ende.y, 0));
+      for (const s of [-1, 1]) g.add(klotz(MAT_METALL, 1.2, 5, 1.2, ende.x, ende.y - 2.5, s * 15.2));
+      const walze = new THREE.Group(); walze.position.set(ende.x, ende.y - 5, 0); g.add(walze); ud.walze = walze;
+      walze.add(zylinderZ(m, 6, 6, 28, 0, 0, 0));
+      for (let i = 0; i < 7; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(6.05, 0.45, 5, 20), tinte); r.position.z = -12 + i * 4; walze.add(r); }
+      walze.add(klotz(mat(TEAMS[team].hell), 1.6, 0.6, 27.6, 0, 6.05, 0), klotz(mat(TEAMS[team].hell), 1.6, 0.6, 27.6, 0, -6.05, 0));  // Streifen: so sieht man das Drehen
+      for (const s of [-1, 1]) walze.add(zylinderZ(MAT_GRAU, 4.5, 4.5, 0.6, 0, 0, s * 14.3), kugel(MAT_METALL, 0.9, 2.5, 0, s * 14.7));
+      break;
+    }
+    default: { // Spritzer
+      g.add(klotz(m, 12, 6, 5, 6, 1, 0), klotz(MAT_GRAU, 12.4, 1.2, 5.4, 6, -1.6, 0));       // Gehäuse
+      const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 1.5, -5, 0); griff.rotation.z = 0.25; g.add(griff);
+      abzugBauen(g, 6);
+      // Glastank oben: Man sieht, wie viel Tinte noch drin ist!
+      g.add(zylinderX(glasRohrMat, 2.6, 2.6, 10, 5, 6.2, 0), ringX(MAT_METALL, 2.6, 0.5, 0, 6.2, 0), ringX(MAT_METALL, 2.6, 0.5, 10, 6.2, 0));
+      g.add(klotz(MAT_GRAU, 2, 2, 2, 2, 4.2, 0), klotz(MAT_GRAU, 2, 2, 2, 8, 4.2, 0));
+      const tank = new THREE.Group(); tank.position.set(0.3, 6.2, 0); g.add(tank); ud.tinteFuell = tank;
+      tank.add(zylinderX(tinte, 2.1, 2.1, 9.4, 4.7, 0, 0));
+      // Druckanzeige an der Seite
+      g.add(zylinderZ(MAT_WEISS, 1.6, 1.6, 0.8, 9, 1.5, 2.8), ringX(MAT_METALL, 1.6, 0.3, 9, 1.5, 3.2), klotz(mat('#ff4d4d'), 0.3, 1.3, 0.3, 9, 1.9, 3.3));
+      g.children[g.children.length - 2].rotation.y = 0;
+      // Lauf mit Pumpe (zuckt beim Schießen zurück)
+      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
+      lauf.add(zylinderX(MAT_METALL, 1.5, 1.5, 9, 16, 1.5, 0), ringX(MAT_GRAU, 1.7, 0.45, 14, 1.5, 0), ringX(MAT_GRAU, 1.7, 0.45, 17.5, 1.5, 0));
+      lauf.add(zylinderX(m, 1.1, 2.3, 3, 21.5, 1.5, 0), klotz(MAT_GUMMI, 5, 2.2, 3, 15, -1, 0));
+      for (let i = 0; i < 3; i++) lauf.add(klotz(MAT_GRAU, 0.4, 2.4, 3.2, 13.5 + i * 1.5, -1, 0));
+      ud.blitz = kugel(blitzMat, 2.2, 24, 1.5, 0); lauf.add(ud.blitz);
+    }
   }
+  if (ud.blitz) { ud.blitz.castShadow = false; ud.blitz.visible = false; }
+  return g;
+}
+
+// Waffen-Teile bewegen sich (Tinte, Rückstoß, Walze, Ladung …)
+function animiereWaffe(ud, e, dt, vf) {
+  if (ud.tinteFuell) ud.tinteFuell.scale.x = Math.max(0.02, e.tinte / 100);
+  if (ud.stielTinte) ud.stielTinte.scale.y = Math.max(0.02, e.tinte / 100);
+  if (ud.inhalt) ud.inhalt.position.y = -4.5 + 9 * e.tinte / 100;
+  if (ud.lauf) ud.lauf.position.x = -e.rueck * 1.6;
+  if (ud.blitz) { ud.blitz.visible = e.rueck > 0.55; ud.blitz.scale.setScalar(1.6 + e.rueck * 1.4); }
+  if (ud.ladeMat) ud.ladeMat.emissiveIntensity = 0.15 + e.ladung * 2.2 * (e.ladung >= 1 ? 0.75 + Math.sin(zeit * 30) * 0.25 : 1);
+  if (ud.spulen) ud.spulen.rotation.x += dt * (0.5 + e.ladung * 25);
+  if (ud.schwing) ud.schwing.rotation.z = e.rueck * 0.8;
+  if (ud.walze) ud.walze.rotation.z -= vf * dt / 6;
+}
+
+// Farbbombe mit Metallband und blinkendem Lämpchen
+function baueBombe(team) {
+  const g = new THREE.Group();
+  g.add(kugel(teamMat[team], 8, 0, 0, 0), ringY(MAT_GRAU, 8.1, 1, 0, 0, 0));
+  g.add(zylinder(MAT_GRAU, 2.5, 3, 3, 0, 8.5, 0), kugel(mat('#ff3b3b', { emissive: '#ff3b3b' }), 1.3, 0, 10.4, 0));
+  g.add(kugel(mat(TEAMS[team].hell), 2, 4, 4, 5));
+  return g;
+}
+// Rakete für den Raketenhagel (zeigt in +z)
+function baueRakete(team) {
+  const g = new THREE.Group();
+  g.add(zylinderZ(teamMat[team], 4, 4, 16, 0, 0, 0), ringX(MAT_GRAU, 4.1, 0.6, 0, 0, 3).rotateY(-Math.PI / 2));
+  const spitze = new THREE.Mesh(new THREE.ConeGeometry(4, 8, 14), MAT_WEISS); spitze.rotation.x = Math.PI / 2; spitze.position.z = 12; g.add(spitze);
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2, f = klotz(MAT_GRAU, 0.8, 6, 5, Math.cos(a) * 5, Math.sin(a) * 5, -6);
+    f.rotation.z = a + Math.PI / 2; g.add(f);
+  }
+  const flamme = kugel(new THREE.MeshBasicMaterial({ color: '#ffd166' }), 3, 0, 0, -10, 1, 1, 2);
+  flamme.castShadow = false; g.add(flamme); g.userData.flamme = flamme;
   return g;
 }
 
@@ -496,18 +634,23 @@ const welleGeo = new THREE.RingGeometry(8, 12, 20); welleGeo.rotateX(-Math.PI / 
 const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 
 // ---------- Ich-Sicht-Waffe (hängt an der Kamera) ----------
-let haendeWaffe = null;
+let haendeWaffe = null, swayX = 0, swayY = 0;
+const vmHalter = new THREE.Group(); kamera.add(vmHalter);
+const VM_POS = { spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55] };
+const VM_HAENDE = { spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]] };
 function baueHaendeWaffe(art) {
-  if (haendeWaffe) kamera.remove(haendeWaffe);
-  haendeWaffe = baueWaffe(art, teamMat[0]);
-  haendeWaffe.rotation.y = Math.PI / 2;                  // +x zeigt nach vorne (-z der Kamera)
-  if (art === 'roller') { haendeWaffe.position.set(0, -13, -8); haendeWaffe.scale.setScalar(0.6); }
-  else { haendeWaffe.position.set(6, -6, -10); haendeWaffe.scale.setScalar(0.5); }
-  // Handschuhe halten die Waffe
-  if (art === 'roller') haendeWaffe.add(kugel(MAT_STIEFEL, 3, 2, 4, -3), kugel(MAT_STIEFEL, 3, 9, 4, 3));
-  else haendeWaffe.add(kugel(MAT_STIEFEL, 3, 1, -4, 4), kugel(MAT_STIEFEL, 3, 11, -2, -4));
-  haendeWaffe.userData.basis = haendeWaffe.position.clone();
-  kamera.add(haendeWaffe);
+  if (haendeWaffe) vmHalter.remove(haendeWaffe);
+  haendeWaffe = baueWaffe(art, teamMat[0], 0);
+  const [x, y, z, sk] = VM_POS[art];
+  haendeWaffe.position.set(x, y, z); haendeWaffe.scale.setScalar(sk);
+  haendeWaffe.rotation.y = Math.PI / 2 + 0.07;                 // zeigt nach vorne, leicht zur Mitte
+  // Handschuhe + Ärmel vom Taucheranzug
+  for (const [hx, hy, hz] of VM_HAENDE[art]) {
+    const aermel = zylinderX(teamMat[0], 2.8, 3.3, 16, hx - 8.5, hy - 2.2, hz); aermel.rotation.z = -Math.PI / 2 + 0.25;
+    haendeWaffe.add(kugel(MAT_STIEFEL, 3, hx, hy, hz), ringX(MAT_GRAU, 3, 0.7, hx - 1.8, hy - 0.5, hz), aermel);
+  }
+  haendeWaffe.traverse(o => { o.castShadow = false; });
+  vmHalter.add(haendeWaffe);
 }
 
 // ---------- Teilchen (Spritzer) ----------
@@ -545,6 +688,7 @@ addEventListener('mouseup', e => { if (e.button === 0) maus.links = false; if (e
 addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => {
   if (document.pointerLockElement !== glCv || zustand !== 'spiel' || !spieler || spieler.tot) return;
+  swayX += e.movementX; swayY += e.movementY;
   spieler.winkel += e.movementX * 0.0025;
   spieler.pitch = Math.max(-1.2, Math.min(1.0, spieler.pitch - e.movementY * 0.0025));
 });
@@ -579,6 +723,7 @@ function neuerKlecks(team, nr) {
     tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
     ladung: 0, laden: false, rollT: 0, rollt: false, schild: 0, slam: false, ulti: 0, rueck: 0,
     letzterTreffer: 9, ko: 0, tode: 0, punkte: 0,
+    spawnT: 0.45, landT: 0, todT: 0, tauchAnim: 0, lauf: 0, vmPhase: 0,
     ki: { ziel: null, zielT: 0, stuckT: 0, lastX: 0, lastY: 0, tanken: false, strafe: 1, strafeT: 0, seite: 1, umwegT: 0, umwegA: 0, pause: 0 },
   };
   const p = spawnPunkt(e); e.x = p.x; e.y = p.y;
@@ -586,9 +731,9 @@ function neuerKlecks(team, nr) {
   e.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   e.gruppe = new THREE.Group();
   e.koerper = baueTaucher(e.mat, team, zufallAus(HAUTFARBEN), zufallAus(HAARFARBEN));
-  e.waffenModell = baueWaffe(e.waffe, e.mat);
-  if (e.waffe === 'roller') e.waffenModell.position.set(4, 6, 0); else e.waffenModell.position.set(8, 22, 3);
-  e.gruppe.add(e.koerper, e.waffenModell);
+  e.waffenModell = baueWaffe(e.waffe, e.mat, team);
+  e.koerper.userData.ober.add(e.waffenModell);           // Waffe bewegt sich mit dem Oberkörper
+  e.gruppe.add(e.koerper);
   e.schildName = sp ? null : namensSchild(e.name, TEAMS[team].hell);
   if (e.schildName) e.gruppe.add(e.schildName);
   e.schnorchel = baueSchnorchel(team); e.gruppe.add(e.schnorchel);
@@ -668,7 +813,7 @@ function bewege(e, dx, dy, dt) {
   if (e.z > 0 || e.vz > 0) {
     e.vz -= SCHWERKRAFT * dt; e.z += e.vz * dt;
     if (e.z <= 0) {
-      e.z = 0; e.vz = 0;
+      e.z = 0; e.vz = 0; e.landT = 0.25;
       if (e.slam) farbsturmLandung(e);
     }
   }
@@ -677,7 +822,10 @@ function bewege(e, dx, dy, dt) {
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
   e.taucht = e.willTauchen && eigen && amBoden;
-  if (e.spieler && vorher !== e.taucht) ton(e.taucht ? 'blubb' : 'auf');
+  if (vorher !== e.taucht) {
+    spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
+    if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
+  }
   let speed = e.taucht ? 290 : feind ? 75 : 160;
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, 130);
@@ -792,8 +940,8 @@ function bombeWerfen(e, zx, zy, extra = {}) {
   zx = Math.max(10, Math.min(W - 10, zx)); zy = Math.max(10, Math.min(H - 10, zy));
   const b = { sx: e.x, sy: e.y, zx, zy, x: e.x, y: e.y, h0: e.z + 20, t: 0, dauer: 0.6, hoehe: 70, r: 65, schaden: 90,
     team: e.team, wer: e, ulti: false, ...extra };
-  b.mesh = new THREE.Mesh(geoBombe, b.ulti ? mat(TEAMS[e.team].col, { emissive: TEAMS[e.team].col, emissiveIntensity: 0.6 }) : teamMat[e.team]);
-  b.mesh.castShadow = true; scene.add(b.mesh);
+  b.mesh = b.ulti ? baueRakete(e.team) : baueBombe(e.team);
+  b.mesh.position.set(e.x, b.h0, e.y); scene.add(b.mesh);
   bomben.push(b);
   if (e.spieler && !b.ulti) ton('wurf');
   return true;
@@ -862,7 +1010,7 @@ function treffen(e, schaden, wer) {
 }
 
 function erwischt(e, wer) {
-  e.tot = true; e.wiederT = 4; e.tode++; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0;
+  e.tot = true; e.wiederT = 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0;
   const farbe = wer ? wer.team : 1 - e.team;
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
@@ -1031,7 +1179,7 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45 });
         if (e.spieler) ton('plopp');
       }
       continue;
@@ -1133,6 +1281,47 @@ function update(dt) {
   rotBlitz = Math.max(0, rotBlitz - dt); leerHinweis = Math.max(0, leerHinweis - dt);
 }
 
+// ================== ANIMATION DER FARBTAUCHER ==================
+// [Schulter-Winkel, Ellbogen-Winkel, wie stark die Arme beim Zielen hoch/runter gehen]
+const HALTUNG = { spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0] };
+function animiereFigur(e, v, dt) {
+  const ud = e.koerper.userData, inLuft = e.z > 0;
+  const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
+  const vf = e.vx * c + e.vy * s, vs = -e.vx * s + e.vy * c;   // vorwärts / seitwärts
+  const amp = inLuft ? 0 : Math.min(1, v / 150);
+  e.lauf += dt * (5 + v * 0.06);
+  const ph = e.lauf;
+  // Beine mit Knien
+  ud.beine.forEach((b, i) => {
+    if (inLuft) { b.huefte.rotation.z = i ? -0.25 : 0.75; b.knie.rotation.z = i ? -0.5 : -1.3; return; }
+    const p = ph + i * Math.PI;
+    b.huefte.rotation.z = Math.sin(p) * 0.65 * amp * (vf < -20 ? -1 : 1);
+    b.knie.rotation.z = -Math.max(0, Math.sin(p + 1.3)) * 1.1 * amp - (e.landT > 0 ? 0.6 : 0);
+  });
+  // Oberkörper: wippen, vorbeugen, atmen, zurückzucken bei Treffern
+  const zucken = e.letzterTreffer < 0.25 ? 0.35 * (1 - e.letzterTreffer / 0.25) : 0;
+  ud.ober.position.y = 14 + Math.abs(Math.cos(ph)) * 1.3 * amp - (e.landT > 0 ? Math.sin(e.landT / 0.25 * Math.PI) * 2.5 : 0);
+  ud.ober.rotation.z = -vf / 160 * 0.16 + zucken + e.rueck * 0.06 + (e.rollt ? -0.15 : 0);
+  ud.ober.rotation.x = vs / 160 * 0.12;
+  ud.ober.scale.y = 1 + Math.sin(zeit * 2.2 + e.nr) * 0.012;
+  // Kopf schaut hoch/runter, Augen blinzeln
+  ud.kopf.rotation.z = e.pitch * 0.45 - zucken * 0.5;
+  ud.augen.scale.y = ((zeit + e.nr * 0.77) % 3.3) < 0.12 ? 0.1 : 1;
+  ud.tankFuell.scale.y = Math.max(0.02, e.tinte / 100);
+  // Arme halten die Waffe und zielen mit
+  const [a0, b0, pf] = HALTUNG[e.waffe];
+  const a = a0 + e.pitch * pf - e.rueck * 0.12 + (inLuft ? -0.2 : 0);
+  ud.arme.forEach(arm => { arm.schulter.rotation.z = a; arm.ellbogen.rotation.z = b0; });
+  if (e.waffe === 'eimer') {   // freie Hand schwingt beim Laufen
+    ud.arme[0].schulter.rotation.z = Math.sin(ph) * 0.5 * amp + 0.15; ud.arme[0].ellbogen.rotation.z = 0.3;
+  }
+  const hx = (6 * Math.sin(a) + 6 * Math.sin(a + b0)) * 0.88, hy = 14 - 6 * Math.cos(a) - 6 * Math.cos(a + b0);
+  const w = e.waffenModell;
+  w.position.set(hx, hy, e.waffe === 'eimer' ? 4 : 0);
+  w.rotation.z = (e.waffe === 'roller' ? 0 : e.pitch * pf) + e.rueck * 0.2;
+  animiereWaffe(w.userData, e, dt, vf);
+}
+
 // ================== 3D-BILD AKTUALISIEREN ==================
 let augenHoehe = AUGE;
 function welt3D(dt) {
@@ -1143,26 +1332,33 @@ function welt3D(dt) {
     const g = e.gruppe;
     const istIch = e.spieler && ichSicht;
     const v = Math.hypot(e.vx, e.vy);
+    // Zeit-Zähler für Animationen
+    e.landT = Math.max(0, e.landT - dt);
+    e.spawnT = Math.max(0, e.spawnT - dt);
+    e.todT = Math.max(0, e.todT - dt);
+    e.tauchAnim += ((e.taucht ? 1 : 0) - e.tauchAnim) * Math.min(1, dt * 14);
+    if (e.tot) e.tauchAnim = 0;
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
-    g.visible = !(e.tot || istIch || (e.taucht && e.team !== spieler.team && !feindNah));
-    g.position.set(e.x, e.z, e.y);
-    g.rotation.y = -e.winkel;
-    e.koerper.visible = !e.taucht;
-    e.waffenModell.visible = !e.taucht;
-    e.schnorchel.visible = e.taucht;
-    if (e.schildName) e.schildName.visible = !e.taucht;
-    if (e.taucht) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
-    else if (g.visible) {
-      // Laufen: Beine und Arme schwingen
-      const ud = e.koerper.userData, inLuft = e.z > 0;
-      const schwung = inLuft ? 0 : Math.sin(zeit * 13 + e.nr) * Math.min(1, v / 140) * 0.7;
-      ud.beine[0].rotation.z = inLuft ? 0.6 : schwung;
-      ud.beine[1].rotation.z = inLuft ? -0.3 : -schwung;
-      const arm = e.waffe === 'roller' ? 0.8 : 1.35;
-      ud.arme[0].rotation.z = arm + schwung * 0.12;
-      ud.arme[1].rotation.z = arm - schwung * 0.12;
+    g.visible = !((e.tot && e.todT <= 0) || istIch || (e.taucht && e.tauchAnim > 0.9 && e.team !== spieler.team && !feindNah));
+    let gx = 1, gy = 1, hoch = 0, dreh = 0;
+    if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
+      const f = 1 - e.todT / 0.5;
+      gx = gy = Math.max(0.01, 1 - f); hoch = Math.sin(f * Math.PI) * 22; dreh = f * 9;
+    } else if (e.spawnT > 0) {                     // Wieder da: ploppt mit Federn auf
+      const f = 1 - e.spawnT / 0.45;
+      gx = gy = Math.min(1, f * 1.4) + Math.sin(f * Math.PI) * 0.18;
     }
-    e.waffenModell.position.x = (e.waffe === 'roller' ? 4 : 8) - e.rueck * 3;
+    if (e.landT > 0) { const q = Math.sin(e.landT / 0.25 * Math.PI); gy *= 1 - q * 0.16; gx *= 1 + q * 0.1; }   // Landen: zusammenstauchen
+    g.position.set(e.x, e.z + hoch, e.y);
+    g.rotation.y = -e.winkel + dreh;
+    g.scale.set(gx, gy, gx);
+    // Abtauchen: der Körper versinkt in der Farbe, dann kommt der Schnorchel
+    e.koerper.visible = e.tauchAnim < 0.97;
+    e.koerper.position.y = -e.tauchAnim * 50;
+    e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6;
+    if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
+    if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
+    if (g.visible && e.koerper.visible) animiereFigur(e, v, dt);
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
     e.welle.visible = !e.tot && e.taucht && e.team !== spieler.team && v > 60 && Math.sin(zeit * 16 + e.nr) > 0.4;
@@ -1171,8 +1367,19 @@ function welt3D(dt) {
     e.blase.visible = !e.tot && e.schild > 0 && !istIch;
     e.blase.position.set(e.x, e.z + 24, e.y);
   }
-  for (const s of schuesse) s.mesh.position.set(s.x, s.h, s.y);
-  for (const b of bomben) { b.mesh.position.set(b.x, b.h, b.y); b.mesh.rotation.x += dt * 8; }
+  for (const s of schuesse) {   // Tropfen sind länglich in Flugrichtung
+    s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); s.mesh.scale.set(0.8, 0.8, 1.7);
+  }
+  for (const b of bomben) {
+    if (b.ulti) {   // Rakete zeigt in Flugrichtung, Flamme flackert
+      const alt = b.mesh.position.clone();
+      b.mesh.position.set(b.x, b.h, b.y);
+      if (dt > 0 && alt.distanceToSquared(b.mesh.position) > 0.01) b.mesh.lookAt(2 * b.x - alt.x, 2 * b.h - alt.y, 2 * b.y - alt.z);
+      b.mesh.userData.flamme.scale.set(3, 3, 5 + Math.sin(zeit * 40) * 2);
+    } else {
+      b.mesh.position.set(b.x, b.h, b.y); b.mesh.rotation.x += dt * 8; b.mesh.rotation.z += dt * 5;
+    }
+  }
   for (const w of wolken) {
     w.mesh.position.set(w.x, 130 + Math.sin(zeit * 2) * 5, w.y);
     w.mesh.scale.setScalar(Math.min(1, w.t * 2, (7 - w.t) * 3 + 0.2));
@@ -1205,11 +1412,22 @@ function welt3D(dt) {
     kamera.lookAt(p.x + fx * 200, p.z + 35 + fy * 200, p.y + fz * 200);
   }
   if (haendeWaffe) {
-    haendeWaffe.visible = ichSicht && !p.taucht && !p.tot;
-    const b = haendeWaffe.userData.basis, v = Math.hypot(p.vx, p.vy);
-    const wackeln = Math.sin(zeit * 10) * Math.min(1, v / 160);
-    haendeWaffe.position.set(b.x + wackeln * 0.5, b.y + Math.abs(wackeln) * 0.6 - (p.laden ? p.ladung * 1.5 : 0), b.z + p.rueck * 2);
-    if (p.waffe === 'roller') haendeWaffe.position.y = b.y + (p.rollt ? -1.5 : 1.5);
+    const v = Math.hypot(p.vx, p.vy), amp = p.z > 0 ? 0 : Math.min(1, v / 160);
+    p.vmPhase += dt * (5 + v * 0.05);
+    const ph = p.vmPhase, abkling = Math.exp(-12 * dt);
+    swayX *= abkling; swayY *= abkling;
+    const sx = Math.max(-0.18, Math.min(0.18, swayX * 0.004)), sy = Math.max(-0.15, Math.min(0.15, swayY * 0.004));
+    let x = Math.sin(ph) * 0.45 * amp, y = -Math.abs(Math.cos(ph)) * 0.55 * amp, z = 0;
+    y += Math.max(-1, Math.min(1, -p.vz / 400)) * 1.2;                        // Springen
+    y -= Math.sin(Math.min(1, p.landT / 0.25) * Math.PI) * 1.5;                 // Landen
+    z += p.rueck * 1.6;                                                       // Rückstoß
+    y -= p.tauchAnim * 14 + p.spawnT * 30;                                   // Abtauchen / Auftauchen
+    if (p.laden) { z += p.ladung; if (p.ladung >= 1) x += Math.sin(zeit * 70) * 0.06; }
+    if (p.rollt) y -= 0.8;
+    vmHalter.position.set(x - sx * 4, y + sy * 3, z);                         // Waffe schwingt beim Umschauen nach
+    vmHalter.rotation.set(sy + p.rueck * 0.1, sx, Math.sin(ph) * 0.025 * amp);
+    haendeWaffe.visible = ichSicht && !p.tot && p.tauchAnim < 0.9;
+    animiereWaffe(haendeWaffe.userData, p, dt, p.vx * Math.cos(p.winkel) + p.vy * Math.sin(p.winkel));
   }
   renderer.render(scene, kamera);
 }
