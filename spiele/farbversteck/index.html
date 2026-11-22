@@ -31,6 +31,23 @@
   .palette button { width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 3px solid #3d4266; }
   .palette button.an { border-color: #ffd166; transform: scale(1.15); }
   #liste div { background: #1b1f3a; border-radius: 0.6rem; padding: 0.3rem 0.6rem; margin: 0.25rem 0; text-align: left; }
+  .box.breit { max-width: 56rem; }
+  .lobbyGitter { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0.8rem 0; text-align: left; }
+  @media (max-width: 700px) { .lobbyGitter { grid-template-columns: 1fr; } }
+  .karte { background: #1b1f3a; border-radius: 1rem; padding: 0.6rem 1rem 1rem; }
+  .karte h2 { margin-top: 0.5rem; }
+  #liste div { display: flex; align-items: center; gap: 0.5rem; background: #2a2f55; border-radius: 0.6rem; padding: 0.35rem 0.6rem; margin: 0.3rem 0; }
+  #liste .punkt { width: 1rem; height: 1rem; border-radius: 50%; flex: none; }
+  #liste .rolle { margin-left: auto; font-size: 0.85rem; color: #c9c3ff; }
+  #liste .bot { opacity: 0.75; }
+  .vorschau { margin-top: 0.7rem; padding: 0.5rem; border-radius: 0.6rem; background: #2a2f55; text-align: center; font-weight: bold; }
+  .zeile { display: flex; align-items: center; gap: 0.5rem; margin: 0.45rem 0; }
+  .zeile .was { flex: 1; }
+  .zeile button { width: 2.2rem; height: 2.2rem; border-radius: 50%; border: none; background: #ffd166; color: #1b1f3a; font-size: 1.3rem; line-height: 1; }
+  .zeile button:disabled { background: #3d4266; color: #6b7099; cursor: default; }
+  .zeile .wert { min-width: 3.6rem; text-align: center; font-size: 1.2rem; font-weight: bold; color: #ffd166; }
+  .codeSchild { display: inline-block; background: #ffd166; color: #1b1f3a; border-radius: 0.8rem; padding: 0.3rem 1rem; font-size: 1.2rem; }
+  .codeSchild b { letter-spacing: 0.25em; font-size: 1.6rem; }
   a.zurueck { position: fixed; top: 0.6rem; left: 0.6rem; color: #c9c3ff; font-size: 0.9rem; z-index: 11; }
 </style>
 </head>
@@ -46,15 +63,7 @@
     <h2>Dein Spielername</h2>
     <input id="name" maxlength="14" placeholder="Spitzname">
     <p class="klein">Nimm einen Spitznamen, nicht deinen echten Namen!</p>
-    <h2>Ich will …</h2>
-    <div class="wahl" id="wahlRolle">
-      <button data-r="verstecker" class="an">🙈 mich verstecken</button><button data-r="sucher">👀 suchen</button><button data-r="zufall">🎲 egal</button>
-    </div>
-    <h2>Bots</h2>
-    <div class="wahl" id="wahlBots">
-      <button data-b="2">2</button><button data-b="4" class="an">4</button><button data-b="6">6</button>
-    </div>
-    <button class="gross" id="solo">▶ Spielen</button>
+    <button class="gross" id="solo">🎮 Allein gegen Bots</button>
     <h2>👫 Mit Freunden online</h2>
     <button class="klein" id="raum">🏠 Raum erstellen</button>
     <input id="code" maxlength="4" placeholder="CODE" style="width:6rem;text-transform:uppercase;letter-spacing:0.2em">
@@ -74,12 +83,27 @@
 </div>
 
 <div id="lobby" class="overlay hidden">
-  <div class="box">
-    <h1 style="font-size:2rem">🏠 Raum <span id="lobbyCode"></span></h1>
-    <p id="lobbyText">Sag deinen Freunden den Code!</p>
-    <div id="liste"></div>
+  <div class="box breit">
+    <h1 style="font-size:2.2rem" id="lobbyTitel">🏠 LOBBY</h1>
+    <div id="codeSchild" class="codeSchild hidden">Raum-Code: <b id="lobbyCode"></b></div>
+    <p id="lobbyText"></p>
+    <div class="lobbyGitter">
+      <div class="karte">
+        <h2>🦎 Mitspieler <span id="anzahl" class="klein"></span></h2>
+        <div id="liste"></div>
+        <div id="vorschau" class="vorschau"></div>
+      </div>
+      <div class="karte">
+        <h2>⚙️ Einstellungen</h2>
+        <div id="einst"></div>
+        <h2>Ich will …</h2>
+        <div class="wahl" id="wahlRolle">
+          <button data-r="verstecker" class="an">🙈 verstecken</button><button data-r="sucher">👀 suchen</button><button data-r="zufall">🎲 egal</button>
+        </div>
+      </div>
+    </div>
     <button class="gross" id="lobbyStart">▶ Runde starten</button>
-    <p><button class="klein" id="lobbyRaus">⬅ Verlassen</button></p>
+    <p><button class="klein" id="lobbyRaus">⬅ Zurück</button></p>
   </div>
 </div>
 
@@ -99,6 +123,7 @@
     <h1 id="sieger" style="font-size:2.2rem">…</h1>
     <div id="punkte"></div>
     <button class="gross" id="nochmal">🔁 Nochmal</button>
+    <button class="klein" id="zurLobby">⚙️ Zur Lobby</button>
     <button class="klein" id="zumStart">⬅ Hauptmenü</button>
   </div>
 </div>
@@ -110,8 +135,15 @@
 import * as THREE from 'three';
 
 // ===================== EINSTELLUNGEN (hier kannst du alles ändern!) =====================
-const VERSTECK_ZEIT = 60;       // So lange dürfen sich die Verstecker verstecken (Sekunden)
-const SUCH_ZEIT = 150;          // So lange dürfen die Sucher suchen
+// Die Lobby-Einstellungen (Startwerte – in der Lobby kann man sie mit + und − ändern)
+const einst = { bots: 4, sucher: 1, versteckZeit: 60, suchZeit: 150 };
+const EINST_REGLER = [
+  { k: 'bots', name: '🤖 Bots', min: 0, max: 9, schritt: 1 },
+  { k: 'sucher', name: '👀 Sucher', min: 1, max: 4, schritt: 1 },
+  { k: 'versteckZeit', name: '🙈 Versteckzeit', min: 20, max: 120, schritt: 10, zeit: true },
+  { k: 'suchZeit', name: '⏱️ Suchzeit', min: 60, max: 300, schritt: 30, zeit: true },
+];
+const MAX_SPIELER = 10;
 const TIPP_WEITE = 3.5;         // So nah musst du sein, um jemanden anzutippen (Meter)
 const DANEBEN_PAUSE = 1.5;      // Daneben getippt? So lange musst du warten
 const LAUF = 3.2, RENN = 5.2;   // Lauftempo (Meter pro Sekunde)
@@ -364,20 +396,28 @@ function gehen(L, dx, dz, tempo, dt) {
 }
 
 // ===================== RUNDE =====================
-let phase = 'menu', zeit = 0, rundeNr = 0, meldungen = [], danebenT = 0, rolleWunsch = 'verstecker', botAnzahl = 4, sieger = null;
+let phase = 'menu', zeit = 0, rundeNr = 0, meldungen = [], danebenT = 0, rolleWunsch = 'verstecker', sieger = null;
 let pipette = 0x6fb8ff, palette = [0x6fb8ff, 0xffd166, 0xff5fa2, 0x5be37d, 0xffffff, 0x2b2b33];
 function meldung(text, t = 3) { meldungen.push({ text, t }); if (meldungen.length > 4) meldungen.shift(); }
 const FLUR_START = [[12, 12], [13.5, 12], [15, 12], [16.5, 12], [18, 12], [12, 16], [13.5, 16], [15, 16], [16.5, 16], [18, 16]];
 // Gastgeber (oder allein): neue Runde mit Rollen
+// Die Einstellungen müssen zusammenpassen: höchstens 10 Spieler, mindestens 1 Verstecker
+function einstPruefen() {
+  const menschen = 1 + (mp.aktiv ? mp.gaeste.size : 0);
+  einst.bots = Math.max(menschen < 2 ? 1 : 0, Math.min(MAX_SPIELER - menschen, einst.bots));
+  einst.sucher = Math.max(1, Math.min(menschen + einst.bots - 1, 4, einst.sucher));
+  einst.versteckZeit = Math.max(20, Math.min(120, einst.versteckZeit)); einst.suchZeit = Math.max(60, Math.min(300, einst.suchZeit));
+}
 function rundeAufstellen() {
-  const menschen = mp.aktiv ? [{ id: 'host', name: meinName(), wunsch: rolleWunsch }, ...[...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name, wunsch: g.wunsch }))] : [{ id: 'host', name: meinName(), wunsch: rolleWunsch }];
-  const auf = menschen.map(m => ({ id: m.id, name: m.name, mensch: m.id, rolle: m.wunsch === 'zufall' ? (Math.random() < 0.3 ? 'sucher' : 'verstecker') : m.wunsch }));
+  einstPruefen();
+  const menschen = [{ id: 'host', name: meinName(), wunsch: rolleWunsch }, ...(mp.aktiv ? [...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name, wunsch: g.wunsch })) : [])];
+  const auf = menschen.map(m => ({ id: m.id, name: m.name, mensch: m.id, wunsch: m.wunsch, rolle: 'verstecker' }));
   const namen = [...BOT_NAMEN].sort(() => Math.random() - 0.5);
-  for (let i = 0; i < botAnzahl; i++) auf.push({ id: 'bot' + i, name: namen[i], bot: true, rolle: 'verstecker' });
-  // Mindestens 1 Sucher und mindestens 1 Verstecker
-  if (!auf.some(a => a.rolle === 'sucher')) { const b = auf.find(a => a.bot) || auf[0]; b.rolle = 'sucher'; }
-  if (!auf.some(a => a.rolle === 'verstecker')) auf.push({ id: 'botX', name: namen[8], bot: true, rolle: 'verstecker' });
-  if (auf.length >= 7 && auf.filter(a => a.rolle === 'sucher').length < 2) { const b = auf.find(a => a.bot && a.rolle === 'verstecker'); if (b) b.rolle = 'sucher'; }
+  for (let i = 0; i < einst.bots; i++) auf.push({ id: 'bot' + i, name: namen[i % namen.length], bot: true, wunsch: 'zufall', rolle: 'verstecker' });
+  // Sucher verteilen: zuerst wer suchen WILL, dann wem es egal ist (auch Bots), zuletzt wer sich lieber versteckt
+  const misch = l => l.sort(() => Math.random() - 0.5);
+  const reihe = [...misch(auf.filter(a => a.wunsch === 'sucher')), ...misch(auf.filter(a => a.wunsch === 'zufall')), ...misch(auf.filter(a => a.wunsch === 'verstecker'))];
+  for (const a of reihe.slice(0, Math.min(einst.sucher, auf.length - 1))) a.rolle = 'sucher';
   auf.forEach((a, i) => { const [x, z] = FLUR_START[i % FLUR_START.length]; Object.assign(a, { x, z, yaw: 0, farben: TEILE.map(() => START_FARBE[i % START_FARBE.length]) }); });
   return auf;
 }
@@ -385,7 +425,7 @@ function rundeStarten(auf) {
   alleWeg();
   for (const a of auf) neuePerson(a);
   ich = leute.get(mp.aktiv ? mp.meineId : 'host');
-  rundeNr++; phase = 'verstecken'; zeit = VERSTECK_ZEIT; sieger = null; meldungen = []; danebenT = 0;
+  rundeNr++; phase = 'verstecken'; zeit = einst.versteckZeit; sieger = null; meldungen = []; danebenT = 0;
   zeigeNur(null);
   meldung(ich.rolle === 'sucher' ? '👀 Du bist SUCHER! Augen zu und zählen …' : '🙈 Du bist VERSTECKER! Schnell: anmalen (Tab) und verstecken!', 5);
   ton('pfiff'); musik('verstecken');
@@ -393,7 +433,7 @@ function rundeStarten(auf) {
 }
 function phaseUpdate(dt) {   // Nur Gastgeber / allein
   zeit -= dt;
-  if (phase === 'verstecken' && zeit <= 0) { phase = 'suchen'; zeit = SUCH_ZEIT; meldung('👀 Die Sucher kommen! Ab jetzt: still halten!', 4); ton('pfiff'); musik('suchen'); mpEreignis({ k: 'phase' }); }
+  if (phase === 'verstecken' && zeit <= 0) { phase = 'suchen'; zeit = einst.suchZeit; meldung('👀 Die Sucher kommen! Ab jetzt: still halten!', 4); ton('pfiff'); musik('suchen'); mpEreignis({ k: 'phase' }); }
   else if (phase === 'suchen') {
     for (const L of leute.values()) if (L.rolle === 'verstecker' && !L.gefunden) L.punkte += dt / 10;
     const rest = [...leute.values()].filter(L => L.rolle === 'verstecker' && !L.gefunden).length;
@@ -416,7 +456,7 @@ function endeZeigen(d) {
   for (const [id, name, p, rolle, gef] of [...d.punkte].sort((a, b) => b[2] - a[2])) {
     const z = document.createElement('p'); z.textContent = `${rolle === 'sucher' ? '👀' : gef ? '😵' : '🙈'} ${name}${ich && id === ich.id ? ' (Du)' : ''}: ${p} Punkte`; box.appendChild(z);
   }
-  $('nochmal').classList.toggle('hidden', istGast());
+  $('nochmal').classList.toggle('hidden', istGast()); $('zurLobby').classList.toggle('hidden', istGast());
   zeigeNur('ende');
 }
 // Antippen: Hat der Sucher jemanden gefunden?
@@ -762,6 +802,7 @@ function mpVomGast(id, d) {
     L.yaw = zahl(d.y, -1e4, 1e4) ?? L.yaw; L.bewegt = !!d.b; L.pose = POSEN[d.po] ? d.po : 'stehen';
   } else if (d.t === 'f' && L && Array.isArray(d.f) && d.f.length === 6) { farbenSetzen(L, d.f); mpAnAlle({ t: 'f', id, f: L.farben }); }
   else if (d.t === 'tag' && L) antippen(L, leute.get(d.z));
+  else if (d.t === 'wunsch' && phase === 'lobby' && ['verstecker', 'sucher', 'zufall'].includes(d.w)) { const g = mp.gaeste.get(id); if (g) { g.wunsch = d.w; lobbyZeigen(); } }
 }
 async function mpBeitreten() {
   const code = $('code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -781,7 +822,12 @@ async function mpBeitreten() {
 }
 function mpVomHost(d) {
   if (!d || typeof d !== 'object') return;
-  if (d.t === 'lobby') { phase = 'lobby'; lobbyMalen(d.liste || [], d.code); zeigeNur('lobby'); }
+  if (d.t === 'lobby') {
+    if (phase !== 'lobby') { alleWeg(); musik('aus'); if (document.pointerLockElement) document.exitPointerLock(); }
+    phase = 'lobby';
+    if (d.einst) for (const R of EINST_REGLER) if (Number.isFinite(d.einst[R.k])) einst[R.k] = d.einst[R.k];
+    lobbyMalen(Array.isArray(d.liste) ? d.liste : [], d.code); zeigeNur('lobby');
+  }
   else if (d.t === 'runde' && Array.isArray(d.auf)) rundeStarten(d.auf.map(a => ({ ...a, name: String(a.name).slice(0, 16) })));
   else if (d.t === 's') {
     phase = d.ph === 1 ? 'verstecken' : d.ph === 2 ? 'suchen' : phase; zeit = Number(d.zt) || 0;
@@ -806,28 +852,76 @@ function mpTick(dt) {
       l: [...leute.values()].map(L => [L.id, Math.round(L.x * 100) / 100, Math.round(L.z * 100) / 100, Math.round(L.yaw * 100) / 100, L.pose, L.rolle === 'sucher' ? 1 : 0, L.gefunden ? 1 : 0, L.bewegt ? 1 : 0]) });
   } else if (istGast() && ich && ['verstecken', 'suchen'].includes(phase)) mpSende({ t: 'p', x: Math.round(ich.x * 100) / 100, z: Math.round(ich.z * 100) / 100, y: Math.round(ich.yaw * 100) / 100, po: ich.pose, b: ich.bewegt ? 1 : 0 });
 }
-function lobbyListe() { return [{ id: 'host', name: meinName() + ' 👑' }, ...[...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name }))]; }
-function lobbyZeigen() { phase = 'lobby'; const l = lobbyListe(); mpAnAlle({ t: 'lobby', liste: l, code: mp.code }); lobbyMalen(l, mp.code); zeigeNur('lobby'); }
+function lobbyListe() {
+  einstPruefen();
+  const l = [{ id: 'host', name: meinName(), w: rolleWunsch, chef: 1 }, ...[...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name, w: g.wunsch }))];
+  for (let i = 0; i < einst.bots; i++) l.push({ id: 'bot' + i, name: 'Bot ' + (i + 1), w: 'zufall', bot: 1 });
+  return l;
+}
+function lobbyZeigen() {
+  if (ich || leute.size) alleWeg();
+  if (phase !== 'lobby') { musik('aus'); if (document.pointerLockElement) document.exitPointerLock(); }
+  phase = 'lobby';
+  const l = lobbyListe();
+  mpAnAlle({ t: 'lobby', liste: l, code: mp.code, einst });
+  lobbyMalen(l, mp.code); zeigeNur('lobby');
+}
+const WUNSCH_TEXT = { verstecker: '🙈 will verstecken', sucher: '👀 will suchen', zufall: '🎲 egal' };
+const zeitText = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 function lobbyMalen(liste, code) {
+  const darf = !istGast();   // Nur der Gastgeber (oder wer allein spielt) darf einstellen
+  $('lobbyTitel').textContent = mp.aktiv ? '🏠 ONLINE-LOBBY' : '🎮 LOBBY';
+  $('codeSchild').classList.toggle('hidden', !mp.aktiv);
   $('lobbyCode').textContent = code || mp.code;
+  $('lobbyText').textContent = istGast() ? 'Warte, bis der Gastgeber die Runde startet …' : mp.aktiv ? 'Sag deinen Freunden den Code! Stell alles ein und starte die Runde.' : 'Stell alles ein, wie du willst – dann los!';
+  // Mitspieler-Liste
   const box = $('liste'); box.innerHTML = '';
-  for (const p of liste) { const z = document.createElement('div'); z.textContent = `🦎 ${p.name}`; box.appendChild(z); }
-  $('lobbyStart').classList.toggle('hidden', istGast());
-  $('lobbyText').textContent = istGast() ? 'Warte, bis der Gastgeber die Runde startet …' : `Sag deinen Freunden den Code! Dazu kommen noch ${botAnzahl} Bots.`;
+  liste.forEach((p, i) => {
+    const z = document.createElement('div'); if (p.bot) z.className = 'bot';
+    const punkt = document.createElement('span'); punkt.className = 'punkt'; punkt.style.background = hex(START_FARBE[i % START_FARBE.length]);
+    const name = document.createElement('span'); name.textContent = `${p.bot ? '🤖' : '🦎'} ${String(p.name).slice(0, 16)}${p.chef ? ' 👑' : ''}${!p.bot && p.id === (mp.aktiv ? mp.meineId : 'host') ? ' (Du)' : ''}`;
+    const rolle = document.createElement('span'); rolle.className = 'rolle'; rolle.textContent = p.bot ? '🎲 egal' : WUNSCH_TEXT[p.w] || '🎲 egal';
+    z.append(punkt, name, rolle); box.appendChild(z);
+  });
+  $('anzahl').textContent = `(${liste.length} von ${MAX_SPIELER})`;
+  const sucher = Math.min(einst.sucher, Math.max(1, liste.length - 1));
+  $('vorschau').textContent = `👀 ${sucher} Sucher  ·  🙈 ${Math.max(0, liste.length - sucher)} Verstecker`;
+  // Einstellungen mit + und −
+  const eb = $('einst'); eb.innerHTML = '';
+  for (const R of EINST_REGLER) {
+    const z = document.createElement('div'); z.className = 'zeile';
+    const was = document.createElement('span'); was.className = 'was'; was.textContent = R.name;
+    const minus = document.createElement('button'), plus = document.createElement('button'), wert = document.createElement('span');
+    minus.textContent = '−'; plus.textContent = '+'; wert.className = 'wert'; wert.textContent = R.zeit ? zeitText(einst[R.k]) : einst[R.k];
+    const aendern = d => { const alt = einst[R.k]; einst[R.k] = Math.max(R.min, Math.min(R.max, einst[R.k] + d * R.schritt)); einstPruefen(); if (einst[R.k] !== alt) ton('klick'); else ton('daneben'); lobbyZeigen(); };
+    minus.onclick = () => aendern(-1); plus.onclick = () => aendern(1);
+    minus.disabled = !darf || einst[R.k] <= R.min; plus.disabled = !darf || einst[R.k] >= R.max;
+    z.append(was, minus, wert, plus); eb.appendChild(z);
+  }
+  for (const x of $('wahlRolle').querySelectorAll('button')) x.classList.toggle('an', x.dataset.r === rolleWunsch);
+  $('lobbyStart').classList.toggle('hidden', !darf);
 }
 
 // ===================== MENÜS =====================
 function zeigeNur(id) { for (const o of ['start', 'lobby', 'malpanel', 'ende']) $(o).classList.toggle('hidden', o !== id); $('zurueck').classList.toggle('hidden', !['start', 'lobby'].includes(id)); }
-for (const b of $('wahlRolle').querySelectorAll('button')) b.onclick = () => { rolleWunsch = b.dataset.r; for (const x of $('wahlRolle').querySelectorAll('button')) x.classList.toggle('an', x === b); ton('klick'); };
-for (const b of $('wahlBots').querySelectorAll('button')) b.onclick = () => { botAnzahl = Number(b.dataset.b); for (const x of $('wahlBots').querySelectorAll('button')) x.classList.toggle('an', x === b); ton('klick'); };
+for (const b of $('wahlRolle').querySelectorAll('button')) b.onclick = () => {
+  rolleWunsch = b.dataset.r; ton('klick');
+  try { localStorage.setItem('farbversteck-wunsch', rolleWunsch); } catch (e) { /* egal */ }
+  if (istGast()) { mpSende({ t: 'wunsch', w: rolleWunsch }); for (const x of $('wahlRolle').querySelectorAll('button')) x.classList.toggle('an', x === b); }
+  else lobbyZeigen();
+};
+try { const w = localStorage.getItem('farbversteck-wunsch'); if (WUNSCH_TEXT[w]) rolleWunsch = w; const e = JSON.parse(localStorage.getItem('farbversteck-einst') || '{}'); for (const R of EINST_REGLER) if (Number.isFinite(e[R.k])) einst[R.k] = e[R.k]; } catch (e) { /* egal */ }
+function einstMerken() { try { localStorage.setItem('farbversteck-einst', JSON.stringify(einst)); } catch (e) { /* egal */ } }
+function rundeLos() { einstMerken(); const auf = rundeAufstellen(); mpAnAlle({ t: 'runde', auf }); rundeStarten(auf); }
 try { $('name').value = localStorage.getItem('farbversteck-name') || ''; } catch (e) { /* egal */ }
 $('name').addEventListener('change', () => { try { localStorage.setItem('farbversteck-name', $('name').value); } catch (e) { /* egal */ } });
-$('solo').onclick = () => { audio(); rundeStarten(rundeAufstellen()); };
+$('solo').onclick = () => { audio(); mpBeenden(); lobbyZeigen(); };
 $('raum').onclick = () => { audio(); mpRaumErstellen(); };
 $('beitreten').onclick = () => { audio(); mpBeitreten(); };
-$('lobbyStart').onclick = () => { const auf = rundeAufstellen(); mpAnAlle({ t: 'runde', auf }); rundeStarten(auf); };
-$('lobbyRaus').onclick = () => { mpBeenden(); zeigeNur('start'); phase = 'menu'; };
-$('nochmal').onclick = () => { if (mp.aktiv) { const auf = rundeAufstellen(); mpAnAlle({ t: 'runde', auf }); rundeStarten(auf); } else rundeStarten(rundeAufstellen()); };
+$('lobbyStart').onclick = rundeLos;
+$('lobbyRaus').onclick = () => { mpBeenden(); zeigeNur('start'); phase = 'menu'; mpStatus(''); };
+$('nochmal').onclick = rundeLos;
+$('zurLobby').onclick = lobbyZeigen;
 $('zumStart').onclick = () => { mpBeenden(); alleWeg(); phase = 'menu'; musik('aus'); zeigeNur('start'); };
 
 // ===================== HAUPTSCHLEIFE =====================
