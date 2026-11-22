@@ -33,6 +33,32 @@
   .hidden { display: none !important; }
   button.klein { background: #1b1f3a; color: #fff; border: 2px solid #3d4266; border-radius: 0.7rem; padding: 0.3rem 0.9rem; cursor: pointer; font: 0.95rem system-ui, sans-serif; margin-top: 0.6rem; }
   a { color: #c9c3ff; }
+  .overlay.links { justify-content: flex-start; background: linear-gradient(90deg, #14172ef2 0%, #14172ee6 42%, #14172e00 75%); }
+  .overlay.links .box { max-width: 36rem; margin: auto 0; }
+  input#kontoName { font: 1.2rem system-ui, sans-serif; padding: 0.5rem 0.8rem; border-radius: 0.7rem; border: 2px solid #3d4266; background: #1b1f3a; color: #fff; width: 80%; }
+  .farben { display: flex; gap: 0.5rem; justify-content: center; }
+  .farben button { width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 3px solid #3d4266; cursor: pointer; }
+  .farben button.an { border-color: #ffd166; transform: scale(1.15); }
+  .fehler { color: #ff8080 !important; min-height: 1.2em; }
+  .kleinText { font-size: 0.85rem; }
+  .kontoZeile { display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap; font-size: 1.15rem; margin: 0.4rem 0; }
+  .kontoZeile button.klein { margin-top: 0; }
+  .tabs { display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap; margin: 0.6rem 0; }
+  .tabs button { background: #1b1f3a; color: #fff; border: 3px solid #3d4266; border-radius: 0.8rem; padding: 0.4rem 0.8rem; cursor: pointer; font: bold 1rem system-ui, sans-serif; }
+  .tabs button.an { border-color: #ffd166; background: #3d4266; }
+  .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.6rem; max-height: 48vh; overflow-y: auto; padding: 0.3rem; }
+  .item { background: #1b1f3a; border: 3px solid #3d4266; border-radius: 1rem; padding: 0.5rem; cursor: pointer; transition: transform .1s; }
+  .item:hover { transform: scale(1.03); }
+  .item.an { border-color: #5be37d; }
+  .item.vorschau { border-color: #ffd166; }
+  .item .em { font-size: 2rem; display: block; }
+  .item small { display: block; color: #c9c3ff; font-size: 0.75rem; min-height: 2.2em; margin: 0.2rem 0; }
+  .item .preis { font-weight: bold; color: #ffd166; }
+  .item button { margin-top: 0.3rem; background: linear-gradient(90deg, #ff8a1f, #a347ff); color: #fff; border: none; border-radius: 0.6rem; padding: 0.3rem 0.8rem; font: bold 0.9rem system-ui, sans-serif; cursor: pointer; }
+  .item button:disabled { background: #3d4266; color: #8f88c9; cursor: not-allowed; }
+  .ausr { display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap; font-size: 0.9rem; }
+  .ausr span { background: #1b1f3a; border-radius: 0.7rem; padding: 0.3rem 0.6rem; }
+  details { margin-top: 0.8rem; } summary { cursor: pointer; color: #ffd166; font-weight: bold; }
   a.zurueck { position: fixed; top: 0.6rem; left: 0.6rem; font-size: 0.9rem; z-index: 11; }
 </style>
 </head>
@@ -41,13 +67,33 @@
 <canvas id="hud"></canvas>
 <a class="zurueck" id="zurueck" href="../../">⬅ Alle Spiele</a>
 
-<div id="menu" class="overlay">
+<div id="konto" class="overlay links hidden">
   <div class="box">
     <h1>KLECKS-KRIEG 3D</h1>
+    <div id="kontoListeBox"><h2>👤 Wer spielt?</h2><div class="wahl" id="kontoListe"></div></div>
+    <h2>✨ Neues Konto erstellen</h2>
+    <p>Dein Spielername – nimm einen <b>Spitznamen</b>, nicht deinen echten Namen!</p>
+    <input id="kontoName" maxlength="14" placeholder="z. B. FarbBlitz" autocomplete="off">
+    <h2>Hautfarbe</h2><div class="farben" id="wahlHaut"></div>
+    <h2>Haarfarbe</h2><div class="farben" id="wahlHaar"></div>
+    <h2>Frisur</h2><div class="wahl" id="wahlFrisur"></div>
+    <p id="kontoFehler" class="fehler"></p>
+    <button class="gross" id="kontoErstellen">✨ Konto erstellen</button>
+    <p class="kleinText">💾 Dein Konto wird nur hier im Browser auf diesem Computer gespeichert.</p>
+  </div>
+</div>
+
+<div id="menu" class="overlay links hidden">
+  <div class="box">
+    <h1>KLECKS-KRIEG 3D</h1>
+    <div class="kontoZeile"><span>👤 <b id="menuName"></b></span><span>🪙 <b id="menuMuenzen"></b></span>
+      <button class="klein" id="kontoWechseln">🔄 Konto wechseln</button></div>
     <p>Team <b style="color:#ff8a1f">Orange</b> gegen Team <b style="color:#a347ff">Lila</b>! Mal in 3 Minuten mehr Boden an als die Gegner.</p>
-    <p style="font-size:1.2rem">Du bist ein <b>Farbtaucher</b> 🤿 – mit Glashelm und Farbtank! Such dir deine Ausrüstung aus:</p>
-    <h2>Deine Waffe</h2><div class="wahl" id="wahlWaffe"></div>
-    <h2>Deine Ulti</h2><div class="wahl" id="wahlUlti"></div>
+    <h2>🎒 Deine Ausrüstung</h2><div class="ausr" id="menuAusruestung"></div>
+    <button class="gross" id="start">▶ Los geht's!</button>
+    <button class="gross" id="zuShops">🛒 Shops</button>
+    <h2>⚡ Deine Ulti</h2><div class="wahl" id="wahlUlti"></div>
+    <details><summary>🎮 Steuerung</summary>
     <div class="steuerung">
       <span class="taste">W A S D</span><span>Laufen</span>
       <span class="taste">Maus</span><span>Umschauen</span>
@@ -60,9 +106,20 @@
       <span class="taste">M</span><span>Musik an/aus 🎵</span>
     </div>
     <p style="margin-top:0.8rem">⚠️ In der Gegnerfarbe bist du langsam und verlierst Leben! Malen lädt deine Ulti auf.</p>
-    <button class="gross" id="start">▶ Los geht's!</button>
+    </details>
     <p><button class="klein" id="musikKnopf">🎵 Musik: an</button></p>
     <p style="margin-top:0.8rem"><a href="2d.html">🗺️ Alte 2D-Version spielen</a></p>
+  </div>
+</div>
+
+<div id="shop" class="overlay links hidden">
+  <div class="box">
+    <h1 style="font-size:2.2rem">🛒 SHOPS</h1>
+    <div class="kontoZeile"><span>🪙 <b id="shopMuenzen"></b> Münzen</span></div>
+    <div class="tabs" id="shopTabs"></div>
+    <p id="shopInfo">Klick auf ein Teil, um es anzuprobieren!</p>
+    <div class="items" id="shopItems"></div>
+    <button class="gross" id="shopZurueck">⬅ Zurück</button>
   </div>
 </div>
 
@@ -81,7 +138,7 @@
     <div class="balken"><div id="balkenO" style="background:#ff8a1f"></div><div id="balkenL" style="background:#a347ff"></div></div>
     <p id="statistik"></p>
     <button class="gross" id="nochmal">🔁 Nochmal</button>
-    <button class="gross" id="zumMenu">🎒 Ausrüstung ändern</button>
+    <button class="gross" id="zumMenu">🛒 Menü &amp; Shops</button>
   </div>
 </div>
 
@@ -128,9 +185,86 @@ const ULTIS = {
   wirbel:  { name: 'Farbsturm',    emoji: '🌀', info: 'Hochspringen & riesiger Platscher' },
 };
 
-// Deine Auswahl (wird im Browser gemerkt)
-let auswahl = { waffe: 'spritzer', ulti: 'regen' };
-try { Object.assign(auswahl, JSON.parse(localStorage.getItem('klecks3d-auswahl') || '{}')); } catch (e) {}
+// ================== SHOP-SACHEN ==================
+const WAFFEN_PREIS = { spritzer: 0, eimer: 300, pinsel: 350, roller: 400, sniper: 500 };
+const HEMDEN = {
+  tshirt:   { name: 'Basic-T-Shirt', emoji: '👕', preis: 0,   info: 'Ganz normal, aber bequem', bonus: {}, farbe: '#f4f4f4', aermel: 'kurz' },
+  streifen: { name: 'Ringelshirt',   emoji: '🦓', preis: 150, info: '🎨 Tinte sparen +6%', bonus: { tinte: 0.06 }, farbe: '#3b6fd8', streifen: '#ffffff', aermel: 'kurz' },
+  trikot:   { name: 'Fußballtrikot', emoji: '⚽', preis: 250, info: '🏃 Laufen +7%', bonus: { tempo: 0.07 }, farbe: '#e63946', akzent: '#ffffff', aermel: 'kurz' },
+  hawaii:   { name: 'Hawaiihemd',    emoji: '🌺', preis: 300, info: '⚡ Ulti lädt 15% schneller', bonus: { ulti: 0.15 }, farbe: '#ff9f1c', blumen: true, aermel: 'kurz' },
+  hoodie:   { name: 'Kapuzenpulli',  emoji: '🟢', preis: 350, info: '❤️ Heilt 25% schneller', bonus: { heilen: 0.25 }, farbe: '#2a9d8f', kapuze: true, aermel: 'lang' },
+  jacke:    { name: 'Lederjacke',    emoji: '🧥', preis: 500, info: '🛡️ 12% weniger Schaden', bonus: { schutz: 0.12 }, farbe: '#26272b', jacke: true, aermel: 'lang' },
+};
+const SCHUHE = {
+  turnschuhe: { name: 'Turnschuhe',   emoji: '👟', preis: 0,   info: 'Für den Anfang', bonus: {}, farbe: '#ffffff', akzent: '#e63946', sohle: '#dddddd' },
+  sandalen:   { name: 'Sandalen',     emoji: '🩴', preis: 120, info: '🌊 Abtauchen 12% schneller', bonus: { tauchen: 0.12 } },
+  sneaker:    { name: 'Neon-Sneaker', emoji: '⚡', preis: 200, info: '🏃 Laufen +8%', bonus: { tempo: 0.08 }, farbe: '#9cff3a', akzent: '#ff5fa2', sohle: '#ff5fa2' },
+  stiefel:    { name: 'Gummistiefel', emoji: '🥾', preis: 250, info: '🟣 Gegnerfarbe stört nur halb so viel', bonus: { feindfarbe: 0.5 }, farbe: '#ffd166' },
+  sprung:     { name: 'Sprungschuhe', emoji: '🦘', preis: 350, info: '⬆️ 35% höher springen', bonus: { sprung: 0.35 }, farbe: '#5a6091', akzent: '#ffd166', sohle: '#23263d' },
+  rollschuhe: { name: 'Rollschuhe',   emoji: '🛼', preis: 450, info: '🏃 Laufen +13%', bonus: { tempo: 0.13 }, farbe: '#ff5fa2', akzent: '#ffffff', sohle: '#ffffff' },
+};
+const KOEPFE = {
+  keine:      { name: 'Nichts',       emoji: '🙂', preis: 0,    info: 'Zeig deine Frisur!', bonus: {} },
+  cap:        { name: 'Baseballcap',  emoji: '🧢', preis: 100,  info: '⚡ Ulti +6%', bonus: { ulti: 0.06 }, farbe: '#e63946' },
+  brille:     { name: 'Sonnenbrille', emoji: '🕶️', preis: 120,  info: '🎨 Tinte sparen +5%', bonus: { tinte: 0.05 } },
+  muetze:     { name: 'Bommelmütze',  emoji: '🧶', preis: 180,  info: '❤️ Heilt 15% schneller', bonus: { heilen: 0.15 }, farbe: '#3b6fd8' },
+  kopfhoerer: { name: 'Kopfhörer',    emoji: '🎧', preis: 250,  info: '💣 Bomben 15% billiger', bonus: { bombe: 0.15 } },
+  piratenhut: { name: 'Piratenhut',   emoji: '🏴‍☠️', preis: 400,  info: '🛡️ 8% weniger Schaden', bonus: { schutz: 0.08 } },
+  krone:      { name: 'Goldkrone',    emoji: '👑', preis: 1000, info: '⚡ Ulti +20% – und du siehst königlich aus!', bonus: { ulti: 0.2 } },
+};
+const FRISUREN = { kurz: { name: 'Kurz', emoji: '💇' }, stachel: { name: 'Stacheln', emoji: '🦔' }, locken: { name: 'Locken', emoji: '🌀' } };
+const HAUTFARBEN = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
+const HAARFARBEN = ['#5a3825', '#2b1d14', '#e8c15a', '#b5522b', '#1b1f3a'];
+const SLOT_LISTE = { waffe: WAFFEN, hemd: HEMDEN, schuhe: SCHUHE, kopf: KOEPFE };
+const hat = (obj, id) => typeof id === 'string' && Object.prototype.hasOwnProperty.call(obj, id);
+
+// Bonus von allen angezogenen Sachen zusammenzählen
+const BONUS_LEER = { tempo: 0, tinte: 0, schutz: 0, ulti: 0, tauchen: 0, heilen: 0, sprung: 0, feindfarbe: 0, bombe: 0 };
+function bonusVon(an) {
+  const b = { ...BONUS_LEER };
+  for (const [liste, id] of [[HEMDEN, an.hemd], [SCHUHE, an.schuhe], [KOEPFE, an.kopf]]) {
+    if (hat(liste, id)) for (const k in liste[id].bonus) b[k] += liste[id].bonus[k];
+  }
+  return b;
+}
+function bombeKosten(e) { return 50 * (1 - e.bonus.bombe); }
+
+// ================== KONTEN (im Browser gespeichert) ==================
+function neuesKonto(name, haut, haar, frisur) {
+  return { name, muenzen: 150, haut, haar, frisur,
+    besitz: { waffe: ['spritzer'], hemd: ['tshirt'], schuhe: ['turnschuhe'], kopf: ['keine'] },
+    an: { waffe: 'spritzer', hemd: 'tshirt', schuhe: 'turnschuhe', kopf: 'keine', ulti: 'regen' },
+    rekord: 0, runden: 0, siege: 0 };
+}
+// Falls gespeicherte Daten kaputt oder alt sind: alles Wichtige wieder richtig machen
+function kontoReparieren(k) {
+  const v = neuesKonto(String(k.name).slice(0, 14),
+    HAUTFARBEN.includes(k.haut) ? k.haut : HAUTFARBEN[1], HAARFARBEN.includes(k.haar) ? k.haar : HAARFARBEN[0], hat(FRISUREN, k.frisur) ? k.frisur : 'kurz');
+  v.muenzen = Math.max(0, Math.floor(Number(k.muenzen) || 0));
+  for (const f of ['rekord', 'runden', 'siege']) v[f] = Math.max(0, Math.floor(Number(k[f]) || 0));
+  for (const slot of Object.keys(SLOT_LISTE)) {
+    const liste = SLOT_LISTE[slot];
+    if (k.besitz && Array.isArray(k.besitz[slot])) for (const id of k.besitz[slot]) if (hat(liste, id) && !v.besitz[slot].includes(id)) v.besitz[slot].push(id);
+    if (k.an && hat(liste, k.an[slot]) && v.besitz[slot].includes(k.an[slot])) v.an[slot] = k.an[slot];
+  }
+  if (k.an && hat(ULTIS, k.an.ulti)) v.an.ulti = k.an.ulti;
+  return v;
+}
+const NAME_OK = /^[\p{L}\p{N} _\-]{2,14}$/u;
+const konten = new Map();
+let konto = null;
+try {
+  const daten = JSON.parse(localStorage.getItem('klecks3d-konten') || '[]');
+  if (Array.isArray(daten)) for (const k of daten) if (k && typeof k.name === 'string' && NAME_OK.test(k.name)) konten.set(k.name, kontoReparieren(k));
+  konto = konten.get(localStorage.getItem('klecks3d-aktiv')) || null;
+} catch (e) {}
+function speichern() {
+  try {
+    localStorage.setItem('klecks3d-konten', JSON.stringify([...konten.values()]));
+    if (konto) localStorage.setItem('klecks3d-aktiv', konto.name);
+  } catch (e) {}
+}
+function kontoAussehen() { return { haut: konto.haut, haar: konto.haar, frisur: konto.frisur }; }
 
 // ================== WÄNDE ==================
 const waende = [];
@@ -200,7 +334,7 @@ function klecks(x, y, r, team, wer, ultiLaden = true) {
   if (wer) {
     wer.punkte += neu;
     if (ultiLaden && wer.ulti < 1) {
-      wer.ulti = Math.min(1, wer.ulti + neu / ULTI_PUNKTE);
+      wer.ulti = Math.min(1, wer.ulti + neu * (1 + wer.bonus.ulti) / ULTI_PUNKTE);
       if (wer.ulti >= 1 && wer.spieler) { meldung('⚡ Ulti bereit! Drück Q!'); ton('ulti'); }
     }
   }
@@ -263,6 +397,8 @@ const SOUNDS = {
   piep:    (t, v) => osz('square', 880, 880, 0.12, 0.08 * v, t, sfxGain, 3000),
   los:     (t, v) => osz('square', 1320, 1320, 0.4, 0.1 * v, t, sfxGain, 3000),
   plopp:   (t, v) => osz('sine', 200, 900, 0.12, 0.12 * v, t),
+  kauf:    (t, v) => { osz('square', 988, 988, 0.08, 0.07 * v, t, sfxGain, 3000); osz('square', 1319, 1319, 0.3, 0.07 * v, t + 0.08, sfxGain, 3000); },
+  nein:    (t, v) => osz('square', 220, 150, 0.2, 0.06 * v, t, sfxGain, 1500),
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
   pfiff:   (t, v) => osz('sine', 1200, 1500, 0.6, 0.15 * v, t),
   sieg:    (t, v) => [60, 64, 67, 72, 76].forEach((n, i) => osz('square', NOTE(n), NOTE(n), i === 4 ? 0.6 : 0.15, 0.08 * v, t + i * 0.12, sfxGain, 3000)),
@@ -425,81 +561,181 @@ function ringX(m, r, dicke, x, y, z) { const k = new THREE.Mesh(new THREE.TorusG
 function ringY(m, r, dicke, x, y, z) { const k = new THREE.Mesh(new THREE.TorusGeometry(r, dicke, 6, 20), m); k.rotation.x = Math.PI / 2; k.position.set(x, y, z); return k; }
 function tintenMaterial(team, glanz = 0.25) { return mat(TEAMS[team].col, { emissive: TEAMS[team].col, emissiveIntensity: glanz, roughness: 0.2 }); }
 
-// Der Farbtaucher! Er schaut in Richtung +x
-const HAUTFARBEN = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
-const HAARFARBEN = ['#5a3825', '#2b1d14', '#e8c15a', '#b5522b', '#1b1f3a'];
-const glasMat = new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: 0.25, roughness: 0.05, metalness: 0.2, depthWrite: false });
+// Der Junge! Er schaut in Richtung +x
 const MAT_STIEFEL = mat('#2b2f4a');
-function baueTaucher(m, team, haut, haar) {
+const MAT_GOLD = mat('#ffd166', { metalness: 0.8, roughness: 0.25, emissive: '#6b4e00', emissiveIntensity: 0.25 });
+const trikotNummer = (() => {
+  const c = leinwand(64, 64), x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.font = 'bold 44px Arial Black, sans-serif'; x.textAlign = 'center'; x.fillText('10', 32, 48);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+
+function schuhBauen(g, id, haut) {
+  const s = SCHUHE[id] || SCHUHE.turnschuhe;
+  if (id === 'sandalen') {
+    g.add(klotz(haut, 6.5, 2, 4, 1.2, -6, 0), kugel(haut, 2, 4.4, -6, 0, 1, 0.6, 1));
+    g.add(klotz(mat('#8a5a2e'), 7.4, 0.8, 4.6, 1.3, -7.1, 0), klotz(mat('#5a3825'), 1, 0.7, 4.4, 2.8, -4.9, 0), klotz(mat('#5a3825'), 1, 0.7, 4.4, -0.3, -4.9, 0));
+    return;
+  }
+  const sm = mat(s.farbe, { roughness: 0.6 });
+  if (id === 'stiefel') {
+    g.add(zylinder(sm, 3.1, 3.1, 6, 0, -3.4, 0), klotz(sm, 7, 3, 4.8, 1.3, -5.7, 0), kugel(sm, 2.4, 4.6, -5.7, 0, 1, 0.6, 1));
+    g.add(klotz(MAT_GUMMI, 7.8, 0.9, 5, 1.3, -7, 0), ringY(MAT_WEISS, 3.1, 0.4, 0, -0.6, 0));
+    return;
+  }
+  const hoch = id === 'sprung' ? 1.5 : id === 'rollschuhe' ? 1 : 0;   // Schuh steht etwas höher
+  g.add(klotz(sm, 7, 2.8, 4.6, 1.3, -5.8 + hoch, 0), kugel(sm, 2.3, 4.6, -5.8 + hoch, 0, 1, 0.65, 1));
+  g.add(klotz(mat(s.sohle), 7.6, 0.8, 4.8, 1.3, -7 + hoch, 0), klotz(mat(s.akzent), 3, 0.7, 4.75, 0.8, -5.3 + hoch, 0));
+  g.add(klotz(MAT_WEISS, 2.4, 0.4, 2, 3.2, -4.3 + hoch, 0));                                // Schnürsenkel
+  if (id === 'rollschuhe') {
+    g.add(klotz(MAT_METALL, 7, 0.6, 3, 1.3, -7.7 + hoch, 0));
+    for (const x of [-1.2, 3.8]) for (const z of [-1.8, 1.8]) g.add(kugel(mat('#ffd166'), 1.1, x, -8.2 + hoch, z));
+  }
+  if (id === 'sprung') for (const x of [-0.8, 3.4]) for (let i = 0; i < 3; i++) g.add(ringY(MAT_METALL, 1.2, 0.35, x, -7.6 - i * 0.6 + hoch, 0));
+}
+
+function haareBauen(kopf, frisur, haar) {
+  kopf.add(kugel(haar, 7.8, -1.5, 3.4, 0, 1, 0.62, 1), kugel(haar, 7.2, -2.5, 0.5, 0, 0.9, 0.9, 1));
+  if (frisur === 'stachel') {
+    for (let i = 0; i < 7; i++) {
+      const c = new THREE.Mesh(new THREE.ConeGeometry(1.8, 5.5, 6), haar);
+      const a = (i / 6 - 0.5) * 2.2;
+      c.position.set(-1 - Math.abs(a) * 1.2 + (i % 2) * 1.5, 7.5 - Math.abs(a) * 0.8, Math.sin(a) * 5);
+      c.rotation.set(Math.sin(a) * 0.5, 0, 0.55); kopf.add(c);
+    }
+  } else if (frisur === 'locken') {
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2;
+      kopf.add(kugel(haar, 2.6, -1.5 + Math.cos(a) * 5.8, 4.5 + (i % 2) * 1.2, Math.sin(a) * 5.8));
+    }
+    kopf.add(kugel(haar, 3, -1, 7.5, 0), kugel(haar, 2.6, 2.5, 6.2, 2), kugel(haar, 2.6, 2.5, 6.2, -2));
+  } else {
+    kopf.add(klotz(haar, 2, 1.4, 9, 5.5, 5.6, 0));      // kleiner Pony
+  }
+}
+
+function hutBauen(kopf, id) {
+  const h = KOEPFE[id];
+  if (!h || id === 'keine') return;
+  if (id === 'cap') {
+    const m = mat(h.farbe);
+    const kuppel = new THREE.Mesh(new THREE.SphereGeometry(8.2, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m); kuppel.position.y = 2; kopf.add(kuppel);
+    const schirm = zylinder(m, 5, 5, 0.6, 7.5, 2.2, 0); schirm.scale.z = 1.1; kopf.add(schirm, kugel(MAT_WEISS, 1, 0, 10.2, 0));
+  } else if (id === 'muetze') {
+    const m = mat(h.farbe, { roughness: 0.95 });
+    const kuppel = new THREE.Mesh(new THREE.SphereGeometry(8.3, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m); kuppel.position.y = 1.5; kuppel.scale.y = 1.2; kopf.add(kuppel);
+    kopf.add(ringY(MAT_WEISS, 8.1, 1.4, 0, 2, 0), ringY(MAT_WEISS, 7.4, 0.6, 0, 6, 0), kugel(MAT_WEISS, 2.8, 0, 12, 0));
+  } else if (id === 'brille') {
+    const glas = mat('#111318', { metalness: 0.6, roughness: 0.1 });
+    kopf.add(klotz(glas, 0.8, 2.6, 3.6, 7.6, 1.4, -2.8), klotz(glas, 0.8, 2.6, 3.6, 7.6, 1.4, 2.8), klotz(MAT_GRAU, 0.6, 0.6, 1.6, 7.8, 1.9, 0));
+    kopf.add(klotz(glas, 8, 0.5, 0.5, 3.5, 1.9, -7.3), klotz(glas, 8, 0.5, 0.5, 3.5, 1.9, 7.3));
+  } else if (id === 'kopfhoerer') {
+    const buegel = new THREE.Mesh(new THREE.TorusGeometry(8.4, 0.8, 6, 20, Math.PI), MAT_SCHWARZ); buegel.rotation.y = Math.PI / 2; kopf.add(buegel);
+    const pink = mat('#ff5fa2');
+    for (const z of [-8.4, 8.4]) kopf.add(zylinderZ(MAT_SCHWARZ, 3.2, 3.2, 2.2, 0, 0, z), zylinderZ(pink, 2.4, 2.4, 2.4, 0, 0, z));
+  } else if (id === 'piratenhut') {
+    const m = mat('#1b1b1f', { roughness: 0.8 });
+    const krempe = zylinder(m, 11, 11, 0.8, 0, 5.5, 0); krempe.scale.z = 0.75;
+    kopf.add(krempe, zylinder(m, 6.5, 7.6, 6, 0, 8.6, 0), ringY(MAT_GOLD, 7.6, 0.5, 0, 6.2, 0), kugel(MAT_WEISS, 1.6, 7.2, 8.8, 0));
+    kopf.add(klotz(MAT_WEISS, 0.4, 0.6, 3.4, 7.6, 7.1, 0));
+  } else if (id === 'krone') {
+    kopf.add(zylinder(MAT_GOLD, 6.2, 6.5, 3.2, 0, 7.4, 0));
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2, zacke = new THREE.Mesh(new THREE.ConeGeometry(1.3, 3.6, 6), MAT_GOLD);
+      zacke.position.set(Math.cos(a) * 5.6, 10.7, Math.sin(a) * 5.6); kopf.add(zacke);
+    }
+    kopf.add(kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 0.4 }), 1, 6.4, 7.4, 0),
+             kugel(mat('#3b9dff', { emissive: '#3b9dff', emissiveIntensity: 0.4 }), 0.8, 4.5, 7.4, 4.6),
+             kugel(mat('#3b9dff', { emissive: '#3b9dff', emissiveIntensity: 0.4 }), 0.8, 4.5, 7.4, -4.6));
+  }
+}
+
+function baueJunge(m, team, aussehen, an) {
   const k = new THREE.Group();
-  const hell = mat(TEAMS[team].hell, { roughness: 0.35 });
+  const hemd = HEMDEN[an.hemd] || HEMDEN.tshirt;
+  const haut = mat(aussehen.haut, { roughness: 0.6 }), haar = mat(aussehen.haar, { roughness: 0.8 });
+  const hemdM = mat(hemd.farbe, { roughness: 0.75 }), hose = mat('#3d5a99', { roughness: 0.85 });
   const dunkel = mat(TEAMS[team].dunkel, { roughness: 0.5 });
-  // Beine: Oberschenkel -> Knie -> Unterschenkel -> Stiefel mit Schwimmflosse
+  const lang = hemd.aermel === 'lang';
+  // Beine (Jeans) mit Knien und Schuhen
   const beine = [];
   for (const s of [-1, 1]) {
-    const huefte = new THREE.Group(); huefte.position.set(0, 14, s * 4);
-    huefte.add(zylinder(m, 3.1, 2.8, 7, 0, -3.5, 0));
+    const huefte = new THREE.Group(); huefte.position.set(0, 14, s * 3.6);
+    huefte.add(zylinder(hose, 3.1, 2.8, 7.5, 0, -3.6, 0));
     const knie = new THREE.Group(); knie.position.y = -7;
-    knie.add(kugel(dunkel, 2.9, 0, 0, 0), zylinder(m, 2.8, 2.5, 6, 0, -3, 0));
-    knie.add(klotz(MAT_STIEFEL, 7, 3, 5, 1, -5.6, 0), klotz(dunkel, 7, 0.7, 6.5, 7, -6.8, 0));
-    huefte.add(knie);
-    k.add(huefte); beine.push({ huefte, knie });
+    knie.add(kugel(hose, 2.8, 0, 0, 0), zylinder(hose, 2.8, 2.6, 5.5, 0, -2.8, 0));
+    schuhBauen(knie, an.schuhe, haut);
+    huefte.add(knie); k.add(huefte); beine.push({ huefte, knie });
   }
-  // Oberkörper (kann sich vorbeugen, wippen, zucken)
+  // Oberkörper mit Hemd
   const ober = new THREE.Group(); ober.position.y = 14; k.add(ober);
-  ober.add(zylinder(m, 7, 6, 16, 0, 8, 0), zylinder(MAT_GRAU, 6.4, 6.4, 2.2, 0, 1.5, 0));
-  ober.add(klotz(MAT_METALL, 1, 2.4, 3, 6.3, 1.5, 0));                    // Gürtelschnalle
-  ober.add(klotz(hell, 1.5, 6, 5, 6.6, 9.5, 0));                          // Abzeichen
-  ober.add(kugel(hell, 1.3, 7.3, 9.5, 0));
-  ober.add(kugel(hell, 3.4, 0, 14, -7.3, 1, 0.8, 1), kugel(hell, 3.4, 0, 14, 7.3, 1, 0.8, 1));   // Schulterpolster
-  // Arme: Schulter -> Ellbogen -> Unterarm -> Handschuh
+  ober.add(zylinder(hose, 6.2, 6.2, 3, 0, 0.6, 0), ringY(mat('#5a3825'), 6.2, 0.6, 0, 1.4, 0), klotz(MAT_METALL, 0.8, 1.6, 2.2, 6.3, 1.4, 0));
+  ober.add(zylinder(hemdM, 6.6, 6.2, 13, 0, 8.2, 0), kugel(hemdM, 3.4, 0, 13.6, -6.6), kugel(hemdM, 3.4, 0, 13.6, 6.6));
+  ober.add(zylinder(haut, 2.4, 2.6, 3.5, 0, 16, 0), ringY(hemdM, 2.9, 0.8, 0, 14.8, 0));
+  if (hemd.streifen) { const sm = mat(hemd.streifen); for (const y of [3.5, 6.5, 9.5, 12.5]) ober.add(ringY(sm, 6.25 + (y - 1.7) / 13 * 0.4, 0.55, 0, y, 0)); }
+  if (hemd.akzent) {
+    const am = mat(hemd.akzent);
+    ober.add(klotz(am, 1, 12.5, 0.8, 0, 8.2, -6.5), klotz(am, 1, 12.5, 0.8, 0, 8.2, 6.5), ringY(am, 2.9, 0.85, 0, 14.9, 0));
+    const nr = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), new THREE.MeshBasicMaterial({ map: trikotNummer, transparent: true }));
+    nr.rotation.y = -Math.PI / 2; nr.position.set(-6.75, 8.5, 0); ober.add(nr);
+  }
+  if (hemd.blumen) {
+    const farben = ['#ff5fa2', '#ffd166', '#ffffff', '#2a9d8f'];
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.4, y = 3 + (i * 7 % 11);
+      ober.add(kugel(mat(farben[i % 4]), 1.1, Math.cos(a) * 6.5, y, Math.sin(a) * 6.5));
+    }
+    for (const y of [4, 7, 10, 13]) ober.add(kugel(MAT_WEISS, 0.6, 6.7, y, 0));
+  }
+  if (hemd.kapuze) {
+    ober.add(kugel(hemdM, 5.5, -5, 15.5, 0, 0.75, 0.8, 1.15), klotz(mat('#1f7a6f'), 1, 4, 8, 6.5, 5, 0));
+    ober.add(zylinder(MAT_WEISS, 0.3, 0.3, 4, 6.4, 12, -1.5), zylinder(MAT_WEISS, 0.3, 0.3, 4, 6.4, 12, 1.5));
+  }
+  if (hemd.jacke) {
+    ober.add(klotz(MAT_WEISS, 0.6, 12, 3.4, 6.45, 8.2, 0), klotz(MAT_METALL, 0.5, 12, 0.5, 6.7, 8.2, -1.9), klotz(MAT_METALL, 0.5, 12, 0.5, 6.7, 8.2, 1.9));
+    ober.add(klotz(hemdM, 2, 3, 3, 5.6, 14.6, -2.8), klotz(hemdM, 2, 3, 3, 5.6, 14.6, 2.8));
+  }
+  // Tinten-Rucksack in Teamfarbe (mit Sichtfenster: zeigt, wie viel Tinte du hast)
+  ober.add(klotz(m, 5, 10, 9, -8.8, 8.8, 0), kugel(m, 4.5, -8.8, 13.8, 0, 0.55, 0.4, 1), klotz(dunkel, 1.2, 4, 6, -11.5, 5.8, 0));
+  ober.add(klotz(glasRohrMat, 0.5, 8, 2.4, -11.45, 10.5, 0));
+  const fuellGeo = new THREE.BoxGeometry(0.7, 7.4, 2); fuellGeo.translate(0, 3.7, 0);
+  const tankFuell = new THREE.Mesh(fuellGeo, tintenMaterial(team, 0.4)); tankFuell.position.set(-11.35, 6.8, 0); ober.add(tankFuell);
+  for (const z of [-3.6, 3.6]) ober.add(klotz(dunkel, 13, 1, 1.4, -0.5, 14.3, z), klotz(dunkel, 0.8, 9, 1.4, 6.6, 9.6, z));
+  // Arme: Schulter -> Ellbogen -> Unterarm -> Schweißband (Teamfarbe) -> Hand
   const arme = [];
   for (const s of [-1, 1]) {
-    const schulter = new THREE.Group(); schulter.position.set(0, 14, s * 8.5); schulter.rotation.y = s * 0.5;
-    schulter.add(zylinder(m, 2.6, 2.4, 6, 0, -3, 0));
+    const schulter = new THREE.Group(); schulter.position.set(0, 14, s * 7.8); schulter.rotation.y = s * 0.5;
+    if (lang) schulter.add(zylinder(hemdM, 2.6, 2.4, 6, 0, -3, 0));
+    else schulter.add(zylinder(hemdM, 2.9, 2.7, 3.4, 0, -1.6, 0), zylinder(haut, 2.1, 2, 3.4, 0, -4.4, 0));
     const ellbogen = new THREE.Group(); ellbogen.position.y = -6;
-    ellbogen.add(kugel(m, 2.4, 0, 0, 0), zylinder(m, 2.4, 2.2, 5, 0, -2.5, 0), ringY(MAT_GRAU, 2.4, 0.6, 0, -4.8, 0), kugel(MAT_STIEFEL, 2.9, 0, -6, 0));
+    const arm = lang ? hemdM : haut;
+    ellbogen.add(kugel(arm, 2.1, 0, 0, 0), zylinder(arm, 2.1, 1.9, 5, 0, -2.5, 0), zylinder(m, 2.25, 2.25, 1.6, 0, -4.4, 0), kugel(haut, 2.3, 0, -6, 0));
     schulter.add(ellbogen);
     ober.add(schulter); arme.push({ schulter, ellbogen });
   }
-  // Kopf mit Gesicht (kann nach oben/unten schauen und blinzeln)
-  const kopf = new THREE.Group(); kopf.position.y = 24; ober.add(kopf);
-  kopf.add(kugel(mat(haut), 7.5, 0, 0, 0));
-  const augen = new THREE.Group(); augen.position.set(6, 1.5, 0); kopf.add(augen);
-  auge(augen, 0, 0, -2.8, 2.2); auge(augen, 0, 0, 2.8, 2.2);
-  kopf.add(klotz(mat(haar), 0.8, 0.8, 2.6, 6.5, 4.4, -2.8), klotz(mat(haar), 0.8, 0.8, 2.6, 6.5, 4.4, 2.8));   // Augenbrauen
-  kopf.add(kugel(MAT_SCHWARZ, 1.2, 7.1, -2.7, 0, 0.6, 0.5, 2));          // Mund
-  kopf.add(kugel(mat(haar), 7.8, -2.5, 3.5, 0, 1, 0.55, 1));             // Haare
-  const helm = new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), glasMat); kopf.add(helm);
-  kopf.add(zylinder(MAT_GRAU, 1.6, 1.6, 2, 0, 11.5, 0), kugel(MAT_GLOW, 1.8, 0, 13, 0));   // Lampe
-  kopf.add(ringX(MAT_GRAU, 3.5, 0.6, 9.6, 2, 0));                        // Sichtfenster-Rahmen
-  const kragen = new THREE.Mesh(new THREE.TorusGeometry(8, 1.8, 8, 20), MAT_GRAU);
-  kragen.rotation.x = Math.PI / 2; kragen.position.y = 15.5; ober.add(kragen);
-  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; ober.add(kugel(MAT_METALL, 0.7, Math.cos(a) * 8, 17, Math.sin(a) * 8)); }  // Schrauben
-  // Farbtank auf dem Rücken mit Sichtfenster (zeigt, wie viel Tinte du hast!)
-  ober.add(zylinder(hell, 5, 5, 17, -11, 10, 0), kugel(hell, 5, -11, 18.5, 0, 1, 0.5, 1), kugel(hell, 5, -11, 1.5, 0, 1, 0.5, 1));
-  ober.add(zylinder(MAT_GRAU, 1.5, 1.5, 3, -11, 21, 0), ringY(MAT_GRAU, 5.1, 0.6, -11, 5, 0), ringY(MAT_GRAU, 5.1, 0.6, -11, 15, 0));
-  ober.add(klotz(glasRohrMat, 0.6, 13, 3, -16.2, 10, 0));
-  const fuellGeo = new THREE.BoxGeometry(0.8, 12, 2.4); fuellGeo.translate(0, 6, 0);
-  const tankFuell = new THREE.Mesh(fuellGeo, tintenMaterial(team, 0.4)); tankFuell.position.set(-16.05, 4, 0); ober.add(tankFuell);
-  const schlauch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-11, 22, 0), new THREE.Vector3(-11, 29, 0), new THREE.Vector3(-7, 34, 0), new THREE.Vector3(-3, 35, 0)]), 12, 1.1, 6), MAT_GRAU);
-  ober.add(schlauch);
+  // Kopf mit Gesicht, Ohren, Nase und Frisur
+  const kopf = new THREE.Group(); kopf.position.y = 23.5; ober.add(kopf);
+  kopf.add(kugel(haut, 7.5, 0, 0, 0), kugel(haut, 1.8, 0, 0, -7.3, 0.6, 1, 0.6), kugel(haut, 1.8, 0, 0, 7.3, 0.6, 1, 0.6), kugel(haut, 1.1, 7.6, -0.4, 0));
+  const augen = new THREE.Group(); augen.position.set(6.1, 1.3, 0); kopf.add(augen);
+  auge(augen, 0, 0, -2.8, 2.1); auge(augen, 0, 0, 2.8, 2.1);
+  kopf.add(klotz(haar, 0.8, 0.8, 2.6, 6.6, 4.1, -2.8), klotz(haar, 0.8, 0.8, 2.6, 6.6, 4.1, 2.8));
+  const mund = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.4, 6, 10, Math.PI), MAT_SCHWARZ);
+  mund.rotation.set(Math.PI, Math.PI / 2, 0); mund.position.set(7.1, -2.4, 0); kopf.add(mund);   // Lächeln
+  haareBauen(kopf, aussehen.frisur, haar);
+  hutBauen(kopf, an.kopf);
   k.userData = { beine, arme, ober, kopf, augen, tankFuell };
   return k;
 }
-// Beim Abtauchen schaut nur der Schnorchel aus der Farbe
+// Beim Abtauchen sieht man nur Blubberblasen in der Farbe
 function baueSchnorchel(team) {
-  const g = new THREE.Group(), m = mat(TEAMS[team].hell);
-  const bogen = zylinder(m, 1.6, 1.6, 5, 2, 12, 0); bogen.rotation.z = -Math.PI / 2;
-  g.add(zylinder(m, 1.6, 1.6, 12, 0, 6, 0), bogen, kugel(mat('#ffd166'), 2, 4.5, 12, 0));
+  const g = new THREE.Group(), m = mat(TEAMS[team].hell, { transparent: true, opacity: 0.85, roughness: 0.1 });
+  g.add(kugel(m, 2, 0, 2, 0), kugel(m, 1.4, 3, 3.5, 2), kugel(m, 1, -2.5, 4.5, -1.5), kugel(m, 0.8, 1, 6.5, -2));
   const pg = new THREE.CircleGeometry(7, 16); pg.rotateX(-Math.PI / 2);
   const pfuetze = new THREE.Mesh(pg, mat(TEAMS[team].dunkel)); pfuetze.position.y = 0.7; g.add(pfuetze);
   g.visible = false;
   return g;
 }
 
-// Alle Waffen zeigen nach vorne (+x). Der Ursprung (0,0,0) ist da, wo die Hand greift.
 function abzugBauen(g, x) {
   const buegel = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.45, 6, 12, Math.PI), MAT_GRAU);
   buegel.rotation.z = Math.PI; buegel.position.set(x, -2.2, 0);
@@ -666,7 +902,7 @@ let haendeWaffe = null, swayX = 0, swayY = 0;
 const vmHalter = new THREE.Group(); kamera.add(vmHalter);
 const VM_POS = { spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
 const VM_HAENDE = { spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
-function baueHaendeWaffe(art) {
+function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
   haendeWaffe = baueWaffe(art, teamMat[0], 0);
   const [x, y, z, sk] = VM_POS[art];
@@ -674,8 +910,9 @@ function baueHaendeWaffe(art) {
   haendeWaffe.rotation.y = Math.PI / 2 + 0.07;                 // zeigt nach vorne, leicht zur Mitte
   // Handschuhe + Ärmel vom Taucheranzug
   for (const [hx, hy, hz] of VM_HAENDE[art]) {
-    const aermel = zylinderX(teamMat[0], 2.8, 3.3, 16, hx - 8.5, hy - 2.2, hz); aermel.rotation.z = -Math.PI / 2 + 0.25;
-    haendeWaffe.add(kugel(MAT_STIEFEL, 3, hx, hy, hz), ringX(MAT_GRAU, 3, 0.7, hx - 1.8, hy - 0.5, hz), aermel);
+    const hemd = HEMDEN[an.hemd] || HEMDEN.tshirt, haut = mat(aussehen.haut, { roughness: 0.6 });
+    const aermel = zylinderX(hemd.aermel === 'lang' ? mat(hemd.farbe) : haut, 2.5, 3, 16, hx - 8.5, hy - 2.2, hz); aermel.rotation.z = -Math.PI / 2 + 0.25;
+    haendeWaffe.add(kugel(haut, 3, hx, hy, hz), ringX(teamMat[0], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);   // Hand + Schweißband
   }
   haendeWaffe.traverse(o => { o.castShadow = false; });
   vmHalter.add(haendeWaffe);
@@ -745,8 +982,8 @@ function neuerKlecks(team, nr) {
   const sp = team === 0 && nr === 0;
   const e = {
     team, nr, spieler: sp, name: NAMEN[team][nr],
-    waffe: sp ? auswahl.waffe : zufall(WAFFEN),
-    ultiArt: sp ? auswahl.ulti : zufall(ULTIS),
+    waffe: sp ? konto.an.waffe : zufall(WAFFEN),
+    ultiArt: sp ? konto.an.ulti : zufall(ULTIS),
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0, pitch: 0,
     tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
     ladung: 0, laden: false, rollT: 0, rollt: false, schwingT: 0, schwingSeite: 1, haltT: 0, vorherSchiesst: false, schild: 0, slam: false, ulti: 0, rueck: 0,
@@ -758,7 +995,10 @@ function neuerKlecks(team, nr) {
   // 3D-Modell
   e.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   e.gruppe = new THREE.Group();
-  e.koerper = baueTaucher(e.mat, team, zufallAus(HAUTFARBEN), zufallAus(HAARFARBEN));
+  const aussehen = sp ? kontoAussehen() : { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) };
+  const an = sp ? konto.an : { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) };
+  e.bonus = bonusVon(an);
+  e.koerper = baueJunge(e.mat, team, aussehen, an);
   e.waffenModell = baueWaffe(e.waffe, e.mat, team);
   e.koerper.userData.ober.add(e.waffenModell);           // Waffe bewegt sich mit dem Oberkörper
   e.gruppe.add(e.koerper);
@@ -790,7 +1030,7 @@ function neueRunde() {
     for (let n = 0; n < 4; n++) kleckse.push(neuerKlecks(t, n));
   }
   spieler = kleckse[0];
-  baueHaendeWaffe(spieler.waffe);
+  baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
   rest = RUNDE; zeit = 0; pfiff10 = false;
   zustand = 'spiel';
   startCountdown = 3; letzteSek = 99; ton('piep');
@@ -854,7 +1094,7 @@ function bewege(e, dx, dy, dt) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
   }
-  let speed = e.taucht ? 290 : feind ? 75 : 160;
+  let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
@@ -870,8 +1110,8 @@ function bewege(e, dx, dy, dt) {
   else if (!e.schiesst && !e.laden) e.tinte = Math.min(100, e.tinte + 5 * dt);
   // Leben
   e.letzterTreffer += dt;
-  if (feind && e.schild <= 0) { if (e.hp > 30) e.hp -= 12 * dt; }
-  else if (e.letzterTreffer > 2) e.hp = Math.min(100, e.hp + 30 * dt);
+  if (feind && e.schild <= 0) { if (e.hp > 30) e.hp -= 12 * (1 - e.bonus.feindfarbe) * dt; }
+  else if (e.letzterTreffer > 2) e.hp = Math.min(100, e.hp + 30 * (1 + e.bonus.heilen) * dt);
   if (e.schild > 0) e.schild -= dt;
 }
 
@@ -919,7 +1159,7 @@ function schiessen(e, dt) {
     if (!e.schiesst || e.haltT < 0.2 || (e.waffe === 'pinsel' && steht)) return;
     if (e.tinte < 0.5) { if (e.spieler) leerHinweis = 1.5; return; }
     e.rollt = true;
-    e.tinte -= (n.rollKosten + Math.hypot(e.vx, e.vy) * 0.03) * dt;
+    e.tinte -= (n.rollKosten + Math.hypot(e.vx, e.vy) * 0.03) * (1 - e.bonus.tinte) * dt;
     e.rollT -= dt;
     if (e.rollT <= 0) {
       e.rollT = 0.04;
@@ -936,7 +1176,7 @@ function schiessen(e, dt) {
 
   if (!e.schiesst || e.taucht || e.schussCd > 0) return;
   if (e.tinte < w.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
-  e.schussCd = w.cd; e.tinte -= w.kosten; e.rueck = 1;
+  e.schussCd = w.cd; e.tinte -= w.kosten * (1 - e.bonus.tinte); e.rueck = 1;
   for (let i = 0; i < w.anzahl; i++) {
     const facher = w.anzahl > 1 ? (i / (w.anzahl - 1) - 0.5) * w.streu : 0;
     const a = e.winkel + facher + (Math.random() - 0.5) * (w.anzahl > 1 ? 0.08 : w.streu);
@@ -956,7 +1196,7 @@ function schiessen(e, dt) {
 // Beim Schwingen fliegt ein Fächer aus Farbtropfen nach vorne
 function schwungWerfen(e, w) {
   const sw = w.schwung;
-  e.tinte = Math.max(0, e.tinte - sw.kosten); e.rueck = 1;
+  e.tinte = Math.max(0, e.tinte - sw.kosten * (1 - e.bonus.tinte)); e.rueck = 1;
   for (let i = 0; i < sw.anzahl; i++) {
     const a = e.winkel + (i / (sw.anzahl - 1) - 0.5) * sw.streu + (Math.random() - 0.5) * 0.08;
     const sp = sw.speed * (0.8 + Math.random() * 0.3);
@@ -989,7 +1229,7 @@ function schwungKurve(e) {
 
 function sniperSchuss(e) {
   const lad = e.ladung, laenge = 150 + 450 * lad;
-  e.tinte = Math.max(0, e.tinte - (5 + 12 * lad)); e.rueck = 1.5;
+  e.tinte = Math.max(0, e.tinte - (5 + 12 * lad) * (1 - e.bonus.tinte)); e.rueck = 1.5;
   const dx = Math.cos(e.winkel), dy = Math.sin(e.winkel);
   let ende = laenge, opfer = null;
   aussen: for (let d = 16; d <= laenge; d += 5) {
@@ -1015,8 +1255,8 @@ function sniperSchuss(e) {
 
 function bombeWerfen(e, zx, zy, extra = {}) {
   if (!extra.ulti) {
-    if (e.tinte < 50 || e.tot || e.taucht) return false;
-    e.tinte -= 50;
+    if (e.tinte < bombeKosten(e) || e.tot || e.taucht) return false;
+    e.tinte -= bombeKosten(e);
   }
   const d = Math.hypot(zx - e.x, zy - e.y), max = extra.max || 240;
   if (d > max) { zx = e.x + (zx - e.x) / d * max; zy = e.y + (zy - e.y) / d * max; }
@@ -1086,7 +1326,7 @@ function naheKlatsch(x, y) {
 
 function treffen(e, schaden, wer) {
   if (e.tot || e.schild > 0) return;
-  e.hp -= schaden; e.letzterTreffer = 0;
+  e.hp -= schaden * (1 - e.bonus.schutz); e.letzterTreffer = 0;
   if (e.spieler) rotBlitz = Math.min(0.4, rotBlitz + schaden / 150);
   if (schaden > 6) { if (e.spieler) ton('aua'); else if (wer && wer.spieler) ton('treffer'); }
   if (e.hp <= 0) erwischt(e, wer);
@@ -1227,10 +1467,10 @@ function steuerung(p, dt) {
   const l = Math.hypot(dx, dy); if (l) { dx /= l; dy /= l; }
   p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || maus.rechts;
   p.schiesst = maus.links;
-  if (sprungWunsch && p.z <= 0) { p.vz = 330; p.z = 0.01; ton('sprung'); }
+  if (sprungWunsch && p.z <= 0) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
   // Bombe: E halten = zielen, loslassen = werfen
   const z = bombenZiel(p);
-  zielRing.visible = !!tasten.KeyE && p.tinte >= 50 && !p.taucht;
+  zielRing.visible = !!tasten.KeyE && p.tinte >= bombeKosten(p) && !p.taucht;
   zielRing.position.x = z.x; zielRing.position.z = z.y;
   if (bombeLos) bombeWerfen(p, z.x, z.y);
   if (ultiWunsch) {
@@ -1526,14 +1766,6 @@ function hud() {
   const cw = hudCv.width, ch = hudCv.height;
   ctx.clearRect(0, 0, cw, ch);
   if (!spieler || zustand === 'menu') return;
-  // Blick durch den Glashelm
-  if (ichSicht && !spieler.taucht && !spieler.tot) {
-    const vg = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.42, cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
-    vg.addColorStop(0, 'rgba(170,225,255,0)'); vg.addColorStop(1, 'rgba(170,225,255,0.4)');
-    ctx.fillStyle = vg; ctx.fillRect(0, 0, cw, ch);
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 16; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(cw / 2, ch / 2, Math.max(cw, ch) * 0.47, -2.65, -2.15); ctx.stroke(); ctx.lineCap = 'butt';
-  }
   if (spieler.taucht) { ctx.fillStyle = 'rgba(255,138,31,0.18)'; ctx.fillRect(0, 0, cw, ch); }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
@@ -1562,7 +1794,7 @@ function hud() {
   ctx.fillStyle = spieler.tinte < 15 ? '#ff6060' : TEAMS[0].col;
   if (fh > 1) { ctx.beginPath(); ctx.roundRect(tx, ty + 130 - fh, 44, fh, 10); ctx.fill(); }
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tx, ty + 65); ctx.lineTo(tx + 8, ty + 65); ctx.stroke();
-  ctx.font = '20px system-ui'; ctx.globalAlpha = spieler.tinte >= 50 ? 1 : 0.3; ctx.fillText('💣', tx + 56, ty + 22);
+  ctx.font = '20px system-ui'; ctx.globalAlpha = spieler.tinte >= bombeKosten(spieler) ? 1 : 0.3; ctx.fillText('💣', tx + 56, ty + 22);
   ctx.font = 'bold 11px system-ui'; ctx.fillStyle = '#ffd166'; ctx.fillText('E', tx + 84, ty + 20); ctx.globalAlpha = 1;
   ctx.font = '20px system-ui'; ctx.fillText('❤️', tx + 56, ty + 56);
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(tx + 84, ty + 44, 60, 10);
@@ -1648,79 +1880,211 @@ function rundenEnde() {
   const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
   bO.style.width = bL.style.width = '0';
   bO.textContent = pO.toFixed(1) + '%'; bL.textContent = pL.toFixed(1) + '%';
-  let rekord = 0;
-  try { rekord = +localStorage.getItem('klecks3d-rekord') || 0; } catch (e) {}
-  const neu = spieler.punkte > rekord;
-  if (neu) try { localStorage.setItem('klecks3d-rekord', spieler.punkte); } catch (e) {}
+  // Münzen verdienen und im Konto speichern
+  const verdient = Math.round(spieler.punkte / 25) + spieler.ko * 10 + (gewonnen ? 100 : 30);
+  const neu = spieler.punkte > konto.rekord;
+  konto.muenzen += verdient; konto.runden++; if (gewonnen) konto.siege++;
+  if (neu) konto.rekord = spieler.punkte;
+  speichern();
   document.getElementById('statistik').innerHTML =
-    `🎨 Du hast <b>${spieler.punkte}</b> Farbkästchen gemalt ${neu ? '– <b>NEUER REKORD!</b> 🌟' : `(Rekord: ${rekord})`}<br>` +
-    `🎯 Erwischt: <b>${spieler.ko}</b> &nbsp; 💦 Selbst erwischt worden: <b>${spieler.tode}</b>`;
+    `🎨 Du hast <b>${spieler.punkte}</b> Farbkästchen gemalt ${neu ? '– <b>NEUER REKORD!</b> 🌟' : `(Rekord: ${konto.rekord})`}<br>` +
+    `🎯 Erwischt: <b>${spieler.ko}</b> &nbsp; 💦 Selbst erwischt worden: <b>${spieler.tode}</b><br>` +
+    `<span style="font-size:1.4rem;color:#ffd166">🪙 +${verdient} Münzen</span> (jetzt: ${konto.muenzen})`;
+  setTimeout(() => ton('kauf'), 900);
   document.getElementById('ende').classList.remove('hidden');
   setTimeout(() => { bO.style.width = (pO / summe * 100) + '%'; bL.style.width = (pL / summe * 100) + '%'; }, 100);
 }
 
-// ================== MENÜ ==================
-function wahlKnoepfe(id, liste, schluessel) {
-  const box = document.getElementById(id);
-  box.innerHTML = '';
-  for (const [k, v] of Object.entries(liste)) {
-    const b = document.createElement('button');
-    const em = document.createElement('b'); em.textContent = v.emoji;
-    const sm = document.createElement('small'); sm.textContent = v.info;
-    b.append(em, v.name, sm);
-    if (auswahl[schluessel] === k) b.classList.add('an');
-    b.onclick = () => {
-      auswahl[schluessel] = k; ton('klick');
-      try { localStorage.setItem('klecks3d-auswahl', JSON.stringify(auswahl)); } catch (e) {}
-      wahlKnoepfe(id, liste, schluessel);
-    };
-    box.append(b);
+// ================== MENÜ, KONTO & SHOPS ==================
+const $ = id => document.getElementById(id);
+function nurZeigen(id) {
+  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause']) $(o).classList.toggle('hidden', o !== id);
+  $('zurueck').classList.toggle('hidden', !['konto', 'menu', 'shop'].includes(id));
+}
+function knopf(inhalt, beiKlick, klasse) {   // Knopf bauen (Text immer mit textContent – sicher!)
+  const b = document.createElement('button');
+  for (const teil of inhalt) {
+    if (typeof teil === 'string') b.append(teil);
+    else { const el = document.createElement(teil[0]); el.textContent = teil[1]; if (teil[2]) el.className = teil[2]; b.append(el); }
+  }
+  if (klasse) b.className = klasse;
+  b.onclick = beiKlick;
+  return b;
+}
+
+// ---------- 3D-Vorschau von deinem Jungen ----------
+const VORSCHAU = { x: W / 2, z: -1500 };
+const podest = zylinder(mat('#3d4266'), 24, 27, 6, VORSCHAU.x, 0, VORSCHAU.z);
+const podestRing = ringY(mat(TEAMS[0].col, { emissive: TEAMS[0].col, emissiveIntensity: 0.5 }), 25.5, 1.2, VORSCHAU.x, 3, VORSCHAU.z);
+scene.add(podest, podestRing);
+let vorschau = null, anprobe = null, neuAussehen = { haut: HAUTFARBEN[1], haar: HAARFARBEN[0], frisur: 'kurz' };
+function vorschauBauen() {
+  const dreh = vorschau ? vorschau.gruppe.rotation.y : 0.6;
+  if (vorschau) scene.remove(vorschau.gruppe);
+  const aussehen = konto && $('konto').classList.contains('hidden') ? kontoAussehen() : neuAussehen;
+  const an = konto && $('konto').classList.contains('hidden') ? { ...konto.an } : neuesKonto('', '', '', '').an;
+  if (anprobe) an[anprobe.slot] = anprobe.id;
+  const e = { waffe: an.waffe, winkel: 0, vx: 0, vy: 0, z: 0, pitch: 0, rueck: 0, letzterTreffer: 9, rollt: false, tinte: 100,
+    ladung: 0, landT: 0, lauf: 0, nr: 0, schwingT: 0, schwingSeite: 1 };
+  e.mat = mat(TEAMS[0].col, { roughness: 0.35 });
+  e.koerper = baueJunge(e.mat, 0, aussehen, an);
+  e.waffenModell = baueWaffe(an.waffe, e.mat, 0); e.koerper.userData.ober.add(e.waffenModell);
+  e.gruppe = new THREE.Group(); e.gruppe.add(e.koerper);
+  e.gruppe.position.set(VORSCHAU.x, 3, VORSCHAU.z); e.gruppe.rotation.y = dreh; e.gruppe.scale.setScalar(1.15);
+  scene.add(e.gruppe); vorschau = e;
+}
+function vorschauZeigen(dt) {
+  zeit += dt;
+  vmHalter.visible = false;
+  if (vorschau) { vorschau.gruppe.rotation.y += dt * 0.6; animiereFigur(vorschau, 0, dt); }
+  const seite = innerWidth > 800 ? 30 : 0;
+  kamera.position.set(VORSCHAU.x + 85, 38, VORSCHAU.z - seite * 0.4);
+  kamera.lookAt(VORSCHAU.x, 27, VORSCHAU.z + seite);
+  renderer.render(scene, kamera);
+}
+
+// ---------- Konto auswählen / erstellen ----------
+function farbKnoepfe(id, farben, feld) {
+  const box = $(id); box.innerHTML = '';
+  for (const f of farben) {
+    const b = knopf([], () => { neuAussehen[feld] = f; ton('klick'); farbKnoepfe(id, farben, feld); vorschauBauen(); }, neuAussehen[feld] === f ? 'an' : '');
+    b.style.background = f; b.title = f; box.append(b);
   }
 }
-wahlKnoepfe('wahlWaffe', WAFFEN, 'waffe');
-wahlKnoepfe('wahlUlti', ULTIS, 'ulti');
+function kontoZeigen() {
+  zustand = 'menu'; anprobe = null;
+  nurZeigen('konto');
+  const liste = $('kontoListe'); liste.innerHTML = '';
+  $('kontoListeBox').classList.toggle('hidden', konten.size === 0);
+  for (const k of konten.values()) {
+    liste.append(knopf([['b', '👤'], k.name, ['small', `🪙 ${k.muenzen} · ${k.runden} Runden`]], () => {
+      konto = k; speichern(); ton('klick'); menuZeigen();
+    }));
+    liste.append(knopf(['🗑️'], () => {
+      if (!confirm(`Konto "${k.name}" wirklich löschen? Alle Münzen und Sachen sind dann weg!`)) return;
+      konten.delete(k.name); if (konto === k) konto = null; speichern(); kontoZeigen();
+    }));
+  }
+  farbKnoepfe('wahlHaut', HAUTFARBEN, 'haut');
+  farbKnoepfe('wahlHaar', HAARFARBEN, 'haar');
+  const fr = $('wahlFrisur'); fr.innerHTML = '';
+  for (const [id, f] of Object.entries(FRISUREN)) {
+    fr.append(knopf([['b', f.emoji], f.name], () => { neuAussehen.frisur = id; ton('klick'); kontoZeigen(); }, neuAussehen.frisur === id ? 'an' : ''));
+  }
+  $('kontoFehler').textContent = '';
+  vorschauBauen();
+}
+$('kontoErstellen').onclick = () => {
+  const name = $('kontoName').value.trim().replace(/\s+/g, ' ');
+  if (!NAME_OK.test(name)) { $('kontoFehler').textContent = 'Der Name braucht 2–14 Zeichen (nur Buchstaben, Zahlen, Leerzeichen, - und _).'; ton('nein'); return; }
+  if (konten.has(name)) { $('kontoFehler').textContent = 'Diesen Namen gibt es schon – klick oben drauf oder nimm einen anderen.'; ton('nein'); return; }
+  konto = neuesKonto(name, neuAussehen.haut, neuAussehen.haar, neuAussehen.frisur);
+  konten.set(name, konto); speichern();
+  $('kontoName').value = '';
+  ton('kauf'); menuZeigen();
+};
+$('kontoName').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('kontoErstellen').click(); });
+
+// ---------- Hauptmenü ----------
+function menuZeigen() {
+  zustand = 'menu'; anprobe = null;
+  nurZeigen('menu');
+  $('menuName').textContent = konto.name;
+  $('menuMuenzen').textContent = konto.muenzen;
+  const ausr = $('menuAusruestung'); ausr.innerHTML = '';
+  for (const [slot, liste] of Object.entries(SLOT_LISTE)) {
+    const it = liste[konto.an[slot]], sp = document.createElement('span');
+    sp.textContent = `${it.emoji} ${it.name}`; sp.title = it.info; ausr.append(sp);
+  }
+  const ul = $('wahlUlti'); ul.innerHTML = '';
+  for (const [id, u] of Object.entries(ULTIS)) {
+    ul.append(knopf([['b', u.emoji], u.name, ['small', u.info]], () => { konto.an.ulti = id; speichern(); ton('klick'); menuZeigen(); }, konto.an.ulti === id ? 'an' : ''));
+  }
+  vorschauBauen();
+}
+$('kontoWechseln').onclick = () => { ton('klick'); kontoZeigen(); };
+
+// ---------- Die 4 Shops ----------
+const SHOPS = {
+  waffe:  { name: 'Waffen',        emoji: '🔫', liste: WAFFEN, gruss: 'Willkommen im Waffenladen! Alles spritzt, nichts tut wirklich weh.' },
+  hemd:   { name: 'Hemden',        emoji: '👕', liste: HEMDEN, gruss: 'Frische Hemden! Jedes gibt dir einen kleinen Bonus.' },
+  schuhe: { name: 'Schuhe',        emoji: '👟', liste: SCHUHE, gruss: 'Die richtigen Schuhe machen dich schneller!' },
+  kopf:   { name: 'Kopfbedeckung', emoji: '🧢', liste: KOEPFE, gruss: 'Hüte, Mützen, Brillen – und eine echte Goldkrone!' },
+};
+let shopTab = 'waffe';
+function preisVon(slot, id) { return slot === 'waffe' ? WAFFEN_PREIS[id] : SHOPS[slot].liste[id].preis; }
+function shopZeigen() {
+  zustand = 'menu';
+  nurZeigen('shop');
+  $('shopMuenzen').textContent = konto.muenzen;
+  const tabs = $('shopTabs'); tabs.innerHTML = '';
+  for (const [slot, sh] of Object.entries(SHOPS)) {
+    tabs.append(knopf([`${sh.emoji} ${sh.name}`], () => { shopTab = slot; anprobe = null; ton('klick'); shopZeigen(); }, shopTab === slot ? 'an' : ''));
+  }
+  $('shopInfo').textContent = SHOPS[shopTab].gruss + ' Klick auf ein Teil zum Anprobieren.';
+  const box = $('shopItems'); box.innerHTML = '';
+  for (const [id, it] of Object.entries(SHOPS[shopTab].liste)) {
+    const preis = preisVon(shopTab, id), besitzt = konto.besitz[shopTab].includes(id), traegt = konto.an[shopTab] === id;
+    const karte = document.createElement('div');
+    karte.className = 'item' + (traegt ? ' an' : '') + (anprobe && anprobe.id === id ? ' vorschau' : '');
+    const em = document.createElement('span'); em.className = 'em'; em.textContent = it.emoji;
+    const nm = document.createElement('b'); nm.textContent = it.name;
+    const info = document.createElement('small'); info.textContent = it.info;
+    karte.append(em, nm, info);
+    if (traegt) {
+      const t = document.createElement('div'); t.textContent = shopTab === 'waffe' ? '✔ In der Hand' : '✔ Angezogen'; t.style.color = '#5be37d'; karte.append(t);
+    } else if (besitzt) {
+      karte.append(knopf([shopTab === 'waffe' ? '✋ Nehmen' : '👕 Anziehen'], ev => {
+        ev.stopPropagation(); konto.an[shopTab] = id; anprobe = null; speichern(); ton('klick'); shopZeigen(); vorschauBauen();
+      }));
+    } else {
+      const pr = document.createElement('div'); pr.className = 'preis'; pr.textContent = `🪙 ${preis}`; karte.append(pr);
+      const kauf = knopf(['Kaufen'], ev => {
+        ev.stopPropagation();
+        if (konto.muenzen < preis) { ton('nein'); return; }
+        konto.muenzen -= preis; konto.besitz[shopTab].push(id); konto.an[shopTab] = id; anprobe = null;
+        speichern(); ton('kauf'); shopZeigen(); vorschauBauen();
+      });
+      if (konto.muenzen < preis) { kauf.disabled = true; kauf.textContent = `Noch ${preis - konto.muenzen} 🪙`; }
+      karte.append(kauf);
+    }
+    karte.onclick = () => { anprobe = { slot: shopTab, id }; ton('klick'); shopZeigen(); vorschauBauen(); };   // Anprobieren
+    box.append(karte);
+  }
+}
+$('zuShops').onclick = () => { ton('klick'); anprobe = null; shopZeigen(); vorschauBauen(); };
+$('shopZurueck').onclick = () => { ton('klick'); menuZeigen(); };
 
 function starten() {
-  for (const id of ['menu', 'ende', 'pause']) document.getElementById(id).classList.add('hidden');
-  document.getElementById('zurueck').classList.add('hidden');
+  nurZeigen(null);
   neueRunde();
   mausFangen();
 }
-document.getElementById('start').onclick = starten;
-document.getElementById('musikKnopf').onclick = () => musikUmschalten();
-document.getElementById('musikKnopf').textContent = '🎵 Musik: ' + (musikAn ? 'an' : 'aus');
-document.getElementById('nochmal').onclick = starten;
-document.getElementById('zumMenu').onclick = () => {
-  document.getElementById('ende').classList.add('hidden');
-  document.getElementById('menu').classList.remove('hidden');
-  document.getElementById('zurueck').classList.remove('hidden');
-  zustand = 'menu';
-};
-document.getElementById('weiter').onclick = () => {
-  document.getElementById('pause').classList.add('hidden');
+$('start').onclick = starten;
+$('musikKnopf').onclick = () => musikUmschalten();
+$('musikKnopf').textContent = '🎵 Musik: ' + (musikAn ? 'an' : 'aus');
+$('nochmal').onclick = starten;
+$('zumMenu').onclick = () => menuZeigen();
+$('weiter').onclick = () => {
+  $('pause').classList.add('hidden');
   zustand = 'spiel';
   mausFangen();
 };
-document.getElementById('aufgeben').onclick = e => {
+$('aufgeben').onclick = e => {
   e.preventDefault();
-  document.getElementById('pause').classList.add('hidden');
+  $('pause').classList.add('hidden');
   rundenEnde();
 };
+if (konto) menuZeigen(); else kontoZeigen();
 
 // ================== HAUPTSCHLEIFE ==================
-// Im Menü dreht sich die Kamera langsam über der Arena
 let letzt = performance.now();
 bodenAktualisieren();
 function schleife(t) {
   const dt = Math.min(0.05, (t - letzt) / 1000); letzt = t;
   if (zustand === 'spiel') update(dt);
-  if (spieler) welt3D(zustand === 'spiel' ? dt : 0);
-  else {
-    zeit += dt;
-    kamera.position.set(W / 2 + Math.cos(zeit * 0.15) * 900, 420, H / 2 + Math.sin(zeit * 0.15) * 700);
-    kamera.lookAt(W / 2, 0, H / 2);
-    renderer.render(scene, kamera);
-  }
+  if (zustand === 'menu') vorschauZeigen(dt);           // Menü & Shops: dein Junge dreht sich auf dem Podest
+  else if (spieler) { vmHalter.visible = true; welt3D(zustand === 'spiel' ? dt : 0); }
   hud();
   requestAnimationFrame(schleife);
 }
