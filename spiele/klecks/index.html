@@ -1836,7 +1836,7 @@ function update(dt) {
     tn.t -= dt;
     let ziel = null, zd = 450;
     for (const e of kleckse) if (e.team !== tn.team && !e.tot) { const d = Math.hypot(e.x - tn.x, e.y - tn.y); if (d < zd) { zd = d; ziel = e; } }
-    if (ziel) {
+    if (ziel && zd > 2) {   // (bei Abstand 0 nicht durch 0 teilen!)
       const nx = tn.x + (ziel.x - tn.x) / zd * 85 * dt, ny = tn.y + (ziel.y - tn.y) / zd * 85 * dt;
       if (!istWand(nx, ny)) { tn.x = nx; tn.y = ny; }
     }
