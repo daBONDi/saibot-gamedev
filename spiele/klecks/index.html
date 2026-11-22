@@ -44,7 +44,7 @@
   <div class="box">
     <h1>KLECKS-KRIEG 3D</h1>
     <p>Team <b style="color:#ff8a1f">Orange</b> gegen Team <b style="color:#a347ff">Lila</b>! Mal in 3 Minuten mehr Boden an als die Gegner.</p>
-    <h2>Deine Figur</h2><div class="wahl" id="wahlFigur"></div>
+    <p style="font-size:1.2rem">Du bist ein <b>Tintenfisch</b> 🦑 – such dir deine Ausrüstung aus!</p>
     <h2>Deine Waffe</h2><div class="wahl" id="wahlWaffe"></div>
     <h2>Deine Ulti</h2><div class="wahl" id="wahlUlti"></div>
     <div class="steuerung">
@@ -105,13 +105,6 @@ const TEAMS = [
 const NAMEN = [['Du', 'Blubb', 'Spritzi', 'Klacks'], ['Gloop', 'Schmatz', 'Plörre', 'Kleckerich']];
 const BASIS = [{ x: 80, y: H / 2 }, { x: W - 80, y: H / 2 }];
 
-const FIGUREN = {
-  schleim: { name: 'Schleim', emoji: '🟠', info: 'Wabbelig & mutig' },
-  frosch:  { name: 'Frosch',  emoji: '🐸', info: 'Glubschaugen' },
-  roboter: { name: 'Roboter', emoji: '🤖', info: 'Mit Leuchtaugen' },
-  pilz:    { name: 'Pilz',    emoji: '🍄', info: 'Gepunkteter Hut' },
-  katze:   { name: 'Katze',   emoji: '🐱', info: 'Spitze Ohren' },
-};
 const WAFFEN = {
   spritzer: { name: 'Spritzer',   emoji: '🔫', info: 'Schnell & einfach',
               cd: 0.12, kosten: 1.5, speed: 650, bremse: 2, schaden: 24, klecks: 17, spur: 6, streu: 0.08, anzahl: 1, reichweite: 260 },
@@ -128,7 +121,7 @@ const ULTIS = {
 };
 
 // Deine Auswahl (wird im Browser gemerkt)
-let auswahl = { figur: 'schleim', waffe: 'spritzer', ulti: 'regen' };
+let auswahl = { waffe: 'spritzer', ulti: 'regen' };
 try { Object.assign(auswahl, JSON.parse(localStorage.getItem('klecks3d-auswahl') || '{}')); } catch (e) {}
 
 // ================== WÄNDE ==================
@@ -328,41 +321,36 @@ function zylinder(m, r1, r2, h, x, y, z) {
 }
 function auge(g, x, y, z, r) { g.add(kugel(MAT_WEISS, r, x, y, z), kugel(MAT_SCHWARZ, r * 0.5, x + r * 0.62, y, z)); }
 
-// Figuren schauen in Richtung +x
-function baueFigur(figur, m) {
+// Der Tintenfisch! Er schaut in Richtung +x
+function baueTintenfisch(m, team) {
   const k = new THREE.Group();
-  switch (figur) {
-    case 'frosch':
-      k.add(kugel(m, 16, 0, 11, 0, 1.1, 0.7, 1), kugel(m, 6.5, 6, 21, -7), kugel(m, 6.5, 6, 21, 7));
-      auge(k, 9, 23, -7, 4.5); auge(k, 9, 23, 7, 4.5);
-      k.add(klotz(MAT_SCHWARZ, 2, 1.5, 14, 16.5, 9, 0));
-      break;
-    case 'roboter':
-      k.add(klotz(m, 26, 26, 26, 0, 15, 0), klotz(MAT_SCHWARZ, 4, 9, 20, 12, 18, 0));
-      k.add(kugel(MAT_GLOW, 2.8, 14.5, 18, -5), kugel(MAT_GLOW, 2.8, 14.5, 18, 5));
-      k.add(klotz(MAT_GRAU, 2, 10, 2, 0, 33, 0), kugel(mat('#ff5fa2', { emissive: '#ff5fa2' }), 3, 0, 39, 0));
-      break;
-    case 'pilz': {
-      k.add(zylinder(MAT_CREME, 8, 9, 18, 0, 9, 0));
-      const hut = new THREE.Mesh(new THREE.SphereGeometry(17, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m);
-      hut.position.y = 15; hut.castShadow = true; k.add(hut);
-      for (const [x, y, z] of [[0, 32, 0], [9, 27, 7], [-8, 27, -8], [5, 27, -11], [-9, 26, 9]]) k.add(kugel(MAT_WEISS, 3, x, y, z));
-      auge(k, 8, 9, -4, 3.2); auge(k, 8, 9, 4, 3.2);
-      break;
-    }
-    case 'katze': {
-      k.add(kugel(m, 15, 0, 14, 0));
-      for (const s of [-1, 1]) { const o = new THREE.Mesh(new THREE.ConeGeometry(5, 11, 4), m); o.position.set(2, 29, s * 8); o.castShadow = true; k.add(o); }
-      auge(k, 12, 17, -6, 4.5); auge(k, 12, 17, 6, 4.5);
-      k.add(kugel(mat('#ff8fb8'), 1.8, 15, 12.5, 0));
-      const schwanz = zylinder(m, 2, 2, 20, -15, 18, 0); schwanz.rotation.z = 0.7; k.add(schwanz);
-      break;
-    }
-    default: // schleim
-      k.add(kugel(m, 16, 0, 14, 0, 1, 0.9, 1), kugel(m, 6, -3, 28, 2));
-      auge(k, 11, 18, -6, 5); auge(k, 11, 18, 6, 5);
+  const hell = mat(TEAMS[team].hell, { roughness: 0.35 });
+  // Kopf (etwas nach hinten gekippt)
+  const kopf = new THREE.Group(); kopf.rotation.z = 0.15; k.add(kopf);
+  kopf.add(kugel(m, 13, -1, 24, 0, 1, 1.35, 1));
+  // Flossen oben am Kopf
+  for (const s of [-1, 1]) {
+    const flosse = kugel(m, 7, -4, 37, s * 9, 0.45, 0.8, 1.3); flosse.rotation.x = s * 0.5; kopf.add(flosse);
   }
-  k.add(zylinder(m, 5, 5, 14, -17, 17, 0));   // Tintentank auf dem Rücken
+  // Punkte auf dem Rücken
+  for (const [x, y, z] of [[-11, 28, 4], [-10, 22, -5], [-7, 34, -2], [-12, 17, 2]]) kopf.add(kugel(hell, 2.4, x, y, z));
+  // Große Glubschaugen, Bäckchen und Mund
+  auge(k, 11, 22, -6, 5.5); auge(k, 11, 22, 6, 5.5);
+  k.add(kugel(mat('#ff8fb8'), 2.2, 11, 16, -9.5), kugel(mat('#ff8fb8'), 2.2, 11, 16, 9.5));
+  k.add(kugel(MAT_SCHWARZ, 1.6, 13, 14, 0, 0.6, 1, 1.6));
+  // 8 Arme, die beim Laufen wackeln
+  const arme = [];
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    const gelenk = new THREE.Group();
+    gelenk.position.set(Math.cos(a) * 8, 11, Math.sin(a) * 8);
+    gelenk.rotation.set(0, -a, 0.6);
+    gelenk.add(zylinder(m, 2.6, 1.4, 13, 0, -6.5, 0), kugel(hell, 1.7, 0, -13, 0));
+    k.add(gelenk); arme.push(gelenk);
+  }
+  k.userData.arme = arme;
+  // Tintentank auf dem Rücken
+  k.add(zylinder(hell, 5, 5, 14, -16, 22, 0), zylinder(MAT_GRAU, 2, 2, 3, -16, 30.5, 0));
   return k;
 }
 
@@ -471,7 +459,6 @@ function neuerKlecks(team, nr) {
   const sp = team === 0 && nr === 0;
   const e = {
     team, nr, spieler: sp, name: NAMEN[team][nr],
-    figur: sp ? auswahl.figur : zufall(FIGUREN),
     waffe: sp ? auswahl.waffe : zufall(WAFFEN),
     ultiArt: sp ? auswahl.ulti : zufall(ULTIS),
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0, pitch: 0,
@@ -484,7 +471,7 @@ function neuerKlecks(team, nr) {
   // 3D-Modell
   e.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   e.gruppe = new THREE.Group();
-  e.koerper = baueFigur(e.figur, e.mat);
+  e.koerper = baueTintenfisch(e.mat, team);
   e.waffenModell = baueWaffe(e.waffe, e.mat);
   if (e.waffe === 'roller') e.waffenModell.position.set(4, 6, 0); else e.waffenModell.position.set(6, 14, 11);
   e.gruppe.add(e.koerper, e.waffenModell);
@@ -1027,6 +1014,12 @@ function welt3D(dt) {
       g.scale.set(1 - wab, 1 + wab, 1 - wab);
     }
     e.waffenModell.visible = !e.taucht;
+    if (g.visible) {
+      const laeuft = v > 20;
+      e.koerper.userData.arme.forEach((arm, i) => {
+        arm.rotation.z = 0.6 + Math.sin(zeit * (laeuft ? 14 : 4) + i * 0.8) * (laeuft ? 0.3 : 0.1);
+      });
+    }
     e.waffenModell.position.x = (e.waffe === 'roller' ? 4 : 6) - e.rueck * 3;
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
@@ -1218,7 +1211,6 @@ function wahlKnoepfe(id, liste, schluessel) {
     box.append(b);
   }
 }
-wahlKnoepfe('wahlFigur', FIGUREN, 'figur');
 wahlKnoepfe('wahlWaffe', WAFFEN, 'waffe');
 wahlKnoepfe('wahlUlti', ULTIS, 'ulti');
 
