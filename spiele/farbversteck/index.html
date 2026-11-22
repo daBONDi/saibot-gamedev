@@ -116,6 +116,8 @@ const TIPP_WEITE = 3.5;         // So nah musst du sein, um jemanden anzutippen 
 const DANEBEN_PAUSE = 1.5;      // Daneben getippt? So lange musst du warten
 const LAUF = 3.2, RENN = 5.2;   // Lauftempo (Meter pro Sekunde)
 const AUGEN_ZU_NACH = 0.8;      // Wer so lange still steht, macht die Augen zu
+const BOT_SCHAERFE = 0.12;      // Wie gut die Computer-Sucher gucken (höher = schwerer)
+const BOT_TOLERANZ = 0.12;      // So ähnlich muss die Farbe sein, damit sie gar nichts merken
 const TEILE = ['kopf', 'koerper', 'armL', 'armR', 'beinL', 'beinR'];
 const TEIL_NAMEN = { kopf: '🙂 Kopf', koerper: '👕 Bauch', armL: '💪 Linker Arm', armR: '💪 Rechter Arm', beinL: '🦵 Linkes Bein', beinR: '🦵 Rechtes Bein' };
 const POSEN = { stehen: '🧍 Stehen', hocken: '🧎 Hocken', liegen: '🛌 Liegen', kugel: '⚪ Kugel' };
@@ -320,6 +322,7 @@ const figurTeile = () => { const l = []; for (const L of leute.values()) for (co
 function wemGehoert(obj) { for (const L of leute.values()) if (Object.values(L.fig.teile).includes(obj)) return L; return null; }
 // Ersten Treffer suchen, der NICHT zu einer bestimmten Figur gehört
 function treffer(von, richtung, ohne = null, weite = 40, mitFiguren = true) {
+  scene.updateMatrixWorld();   // Alle Positionen frisch ausrechnen, sonst zielt der Strahl ins Leere
   strahl.set(von, richtung); strahl.far = weite;
   const liste = mitFiguren ? [...fangbar, ...figurTeile()] : fangbar;
   for (const h of strahl.intersectObjects(liste, false)) { if (ohne && wemGehoert(h.object) === ohne) continue; return h; }
@@ -522,11 +525,11 @@ function sucherBot(L, dt) {
         summe += dahinter ? farbAbstand(Z.farben[TEILE.indexOf(t)], farbeVonTreffer(dahinter)) : 0.5;
       }
       if (!sichtbar) continue;
-      let chance = Math.max(0, (summe / sichtbar - 0.07) * 2.2) * Math.min(1, sichtbar / 3);
+      let chance = Math.max(0, (summe / sichtbar - BOT_TOLERANZ) * 2.2) * Math.min(1, sichtbar / 3);
       if (Z.bewegt) chance += 0.6;
       if (Z.fig.augen.visible) chance += 0.25;
       if (d < 1.8) chance += 0.15;
-      if (Math.random() < Math.min(0.85, chance) * 0.45) { K.verdacht = Z; K.pfad = pfadZu(L, Z.x, Z.z); break; }
+      if (Math.random() < Math.min(0.85, chance) * BOT_SCHAERFE) { K.verdacht = Z; K.pfad = pfadZu(L, Z.x, Z.z); break; }
     }
   }
 }
