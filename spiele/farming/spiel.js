@@ -5738,6 +5738,9 @@ function mpEmpfangen(d, vonGast) {
     // Geld und Silos rechnet der Gastgeber: Gäste schicken nur, wie viel sich geändert hat
     case 'geldStand': money = d.m; mp.geldBasis = d.m; return;
     case 'geld': if (host) money += d.d; return;
+    case 'helferStand': if (!host && Array.isArray(d.l)) { helferFern = d.l.slice(0, HELFER_MAX); helferMalen(); } return;
+    case 'helferAktion': if (host) helferAktionHost(d); return;
+    case 'helferMeldung': if (!host) meldung(String(d.text || '').slice(0, 200), 3.5); return;
     case 'siloStand': { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = d.i; s.basis = d.i; if (typeof d.r === 'number') { s.roh = d.r; s.rohBasis = d.r; } siloSchild(s); } return; }
     case 'silo': if (host) { const s = silos.find(x => siloSchluessel(x) === d.s); if (s) { s.inhalt = begrenzt(s.inhalt + d.d, 0, s.max); if (d.dr) s.roh = begrenzt(s.roh + d.dr, 0, s.inhalt); siloSchild(s); } } return;
     case 'felder':   // Alle 15 Sekunden: Felder abgleichen (falls etwas verloren ging)
@@ -5821,6 +5824,8 @@ function mpTick(dt) {
   if (!host && !weltDa()) return;
   // Geld: Gastgeber sagt allen den Stand, Gäste schicken ihre Änderung
   if (host) { if (money !== mp.geldBasis) { mp.geldBasis = money; mpAnAlle({ t: 'geldStand', m: money }); } }
+  if (host) { const hs = JSON.stringify(helferStand()); mp.helferTakt = (mp.helferTakt || 0) + 1;
+  if (hs !== mp.helferBasis || mp.helferTakt % (MP_RATE * 5) === 0) { mp.helferBasis = hs; mpAnAlle({ t: 'helferStand', l: JSON.parse(hs) }); } }   // Helfer-Liste für die Freunde
   else if (mp.geldBasis !== null && money !== mp.geldBasis) { mpEvent({ t: 'geld', d: money - mp.geldBasis }); mp.geldBasis = money; }
   for (const s of silos) {
     if (s.inhalt === s.basis) continue;
@@ -6601,9 +6606,11 @@ function helferZeigen(an) {
 }
 function helferMalen() {
   if ($('helferpanel').style.display !== 'block') return;
-  if (mp.aktiv && mp.rolle !== 'host') { $('helferInhalt').innerHTML = '<p>🌐 Im Multiplayer gibt es die Helfer nur beim Gastgeber.</p>'; return; }
-  let html = '';
-  helfer.forEach((h, i) => {
+  // Im Multiplayer arbeiten die Helfer beim Gastgeber – Freunde sehen sie trotzdem und können ihnen Aufgaben geben
+  const gast = istHelferGast();
+  const liste = gast ? helferFern.map((d, i) => ({ name: d.n, xp: d.xp, status: d.st, job: d.job, ...(gastWahl[i] || { wahl: null, wahlFeld: null }) })) : helfer;
+  let html = gast ? '<p class="klein">🌐 Die Helfer arbeiten auf dem Hof vom Gastgeber – du kannst ihnen aber genauso Aufgaben geben!</p>' : '';
+  liste.forEach((h, i) => {
     const lv = helferLevel(h), naechste = HELFER_XP[lv], vorige = HELFER_XP[lv - 1];
     const anteil = naechste === undefined ? 100 : Math.floor((h.xp - vorige) / (naechste - vorige) * 100);
     html += `<div class="angebot"><b>👷 ${h.name}</b> · Level ${lv} ${'⭐'.repeat(lv)}<br>
@@ -6625,14 +6632,15 @@ function helferMalen() {
     }
     html += '</div>';
   });
-  if (!helfer.length) html += '<p>Du hast noch keine Helfer. Helfer arbeiten auf dem Feld (pflügen, säen, ernten) oder auf dem Hof (Tiere, Gemüse, Obst, Honig) – und werden mit der Zeit immer besser!</p>';
-  if (helfer.length < HELFER_MAX) html += `<button data-a="neu" ${money >= HELFER_PREIS ? '' : 'disabled'}>➕ Helfer einstellen (${euro(HELFER_PREIS)})</button>`;
+  if (!liste.length) html += '<p>Du hast noch keine Helfer. Helfer arbeiten auf dem Feld (pflügen, säen, ernten) oder auf dem Hof (Tiere, Gemüse, Obst, Honig) – und werden mit der Zeit immer besser!</p>';
+  if (liste.length < HELFER_MAX) html += `<button data-a="neu" ${money >= HELFER_PREIS ? '' : 'disabled'}>➕ Helfer einstellen (${euro(HELFER_PREIS)})</button>`;
   html += `<p class="klein">💡 Feld-Helfer nehmen sich ein freies Fahrzeug, kaufen selbst Saat und Diesel und bringen das Korn ins Silo. Häckseln geht nur mit Häcksler + Silagesilo.</p>`;
   $('helferInhalt').innerHTML = html;
 }
 document.getElementById('helferInhalt').addEventListener('click', e => {
   const k = e.target.closest('button');
   if (!k) return;
+  if (istHelferGast()) { helferKlickGast(k); helferMalen(); k.blur(); return; }
   const h = helfer[Number(k.dataset.h)], a = k.dataset.a;
   if (a === 'neu') helferEinstellen();
   else if (!h) return;
@@ -6645,6 +6653,38 @@ document.getElementById('helferInhalt').addEventListener('click', e => {
   helferMalen();
   k.blur();
 });
+// ----- Helfer im Multiplayer: Freunde schicken ihre Wünsche an den Gastgeber -----
+let helferFern = [];          // So sieht ein Freund die Helfer (kommt vom Gastgeber)
+const gastWahl = {};          // Welches Feld hat der Freund im Menü gerade ausgewählt?
+function istHelferGast() { return mp.aktiv && mp.rolle !== 'host'; }
+const helferStand = () => helfer.map(h => ({ n: h.name, f: h.farbe, xp: Math.floor(h.xp), st: h.status, job: !!h.job }));
+function helferKlickGast(k) {
+  const i = Number(k.dataset.h), a = k.dataset.a, d = helferFern[i];
+  const w = gastWahl[i] || (gastWahl[i] = { wahl: null, wahlFeld: null });
+  if (a === 'feld') { w.wahl = w.wahl === 'feld' ? null : 'feld'; if (w.wahlFeld === null) { const f = felder.find(f => f.gekauft); w.wahlFeld = f ? f.nr : null; } return; }
+  if (a === 'wf') { w.wahlFeld = Number(k.dataset.f); return; }
+  if (a === 'weg' && !(d && confirm(`${d.n} wirklich entlassen?`))) return;
+  if (a === 'neu' || d) {
+    mpEvent({ t: 'helferAktion', a, h: i, f: w.wahlFeld, j: k.dataset.j || null });
+    if (a === 'job') w.wahl = null;
+    meldung('📨 Ist an den Gastgeber geschickt – gleich geht\'s los!', 2);
+    sound.klick();
+  }
+}
+function helferAktionHost(d) {   // Der Gastgeber führt aus, was ein Freund im Helfer-Menü gedrückt hat
+  const h = helfer[d.h | 0], texte = [], alteMeldung = meldung;
+  meldung = (text, dauer) => { texte.push(text); alteMeldung(text, dauer); };   // Antworten auch dem Freund zeigen
+  try {
+    if (d.a === 'neu') helferEinstellen();
+    else if (!h) { /* den Helfer gibt es nicht mehr */ }
+    else if (d.a === 'stopp' && h.job) jobEnde(h, '⏹️ Hat aufgehört.');
+    else if (d.a === 'job' && !h.job && felder[d.f | 0] && Object.prototype.hasOwnProperty.call(HELFER_AUFGABEN, d.j)) feldJobStarten(h, d.f | 0, d.j);
+    else if (d.a === 'hof' && !h.job) hofJobStarten(h);
+    else if (d.a === 'weg' && !h.job) { helfer.splice(helfer.indexOf(h), 1); scene.remove(h.schild); meldung(`👋 Tschüss, ${h.name}!`); speichern(); }
+  } finally { meldung = alteMeldung; }
+  if (texte.length) mpAnAlle({ t: 'helferMeldung', text: texte[texte.length - 1] });
+  helferMalen();
+}
 document.getElementById('btn-helfer').addEventListener('click', e => { helferZeigen($('helferpanel').style.display !== 'block'); e.currentTarget.blur(); });
 document.getElementById('helfer-zu').addEventListener('click', () => helferZeigen(false));
 
