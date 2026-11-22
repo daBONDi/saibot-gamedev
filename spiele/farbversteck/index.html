@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farbversteck</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1f3a; font-family: system-ui, sans-serif; }
+  canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  #hud { pointer-events: none; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #1b1f3acc; color: #fff;
+    padding: 1rem; box-sizing: border-box; overflow-y: auto; z-index: 10; }
+  .box { background: #2a2f55; padding: 1.4rem 1.8rem; border-radius: 1.4rem; max-width: 40rem; width: 100%; text-align: center; box-shadow: 0 10px 40px #0008; margin: auto; }
+  h1 { font-size: 2.8rem; margin: 0 0 0.3rem; font-family: 'Arial Black', Impact, sans-serif;
+    background: linear-gradient(90deg, #ff5fa2, #ffd166, #5be37d, #6fb8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; color: #ffd166; }
+  p { color: #c9c3ff; margin: 0.4rem 0; }
+  button { font: bold 1rem system-ui, sans-serif; cursor: pointer; }
+  button.gross { background: linear-gradient(90deg, #ff5fa2, #6fb8ff); color: #fff; border: none; border-radius: 1rem; padding: 0.7rem 1.6rem; font-size: 1.25rem; margin: 0.4rem; }
+  button.klein, .wahl button { background: #1b1f3a; color: #fff; border: 2px solid #3d4266; border-radius: 0.7rem; padding: 0.35rem 0.8rem; margin: 0.2rem; }
+  .wahl button.an { border-color: #ffd166; background: #3d4266; }
+  input { font: 1.1rem system-ui, sans-serif; padding: 0.45rem 0.7rem; border-radius: 0.7rem; border: 2px solid #3d4266; background: #1b1f3a; color: #fff; text-align: center; }
+  .klein { font-size: 0.85rem; color: #c9c3ff; }
+  .fehler { color: #ff8080; min-height: 1.2em; }
+  .hidden { display: none !important; }
+  .steuerung { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.8rem; text-align: left; margin: 0.8rem auto 0; max-width: 30rem; font-size: 0.9rem; }
+  .taste { background: #ffd166; color: #1b1f3a; border-radius: 0.4rem; padding: 0 0.5rem; font-weight: bold; text-align: center; }
+  #malpanel .teile { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin: 0.6rem 0; }
+  #malpanel .teile button { border: 3px solid #1b1f3a; border-radius: 0.8rem; padding: 0.7rem 0.3rem; color: #fff; text-shadow: 0 1px 3px #000; }
+  .palette { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; margin: 0.4rem 0; }
+  .palette button { width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 3px solid #3d4266; }
+  .palette button.an { border-color: #ffd166; transform: scale(1.15); }
+  #liste div { background: #1b1f3a; border-radius: 0.6rem; padding: 0.3rem 0.6rem; margin: 0.25rem 0; text-align: left; }
+  a.zurueck { position: fixed; top: 0.6rem; left: 0.6rem; color: #c9c3ff; font-size: 0.9rem; z-index: 11; }
+</style>
+</head>
+<body>
+<canvas id="welt"></canvas>
+<canvas id="hud"></canvas>
+<a class="zurueck" id="zurueck" href="../../">⬅ Alle Spiele</a>
+
+<div id="start" class="overlay">
+  <div class="box">
+    <h1>FARBVERSTECK</h1>
+    <p>Mal dich an wie die Wand, das Sofa oder der Teppich – und lass dich nicht finden! 🎨🙈</p>
+    <h2>Dein Spielername</h2>
+    <input id="name" maxlength="14" placeholder="Spitzname">
+    <p class="klein">Nimm einen Spitznamen, nicht deinen echten Namen!</p>
+    <h2>Ich will …</h2>
+    <div class="wahl" id="wahlRolle">
+      <button data-r="verstecker" class="an">🙈 mich verstecken</button><button data-r="sucher">👀 suchen</button><button data-r="zufall">🎲 egal</button>
+    </div>
+    <h2>Bots</h2>
+    <div class="wahl" id="wahlBots">
+      <button data-b="2">2</button><button data-b="4" class="an">4</button><button data-b="6">6</button>
+    </div>
+    <button class="gross" id="solo">▶ Spielen</button>
+    <h2>👫 Mit Freunden online</h2>
+    <button class="klein" id="raum">🏠 Raum erstellen</button>
+    <input id="code" maxlength="4" placeholder="CODE" style="width:6rem;text-transform:uppercase;letter-spacing:0.2em">
+    <button class="klein" id="beitreten">🚪 Beitreten</button>
+    <p id="mpStatus" class="fehler"></p>
+    <p class="klein">🌐 Online über PeerJS (wie bei deinen anderen Spielen). Gib den Code nur an Freunde weiter!</p>
+    <div class="steuerung">
+      <span class="taste">W A S D</span><span>Laufen (Shift = rennen)</span>
+      <span class="taste">Maus</span><span>Umschauen</span>
+      <span class="taste">Rechtsklick</span><span>🎨 Pipette: Farbe aufsaugen (Verstecker)</span>
+      <span class="taste">Tab</span><span>Mal-Menü: Körperteile anmalen</span>
+      <span class="taste">G</span><span>Ganzen Körper in der Pipetten-Farbe anmalen</span>
+      <span class="taste">1 2 3 4</span><span>Pose: stehen · hocken · liegen · Kugel</span>
+      <span class="taste">Linksklick</span><span>👀 Antippen (Sucher)</span>
+    </div>
+  </div>
+</div>
+
+<div id="lobby" class="overlay hidden">
+  <div class="box">
+    <h1 style="font-size:2rem">🏠 Raum <span id="lobbyCode"></span></h1>
+    <p id="lobbyText">Sag deinen Freunden den Code!</p>
+    <div id="liste"></div>
+    <button class="gross" id="lobbyStart">▶ Runde starten</button>
+    <p><button class="klein" id="lobbyRaus">⬅ Verlassen</button></p>
+  </div>
+</div>
+
+<div id="malpanel" class="overlay hidden">
+  <div class="box">
+    <h1 style="font-size:2rem">🎨 Anmalen</h1>
+    <p>1. Farbe auswählen (neue Farben bekommst du mit Rechtsklick = Pipette)<br>2. Auf ein Körperteil klicken</p>
+    <div class="palette" id="palette"></div>
+    <div class="teile" id="teile"></div>
+    <button class="klein" id="alles">🖌️ Alles in dieser Farbe</button>
+    <button class="gross" id="malZu">✔ Fertig (Tab)</button>
+  </div>
+</div>
+
+<div id="ende" class="overlay hidden">
+  <div class="box">
+    <h1 id="sieger" style="font-size:2.2rem">…</h1>
+    <div id="punkte"></div>
+    <button class="gross" id="nochmal">🔁 Nochmal</button>
+    <button class="klein" id="zumStart">⬅ Hauptmenü</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ===================== EINSTELLUNGEN (hier kannst du alles ändern!) =====================
+const VERSTECK_ZEIT = 60;       // So lange dürfen sich die Verstecker verstecken (Sekunden)
+const SUCH_ZEIT = 150;          // So lange dürfen die Sucher suchen
+const TIPP_WEITE = 3.5;         // So nah musst du sein, um jemanden anzutippen (Meter)
+const DANEBEN_PAUSE = 1.5;      // Daneben getippt? So lange musst du warten
+const LAUF = 3.2, RENN = 5.2;   // Lauftempo (Meter pro Sekunde)
+const AUGEN_ZU_NACH = 0.8;      // Wer so lange still steht, macht die Augen zu
+const TEILE = ['kopf', 'koerper', 'armL', 'armR', 'beinL', 'beinR'];
+const TEIL_NAMEN = { kopf: '🙂 Kopf', koerper: '👕 Bauch', armL: '💪 Linker Arm', armR: '💪 Rechter Arm', beinL: '🦵 Linkes Bein', beinR: '🦵 Rechtes Bein' };
+const POSEN = { stehen: '🧍 Stehen', hocken: '🧎 Hocken', liegen: '🛌 Liegen', kugel: '⚪ Kugel' };
+const POSE_LISTE = Object.keys(POSEN);
+const BOT_NAMEN = ['Pinselchen', 'Tupfi', 'Kleksi', 'Farbfloh', 'Malmaus', 'Spritzi', 'Tarnfred', 'Schmierle', 'Buntbär'];
+const START_FARBE = [0xff8a1f, 0x6fb8ff, 0x5be37d, 0xff5fa2, 0xffd166, 0xa347ff];
+
+// ===================== GRUNDGERÜST =====================
+const welt = document.getElementById('welt'), hud = document.getElementById('hud'), ctx = hud.getContext('2d');
+const $ = id => document.getElementById(id);
+const renderer = new THREE.WebGLRenderer({ canvas: welt, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#bfe6ff');
+const kamera = new THREE.PerspectiveCamera(70, 1, 0.05, 200);
+function groesse() { renderer.setSize(innerWidth, innerHeight, false); hud.width = innerWidth; hud.height = innerHeight; kamera.aspect = innerWidth / innerHeight; kamera.updateProjectionMatrix(); }
+addEventListener('resize', groesse); groesse();
+scene.add(new THREE.HemisphereLight('#ffffff', '#b8a890', 1.0));
+const sonne = new THREE.DirectionalLight('#ffffff', 0.9); sonne.position.set(6, 12, 4); scene.add(sonne);
+
+// ===================== TEXTUREN (Tapeten, Böden, Teppiche) =====================
+function leinwand(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function bild(w, h, malen) { const c = leinwand(w, h); malen(c.getContext('2d'), w, h); return c; }
+const TEX = {
+  streifen: (a, b) => bild(64, 64, (g, w, h) => { g.fillStyle = a; g.fillRect(0, 0, w, h); g.fillStyle = b; for (let x = 0; x < w; x += 16) g.fillRect(x, 0, 8, h); }),
+  punkte: (a, b) => bild(64, 64, (g, w, h) => { g.fillStyle = a; g.fillRect(0, 0, w, h); g.fillStyle = b; for (const [x, y] of [[16, 16], [48, 48], [48, 16], [16, 48]]) { g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); } }),
+  karo: (a, b) => bild(64, 64, (g, w, h) => { g.fillStyle = a; g.fillRect(0, 0, w, h); g.fillStyle = b; g.fillRect(0, 0, 32, 32); g.fillRect(32, 32, 32, 32); }),
+  holz: (a, b) => bild(64, 64, (g, w, h) => { g.fillStyle = a; g.fillRect(0, 0, w, h); g.fillStyle = b; for (let y = 0; y < h; y += 16) g.fillRect(0, y, w, 2); for (let k = 0; k < 4; k++) g.fillRect((k * 23) % w, k * 16, 2, 16); }),
+  teppich: (farben) => bild(64, 64, (g, w, h) => { farben.forEach((f, i) => { g.fillStyle = f; const r = i * 8; g.fillRect(r, r, w - 2 * r, h - 2 * r); }); }),
+  flicken: (farben) => bild(64, 64, (g, w, h) => { for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = farben[(x + y * 3) % farben.length]; g.fillRect(x * 16, y * 16, 16, 16); } }),
+  zickzack: (a, b) => bild(64, 64, (g, w, h) => { g.fillStyle = a; g.fillRect(0, 0, w, h); g.strokeStyle = b; g.lineWidth = 8; for (let y = 8; y < h; y += 32) { g.beginPath(); for (let x = 0; x <= w; x += 16) g.lineTo(x, y + (x / 16 % 2 ? 12 : 0)); g.stroke(); } }),
+};
+// Material mit Bild: die Pipette liest später die echte Farbe aus dem Bild
+function texMat(canvas, rx = 1, ry = 1) {
+  const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.magFilter = THREE.NearestFilter;
+  const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 });
+  m.userData.pixel = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height); m.userData.cw = canvas.width; m.userData.ch = canvas.height;
+  return m;
+}
+const farbMat = farbe => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.85 });
+
+// ===================== DIE WOHNUNG =====================
+const WAND_H = 2.8;
+const fangbar = [];           // Alles, worauf die Pipette und das Antippen zielen kann
+const hindernisse = [];       // Rechtecke {x0, z0, x1, z1}, durch die man nicht laufen kann
+function kiste(x, y, z, w, h, d, material, sperrt = true, eltern = scene) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  m.position.set(x, y + h / 2, z); eltern.add(m); fangbar.push(m);
+  if (sperrt && h > 0.3 && eltern === scene) hindernisse.push({ x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 });
+  return m;
+}
+function walze(x, y, z, r, h, material, sperrt = false) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 20), material); m.position.set(x, y + h / 2, z); scene.add(m); fangbar.push(m);
+  if (sperrt) hindernisse.push({ x0: x - r, z0: z - r, x1: x + r, z1: z + r });
+  return m;
+}
+// Räume: [x0, z0, x1, z1], Tapete, Boden, Türen (Lücken in den Wänden)
+const RAEUME = [
+  { id: 'wohn', name: 'Wohnzimmer', x0: 0, z0: 0, x1: 12, z1: 10, tapete: TEX.streifen('#8fc9a8', '#a8dcbc'), boden: TEX.holz('#b5814a', '#8a5a2e'),
+    tueren: [{ seite: 'z1', von: 10.3, bis: 11.7 }, { seite: 'x1', von: 6, bis: 7.4 }] },
+  { id: 'kueche', name: 'Küche', x0: 12, z0: 0, x1: 20, z1: 10, tapete: TEX.karo('#fff3a8', '#ffe066'), boden: TEX.karo('#f2f2f2', '#2b2b33'),
+    tueren: [{ seite: 'x0', von: 6, bis: 7.4 }, { seite: 'z1', von: 15, bis: 16.4 }] },
+  { id: 'kinder', name: 'Kinderzimmer', x0: 0, z0: 10, x1: 10, z1: 18, tapete: TEX.punkte('#ffb3d1', '#ffffff'), boden: TEX.holz('#d9a066', '#b07a45'),
+    tueren: [{ seite: 'x1', von: 13, bis: 14.4 }] },
+  { id: 'flur', name: 'Flur', x0: 10, z0: 10, x1: 20, z1: 18, tapete: TEX.zickzack('#ffcf8a', '#ff9f4a'), boden: TEX.holz('#9a6a3a', '#6e4520'),
+    tueren: [{ seite: 'z0', von: 10.3, bis: 11.7 }, { seite: 'z0', von: 15, bis: 16.4 }, { seite: 'x0', von: 13, bis: 14.4 }] },
+];
+// Welche Räume sind durch eine Tür verbunden (für die Bots)
+const TUER_PUNKTE = [
+  { a: 'wohn', b: 'flur', x: 11, z: 10 }, { a: 'wohn', b: 'kueche', x: 12, z: 6.7 },
+  { a: 'kueche', b: 'flur', x: 15.7, z: 10 }, { a: 'kinder', b: 'flur', x: 10, z: 13.7 },
+];
+const raumBei = (x, z) => RAEUME.find(R => x >= R.x0 && x <= R.x1 && z >= R.z0 && z <= R.z1) || RAEUME[3];
+for (const R of RAEUME) {
+  const w = R.x1 - R.x0, d = R.z1 - R.z0;
+  // Boden und Decke
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(w, d), texMat(R.boden, w / 1.2, d / 1.2)); boden.rotation.x = -Math.PI / 2; boden.position.set(R.x0 + w / 2, 0, R.z0 + d / 2); scene.add(boden); fangbar.push(boden);
+  const decke = new THREE.Mesh(new THREE.PlaneGeometry(w, d), farbMat('#fbf7ef')); decke.rotation.x = Math.PI / 2; decke.position.set(R.x0 + w / 2, WAND_H, R.z0 + d / 2); scene.add(decke);
+  const lampe = new THREE.PointLight('#fff2d8', 0.6, 14, 1.5); lampe.position.set(R.x0 + w / 2, WAND_H - 0.3, R.z0 + d / 2); scene.add(lampe);
+  // Vier Wände (jede Seite mit Lücken für Türen)
+  const seiten = { z0: [R.x0, R.z0, R.x1, R.z0], z1: [R.x0, R.z1, R.x1, R.z1], x0: [R.x0, R.z0, R.x0, R.z1], x1: [R.x1, R.z0, R.x1, R.z1] };
+  for (const [seite, [ax, az, bx, bz]] of Object.entries(seiten)) {
+    const entlangX = az === bz, von = entlangX ? ax : az, bis = entlangX ? bx : bz;
+    const luecken = R.tueren.filter(T => T.seite === seite).sort((p, q) => p.von - q.von);
+    let start = von;
+    for (const stueck of [...luecken, { von: bis, bis: bis }]) {
+      const l = stueck.von - start;
+      if (l > 0.05) {
+        const mitte = start + l / 2, innen = seite === 'z0' || seite === 'x0' ? 0.05 : -0.05;
+        const m = texMat(R.tapete, l / 1.0, WAND_H / 1.0);
+        if (entlangX) kiste(mitte, 0, az + innen, l, WAND_H, 0.1, m); else kiste(ax + innen, 0, mitte, 0.1, WAND_H, l, m);
+      }
+      if (stueck.von < bis) { // Über der Tür ein Stück Wand
+        const tl = stueck.bis - stueck.von, tm = stueck.von + tl / 2, innen = seite === 'z0' || seite === 'x0' ? 0.05 : -0.05;
+        const m = texMat(R.tapete, tl, 0.6);
+        if (entlangX) kiste(tm, 2.2, az + innen, tl, 0.6, 0.1, m, false); else kiste(ax + innen, 2.2, tm, 0.1, 0.6, tl, m, false);
+      }
+      start = stueck.bis;
+    }
+  }
+}
+// ---------- Möbel ----------
+(function moebel() {
+  // 🛋️ Wohnzimmer
+  const sofa = farbMat('#3b6fd8'), sofaHell = farbMat('#5a8cf0');
+  kiste(4, 0, 1.0, 3.6, 0.45, 1.2, sofa); kiste(4, 0, 0.45, 3.6, 1.0, 0.3, sofa); kiste(2.35, 0, 1.0, 0.3, 0.7, 1.2, sofaHell); kiste(5.65, 0, 1.0, 0.3, 0.7, 1.2, sofaHell);
+  for (const x of [3.1, 4.9]) kiste(x, 0.45, 1.0, 1.6, 0.15, 1.0, sofaHell, false);                           // Kissen
+  kiste(4, 0.01, 3.6, 5, 0.02, 3.4, texMat(TEX.teppich(['#d8302a', '#ff8a1f', '#ffd166', '#d8302a']), 1, 1), false);   // großer Teppich
+  kiste(4, 0, 3.6, 1.6, 0.45, 0.9, farbMat('#6b4a2b'));                                                        // Couchtisch
+  kiste(8.6, 0, 1.2, 1.1, 0.5, 1.1, farbMat('#ffd166')); kiste(8.6, 0, 0.75, 1.1, 1.0, 0.25, farbMat('#ffd166'));   // Sessel
+  kiste(11.6, 0, 3.0, 0.6, 2.0, 2.4, farbMat('#ffffff'));                                                      // Regal
+  ['#e63946', '#2a9d8f', '#ffd166', '#3b6fd8', '#a347ff', '#ff8a1f'].forEach((f, i) => kiste(11.4, 0.2 + Math.floor(i / 3) * 0.7, 2.2 + (i % 3) * 0.7, 0.3, 0.45, 0.5, farbMat(f), false));
+  kiste(4, 0, 9.6, 2.4, 0.5, 0.5, farbMat('#26272b')); kiste(4, 0.5, 9.75, 1.8, 1.0, 0.08, farbMat('#111318'), false);   // Fernseher
+  walze(0.6, 0, 9.3, 0.3, 0.5, farbMat('#c8642a'), true); walze(0.6, 0.5, 9.3, 0.45, 1.1, farbMat('#3f9b4b'));        // Pflanze
+  kiste(0.08, 0.6, 5.5, 0.06, 1.8, 2.6, texMat(TEX.streifen('#8a3ad8', '#a35ae8'), 1, 2), false);               // Vorhang
+  walze(10.8, 0, 8.8, 0.15, 1.6, farbMat('#333333'), true); walze(10.8, 1.6, 8.8, 0.35, 0.4, farbMat('#fff4c2'));   // Stehlampe
+  // 🍳 Küche
+  const mint = farbMat('#7fd8c0');
+  kiste(16, 0, 0.4, 7.6, 0.9, 0.7, mint); kiste(16, 0.9, 0.4, 7.6, 0.05, 0.72, farbMat('#c9a26a'), false);      // Unterschränke + Arbeitsplatte
+  kiste(16, 1.6, 0.25, 7.6, 0.7, 0.4, mint, false);                                                           // Hängeschränke
+  kiste(19.5, 0, 3.0, 0.8, 1.9, 0.8, farbMat('#f2f2f2'));                                                      // Kühlschrank
+  kiste(16, 0, 5.5, 2.2, 0.75, 1.3, farbMat('#c9a26a'));                                                       // Tisch
+  for (const [x, z] of [[14.6, 5.5], [17.4, 5.5], [16, 4.4], [16, 6.6]]) { kiste(x, 0, z, 0.5, 0.45, 0.5, farbMat('#e63946')); kiste(x, 0.45, z + (z > 5.5 ? 0.22 : z < 5.5 ? -0.22 : 0), 0.5, 0.5, 0.06, farbMat('#e63946'), false); }
+  walze(16, 0.75, 5.5, 0.25, 0.12, farbMat('#ffffff')); for (const [x, f] of [[15.9, '#ffd166'], [16.1, '#e63946']]) walze(x, 0.87, 5.5, 0.08, 0.1, farbMat(f));
+  kiste(19.6, 0, 8.5, 0.6, 0.9, 1.6, farbMat('#ff8a1f'));                                                      // Mülltonnen
+  // 🧸 Kinderzimmer
+  kiste(1.5, 0, 16.5, 2.0, 0.5, 2.6, farbMat('#ffffff')); kiste(1.5, 0.5, 16.4, 1.9, 0.2, 2.4, texMat(TEX.flicken(['#5be37d', '#6fb8ff', '#ffd166', '#ff5fa2']), 2, 3), false);   // Bett
+  kiste(1.5, 0, 17.85, 2.0, 1.0, 0.15, farbMat('#ffffff'));
+  kiste(5, 0.01, 14, 4, 0.02, 3, farbMat('#4f9bd8'), false);                                                   // blauer Teppich
+  kiste(8.8, 0, 17.4, 1.4, 0.6, 0.8, farbMat('#e63946'));                                                      // Spielzeugkiste
+  kiste(8.8, 0, 11.0, 1.6, 0.75, 0.8, farbMat('#ffd166')); kiste(8.4, 0, 11.8, 0.5, 0.45, 0.5, farbMat('#6fb8ff'));   // Schreibtisch + Hocker
+  const baer = farbMat('#8a5a2e'); walze(6.5, 0, 17.4, 0.3, 0.6, baer, true); walze(6.5, 0.6, 17.4, 0.22, 0.4, baer);   // Teddybär
+  kiste(5, 1.0, 17.93, 1.6, 1.0, 0.03, texMat(TEX.zickzack('#6fb8ff', '#ffffff'), 1, 1), false);              // Poster
+  // 🧥 Flur
+  kiste(15, 0.01, 14, 8, 0.02, 1.4, texMat(TEX.streifen('#d8302a', '#ffffff'), 6, 1), false);                  // Läufer
+  kiste(19.7, 0, 14, 0.5, 1.8, 1.6, farbMat('#6b4a2b'));                                                       // Garderobe
+  for (const [z, f] of [[13.5, '#2a9d8f'], [14.4, '#a347ff']]) kiste(19.5, 0.7, z, 0.3, 1.0, 0.5, farbMat(f), false);   // Jacken
+  kiste(12.5, 0, 17.6, 2.0, 0.5, 0.6, farbMat('#ffffff'));                                                     // Schuhregal
+  kiste(17, 0.9, 17.95, 1.0, 1.5, 0.03, farbMat('#cfefff'), false);                                            // Spiegel
+})();
+
+// ===================== DIE FARBLINGE (eigene Figuren) =====================
+const augenWeiss = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.3 }), augenSchwarz = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.3 });
+function baueFarbling() {
+  const g = new THREE.Group(), innen = new THREE.Group(); g.add(innen);
+  const mats = {}, teile = {};
+  for (const t of TEILE) mats[t] = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85 });
+  const mesh = (geo, t, eltern, x, y, z) => { const m = new THREE.Mesh(geo, mats[t]); m.position.set(x, y, z); eltern.add(m); m.userData.teil = t; teile[t] = m; return m; };
+  mesh(new THREE.CapsuleGeometry(0.28, 0.35, 6, 14), 'koerper', innen, 0, 0.85, 0);
+  mesh(new THREE.SphereGeometry(0.24, 18, 14), 'kopf', innen, 0, 1.42, 0);
+  const glieder = {};
+  for (const [t, x, y, r, l] of [['armL', -0.34, 1.08, 0.08, 0.32], ['armR', 0.34, 1.08, 0.08, 0.32], ['beinL', -0.13, 0.52, 0.1, 0.3], ['beinR', 0.13, 0.52, 0.1, 0.3]]) {
+    const p = new THREE.Group(); p.position.set(x, y, 0); innen.add(p);
+    mesh(new THREE.CapsuleGeometry(r, l, 4, 10), t, p, 0, -(l / 2 + r * 0.8), 0);
+    glieder[t] = p;
+  }
+  const augen = new THREE.Group(); augen.position.set(0, 1.46, -0.19); innen.add(augen);
+  for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 8), augenWeiss); w.position.x = s * 0.09; augen.add(w); const p = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), augenSchwarz); p.position.set(s * 0.09, 0, -0.045); augen.add(p); }
+  const schild = namensSchild(); schild.position.y = 2.0; g.add(schild);
+  scene.add(g);
+  return { g, innen, mats, teile, glieder, augen, schild, phase: 0 };
+}
+function namensSchild() {
+  const c = leinwand(256, 64), t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: true, transparent: true })); s.scale.set(1.4, 0.35, 1);
+  s.userData.malen = (text, farbe) => { const g = c.getContext('2d'); g.clearRect(0, 0, 256, 64); g.font = 'bold 30px system-ui'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = '#1b1f3a'; g.strokeText(text, 128, 44); g.fillStyle = farbe; g.fillText(text, 128, 44); t.needsUpdate = true; };
+  return s;
+}
+function farbenSetzen(L, farben) {
+  L.farben = farben.slice(0, 6).map(f => Number(f) >>> 0 & 0xffffff);
+  TEILE.forEach((t, i) => L.fig.mats[t].color.setHex(L.farben[i]));
+}
+// Posen und Laufen
+function figurAnimieren(L, dt) {
+  const F = L.fig, gl = F.glieder, inn = F.innen;
+  F.g.position.set(L.x, 0, L.z); F.g.rotation.y = L.yaw;
+  inn.rotation.set(0, 0, 0); inn.position.set(0, 0, 0); inn.scale.set(1, 1, 1);
+  for (const t of ['armL', 'armR', 'beinL', 'beinR']) gl[t].rotation.set(0, 0, 0);
+  if (L.bewegt) { F.phase += dt * 10; const s = Math.sin(F.phase) * 0.6; gl.beinL.rotation.x = s; gl.beinR.rotation.x = -s; gl.armL.rotation.x = -s * 0.8; gl.armR.rotation.x = s * 0.8; inn.position.y = Math.abs(Math.cos(F.phase)) * 0.04; }
+  else if (L.pose === 'hocken') { inn.position.y = -0.3; gl.beinL.rotation.x = gl.beinR.rotation.x = 1.3; gl.armL.rotation.x = gl.armR.rotation.x = 0.5; }
+  else if (L.pose === 'liegen') { inn.rotation.x = Math.PI / 2; inn.position.set(0, 0.3, -0.85); gl.armL.rotation.z = -0.2; gl.armR.rotation.z = 0.2; }
+  else if (L.pose === 'kugel') { inn.position.y = -0.35; inn.scale.set(1.1, 0.85, 1.1); gl.beinL.rotation.x = gl.beinR.rotation.x = 1.6; gl.armL.rotation.set(-0.6, 0, -0.9); gl.armR.rotation.set(-0.6, 0, 0.9); }
+  // Wer still steht, macht die Augen zu – offene Augen verraten dich!
+  F.augen.visible = L.bewegt || L.stillT < AUGEN_ZU_NACH || L.gefunden || L.rolle === 'sucher';
+  F.schild.visible = L.rolle === 'sucher' || L.gefunden || L === ich || (ich && ich.rolle === 'verstecker' && L.rolle === 'verstecker');
+}
+
+// ===================== FARBEN MESSEN =====================
+const strahl = new THREE.Raycaster(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpC = new THREE.Color();
+const farbeVonTreffer = hit => {   // Welche Farbe hat die Stelle, auf die man zeigt?
+  const m = hit.object.material;
+  if (m.userData && m.userData.pixel && hit.uv) {
+    const rep = m.map.repeat, u = ((hit.uv.x * rep.x) % 1 + 1) % 1, v = ((hit.uv.y * rep.y) % 1 + 1) % 1;
+    const px = Math.min(m.userData.cw - 1, Math.floor(u * m.userData.cw)), py = Math.min(m.userData.ch - 1, Math.floor((1 - v) * m.userData.ch));
+    const d = m.userData.pixel.data, i = (py * m.userData.cw + px) * 4;
+    return (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+  }
+  return m.color ? m.color.getHex() : 0xffffff;
+};
+const figurTeile = () => { const l = []; for (const L of leute.values()) for (const t of TEILE) l.push(L.fig.teile[t]); return l; };
+function wemGehoert(obj) { for (const L of leute.values()) if (Object.values(L.fig.teile).includes(obj)) return L; return null; }
+// Ersten Treffer suchen, der NICHT zu einer bestimmten Figur gehört
+function treffer(von, richtung, ohne = null, weite = 40, mitFiguren = true) {
+  strahl.set(von, richtung); strahl.far = weite;
+  const liste = mitFiguren ? [...fangbar, ...figurTeile()] : fangbar;
+  for (const h of strahl.intersectObjects(liste, false)) { if (ohne && wemGehoert(h.object) === ohne) continue; return h; }
+  return null;
+}
+const farbAbstand = (a, b) => { const dr = ((a >> 16) & 255) - ((b >> 16) & 255), dg = ((a >> 8) & 255) - ((b >> 8) & 255), db = (a & 255) - (b & 255); return Math.sqrt(dr * dr + dg * dg + db * db) / 441.7; };
+// Die perfekte Tarnung von einem Blickpunkt aus: Was liegt HINTER jedem Körperteil?
+function tarnFarben(L, blick) {
+  L.fig.g.updateMatrixWorld(true);
+  return TEILE.map((t, i) => {
+    L.fig.teile[t].getWorldPosition(tmpV);
+    tmpV2.copy(tmpV).sub(blick).normalize();
+    const h = treffer(blick, tmpV2, L, 40, false);
+    return h ? farbeVonTreffer(h) : L.farben[i];
+  });
+}
+
+// ===================== SPIELER UND BOTS =====================
+const leute = new Map();   // id → { id, name, bot, mensch, rolle, gefunden, x, z, yaw, pitch, pose, farben, bewegt, stillT, fig, punkte, ki }
+let ich = null;
+function neuePerson(d) {
+  const L = { id: d.id, name: d.name, bot: !!d.bot, mensch: d.mensch || null, rolle: d.rolle || 'verstecker', gefunden: false, x: d.x || 15, z: d.z || 14, yaw: d.yaw || 0, pitch: 0,
+    pose: 'stehen', bewegt: false, stillT: 0, punkte: 0, ki: { pfad: [], ziel: null, warte: 0, scan: 0, verdacht: null }, fig: baueFarbling() };
+  farbenSetzen(L, d.farben || TEILE.map(() => START_FARBE[(leute.size) % START_FARBE.length]));
+  L.fig.schild.userData.malen(d.name, d.rolle === 'sucher' ? '#ff8080' : '#ffffff');
+  leute.set(L.id, L);
+  return L;
+}
+function alleWeg() { for (const L of leute.values()) scene.remove(L.fig.g); leute.clear(); ich = null; }
+// Laufen mit Wänden und Möbeln
+function kollidiert(x, z, r = 0.28) {
+  if (x < r || z < r || x > 20 - r || z > 18 - r) return true;
+  for (const h of hindernisse) { const cx = Math.max(h.x0, Math.min(x, h.x1)), cz = Math.max(h.z0, Math.min(z, h.z1)); if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; }
+  return false;
+}
+function gehen(L, dx, dz, tempo, dt) {
+  const nx = L.x + dx * tempo * dt; if (!kollidiert(nx, L.z)) L.x = nx;
+  const nz = L.z + dz * tempo * dt; if (!kollidiert(L.x, nz)) L.z = nz;
+}
+
+// ===================== RUNDE =====================
+let phase = 'menu', zeit = 0, rundeNr = 0, meldungen = [], danebenT = 0, rolleWunsch = 'verstecker', botAnzahl = 4, sieger = null;
+let pipette = 0x6fb8ff, palette = [0x6fb8ff, 0xffd166, 0xff5fa2, 0x5be37d, 0xffffff, 0x2b2b33];
+function meldung(text, t = 3) { meldungen.push({ text, t }); if (meldungen.length > 4) meldungen.shift(); }
+const FLUR_START = [[12, 12], [13.5, 12], [15, 12], [16.5, 12], [18, 12], [12, 16], [13.5, 16], [15, 16], [16.5, 16], [18, 16]];
+// Gastgeber (oder allein): neue Runde mit Rollen
+function rundeAufstellen() {
+  const menschen = mp.aktiv ? [{ id: 'host', name: meinName(), wunsch: rolleWunsch }, ...[...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name, wunsch: g.wunsch }))] : [{ id: 'host', name: meinName(), wunsch: rolleWunsch }];
+  const auf = menschen.map(m => ({ id: m.id, name: m.name, mensch: m.id, rolle: m.wunsch === 'zufall' ? (Math.random() < 0.3 ? 'sucher' : 'verstecker') : m.wunsch }));
+  const namen = [...BOT_NAMEN].sort(() => Math.random() - 0.5);
+  for (let i = 0; i < botAnzahl; i++) auf.push({ id: 'bot' + i, name: namen[i], bot: true, rolle: 'verstecker' });
+  // Mindestens 1 Sucher und mindestens 1 Verstecker
+  if (!auf.some(a => a.rolle === 'sucher')) { const b = auf.find(a => a.bot) || auf[0]; b.rolle = 'sucher'; }
+  if (!auf.some(a => a.rolle === 'verstecker')) auf.push({ id: 'botX', name: namen[8], bot: true, rolle: 'verstecker' });
+  if (auf.length >= 7 && auf.filter(a => a.rolle === 'sucher').length < 2) { const b = auf.find(a => a.bot && a.rolle === 'verstecker'); if (b) b.rolle = 'sucher'; }
+  auf.forEach((a, i) => { const [x, z] = FLUR_START[i % FLUR_START.length]; Object.assign(a, { x, z, yaw: 0, farben: TEILE.map(() => START_FARBE[i % START_FARBE.length]) }); });
+  return auf;
+}
+function rundeStarten(auf) {
+  alleWeg();
+  for (const a of auf) neuePerson(a);
+  ich = leute.get(mp.aktiv ? mp.meineId : 'host');
+  rundeNr++; phase = 'verstecken'; zeit = VERSTECK_ZEIT; sieger = null; meldungen = []; danebenT = 0;
+  zeigeNur(null);
+  meldung(ich.rolle === 'sucher' ? '👀 Du bist SUCHER! Augen zu und zählen …' : '🙈 Du bist VERSTECKER! Schnell: anmalen (Tab) und verstecken!', 5);
+  ton('pfiff'); musik('verstecken');
+  mausFangen();
+}
+function phaseUpdate(dt) {   // Nur Gastgeber / allein
+  zeit -= dt;
+  if (phase === 'verstecken' && zeit <= 0) { phase = 'suchen'; zeit = SUCH_ZEIT; meldung('👀 Die Sucher kommen! Ab jetzt: still halten!', 4); ton('pfiff'); musik('suchen'); mpEreignis({ k: 'phase' }); }
+  else if (phase === 'suchen') {
+    for (const L of leute.values()) if (L.rolle === 'verstecker' && !L.gefunden) L.punkte += dt / 10;
+    const rest = [...leute.values()].filter(L => L.rolle === 'verstecker' && !L.gefunden).length;
+    if (rest === 0) rundeEnde('sucher');
+    else if (zeit <= 0) rundeEnde('verstecker');
+  }
+}
+function rundeEnde(gewinner) {
+  for (const L of leute.values()) if (gewinner === 'verstecker' && L.rolle === 'verstecker' && !L.gefunden) L.punkte += 10;
+  const daten = { sieger: gewinner, punkte: [...leute.values()].map(L => [L.id, L.name, Math.round(L.punkte), L.rolle, L.gefunden ? 1 : 0]) };
+  mpAnAlle({ t: 'ende', ...daten });
+  endeZeigen(daten);
+}
+function endeZeigen(d) {
+  phase = 'ende'; sieger = d.sieger;
+  if (document.pointerLockElement) document.exitPointerLock();
+  musik('aus'); ton(d.sieger === (ich && ich.rolle) ? 'sieg' : 'niederlage');
+  $('sieger').textContent = d.sieger === 'sucher' ? '👀 Die Sucher haben alle gefunden!' : '🙈 Die Verstecker haben gewonnen!';
+  const box = $('punkte'); box.innerHTML = '';
+  for (const [id, name, p, rolle, gef] of [...d.punkte].sort((a, b) => b[2] - a[2])) {
+    const z = document.createElement('p'); z.textContent = `${rolle === 'sucher' ? '👀' : gef ? '😵' : '🙈'} ${name}${ich && id === ich.id ? ' (Du)' : ''}: ${p} Punkte`; box.appendChild(z);
+  }
+  $('nochmal').classList.toggle('hidden', istGast());
+  zeigeNur('ende');
+}
+// Antippen: Hat der Sucher jemanden gefunden?
+function antippen(sucher, ziel) {   // Gastgeber prüft
+  if (phase !== 'suchen' || !ziel || ziel.rolle !== 'verstecker' || ziel.gefunden || (sucher.rolle !== 'sucher')) return false;
+  if (Math.hypot(sucher.x - ziel.x, sucher.z - ziel.z) > TIPP_WEITE + 0.6) return false;
+  ziel.gefunden = true; ziel.rolle = 'sucher'; sucher.punkte += 10;
+  ziel.fig.schild.userData.malen(ziel.name, '#ff8080');
+  const text = `🎯 ${sucher.name} hat ${ziel.name} gefunden! ${ziel.name} sucht jetzt mit.`;
+  meldung(ziel === ich ? `😵 ${sucher.name} hat dich gefunden! Jetzt suchst du mit!` : sucher === ich ? `🎯 Gefunden: ${ziel.name}!` : text, 3.5);
+  ton(ziel === ich ? 'erwischt' : 'gefunden');
+  mpEreignis({ k: 'gef', z: ziel.id, s: sucher.id });
+  return true;
+}
+
+// ===================== BOTS =====================
+// Wege durch die Wohnung: Raum → Tür → Raum
+function pfadZu(L, zx, zz) {
+  const von = raumBei(L.x, L.z).id, nach = raumBei(zx, zz).id, pfad = [];
+  if (von !== nach) {   // kurze Suche über die Türen
+    const q = [[von, []]], gesehen = new Set([von]);
+    while (q.length) {
+      const [r, weg] = q.shift();
+      if (r === nach) { for (const T of weg) pfad.push({ x: T.x, z: T.z }); break; }
+      for (const T of TUER_PUNKTE) { const n = T.a === r ? T.b : T.b === r ? T.a : null; if (n && !gesehen.has(n)) { gesehen.add(n); q.push([n, [...weg, T]]); } }
+    }
+  }
+  pfad.push({ x: zx, z: zz });
+  return pfad;
+}
+function zufallsPunkt(raum) {
+  const R = raum || RAEUME[Math.floor(Math.random() * RAEUME.length)];
+  for (let k = 0; k < 40; k++) { const x = R.x0 + 0.5 + Math.random() * (R.x1 - R.x0 - 1), z = R.z0 + 0.5 + Math.random() * (R.z1 - R.z0 - 1); if (!kollidiert(x, z, 0.35)) return { x, z }; }
+  return { x: (R.x0 + R.x1) / 2, z: (R.z0 + R.z1) / 2 };
+}
+function botLaufen(L, dt, tempo) {
+  const P = L.ki.pfad[0];
+  if (!P) { L.bewegt = false; return true; }
+  const dx = P.x - L.x, dz = P.z - L.z, d = Math.hypot(dx, dz);
+  if (d < 0.25) { L.ki.pfad.shift(); return L.ki.pfad.length === 0; }
+  const altX = L.x, altZ = L.z;
+  gehen(L, dx / d, dz / d, tempo, dt);
+  L.yaw = Math.atan2(-dx, -dz); L.bewegt = true;
+  if (Math.hypot(L.x - altX, L.z - altZ) < tempo * dt * 0.2) { L.ki.stecken = (L.ki.stecken || 0) + dt; if (L.ki.stecken > 1) { L.ki.pfad = []; L.ki.stecken = 0; } }   // festgesteckt
+  else L.ki.stecken = 0;
+  return false;
+}
+// Verstecker-Bot: Platz suchen, hinlaufen, Pose einnehmen, passend anmalen
+function versteckBot(L, dt) {
+  const K = L.ki;
+  if (L.gefunden || phase === 'ende') return;
+  if (!K.platz) {
+    const R = RAEUME[Math.floor(Math.random() * RAEUME.length)];
+    const p = zufallsPunkt(R);
+    const nahAnWand = kollidiert(p.x, p.z, 0.75);
+    K.platz = { ...p, pose: nahAnWand ? (Math.random() < 0.6 ? 'stehen' : 'hocken') : POSE_LISTE[1 + Math.floor(Math.random() * 3)], raum: R };
+    K.pfad = pfadZu(L, p.x, p.z);
+  }
+  if (!K.angekommen) {
+    if (phase !== 'verstecken') { if (!botLaufen(L, dt, LAUF)) return; }
+    else if (!botLaufen(L, dt, RENN)) return;
+    K.angekommen = true; L.bewegt = false; L.pose = K.platz.pose;
+    L.yaw = Math.random() * Math.PI * 2;
+    figurAnimieren(L, 0);
+    // Von der Raummitte aus gesehen tarnen (manchmal mit einem kleinen Fehler)
+    const R = K.platz.raum, blick = new THREE.Vector3((R.x0 + R.x1) / 2 + (Math.random() - 0.5) * 2, 1.5, (R.z0 + R.z1) / 2 + (Math.random() - 0.5) * 2);
+    const f = tarnFarben(L, blick);
+    if (Math.random() < 0.5) { const i = Math.floor(Math.random() * 6); tmpC.setHex(f[i]).offsetHSL(0, 0, (Math.random() - 0.5) * 0.25); f[i] = tmpC.getHex(); }
+    farbenSetzen(L, f); mpFarbe(L);
+  }
+}
+// Sucher-Bot: herumlaufen, umschauen und auf Verdächtiges achten
+function sucherBot(L, dt) {
+  const K = L.ki;
+  if (phase !== 'suchen') { L.bewegt = false; return; }
+  K.scan -= dt;
+  if (K.verdacht) {   // Hinlaufen und antippen
+    const Z = K.verdacht;
+    if (Z.gefunden || Z.rolle !== 'verstecker') { K.verdacht = null; K.pfad = []; return; }
+    const d = Math.hypot(Z.x - L.x, Z.z - L.z);
+    if (d < 1.6) { L.yaw = Math.atan2(-(Z.x - L.x), -(Z.z - L.z)); antippen(L, Z); K.verdacht = null; K.pfad = []; K.warte = 1; return; }
+    if (!K.pfad.length) K.pfad = pfadZu(L, Z.x, Z.z);
+    botLaufen(L, dt, LAUF); return;
+  }
+  if (K.warte > 0) { K.warte -= dt; L.bewegt = false; L.yaw += dt * 1.2 * (K.dreh || 1); }   // stehen bleiben und umschauen
+  else if (!K.pfad.length) { const p = zufallsPunkt(); K.pfad = pfadZu(L, p.x, p.z); K.dreh = Math.random() < 0.5 ? 1 : -1; }
+  else if (botLaufen(L, dt, LAUF * 0.85)) K.warte = 1.5 + Math.random() * 2;
+  if (K.scan <= 0) {
+    K.scan = 0.3;
+    const auge = new THREE.Vector3(L.x, 1.45, L.z);
+    for (const Z of leute.values()) {
+      if (Z.rolle !== 'verstecker' || Z.gefunden) continue;
+      const dx = Z.x - L.x, dz = Z.z - L.z, d = Math.hypot(dx, dz);
+      if (d > 9) continue;
+      const blickWinkel = Math.atan2(-dx, -dz), diff = Math.abs(((blickWinkel - L.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      if (diff > 1.1) continue;   // nicht im Blickfeld
+      // Wie gut ist die Tarnung von hier aus? Farbe des Körperteils gegen das, was dahinter liegt
+      Z.fig.g.updateMatrixWorld(true);
+      let summe = 0, sichtbar = 0;
+      for (const t of TEILE) {
+        Z.fig.teile[t].getWorldPosition(tmpV); tmpV2.copy(tmpV).sub(auge).normalize();
+        const h = treffer(auge, tmpV2, null, d + 3);
+        if (!h || wemGehoert(h.object) !== Z) continue;   // verdeckt
+        sichtbar++;
+        const dahinter = treffer(h.point.clone().addScaledVector(tmpV2, 0.02), tmpV2, Z, 30, false);
+        summe += dahinter ? farbAbstand(Z.farben[TEILE.indexOf(t)], farbeVonTreffer(dahinter)) : 0.5;
+      }
+      if (!sichtbar) continue;
+      let chance = Math.max(0, (summe / sichtbar - 0.07) * 2.2) * Math.min(1, sichtbar / 3);
+      if (Z.bewegt) chance += 0.6;
+      if (Z.fig.augen.visible) chance += 0.25;
+      if (d < 1.8) chance += 0.15;
+      if (Math.random() < Math.min(0.85, chance) * 0.45) { K.verdacht = Z; K.pfad = pfadZu(L, Z.x, Z.z); break; }
+    }
+  }
+}
+
+// ===================== STEUERUNG =====================
+const tasten = {};
+let maus = { links: false }, yawZiel = 0;
+addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  tasten[k] = true;
+  if (k === 'tab') { e.preventDefault(); if (ich && phase !== 'menu' && phase !== 'ende' && ich.rolle === 'verstecker') malPanelZeigen($('malpanel').classList.contains('hidden')); }
+  if (!ich || !['verstecken', 'suchen'].includes(phase)) return;
+  if (ich.rolle === 'verstecker' && !ich.gefunden) {
+    if (['1', '2', '3', '4'].includes(k)) { ich.pose = POSE_LISTE[Number(k) - 1]; meldung(`Pose: ${POSEN[ich.pose]}`, 1.2); }
+    if (k === 'g') { farbenSetzen(ich, TEILE.map(() => pipette)); mpFarbe(ich); ton('mal'); meldung('🖌️ Ganzer Körper angemalt!', 1.5); }
+  }
+});
+addEventListener('keyup', e => { tasten[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; });
+addEventListener('contextmenu', e => e.preventDefault());
+welt.addEventListener('mousedown', e => {
+  if (!ich || !['verstecken', 'suchen'].includes(phase)) return;
+  if (document.pointerLockElement !== welt) { mausFangen(); return; }
+  if (e.button === 2 && ich.rolle === 'verstecker') pipetteNehmen();
+  if (e.button === 0 && ich.rolle === 'sucher') tippen();
+});
+addEventListener('mousemove', e => {
+  if (document.pointerLockElement !== welt || !ich) return;
+  ich.yaw -= e.movementX * 0.0025;
+  ich.pitch = Math.max(-1.3, Math.min(1.2, ich.pitch - e.movementY * 0.0025));
+});
+function mausFangen() { try { const p = welt.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* egal */ } }
+function blickRichtung() { kamera.getWorldDirection(tmpV2); return tmpV2.clone(); }
+function pipetteNehmen() {
+  const h = treffer(kamera.position.clone(), blickRichtung(), ich, 30);
+  if (!h) return;
+  pipette = farbeVonTreffer(h);
+  palette = [pipette, ...palette.filter(f => f !== pipette)].slice(0, 12);
+  ton('pipette'); meldung('🎨 Farbe aufgesaugt! (G = alles anmalen · Tab = einzeln)', 1.8);
+}
+function tippen() {
+  if (danebenT > 0) return;
+  const h = treffer(kamera.position.clone(), blickRichtung(), ich, TIPP_WEITE + 2);
+  const Z = h && h.distance <= TIPP_WEITE + 1 ? wemGehoert(h.object) : null;
+  if (Z && Z.rolle === 'verstecker' && !Z.gefunden) {
+    if (istGast()) { mpSende({ t: 'tag', z: Z.id }); ton('klick'); }
+    else antippen(ich, Z);
+  } else { danebenT = DANEBEN_PAUSE; ton('daneben'); meldung('🙅 Daneben! Kurz warten …', 1.2); }
+}
+function spielerUpdate(dt) {
+  const L = ich;
+  if (!L) return;
+  const blind = phase === 'verstecken' && L.rolle === 'sucher';
+  let vx = 0, vz = 0;
+  if (!blind && $('malpanel').classList.contains('hidden')) {
+    const vor = (tasten.w || tasten.arrowup ? 1 : 0) - (tasten.s || tasten.arrowdown ? 1 : 0), seit = (tasten.d || tasten.arrowright ? 1 : 0) - (tasten.a || tasten.arrowleft ? 1 : 0);
+    vx = -Math.sin(L.yaw) * vor + Math.cos(L.yaw) * seit; vz = -Math.cos(L.yaw) * vor - Math.sin(L.yaw) * seit;
+    const l = Math.hypot(vx, vz); if (l) { vx /= l; vz /= l; }
+  }
+  L.bewegt = !!(vx || vz);
+  if (L.bewegt) { gehen(L, vx, vz, tasten.shift ? RENN : LAUF, dt); if (L.pose !== 'stehen' && L.rolle === 'verstecker') L.pose = 'stehen'; }
+}
+
+// ===================== KAMERA =====================
+function kameraSetzen() {
+  const L = ich;
+  if (!L) return;
+  const ego = L.rolle === 'sucher';
+  if (ego) {
+    kamera.position.set(L.x, 1.45, L.z);
+    kamera.rotation.order = 'YXZ'; kamera.rotation.set(L.pitch, L.yaw, 0);
+    L.fig.g.visible = false;
+  } else {   // Verstecker sehen sich von hinten (damit man sieht, wie gut die Tarnung ist)
+    L.fig.g.visible = true;
+    const ziel = new THREE.Vector3(L.x, 1.1, L.z);
+    const richtung = new THREE.Vector3(Math.sin(L.yaw) * Math.cos(L.pitch), -Math.sin(L.pitch), Math.cos(L.yaw) * Math.cos(L.pitch));
+    const h = treffer(ziel, richtung, L, 3.2, false);
+    const abstand = h ? Math.max(0.4, h.distance - 0.2) : 3.2;
+    kamera.position.copy(ziel).addScaledVector(richtung, abstand);
+    kamera.lookAt(ziel);
+  }
+}
+
+// ===================== MAL-MENÜ =====================
+function malPanelZeigen(an) {
+  $('malpanel').classList.toggle('hidden', !an);
+  if (an) { if (document.pointerLockElement) document.exitPointerLock(); malPanelMalen(); }
+  else if (['verstecken', 'suchen'].includes(phase)) mausFangen();
+}
+const hex = f => '#' + f.toString(16).padStart(6, '0');
+function malPanelMalen() {
+  const pal = $('palette'); pal.innerHTML = '';
+  for (const f of palette) { const b = document.createElement('button'); b.style.background = hex(f); if (f === pipette) b.className = 'an'; b.onclick = () => { pipette = f; malPanelMalen(); }; pal.appendChild(b); }
+  const box = $('teile'); box.innerHTML = '';
+  TEILE.forEach((t, i) => {
+    const b = document.createElement('button'); b.textContent = TEIL_NAMEN[t]; b.style.background = hex(ich.farben[i]);
+    b.onclick = () => { const f = [...ich.farben]; f[i] = pipette; farbenSetzen(ich, f); mpFarbe(ich); ton('mal'); malPanelMalen(); };
+    box.appendChild(b);
+  });
+}
+$('alles').onclick = () => { farbenSetzen(ich, TEILE.map(() => pipette)); mpFarbe(ich); ton('mal'); malPanelMalen(); };
+$('malZu').onclick = () => malPanelZeigen(false);
+
+// ===================== TON UND MUSIK =====================
+let ac = null, musikGain = null, musikArt = 'aus', musikT = 0, musikSchritt = 0;
+function audio() { try { if (!ac) { ac = new AudioContext(); musikGain = ac.createGain(); musikGain.gain.value = 0.25; musikGain.connect(ac.destination); } if (ac.state === 'suspended') ac.resume(); return true; } catch (e) { return false; } }
+function osz(typ, f1, f2, lang, laut, t = 0, ziel = null) {
+  if (!audio()) return;
+  const s = ac.currentTime + t, o = ac.createOscillator(), g = ac.createGain();
+  o.type = typ; o.frequency.setValueAtTime(f1, s); if (f2 !== f1) o.frequency.exponentialRampToValueAtTime(f2, s + lang);
+  g.gain.setValueAtTime(laut, s); g.gain.exponentialRampToValueAtTime(0.0001, s + lang);
+  o.connect(g).connect(ziel || ac.destination); o.start(s); o.stop(s + lang + 0.05);
+}
+function ton(art) {
+  const T = {
+    pfiff: () => osz('sine', 1200, 1500, 0.5, 0.12), klick: () => osz('square', 700, 800, 0.05, 0.05),
+    pipette: () => { osz('sine', 400, 1200, 0.15, 0.1); osz('sine', 1200, 600, 0.1, 0.05, 0.15); }, mal: () => osz('triangle', 600, 900, 0.12, 0.08),
+    daneben: () => { osz('sawtooth', 300, 150, 0.25, 0.08); }, gefunden: () => [523, 659, 784].forEach((f, i) => osz('square', f, f, 0.15, 0.06, i * 0.08)),
+    erwischt: () => osz('sawtooth', 600, 100, 0.6, 0.1), piep: () => osz('square', 880, 880, 0.1, 0.06),
+    sieg: () => [523, 659, 784, 1047].forEach((f, i) => osz('square', f, f, 0.2, 0.07, i * 0.12)), niederlage: () => [392, 330, 262].forEach((f, i) => osz('triangle', f, f, 0.3, 0.1, i * 0.2)),
+    schritt: () => osz('sine', 120, 80, 0.06, 0.05),
+  };
+  if (T[art]) T[art]();
+}
+// Leise Schleich-Musik: gezupfter Bass und eine kleine Melodie (selbst ausgedacht)
+const MUSIK_BASS = [45, -1, 52, -1, 45, -1, 52, 50, 41, -1, 48, -1, 43, -1, 50, 47];
+const MUSIK_MEL = [69, -1, 72, -1, -1, 71, 69, -1, 65, -1, 69, -1, 67, 71, -1, -1];
+function musik(art) { musikArt = art; musikSchritt = 0; if (ac) musikT = ac.currentTime + 0.1; }
+function musikUpdate() {
+  if (!ac || musikArt === 'aus') return;
+  const takt = musikArt === 'suchen' ? (zeit < 30 ? 0.16 : 0.22) : 0.25;
+  if (musikT < ac.currentTime - 0.2) musikT = ac.currentTime + 0.05;
+  while (musikT < ac.currentTime + 0.2) {
+    const s = musikSchritt % 16, n = 440 * Math.pow(2, (MUSIK_BASS[s] - 69) / 12), m = MUSIK_MEL[s];
+    const t = musikT - ac.currentTime;
+    if (MUSIK_BASS[s] > 0) osz('triangle', n, n, 0.18, 0.12, t, musikGain);
+    if (m > 0 && musikArt === 'suchen') osz('square', 440 * Math.pow(2, (m - 69) / 12), 440 * Math.pow(2, (m - 69) / 12), 0.1, 0.03, t, musikGain);
+    if (s % 4 === 0) osz('sine', 90, 50, 0.1, 0.12, t, musikGain);
+    musikT += takt; musikSchritt++;
+  }
+}
+
+// ===================== ANZEIGE (HUD) =====================
+function hudMalen() {
+  const cw = hud.width, ch = hud.height;
+  ctx.clearRect(0, 0, cw, ch);
+  if (!ich || !['verstecken', 'suchen'].includes(phase)) return;
+  const blind = phase === 'verstecken' && ich.rolle === 'sucher';
+  if (blind) { ctx.fillStyle = '#05060cf2'; ctx.fillRect(0, 0, cw, ch); }
+  ctx.textAlign = 'center';
+  const rand = (text, x, y, gr, farbe = '#fff') => { ctx.font = `bold ${gr}px system-ui`; ctx.lineWidth = 5; ctx.strokeStyle = '#1b1f3a'; ctx.strokeText(text, x, y); ctx.fillStyle = farbe; ctx.fillText(text, x, y); };
+  if (blind) { rand('🙈 Augen zu! Zählen …', cw / 2, ch / 2 - 20, 40); rand(String(Math.ceil(zeit)), cw / 2, ch / 2 + 50, 70, '#ffd166'); }
+  // Oben: Phase, Zeit, wie viele noch versteckt sind
+  const rest = [...leute.values()].filter(L => L.rolle === 'verstecker' && !L.gefunden).length;
+  ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(cw / 2 - 210, 8, 420, 60, 14); ctx.fill();
+  rand(`${phase === 'verstecken' ? '🙈 Verstecken' : '👀 Suchen'}  ${Math.floor(Math.max(0, zeit) / 60)}:${String(Math.ceil(Math.max(0, zeit)) % 60).padStart(2, '0')}`, cw / 2, 36, 22, phase === 'suchen' && zeit < 30 ? '#ff8080' : '#fff');
+  ctx.font = '14px system-ui'; ctx.fillStyle = '#c9c3ff'; ctx.fillText(`Noch versteckt: ${rest} · Du bist ${ich.rolle === 'sucher' ? '👀 Sucher' : '🙈 Verstecker'}`, cw / 2, 58);
+  // Verstecker: Pipetten-Farbe, Pose, Augen
+  if (ich.rolle === 'verstecker') {
+    ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(12, ch - 120, 260, 108, 14); ctx.fill();
+    ctx.fillStyle = hex(pipette); ctx.beginPath(); ctx.arc(52, ch - 66, 28, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui'; ctx.fillStyle = '#fff';
+    ctx.fillText('🎨 Pipette (Rechtsklick)', 92, ch - 92); ctx.fillText(`Pose: ${POSEN[ich.pose]} (1–4)`, 92, ch - 68);
+    ctx.fillText(ich.fig.augen.visible ? '👀 Augen offen!' : '😌 Augen zu – gut so!', 92, ch - 44);
+    ctx.font = '12px system-ui'; ctx.fillStyle = '#c9c3ff'; ctx.fillText('Tab = anmalen · G = alles', 92, ch - 22);
+  }
+  // Fadenkreuz
+  if (!blind) {
+    const x = cw / 2, y = ich.rolle === 'sucher' ? ch / 2 : ch / 2;
+    ctx.strokeStyle = danebenT > 0 ? '#ff8080' : '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, ich.rolle === 'sucher' ? 12 : 4, 0, 7); ctx.stroke();
+    if (ich.rolle === 'sucher' && danebenT > 0) { ctx.beginPath(); ctx.arc(x, y, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * danebenT / DANEBEN_PAUSE); ctx.stroke(); }
+  }
+  // Meldungen
+  ctx.textAlign = 'center';
+  meldungen.forEach((m, i) => { ctx.globalAlpha = Math.min(1, m.t); rand(m.text, cw / 2, 100 + i * 28, 18); });
+  ctx.globalAlpha = 1;
+  if (document.pointerLockElement !== welt && $('malpanel').classList.contains('hidden')) rand('🖱️ Klick ins Bild zum Steuern', cw / 2, ch - 30, 18, '#ffd166');
+}
+
+// ===================== ONLINE MIT FREUNDEN (PeerJS) =====================
+const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', MP_VORSILBE = 'farbversteck-';
+const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), meineId: 'host', takt: 0, farbenGesendet: '' };
+const istGast = () => mp.aktiv && mp.rolle === 'gast';
+const NAME_OK = /^[\p{L}\p{N} _\-]{2,14}$/u;
+function meinName() { const n = $('name').value.trim(); return NAME_OK.test(n) ? n : 'Farbling'; }
+function mpLadePeerJS() { if (window.Peer) return Promise.resolve(); return new Promise((ok, f) => { const s = document.createElement('script'); s.src = MP_PEERJS; s.onload = ok; s.onerror = () => f(new Error('PeerJS')); document.head.appendChild(s); }); }
+function mpCode() { const z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let c = ''; for (let k = 0; k < 4; k++) c += z[Math.floor(Math.random() * z.length)]; return c; }
+function mpSende(n) { try { if (mp.conn && mp.conn.open) mp.conn.send(n); } catch (e) { /* egal */ } }
+function mpAnAlle(n) { if (!mp.aktiv || mp.rolle !== 'host') return; for (const g of mp.gaeste.values()) try { if (g.conn.open) g.conn.send(n); } catch (e) { /* egal */ } }
+function mpEreignis(e) { mpAnAlle({ t: 'ev', ...e }); }
+function mpFarbe(L) { const n = { t: 'f', id: L.id, f: L.farben }; if (istGast()) mpSende(n); else mpAnAlle(n); }
+function mpStatus(t) { $('mpStatus').textContent = t; }
+function mpBeenden() { try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ } mp.gaeste.clear(); Object.assign(mp, { aktiv: false, rolle: null, code: '', peer: null, conn: null, meineId: 'host' }); }
+function mpWeg(text) { mpBeenden(); alleWeg(); phase = 'menu'; musik('aus'); zeigeNur('start'); mpStatus('❌ ' + text); if (document.pointerLockElement) document.exitPointerLock(); }
+async function mpRaumErstellen(versuch = 0) {
+  if (mp.peer && !versuch) return;
+  mpStatus('⏳ Raum wird erstellt …');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Online-Spiel konnte nicht geladen werden (Internet?)'); return; }
+  const code = mpCode(), peer = new window.Peer(MP_VORSILBE + code);
+  mp.peer = peer;
+  peer.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'host', code, meineId: 'host' }); mpStatus(''); lobbyZeigen(); });
+  peer.on('connection', conn => {
+    conn.on('open', () => {
+      if (mp.gaeste.size >= 7 || phase !== 'lobby') { conn.send({ t: 'nein', grund: phase !== 'lobby' ? 'Da läuft gerade eine Runde – gleich nochmal versuchen!' : 'Der Raum ist voll.' }); setTimeout(() => conn.close(), 400); return; }
+      const md = conn.metadata || {};
+      mp.gaeste.set(conn.peer, { id: conn.peer, conn, name: NAME_OK.test(md.name) ? md.name : 'Gast', wunsch: ['verstecker', 'sucher', 'zufall'].includes(md.wunsch) ? md.wunsch : 'zufall', e: null });
+      ton('klick'); lobbyZeigen();
+    });
+    conn.on('data', d => mpVomGast(conn.peer, d));
+    conn.on('close', () => mpGastWeg(conn.peer)); conn.on('error', () => mpGastWeg(conn.peer));
+  });
+  peer.on('error', e => { if (e.type === 'unavailable-id' && versuch < 3) { peer.destroy(); mp.peer = null; mpRaumErstellen(versuch + 1); return; } if (!mp.aktiv) { mpBeenden(); mpStatus('❌ Raum konnte nicht erstellt werden (Internet?)'); } });
+}
+function mpGastWeg(id) {
+  const g = mp.gaeste.get(id); if (!g) return;
+  mp.gaeste.delete(id);
+  const L = leute.get(id);
+  if (L) { L.bot = true; L.mensch = null; L.name += ' 🤖'; L.fig.schild.userData.malen(L.name, '#ffffff'); meldung(`👋 ${g.name} ist gegangen – ein Bot übernimmt.`); }
+  if (phase === 'lobby') lobbyZeigen();
+}
+function mpVomGast(id, d) {
+  if (!d || typeof d !== 'object') return;
+  const L = leute.get(id);
+  if (d.t === 'p' && L) {   // Position vom Freund
+    const zahl = (v, lo, hi) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : null;
+    const x = zahl(d.x, 0, 20), z = zahl(d.z, 0, 18);
+    if (x !== null && z !== null) { L.x = x; L.z = z; }
+    L.yaw = zahl(d.y, -1e4, 1e4) ?? L.yaw; L.bewegt = !!d.b; L.pose = POSEN[d.po] ? d.po : 'stehen';
+  } else if (d.t === 'f' && L && Array.isArray(d.f) && d.f.length === 6) { farbenSetzen(L, d.f); mpAnAlle({ t: 'f', id, f: L.farben }); }
+  else if (d.t === 'tag' && L) antippen(L, leute.get(d.z));
+}
+async function mpBeitreten() {
+  const code = $('code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { mpStatus('Der Code hat 4 Zeichen, z. B. K7PX'); return; }
+  if (mp.peer) return;
+  mpStatus('⏳ Verbinde …');
+  try { await mpLadePeerJS(); } catch (e) { mpStatus('❌ Online-Spiel konnte nicht geladen werden (Internet?)'); return; }
+  const peer = new window.Peer(); mp.peer = peer;
+  peer.on('open', id => {
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true, metadata: { name: meinName(), wunsch: rolleWunsch } });
+    mp.conn = conn;
+    conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code, meineId: id }); mpStatus('✅ Verbunden!'); });
+    conn.on('data', d => mpVomHost(d));
+    conn.on('close', () => { if (mp.conn === conn) mpWeg('Die Verbindung zum Gastgeber ist weg.'); });
+  });
+  peer.on('error', e => { if (mp.peer === peer) mpWeg(e && e.type === 'peer-unavailable' ? 'Raum nicht gefunden – stimmt der Code?' : 'Keine Verbindung (Internet?)'); });
+}
+function mpVomHost(d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'lobby') { phase = 'lobby'; lobbyMalen(d.liste || [], d.code); zeigeNur('lobby'); }
+  else if (d.t === 'runde' && Array.isArray(d.auf)) rundeStarten(d.auf.map(a => ({ ...a, name: String(a.name).slice(0, 16) })));
+  else if (d.t === 's') {
+    phase = d.ph === 1 ? 'verstecken' : d.ph === 2 ? 'suchen' : phase; zeit = Number(d.zt) || 0;
+    for (const [id, x, z, yaw, po, rolle, gef, bw] of d.l || []) {
+      const L = leute.get(id); if (!L) continue;
+      L.rolle = rolle ? 'sucher' : 'verstecker'; L.gefunden = !!gef;
+      if (L === ich) continue;
+      L.zx = x; L.zz = z; L.yaw = yaw; L.pose = POSEN[po] ? po : 'stehen'; L.bewegt = !!bw;
+    }
+  } else if (d.t === 'f') { const L = leute.get(d.id); if (L && L !== ich && Array.isArray(d.f)) farbenSetzen(L, d.f); }
+  else if (d.t === 'ev') {
+    if (d.k === 'phase') { meldung('👀 Die Sucher kommen! Ab jetzt: still halten!', 4); ton('pfiff'); musik('suchen'); }
+    if (d.k === 'gef') { const Z = leute.get(d.z), S = leute.get(d.s); if (Z && S) { Z.gefunden = true; Z.rolle = 'sucher'; Z.fig.schild.userData.malen(Z.name, '#ff8080'); meldung(Z === ich ? `😵 ${S.name} hat dich gefunden! Jetzt suchst du mit!` : `🎯 ${S.name} hat ${Z.name} gefunden!`, 3.5); ton(Z === ich ? 'erwischt' : 'gefunden'); } }
+  } else if (d.t === 'ende') endeZeigen(d);
+  else if (d.t === 'nein') mpWeg(String(d.grund || 'Abgelehnt'));
+}
+function mpTick(dt) {
+  if (!mp.aktiv) return;
+  mp.takt -= dt; if (mp.takt > 0) return; mp.takt = 1 / 12;
+  if (mp.rolle === 'host' && ['verstecken', 'suchen'].includes(phase)) {
+    mpAnAlle({ t: 's', ph: phase === 'verstecken' ? 1 : 2, zt: Math.round(zeit * 10) / 10,
+      l: [...leute.values()].map(L => [L.id, Math.round(L.x * 100) / 100, Math.round(L.z * 100) / 100, Math.round(L.yaw * 100) / 100, L.pose, L.rolle === 'sucher' ? 1 : 0, L.gefunden ? 1 : 0, L.bewegt ? 1 : 0]) });
+  } else if (istGast() && ich && ['verstecken', 'suchen'].includes(phase)) mpSende({ t: 'p', x: Math.round(ich.x * 100) / 100, z: Math.round(ich.z * 100) / 100, y: Math.round(ich.yaw * 100) / 100, po: ich.pose, b: ich.bewegt ? 1 : 0 });
+}
+function lobbyListe() { return [{ id: 'host', name: meinName() + ' 👑' }, ...[...mp.gaeste.values()].map(g => ({ id: g.id, name: g.name }))]; }
+function lobbyZeigen() { phase = 'lobby'; const l = lobbyListe(); mpAnAlle({ t: 'lobby', liste: l, code: mp.code }); lobbyMalen(l, mp.code); zeigeNur('lobby'); }
+function lobbyMalen(liste, code) {
+  $('lobbyCode').textContent = code || mp.code;
+  const box = $('liste'); box.innerHTML = '';
+  for (const p of liste) { const z = document.createElement('div'); z.textContent = `🦎 ${p.name}`; box.appendChild(z); }
+  $('lobbyStart').classList.toggle('hidden', istGast());
+  $('lobbyText').textContent = istGast() ? 'Warte, bis der Gastgeber die Runde startet …' : `Sag deinen Freunden den Code! Dazu kommen noch ${botAnzahl} Bots.`;
+}
+
+// ===================== MENÜS =====================
+function zeigeNur(id) { for (const o of ['start', 'lobby', 'malpanel', 'ende']) $(o).classList.toggle('hidden', o !== id); $('zurueck').classList.toggle('hidden', !['start', 'lobby'].includes(id)); }
+for (const b of $('wahlRolle').querySelectorAll('button')) b.onclick = () => { rolleWunsch = b.dataset.r; for (const x of $('wahlRolle').querySelectorAll('button')) x.classList.toggle('an', x === b); ton('klick'); };
+for (const b of $('wahlBots').querySelectorAll('button')) b.onclick = () => { botAnzahl = Number(b.dataset.b); for (const x of $('wahlBots').querySelectorAll('button')) x.classList.toggle('an', x === b); ton('klick'); };
+try { $('name').value = localStorage.getItem('farbversteck-name') || ''; } catch (e) { /* egal */ }
+$('name').addEventListener('change', () => { try { localStorage.setItem('farbversteck-name', $('name').value); } catch (e) { /* egal */ } });
+$('solo').onclick = () => { audio(); rundeStarten(rundeAufstellen()); };
+$('raum').onclick = () => { audio(); mpRaumErstellen(); };
+$('beitreten').onclick = () => { audio(); mpBeitreten(); };
+$('lobbyStart').onclick = () => { const auf = rundeAufstellen(); mpAnAlle({ t: 'runde', auf }); rundeStarten(auf); };
+$('lobbyRaus').onclick = () => { mpBeenden(); zeigeNur('start'); phase = 'menu'; };
+$('nochmal').onclick = () => { if (mp.aktiv) { const auf = rundeAufstellen(); mpAnAlle({ t: 'runde', auf }); rundeStarten(auf); } else rundeStarten(rundeAufstellen()); };
+$('zumStart').onclick = () => { mpBeenden(); alleWeg(); phase = 'menu'; musik('aus'); zeigeNur('start'); };
+
+// ===================== HAUPTSCHLEIFE =====================
+let letzt = performance.now(), menuWinkel = 0;
+function schritt(dt) {
+  if (['verstecken', 'suchen'].includes(phase)) {
+    if (!istGast()) phaseUpdate(dt);
+    else zeit -= dt;
+    spielerUpdate(dt);
+    if (!istGast()) for (const L of leute.values()) {
+      if (!L.bot) continue;
+      if (L.rolle === 'sucher') sucherBot(L, dt); else versteckBot(L, dt);
+    }
+    for (const L of leute.values()) {
+      if (L.zx !== undefined && L !== ich) { L.x += (L.zx - L.x) * Math.min(1, dt * 12); L.z += (L.zz - L.z) * Math.min(1, dt * 12); }   // Freunde gleiten weich
+      L.stillT = L.bewegt ? 0 : L.stillT + dt;
+      figurAnimieren(L, dt);
+    }
+    // Sucher hören Schritte in der Nähe
+    if (ich && ich.rolle === 'sucher' && phase === 'suchen') for (const L of leute.values()) if (L.rolle === 'verstecker' && !L.gefunden && L.bewegt && Math.hypot(L.x - ich.x, L.z - ich.z) < 6 && Math.random() < dt * 4) ton('schritt');
+    danebenT = Math.max(0, danebenT - dt);
+    if (phase === 'suchen' && zeit <= 5 && Math.ceil(zeit) !== Math.ceil(zeit + dt)) ton('piep');
+    mpTick(dt);
+  }
+  for (const m of meldungen) m.t -= dt;
+  meldungen = meldungen.filter(m => m.t > 0);
+  musikUpdate();
+}
+function zeichnen() {
+  if (ich && phase !== 'menu' && phase !== 'lobby') kameraSetzen();
+  else {   // Im Menü fliegt die Kamera langsam durch die Wohnung
+    menuWinkel += 0.002;
+    kamera.position.set(10 + Math.cos(menuWinkel) * 4, 2.3, 9 + Math.sin(menuWinkel) * 3);
+    kamera.lookAt(10, 0.8, 9);
+  }
+  renderer.render(scene, kamera);
+  hudMalen();
+}
+function schleife(t) {
+  const dt = Math.min(0.05, (t - letzt) / 1000); letzt = t;
+  schritt(dt); zeichnen();
+  requestAnimationFrame(schleife);
+}
+requestAnimationFrame(schleife);
+globalThis.__fv = c => eval(c);   // nur zum Testen
+</script>
+</body>
+</html>
