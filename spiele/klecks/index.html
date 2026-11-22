@@ -1482,6 +1482,15 @@ addEventListener('keydown', e => {
   tasten[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; }
   if (e.code === 'KeyE' && zustand === 'stadt') stadtBetretenTaste();
+  // 🤫 Geheimer Cheatcode: in der Stadt KLECKSKÖNIG (oder KLECKSKOENIG) tippen
+  if (zustand === 'stadt' && e.key && e.key.length === 1) {
+    cheatPuffer = (cheatPuffer + e.key.toUpperCase()).slice(-20);
+    if (cheatPuffer.endsWith('KLECKSKÖNIG') || cheatPuffer.endsWith('KLECKSKOENIG')) {
+      cheatPuffer = '';
+      konto.muenzen += 10000; speichern();
+      meldung('🤫 Cheat aktiviert: +10.000 Münzen! 🪙'); ton('sieg');
+    }
+  }
   if (e.code === 'Enter' && modus === 'lobby' && zustand === 'lobby' && !istGast()) neueRunde();   // Match starten (Bots füllen auf)
   if (e.code === 'KeyK' && modus === 'lobby' && zustand === 'lobby' && !istGast()) {
     const liste = ['zufall', ...Object.keys(ARENEN)];
@@ -1504,6 +1513,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { tasten[e.code] = false; if (e.code === 'KeyE') bombeLos = true; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; maus.links = maus.rechts = false; });
 let mausKlicks = 0;
+let cheatPuffer = '';   // die letzten getippten Buchstaben (für den Cheatcode)
 addEventListener('mousedown', e => { if (e.button === 0) { maus.links = true; mausKlicks++; } if (e.button === 2) maus.rechts = true; });
 addEventListener('mouseup', e => { if (e.button === 0) maus.links = false; if (e.button === 2) maus.rechts = false; });
 addEventListener('contextmenu', e => e.preventDefault());
