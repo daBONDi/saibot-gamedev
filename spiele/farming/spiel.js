@@ -5104,6 +5104,7 @@ function fahrzeugKaufen(name) {
 
 // ===== Ein- und Aussteigen =====
 function einsteigen(fz) {
+  if (emote) emoteEnde(true);
   aktiv = fz; letztes = fz;
   kamOffset = 0; blickHoch = 0;
   // Der Farmer setzt sich in die Kabine
@@ -5283,6 +5284,7 @@ $('btn-neu').addEventListener('click', neuesSpiel);
 $('btn-haendler').addEventListener('click', () => haendlerZeigen(true));
 $('haendler-zu').addEventListener('click', () => haendlerZeigen(false));
 $('saat-zu').addEventListener('click', () => saatPanelZeigen(false));
+$('emote-zu').addEventListener('click', () => emoteMenuZeigen(false));
 $('hofpanel-zu').addEventListener('click', () => panelZeigen(null));
 
 // ===== Die Anleitung: verschieben (oben an der Leiste ziehen) und einklappen (➖ oder Taste I) =====
@@ -5341,6 +5343,11 @@ document.addEventListener('keydown', e => {
   keys[k] = true;
   if ([' ', 'arrowup', 'arrowdown', 'tab'].includes(k)) e.preventDefault();
   if (e.repeat) return;   // Gedrückt halten soll nicht ständig ein- und aussteigen
+  if (!aktiv && !mitfahrt && k.length === 1) {   // 🤫 Geheimwort: zu Fuß TANZ tippen
+    geheimPuffer = (geheimPuffer + k).slice(-8);
+    if (geheimPuffer.endsWith('tanz')) { geheimPuffer = ''; meldung('🤫 Geheimes Emote-Menü!', 2); sound.kaufen(); emoteMenuZeigen(true); return; }
+    if (k === 'n' && geheimPuffer.endsWith('tan')) return;   // Das N gehört zum Geheimwort (kein Händler)
+  }
 
   if (k === 'e' && angel && angel.phase === 'kampf') { angelKurbeln(); return; }   // Beim Angeln: E = kurbeln!
   if (ragdoll && !['f', 'm', 'j', 'i', 'c', 'tab', 'escape'].includes(k)) return;   // Beim Durch-die-Luft-Fliegen kannst du nichts machen!
@@ -5380,7 +5387,7 @@ document.addEventListener('keydown', e => {
   if (k === 'o') ueberladen();
   if (k === 'tab') helferZeigen($('helferpanel').style.display !== 'block');
   if (k === 'c') albumZeigen($('album').style.display !== 'block');   // C = Fisch-Album
-  if (k === 'escape') { helferZeigen(false); haendlerZeigen(false); saatPanelZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
+  if (k === 'escape') { emoteMenuZeigen(false); emoteEnde(); helferZeigen(false); haendlerZeigen(false); saatPanelZeigen(false); panelZeigen(null); albumZeigen(false); werkbankZeigen(false); if (angel) angelEnde(angel.phase === 'kampf' ? false : null); }
   const bauTaste = '1234567890'.indexOf(k);   // Im Baumodus: 1 bis 9 und 0 (= Nummer 10)
   if (building && k.length === 1 && bauTaste >= 0 && bauTaste < Object.keys(GEBAEUDE_ARTEN).length) { bauArt = Object.keys(GEBAEUDE_ARTEN)[bauTaste]; if (entfernen) entfernenUmschalten(false); updateHUD(); }
   if (k === 'delete') entfernenUmschalten();   // Entf-Taste
@@ -5758,7 +5765,7 @@ function mpEmpfangen(d, vonGast) {
         vonGast.versionOk = true;
         if (d.v !== SPIEL_VERSION) meldung(`${ALTE_VERSION} (${vonGast.name})`, 12);
       }
-      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, bf: d.bf, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag, rx: d.rx || 0, rz: d.rz || 0, rd: d.rd }); } break;
+      if (d.id !== mp.ich) { const o = mp.andere.get(d.id) || mpSpielerNeu(d.id, d.nr); Object.assign(o, { x: d.x, y: d.y, z: d.z, yaw: d.yaw, fz: d.fz, bf: d.bf, lf: d.lf, sa: d.sa, sg: d.sg, ho: d.ho, ag: d.ag, rx: d.rx || 0, rz: d.rz || 0, rd: d.rd, em: typeof d.em === 'string' ? d.em : 0, et: Number(d.et) || 0 }); } break;
     case 'fz': {
       const fz = fahrzeuge.find(f => f.id === d.id);
       if (fz && fz !== aktiv) {
@@ -5836,7 +5843,7 @@ function mpTick(dt) {
   }
   for (const a of anhaenger) if (!a.an && a.inhalt !== a.basis) { a.basis = a.inhalt; mpEvent({ t: 'anh', id: a.id, i: a.inhalt, g: a.gut }); }
   // Wo bin ich?
-  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : mitfahrt ? mitfahrt.id : null, bf: mitfahrt ? 1 : 0, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), rx: r2(player.rotation.x), rz: r2(player.rotation.z), rd: ragdoll && !ragdoll.liegt ? 1 : 0, v: SPIEL_VERSION });
+  mpEvent({ t: 'sp', id: mp.ich, nr: mp.nr, x: r2(player.position.x), y: r2(player.position.y), z: r2(player.position.z), yaw: r2(yaw), fz: aktiv ? aktiv.id : mitfahrt ? mitfahrt.id : null, bf: mitfahrt ? 1 : 0, lf: mp.laeuft, sa: saegeAn, sg: saegt, ho: getragen, ag: aktiv ? 0 : angelZustand(), rx: r2(player.rotation.x), rz: r2(player.rotation.z), rd: ragdoll && !ragdoll.liegt ? 1 : 0, em: emote ? emote.art : 0, et: emote ? r2(emote.t) : 0, v: SPIEL_VERSION });
   if (aktiv) mpFzSenden(aktiv, mp.ich);
   if (host) for (const fz of fahrzeuge) if (fz.helfer) mpFzSenden(fz, 'helfer');
   if (host) {
@@ -5872,6 +5879,13 @@ function mpAndereZeigen(dt) {
     o.ayaw += d * f;
     G.position.set(o.ax, o.ay, o.az);
     G.rotation.set(o.rx || 0, o.ayaw, o.rz || 0);
+    if (o.em && Object.prototype.hasOwnProperty.call(EMOTES, o.em)) {   // 🕺 Der andere Bauer tanzt!
+      if (o.emT === undefined || o.emArt !== o.em || Math.abs(o.emT - o.et) > 0.4) { o.emT = o.et; o.emArt = o.em; }
+      o.emT += dt;
+      emoteAnwenden(o.farmer.t, G, o.em, o.emT, o.ayaw, o.ay);
+      farmerWerkzeug(o.farmer.t, false, false, 0, 0);
+      continue;
+    } else if (o.emArt) { o.emArt = null; o.emT = undefined; G.rotation.order = 'XYZ'; G.rotation.set(o.rx || 0, o.ayaw, o.rz || 0); gliederGerade(o.farmer.t); }
     if (o.rd) armeUndBeineFlattern(o.farmer.t, spielZeit);   // Der andere Bauer fliegt gerade durch die Luft!
     else if (Math.abs(o.rx || 0) > 0.3) { o.farmer.t.armL.rotation.set(0, 0, 1.3); o.farmer.t.armR.rotation.set(0, 0, -1.3); }   // ... und liegt
     else { if (o.warRagdoll !== false) gliederGerade(o.farmer.t); farmerPose(o.farmer.t, false, o.lf, dt, o.y > 0.05); }
@@ -6088,7 +6102,7 @@ function musikUpdate() {
     musik = { g, zeit: audio.currentTime + 0.3, schritt: 0 };
   }
   const nacht = tagHell < 0.4;
-  musik.g.gain.setTargetAtTime(musikAn && tonAn ? MUSIK_LAUT * (nacht ? 0.8 : 1) : 0, audio.currentTime, 0.3);
+  musik.g.gain.setTargetAtTime(musikAn && tonAn && !tanz ? MUSIK_LAUT * (nacht ? 0.8 : 1) : 0, audio.currentTime, 0.3);
   if (!musikAn || !tonAn) { musik.zeit = audio.currentTime + 0.3; return; }
   if (musik.zeit < audio.currentTime - 0.1) musik.zeit = audio.currentTime + 0.05;   // War das Spiel im Hintergrund? Nicht alles nachholen!
   // Immer ein kleines Stück im Voraus planen (dann klingt es gleichmäßig, auch wenn das Spiel kurz ruckelt)
@@ -6128,6 +6142,8 @@ function animate() {
     else farmerPose(farmer, true, false, dt);
   } else if (ragdoll) {
     ragdollUpdate(dt);
+  } else if (emote) {
+    emoteUpdate(dt);   // 🕺 Tanzen!
   } else {
     angefahrenPruefen();
     // Zu Fuß: "Vorne" ist da, wo du hinschaust
@@ -6155,6 +6171,7 @@ function animate() {
   angelUpdate(dt);
   fangUpdate(dt);
   musikUpdate();
+  tanzMusikUpdate();
   salzUpdate(dt);
   waldPlotHacken(dt);
   werkbankUpdate();
@@ -6687,6 +6704,159 @@ function helferAktionHost(d) {   // Der Gastgeber führt aus, was ein Freund im 
 }
 document.getElementById('btn-helfer').addEventListener('click', e => { helferZeigen($('helferpanel').style.display !== 'block'); e.currentTarget.blur(); });
 document.getElementById('helfer-zu').addEventListener('click', () => helferZeigen(false));
+
+// ===== 🤫 Geheimes Emote-Menü (zu Fuß TANZ tippen) =====
+// Jedes Emote ist eine Pose, die von der Zeit abhängt – so tanzen auch die anderen Spieler im Multiplayer genau gleich.
+const EMOTES = {
+  breakdance: { name: 'Breakdance', emoji: '🕺', info: 'Toprock, Windmill, Headspin, Freeze – mit Musik!', dauer: 0, musik: true },   // dauer 0 = bis du dich bewegst
+  winken:     { name: 'Winken',     emoji: '👋', info: 'Hallo!', dauer: 3 },
+  jubeln:     { name: 'Jubeln',     emoji: '🎉', info: 'Juhuu!', dauer: 3 },
+  roboter:    { name: 'Roboter',    emoji: '🤖', info: 'Bip bop – eckiger Roboter-Tanz', dauer: 0 },
+};
+let emote = null;            // { art, t, ansichtWar }
+let geheimPuffer = '';       // die letzten getippten Buchstaben
+const weich = f => { f = Math.max(0, Math.min(1, f)); return f * f * (3 - 2 * f); };
+// Pose = { y, rx, rz, dyaw, bL: [x, z], bR, aL, aR, kx }
+const POSE_GRUND = { y: 0, rx: 0, rz: 0, dyaw: 0, bL: [0, 0], bR: [0, 0], aL: [0, 0], aR: [0, 0], kx: 0 };
+function poseMischen(a, b, f) {
+  const m = (x, y) => x + (y - x) * f, m2 = (x, y) => [m(x[0], y[0]), m(x[1], y[1])];
+  return { y: m(a.y, b.y), rx: m(a.rx, b.rx), rz: m(a.rz, b.rz), dyaw: m(a.dyaw, b.dyaw), bL: m2(a.bL, b.bL), bR: m2(a.bR, b.bR), aL: m2(a.aL, b.aL), aR: m2(a.aR, b.aR), kx: m(a.kx, b.kx) };
+}
+// --- Breakdance: 16 Sekunden, dann von vorne ---
+const BREAK_TEILE = [
+  { bis: 4, pose: tl => {   // Toprock: im Takt tippeln, Arme vor dem Körper
+    const ph = tl * Math.PI * 2 * 1.6, s = Math.sin(ph);
+    return { ...POSE_GRUND, y: Math.abs(s) * 0.06, dyaw: Math.sin(ph / 2) * 0.35, bL: [Math.max(0, s) * 0.7, 0.1], bR: [Math.max(0, -s) * 0.7, -0.1],
+      aL: [-0.9, 0.5 + s * 0.3], aR: [-0.9, -0.5 + s * 0.3], kx: s * 0.1 };
+  } },
+  { bis: 5, pose: () => ({ ...POSE_GRUND, rx: 0.6, y: 0.05, bL: [1.4, 0.2], bR: [0.6, -0.2], aL: [-0.5, 0.6], aR: [0.8, -0.6] }) },   // Runter auf den Boden
+  { bis: 10, pose: tl => {   // Windmill: auf dem Rücken im Kreis drehen, Beine als V in der Luft
+    const w = (tl - 5) * 7, s = Math.sin(w);
+    return { ...POSE_GRUND, rx: 1.45, rz: s * 0.35, y: 0.3 + Math.sin((tl - 5) * 14) * 0.08, dyaw: w,
+      bL: [-0.3 + s * 0.4, 0.9], bR: [-0.3 - s * 0.4, -0.9], aL: [0, 1.4], aR: [0, -1.4], kx: -0.3 };
+  } },
+  { bis: 14, pose: tl => {   // Headspin: Kopfstand und ganz schnell drehen
+    const w = (tl - 10) * 11.67;
+    return { ...POSE_GRUND, rx: Math.PI, y: 1.95, dyaw: 35 + w, bL: [0, 0.55 + Math.sin(w * 0.3) * 0.15], bR: [0, -0.55 - Math.sin(w * 0.3) * 0.15], aL: [-2.9, 0.3], aR: [-2.9, -0.3] };
+  } },
+  { bis: 16, pose: () => ({ ...POSE_GRUND, rx: 0.2, rz: 1.25, y: 0.55, dyaw: 81.68, bL: [-0.9, 0.4], bR: [0.7, -0.2], aL: [-1.5, 1.2], aR: [0, -2.4], kx: 0.2 }) },   // Freeze!
+];
+function breakPose(t) {
+  const tt = t % 16;
+  const k = BREAK_TEILE.findIndex(T => tt < T.bis), T = BREAK_TEILE[k], N = BREAK_TEILE[(k + 1) % BREAK_TEILE.length];
+  const p = T.pose(tt), uebergang = 0.4;
+  if (tt > T.bis - uebergang) return poseMischen(p, N.pose(T.bis % 16 + 0.0001), weich((tt - (T.bis - uebergang)) / uebergang));
+  return p;
+}
+function emotePose(art, t) {
+  if (art === 'breakdance') return poseMischen(POSE_GRUND, breakPose(t), weich(t / 0.3));
+  if (art === 'winken') { const s = Math.sin(t * 10); return { ...POSE_GRUND, aR: [-2.7, -0.4 + s * 0.45], aL: [0, 0.1], kx: -0.1 }; }
+  if (art === 'jubeln') { const h = Math.abs(Math.sin(t * 7)); return { ...POSE_GRUND, y: h * 0.45, aL: [-2.8, 0.4 + h * 0.3], aR: [-2.8, -0.4 - h * 0.3], bL: [h * 0.5, 0], bR: [h * 0.5, 0], kx: -0.2 }; }
+  if (art === 'roboter') {   // Alle 0,4 Sekunden eine neue eckige Pose
+    const n = Math.floor(t / 0.4) % 8, R = [
+      { aL: [-1.57, 0], aR: [0, -1.57] }, { aL: [0, 1.57], aR: [-1.57, 0] }, { aL: [-1.57, 0], aR: [-1.57, 0], dyaw: 0.8 }, { aL: [-3.1, 0], aR: [0, 0], dyaw: 0.8 },
+      { aL: [0, 1.57], aR: [0, -1.57], kx: 0.4 }, { aL: [-1.57, 0.5], aR: [-1.57, -0.5], dyaw: -0.8 }, { aL: [0, 0], aR: [-3.1, 0], dyaw: -0.8, bL: [0.5, 0] }, { aL: [-1.57, 0], aR: [0, -1.57], bR: [0.5, 0] }];
+    return { ...POSE_GRUND, ...R[n] };
+  }
+  return POSE_GRUND;
+}
+// Pose auf einen Bauern anwenden (t = Gelenke, G = ganzer Körper)
+function emoteAnwenden(t, G, art, zeit, yawBasis, yBasis) {
+  const p = emotePose(art, zeit);
+  G.rotation.order = 'YXZ';
+  G.rotation.set(p.rx, yawBasis + p.dyaw, p.rz);
+  G.position.y = yBasis + p.y;
+  t.beinL.rotation.set(p.bL[0], 0, p.bL[1]); t.beinR.rotation.set(p.bR[0], 0, p.bR[1]);
+  t.armL.rotation.set(p.aL[0], 0, p.aL[1]); t.armR.rotation.set(p.aR[0], 0, p.aR[1]);
+  t.kopf.rotation.set(p.kx, 0, 0);
+}
+function emoteMenuZeigen(an) {
+  $('emotepanel').style.display = an ? 'block' : 'none';
+  if (!an) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  const liste = $('emoteListe'); liste.innerHTML = '';
+  for (const [art, E] of Object.entries(EMOTES)) {
+    const k = document.createElement('button'); k.className = 'emoteKnopf';
+    k.innerHTML = `<b style="font-size:1.6em">${E.emoji}</b><br>${E.name}<br><span class="klein">${E.info}</span>`;
+    k.addEventListener('click', () => { emoteMenuZeigen(false); emoteStarten(art); });
+    liste.appendChild(k);
+  }
+}
+function emoteStarten(art) {
+  if (aktiv || mitfahrt) { meldung('🕺 Zum Tanzen musst du erst aussteigen (E)!'); sound.nein(); return; }
+  if (ragdoll || angel || schlaeft) return;
+  if (emote) emoteEnde(true);
+  emote = { art, t: 0, ansichtWar: ansicht };
+  if (ansicht === 'ego') ansichtWechseln();   // Von hinten siehst du dich besser tanzen!
+  meldung(`${EMOTES[art].emoji} ${EMOTES[art].name}!${EMOTES[art].dauer ? '' : ' (Laufen = aufhören)'}`, 2.5);
+  if (EMOTES[art].musik) tanzMusikStart();
+}
+function emoteEnde(still = false) {
+  if (!emote) return;
+  const war = emote; emote = null;
+  player.rotation.set(0, yaw, 0); player.position.y = 0;
+  gliederGerade(farmer);
+  if (EMOTES[war.art].musik) tanzMusikStopp();
+  if (war.ansichtWar === 'ego' && ansicht !== 'ego') ansichtWechseln();
+  if (!still) updateHUD();
+}
+function emoteUpdate(dt) {
+  emote.t += dt;
+  const K = keys;
+  if (K.w || K.a || K.s || K.d || K.arrowup || K.arrowdown || K.arrowleft || K.arrowright || K[' ']) { emoteEnde(); return; }   // Bewegen = aufhören
+  const E = EMOTES[emote.art];
+  if (E.dauer && emote.t >= E.dauer) { emoteEnde(); return; }
+  emoteAnwenden(farmer, player, emote.art, emote.t, yaw, 0);
+  if (emote.art === 'roboter') { const n = Math.floor(emote.t / 0.4); if (n !== emote.letzte) { emote.letzte = n; ton(n % 2 ? 660 : 880, 0, 0.08, 'square', 0.04); } }
+  mp.laeuft = false;
+}
+// --- 🎵 Breakdance-Beat (selbst ausgedacht): Boom-Bap-Schlagzeug, funkiger Bass, Bläser-Akkorde und Scratches ---
+const TANZ_TEMPO = 60 / 96 / 4;   // 96 Schläge pro Minute, in Sechzehnteln
+const TANZ_KICK  = 'x.....x...x.....', TANZ_SNARE = '....x.......x...', TANZ_HAT = 'x.x.x.x.x.x.x.xo';
+const TANZ_BASS = [40, -1, -1, 40, -1, -1, 43, -1, 45, -1, -1, 43, -1, 40, -1, 38,   40, -1, -1, 40, -1, -1, 47, -1, 45, -1, 43, -1, 45, -1, 47, -1];   // E-Moll, funky
+let tanz = null, rauschBuf = null;
+function tanzMusikStart() {
+  if (!audio) return;
+  if (!rauschBuf) { rauschBuf = audio.createBuffer(1, audio.sampleRate, audio.sampleRate); const d = rauschBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const g = audio.createGain(); g.gain.value = 0.0001; g.connect(audio.destination);
+  g.gain.setTargetAtTime(tonAn ? 0.9 : 0, audio.currentTime, 0.05);
+  tanz = { g, zeit: audio.currentTime + 0.05, schritt: 0 };
+}
+function tanzMusikStopp() {
+  if (!tanz) return;
+  const g = tanz.g; g.gain.setTargetAtTime(0.0001, audio.currentTime, 0.1);
+  setTimeout(() => { try { g.disconnect(); } catch (e) { /* egal */ } }, 800);
+  tanz = null;
+}
+function tanzRauschen(t, dauer, typ, f1, f2, laut) {   // Rauschen durch einen Filter (für Snare, Hi-Hat und Scratches)
+  const q = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+  q.buffer = rauschBuf; f.type = typ; f.frequency.setValueAtTime(f1, t); if (f2 !== f1) f.frequency.exponentialRampToValueAtTime(f2, t + dauer); f.Q.value = typ === 'bandpass' ? 6 : 1;
+  g.gain.setValueAtTime(laut, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
+  q.connect(f).connect(g).connect(tanz.g); q.start(t); q.stop(t + dauer + 0.02);
+}
+function tanzKick(t) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.18);
+  g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+  o.connect(g).connect(tanz.g); o.start(t); o.stop(t + 0.3);
+}
+function tanzMusikUpdate() {
+  if (!tanz || !audio) return;
+  tanz.g.gain.setTargetAtTime(tonAn ? 0.9 : 0, audio.currentTime, 0.1);
+  if (tanz.zeit < audio.currentTime - 0.1) tanz.zeit = audio.currentTime + 0.05;
+  while (tanz.zeit < audio.currentTime + 0.3) {
+    const t = tanz.zeit, s = tanz.schritt, st = s % 16, takt = Math.floor(s / 16) % 4;
+    if (TANZ_KICK[st] === 'x' || (takt === 3 && st === 14)) tanzKick(t);
+    if (TANZ_SNARE[st] === 'x') { tanzRauschen(t, 0.18, 'highpass', 1500, 1500, 0.35); musikTon(190, t, 0.08, 'triangle', 0.12, tanz.g); }
+    if (TANZ_HAT[st] === 'x') tanzRauschen(t, 0.04, 'highpass', 8000, 8000, 0.08);
+    if (TANZ_HAT[st] === 'o') tanzRauschen(t, 0.25, 'highpass', 7000, 7000, 0.07);
+    const b = TANZ_BASS[s % 32];
+    if (b > 0) { musikTon(note(b), t, TANZ_TEMPO * 1.8, 'sawtooth', 0.07, tanz.g); musikTon(note(b), t, TANZ_TEMPO * 1.8, 'sine', 0.12, tanz.g); }
+    if ((st === 0 && takt % 2 === 0) || (st === 6 && takt === 1)) for (const n of [64, 67, 71, 74]) musikTon(note(n), t, 0.22, 'square', 0.018, tanz.g);   // Bläser-Akkord
+    if (takt === 3 && (st === 8 || st === 10)) { tanzRauschen(t, 0.09, 'bandpass', 900, 3500, 0.5); tanzRauschen(t + 0.1, 0.09, 'bandpass', 3500, 700, 0.5); }   // Wikka-wikka (Scratch)
+    tanz.zeit += TANZ_TEMPO; tanz.schritt++;
+  }
+}
 
 // ===== Los geht's! =====
 const geladen = laden();
