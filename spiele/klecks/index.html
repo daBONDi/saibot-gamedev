@@ -349,19 +349,26 @@ function spiegel(liste) {
   return aus;
 }
 const ARENEN = {
-  farbhafen: { name: 'Farbhafen', emoji: '⚓', wandH: 80, waende: waende.slice(),
+  farbhafen: { name: 'Farbhafen', emoji: '⚓', wandH: 80, waende: waende.slice(), spezial: '⚙️ Förderbänder schieben dich zur Mitte!',
+    zonen: [{ art: 'band', x: 600, y: 262, w: 170, h: 46, dx: 120 }, { art: 'band', x: 830, y: 262, w: 170, h: 46, dx: -120 },
+            { art: 'band', x: 600, y: 692, w: 170, h: 46, dx: 120 }, { art: 'band', x: 830, y: 692, w: 170, h: 46, dx: -120 }],
     thema: { boden: '#d8d3c6', linie: '#c3bcab', wand: '#5a6091', himmel: '#9fd8ff', draussen: '#6b7bb0', muster: 'fliesen' } },
-  skatepark: { name: 'Skatepark', emoji: '🛹', wandH: 34,
+  skatepark: { name: 'Skatepark', emoji: '🛹', wandH: 34, spezial: '🚀 Sprung-Pads – und du kannst über die Mauern springen!',
+    zonen: [{ art: 'boost', x: 420, y: 300, r: 28 }, { art: 'boost', x: 1180, y: 300, r: 28 }, { art: 'boost', x: 420, y: 700, r: 28 }, { art: 'boost', x: 1180, y: 700, r: 28 },
+            { art: 'boost', x: 800, y: 300, r: 28 }, { art: 'boost', x: 800, y: 700, r: 28 }],
     waende: spiegel([[300, 200, 200, 30], [300, 770, 200, 30], [600, 330, 30, 340], [450, 470, 60, 60], [700, 100, 200, 30, false], [700, 870, 200, 30, false], [760, 460, 80, 80, false]]),
     thema: { boden: '#b9bcc4', linie: '#a3a7b1', wand: '#ff7a59', himmel: '#ffc4d6', draussen: '#8a7f9e', muster: 'beton' } },
-  dschungel: { name: 'Dschungel', emoji: '🌴', wandH: 90,
+  dschungel: { name: 'Dschungel', emoji: '🌴', wandH: 90, spezial: '🌿 Im Gebüsch sieht dich keiner!',
+    zonen: [{ art: 'busch', x: 420, y: 500, r: 45 }, { art: 'busch', x: 1180, y: 500, r: 45 }, { art: 'busch', x: 560, y: 240, r: 40 }, { art: 'busch', x: 1040, y: 240, r: 40 },
+            { art: 'busch', x: 560, y: 760, r: 40 }, { art: 'busch', x: 1040, y: 760, r: 40 }, { art: 'busch', x: 800, y: 475, r: 45 }],
     waende: spiegel([[300, 150, 50, 50], [300, 800, 50, 50], [480, 320, 50, 50], [480, 630, 50, 50], [650, 180, 50, 50], [650, 770, 50, 50],
                      [620, 475, 50, 50], [230, 410, 40, 40], [230, 550, 40, 40], [775, 300, 50, 50, false], [775, 650, 50, 50, false]]),
     thema: { boden: '#7fae5a', linie: '#6c9a4b', wand: '#7d5128', himmel: '#b6f0c8', draussen: '#3f7a3a', muster: 'gras' } },
-  eispalast: { name: 'Eispalast', emoji: '❄️', wandH: 70,
+  eispalast: { name: 'Eispalast', emoji: '❄️', wandH: 70, spezial: '⛸️ Glatteis! Nur bei deiner Basis rutschst du nicht.', glatt: true, zonen: [],
     waende: spiegel([[250, 0, 40, 370], [250, 630, 40, 370], [450, 250, 300, 40], [450, 710, 300, 40], [550, 420, 40, 160], [700, 480, 200, 40, false]]),
     thema: { boden: '#e3f4ff', linie: '#c6e6fb', wand: '#9fdcff', glas: true, himmel: '#dff6ff', draussen: '#cfe8f7', muster: 'eis' } },
-  wueste: { name: 'Wüstentempel', emoji: '🏜️', wandH: 100,
+  wueste: { name: 'Wüstentempel', emoji: '🏜️', wandH: 100, spezial: '🌪️ Treibsand bremst – und manchmal kommt ein Sandsturm!',
+    zonen: [{ art: 'sand', x: 600, y: 300, r: 50 }, { art: 'sand', x: 1000, y: 300, r: 50 }, { art: 'sand', x: 600, y: 700, r: 50 }, { art: 'sand', x: 1000, y: 700, r: 50 }],
     waende: spiegel([[700, 400, 200, 200, false], [350, 150, 150, 120], [350, 730, 150, 120], [520, 470, 60, 60], [650, 120, 300, 40, false], [650, 840, 300, 40, false],
                      [250, 0, 60, 90], [250, 910, 60, 90]]),
     thema: { boden: '#e8cf98', linie: '#d6b97a', wand: '#c9965a', himmel: '#ffe2b0', draussen: '#d9b26f', muster: 'sand' } },
@@ -472,7 +479,8 @@ function audioStart() {
     ac = new AudioContext();
     rauschen = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
     const d = rauschen.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const haupt = ac.createGain(); haupt.gain.value = 0.8; haupt.connect(ac.destination);
+    const haupt = ac.createGain(); haupt.gain.value = 0.8;
+    const komp = ac.createDynamicsCompressor(); haupt.connect(komp); komp.connect(ac.destination);   // macht alles gleichmäßig laut
     sfxGain = ac.createGain(); sfxGain.connect(haupt);
     musikGain = ac.createGain(); musikGain.gain.value = musikAn ? MUSIK_LAUT : 0; musikGain.connect(haupt);
     return true;
@@ -522,6 +530,8 @@ const SOUNDS = {
   laser:   (t, v) => { osz('sawtooth', 150, 110, 3, 0.07 * v, t, sfxGain, 900); osz('sine', 900, 1300, 3, 0.03 * v, t); },
   wellenrauschen: (t, v) => krach(500, 1.6, 0.25 * v, t),
   fanfare: (t, v) => { [60, 64, 67, 72].forEach((n, i) => osz('square', NOTE(n), NOTE(n), 0.14, 0.07 * v, t + i * 0.1, sfxGain, 3000)); [72, 76, 79].forEach(n => osz('triangle', NOTE(n), NOTE(n), 0.9, 0.06 * v, t + 0.42)); },
+  boing:   (t, v) => { osz('sine', 200, 900, 0.25, 0.12 * v, t); osz('square', 400, 1200, 0.15, 0.03 * v, t, sfxGain, 2000); },
+  wind:    (t, v) => krach(400, 2.5, 0.3 * v, t),
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
   pfiff:   (t, v) => osz('sine', 1200, 1500, 0.6, 0.15 * v, t),
   sieg:    (t, v) => [60, 64, 67, 72, 76].forEach((n, i) => osz('square', NOTE(n), NOTE(n), i === 4 ? 0.6 : 0.15, 0.08 * v, t + i * 0.12, sfxGain, 3000)),
@@ -532,48 +542,146 @@ function ton(art, v = 1) {
   try { SOUNDS[art](ac.currentTime, v); } catch (e) { /* kein Sound, auch ok */ }
 }
 
-// ---------- Musik (eigene Melodie, wird live erzeugt) ----------
+// ---------- Musik: eigene Songs, live im Browser gespielt ----------
+// Jeder Song hat 8 Takte mit je 16 Schritten. Akkorde wie 'Am' oder 'G7'.
+// In bass/arp/mel bedeutet eine Zahl: welcher Ton vom Akkord (0 = Grundton), '.' = Pause, 'o' = Grundton eine Oktave höher.
+// Bei den Trommeln bedeutet 'x' = schlagen.
 const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);     // Notennummer -> Frequenz
-const AKKORDE = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];   // Am, F, C, G
-const BASS = [45, 41, 48, 43];
-const BASS_RHYTHMUS = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0];
-const MELODIE = [   // Zahl = welcher Akkord-Ton, -1 = Pause
-  [0, -1, 1, -1, 2, -1, 1, 0, 2, -1, 3, -1, 2, 1, 0, -1],
-  [2, -1, 1, -1, 0, -1, 1, 2, 3, -1, 2, -1, 1, -1, 0, -1],
-  [0, -1, 2, -1, 3, -1, 2, -1, 4, -1, 3, 2, 1, -1, 2, -1],
-  [3, -1, 2, -1, 1, -1, 2, 3, 4, -1, -1, 3, 5, -1, 4, -1],
-];
-let musikModus = 'aus', schritt = 0, naechsterSchritt = 0, musikTimer = null;
-function musikModusSetzen(m) {
+const NOTEN_NAMEN = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11, H: 11 };
+const AKKORD_ARTEN = { '': [0, 4, 7], m: [0, 3, 7], '7': [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], sus4: [0, 5, 7], '5': [0, 7, 12] };
+const akkordCache = {};
+function akkord(name) {
+  if (akkordCache[name]) return akkordCache[name];
+  const m = /^([A-H])([#b]?)(.*)$/.exec(name);
+  let grund = 48 + NOTEN_NAMEN[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+  if (grund > 54) grund -= 12;
+  return (akkordCache[name] = (AKKORD_ARTEN[m[3]] || AKKORD_ARTEN['']).map(i => grund + i));
+}
+const SONGS = {
+  stadt: { name: 'Stadtbummel', bpm: 94, swing: 0.12, lead: 'weich', arpArt: 'zupf', pad: 0.03,
+    akkorde: ['Fmaj7', 'Em7', 'Dm7', 'Cmaj7', 'Fmaj7', 'Em7', 'Dm7', 'G7'],
+    bass: '0..0..2.0...0.2.', arp: '0.2.1.3.0.2.1.3.',
+    mel: ['4...5.4.3...2...', '3.4.5...4.......', '2...3.2.1...0...', '1.2.3...........', '4...5.4.3...2...', '3.4.5...6.5.4...', '5...4.3.2...3...', '4...............'],
+    kick: 'x.....x...x.....', snare: '....x.......x...', hat: '..x...x...x...x.' },
+  lobby: { name: 'Warm-up', bpm: 112, swing: 0.05, lead: 'quadrat', arpArt: 'zupf', pad: 0.025,
+    akkorde: ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'],
+    bass: '0...0.0.0...0.2.', arp: '0.1.2.1.0.1.2.1.',
+    mel: ['4.3.4.5.4...3...', '4...3...2.......', '3.4.5.4.3...2...', '1...2...3.......', '4.3.4.5.6...5...', '4...3...2...1...', '2.3.4.3.2...1...', '2...............'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', clap: '............x...' },
+  farbhafen: { name: 'Hafen-Rock', bpm: 128, lead: 'saege', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E'],
+    bass: '0.0.0.0o0.0.0.0o', arp: '',
+    mel: ['4.4.3.4...5.4.3.', '2...1.2.3...4...', '4.4.3.4...5.6.5.', '4...........3.2.', '5.5.4.5...6.5.4.', '3...2.3.4...5...', '5.4.3.2...3.4...', '4...3...2...1...'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', offen: '..............x.' },
+  skatepark: { name: 'Rampen-Punk', bpm: 156, lead: 'quadrat', arpArt: '', pad: 0, skank: '..x...x...x...x.',
+    akkorde: ['E', 'C#m', 'A', 'B', 'E', 'G#m', 'A', 'B'],
+    bass: '0.1.2.1.0.1.2.o.', arp: '',
+    mel: ['3.3.4.5...4.3...', '2...3...4.......', '3.3.4.5...6.5.4.', '5...4...3...2...', '3.3.4.5...4.3...', '4...5...6.......', '5.4.3.2.3.4.5...', '6...............'],
+    kick: 'x.....x.x.......', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '....x.......x...' },
+  dschungel: { name: 'Trommel-Dschungel', bpm: 118, swing: 0.08, lead: 'marimba', arpArt: 'marimba', pad: 0.02,
+    akkorde: ['Dm', 'C', 'Dm', 'Am', 'Dm', 'C', 'G', 'Am'],
+    bass: '0.......0...2...', arp: '0.1.2.4.2.1.0.2.',
+    mel: ['4...3.4...5.....', '4...2...........', '4...3.4...5.6...', '5...4...3.......', '6...5.4...5.....', '4...3...........', '4.5.6.5.4...3...', '4...............'],
+    kick: 'x.......x.......', tom: 'x..x..x...x.x...', schuettel: '.xxx.xxx.xxx.xxx' },
+  eispalast: { name: 'Glitzerfrost', bpm: 124, lead: 'glocke', arpArt: 'glocke', pad: 0.035,
+    akkorde: ['Em', 'C', 'G', 'D', 'Em', 'C', 'Am', 'B'],
+    bass: '0...0...0...0...', arp: '0.1.2.3.4.3.2.1.',
+    mel: ['6...5...4...3...', '4.....5.6.......', '6...5...4...6...', '5...............', '6...7...8...7...', '6.....5.4.......', '3...4...5...4...', '3...............'],
+    kick: 'x.......x.x.....', snare: '....x.......x...', hat: '..x...x...x...x.' },
+  wueste: { name: 'Sandsturm-Basar', bpm: 132, lead: 'oud', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['E', 'F', 'E', 'Dm', 'E', 'F', 'G', 'E'],
+    bass: '0..0..0.0..0..o.', arp: '',
+    mel: ['4.5.4.3.4...3...', '4.5.6.5.4.......', '4.5.4.3.4...5.4.', '3...4...........', '6.5.4.5.6...4...', '5.4.3.4.5.......', '4.5.6.7.6.5.4.3.', '4...............'],
+    kick: 'x..x..x...x.....', snare: '....x.......x...', tom: '..........x.x.x.', hat: 'x.x.x.x.x.x.x.x.' },
+};
+let musikModus = 'aus', songName = 'stadt', schritt = 0, naechsterSchritt = 0, musikTimer = null, hallBus = null, echoBus = null;
+function musikModusSetzen(m, song) {
+  if (song && SONGS[song] && song !== songName) { songName = song; schritt = 0; }
   musikModus = m;
   if (!ac || musikTimer) return;
   musikTimer = setInterval(musikPlanen, 25);
 }
-function musikPlanen() {
-  if (musikModus === 'aus') return;
-  const bpm = musikModus === 'menu' ? 100 : musikModus === 'eile' ? 152 : 128;
-  const sechzehntel = 60 / bpm / 4;
-  if (naechsterSchritt < ac.currentTime - 0.2) naechsterSchritt = ac.currentTime + 0.05;
-  while (naechsterSchritt < ac.currentTime + 0.12) {
-    musikSchritt(schritt, naechsterSchritt, sechzehntel);
-    naechsterSchritt += sechzehntel; schritt = (schritt + 1) % 64;
+function musikEffekte() {   // Hall (wie in einer großen Halle) und Echo
+  if (hallBus || !ac) return;
+  const laenge = ac.sampleRate * 2, buf = ac.createBuffer(2, laenge, ac.sampleRate);
+  for (let k = 0; k < 2; k++) { const d = buf.getChannelData(k); for (let i = 0; i < laenge; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / laenge, 3); }
+  hallBus = ac.createConvolver(); hallBus.buffer = buf;
+  const hallLaut = ac.createGain(); hallLaut.gain.value = 0.4; hallBus.connect(hallLaut); hallLaut.connect(musikGain);
+  echoBus = ac.createDelay(1); echoBus.delayTime.value = 0.27;
+  const rueck = ac.createGain(); rueck.gain.value = 0.3; echoBus.connect(rueck); rueck.connect(echoBus);
+  const echoLaut = ac.createGain(); echoLaut.gain.value = 0.25; echoBus.connect(echoLaut); echoLaut.connect(musikGain);
+}
+// Ein Instrumenten-Ton mit Filter, Vibrato, Hall und Echo
+function stimme(typ, freq, t, lang, laut, { filter = 0, attack = 0.01, hall = 0, echo = 0, verstimmt = 0, vibrato = 0 } = {}) {
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(lang, attack + 0.02));
+  let ziel = g;
+  if (filter) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filter; f.connect(g); ziel = f; }
+  for (const d of verstimmt ? [-verstimmt, verstimmt] : [0]) {
+    const o = ac.createOscillator(); o.type = typ; o.frequency.value = freq; o.detune.value = d;
+    if (vibrato) {
+      const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 5.5; lg.gain.value = vibrato;
+      lfo.connect(lg); lg.connect(o.detune); lfo.start(t); lfo.stop(t + lang + 0.05);
+    }
+    o.connect(ziel); o.start(t); o.stop(t + lang + 0.05);
+  }
+  g.connect(musikGain);
+  if (hall && hallBus) { const h = ac.createGain(); h.gain.value = hall; g.connect(h); h.connect(hallBus); }
+  if (echo && echoBus) { const h = ac.createGain(); h.gain.value = echo; g.connect(h); h.connect(echoBus); }
+}
+function instrument(art, midi, t, d, laut = 1) {
+  const f = NOTE(midi);
+  switch (art) {
+    case 'saege': stimme('sawtooth', f, t, d * 1.8, 0.035 * laut, { filter: 2800, verstimmt: 8, vibrato: 12, echo: 0.4, hall: 0.3 }); break;
+    case 'quadrat': stimme('square', f, t, d * 1.6, 0.03 * laut, { filter: 3000, verstimmt: 6, vibrato: 10, echo: 0.3, hall: 0.2 }); break;
+    case 'weich': stimme('triangle', f, t, d * 3, 0.06 * laut, { attack: 0.03, vibrato: 8, hall: 0.4, echo: 0.3 }); stimme('sine', f * 2, t, d * 2, 0.012 * laut); break;
+    case 'glocke': stimme('sine', f, t, 1.2, 0.05 * laut, { hall: 0.6, echo: 0.3 }); stimme('sine', f * 2.76, t, 0.4, 0.015 * laut, { hall: 0.5 }); break;
+    case 'marimba': stimme('sine', f, t, 0.35, 0.08 * laut, { hall: 0.3 }); stimme('sine', f * 4, t, 0.08, 0.025 * laut); break;
+    case 'oud': stimme('sawtooth', f, t, 0.35, 0.04 * laut, { filter: 1800, vibrato: 18, hall: 0.4, echo: 0.2 }); break;
+    default: stimme('square', f, t, d * 0.9, 0.018 * laut, { filter: 2000, hall: 0.2 });   // 'zupf'
   }
 }
-function musikSchritt(s, t, d) {
-  const takt = (s / 16) | 0, st = s % 16, ak = AKKORDE[takt], m = musikModus;
-  const menu = m === 'menu', eile = m === 'eile';
-  if (st === 0) for (const n of ak) osz('triangle', NOTE(n), NOTE(n), d * 16, menu ? 0.035 : 0.025, t, musikGain, 1200);  // Teppich
-  if (BASS_RHYTHMUS[st]) osz('sawtooth', NOTE(BASS[takt] + (st === 6 || st === 14 ? 12 : 0)), NOTE(BASS[takt]), d * 1.8, menu ? 0.06 : 0.09, t, musikGain, 600);
-  const mi = MELODIE[takt][st];
-  if (mi >= 0 && (!menu || takt % 2 === 0)) {
-    const toene = [...ak, ...ak.map(n => n + 12)];
-    osz('square', NOTE(toene[mi] + 12), NOTE(toene[mi] + 12), d * 1.7, menu ? 0.03 : 0.045, t, musikGain, eile ? 3500 : 2400);
+function musikPlanen() {
+  if (musikModus === 'aus' || !ac) return;
+  musikEffekte();
+  const song = SONGS[songName], eile = musikModus === 'eile';
+  const sechzehntel = 60 / (song.bpm * (eile ? 1.15 : 1)) / 4;
+  if (naechsterSchritt < ac.currentTime - 0.2) naechsterSchritt = ac.currentTime + 0.05;
+  while (naechsterSchritt < ac.currentTime + 0.12) {
+    try { musikSchritt(song, schritt, naechsterSchritt, sechzehntel, eile); } catch (e) { /* ein falscher Ton ist egal */ }
+    naechsterSchritt += sechzehntel; schritt = (schritt + 1) % 128;
   }
-  if (!menu) {   // Schlagzeug
-    if (st % 4 === 0) osz('sine', 150, 40, 0.16, 0.5, t, musikGain);
-    if (st === 4 || st === 12) krach(1500, 0.13, 0.18, t, musikGain, 'highpass');
-    if (st % 2 === 1 || eile) krach(7000, 0.04, eile ? 0.07 : 0.05, t, musikGain, 'highpass');
+}
+function musikSchritt(song, s, t, d, eile) {
+  const takt = (s / 16) | 0, st = s % 16;
+  if (st % 2 === 1 && song.swing) t += song.swing * d;   // Swing: jeder zweite Schritt etwas später
+  const ak = akkord(song.akkorde[takt]);
+  const toene = [...ak, ...ak.map(n => n + 12), ...ak.map(n => n + 24)];
+  const zeichen = (muster, i) => (muster || '')[i] || '.';
+  const ist = (muster) => zeichen(muster, st) === 'x';
+  // Klang-Teppich
+  if (st === 0 && song.pad) for (const n of ak) stimme('sawtooth', NOTE(n + 12), t, d * 16, song.pad, { attack: 0.3, filter: 900, hall: 0.5, verstimmt: 5 });
+  // Bass
+  const b = zeichen(song.bass, st);
+  if (b !== '.') {
+    const n = b === 'o' ? ak[0] : ak[(+b) % ak.length] - 12 + (+b >= ak.length ? 12 : 0);
+    stimme('sawtooth', NOTE(n), t, d * 1.6, 0.08, { filter: 500 }); stimme('sine', NOTE(n), t, d * 1.6, 0.06);
   }
+  // Begleitung
+  const a = zeichen(song.arp, st);
+  if (a !== '.' && song.arpArt) instrument(song.arpArt, toene[+a] + 12, t, d, 0.45);
+  if (ist(song.skank)) for (const n of ak) stimme('square', NOTE(n + 12), t, 0.07, 0.018, { filter: 2500 });
+  // Melodie
+  const m = zeichen(song.mel[takt], st);
+  if (m !== '.') instrument(song.lead, toene[+m] + 12, t, d);
+  // Schlagzeug
+  if (ist(song.kick)) osz('sine', 150, 40, 0.18, 0.55, t, musikGain);
+  if (ist(song.snare)) { krach(1800, 0.14, 0.2, t, musikGain, 'highpass'); osz('triangle', 220, 160, 0.08, 0.08, t, musikGain); }
+  if (ist(song.hat) || (eile && st % 2 === 1)) krach(8000, 0.035, eile ? 0.06 : 0.045, t, musikGain, 'highpass');
+  if (ist(song.offen)) krach(7000, 0.2, 0.04, t, musikGain, 'highpass');
+  if (ist(song.clap)) for (let i = 0; i < 3; i++) krach(1500, 0.05, 0.1, t + i * 0.012, musikGain, 'bandpass');
+  if (ist(song.tom)) osz('sine', 220, 90, 0.25, 0.25, t, musikGain);
+  if (ist(song.schuettel)) krach(9000, 0.05, 0.02, t, musikGain, 'highpass');
 }
 function musikUmschalten() {
   musikAn = !musikAn;
@@ -583,7 +691,7 @@ function musikUmschalten() {
   meldung(musikAn ? '🎵 Musik an' : '🔇 Musik aus');
 }
 // Browser erlauben Sound erst nach dem ersten Klick
-addEventListener('pointerdown', () => { if (audioStart() && musikModus === 'aus' && zustand === 'menu') musikModusSetzen('menu'); });
+addEventListener('pointerdown', () => { if (audioStart() && musikModus === 'aus' && zustand === 'menu') musikModusSetzen('menu', 'stadt'); });
 
 // ================== 3D-WELT (Three.js) ==================
 const glCv = document.getElementById('welt');
@@ -682,6 +790,7 @@ function karteLaden(name) {
 }
 function himmelSetzen(th) {
   scene.background.set(th.himmel); scene.fog.color.set(th.himmel); draussen.material.color.set(th.draussen);
+  scene.fog.near = 900; scene.fog.far = 2600;
 }
 function sonneAuf(x, z) { sonne.position.set(x - 500, 1000, z - 400); sonne.target.position.set(x, 0, z); }
 // Deko: Farbtürme draußen
@@ -752,6 +861,45 @@ function arenaDeko() {
   }
 }
 arenaDeko();
+// Sonder-Zonen sichtbar machen
+const foerderTexturen = [];
+(function zonenBauen() {
+  const metall = mat('#c9cfe6', { roughness: 0.25, metalness: 0.8 }), grau = mat('#4a4f73', { roughness: 0.3, metalness: 0.4 });
+  const pfeil = leinwand(64, 64), x = pfeil.getContext('2d');
+  x.fillStyle = '#3a3d4a'; x.fillRect(0, 0, 64, 64);
+  x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(14, 12); x.lineTo(40, 32); x.lineTo(14, 52); x.lineTo(24, 32); x.fill();
+  for (const [id, a] of Object.entries(ARENEN)) for (const z of a.zonen || []) {
+    const g = kartenGruppe[id];
+    if (z.art === 'band') {
+      const t = new THREE.CanvasTexture(pfeil); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(z.w / 40, 1); if (z.dx < 0) { t.center.set(0.5, 0.5); t.rotation = Math.PI; }
+      foerderTexturen.push({ t, richtung: Math.sign(z.dx) });
+      const geo = new THREE.PlaneGeometry(z.w, z.h); geo.rotateX(-Math.PI / 2);
+      const band = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, transparent: true, opacity: 0.85 }));
+      band.position.set(z.x + z.w / 2, 1.2, z.y + z.h / 2); g.add(band);
+      for (const yy of [z.y, z.y + z.h]) g.add(zylinderX(metall, 3, 3, z.w, z.x + z.w / 2, 3, yy));
+    } else if (z.art === 'boost') {
+      const leucht = mat('#5be37d', { emissive: '#5be37d', emissiveIntensity: 0.8 });
+      g.add(zylinder(grau, z.r, z.r + 3, 3, z.x, 1.5, z.y), zylinder(leucht, z.r * 0.7, z.r * 0.7, 3.4, z.x, 1.7, z.y));
+      const ring = ringY(leucht, z.r * 0.9, 1.2, z.x, 4, z.y); ring.userData.boost = true; g.add(ring);
+    } else if (z.art === 'busch') {
+      const gruen = [mat('#2f8f3a', { roughness: 0.95 }), mat('#3f9b4b', { roughness: 0.95 }), mat('#56b862', { roughness: 0.95 })];
+      for (let i = 0; i < 9; i++) {
+        const w = i / 9 * Math.PI * 2, d = i === 8 ? 0 : z.r * 0.55;
+        g.add(kugel(gruen[i % 3], z.r * 0.55, z.x + Math.cos(w) * d, 26 + (i % 2) * 10, z.y + Math.sin(w) * d, 1, 1.1, 1));
+      }
+    } else if (z.art === 'sand') {
+      const c = leinwand(128, 128), s2 = c.getContext('2d');
+      const grad = s2.createRadialGradient(64, 64, 4, 64, 64, 64); grad.addColorStop(0, '#9c7a3c'); grad.addColorStop(0.8, '#c29a55'); grad.addColorStop(1, 'rgba(194,154,85,0)');
+      s2.fillStyle = grad; s2.fillRect(0, 0, 128, 128);
+      s2.strokeStyle = '#8a6a30'; s2.lineWidth = 3; s2.beginPath(); for (let k = 0; k < 60; k++) { const w = k * 0.35, r = k; s2.lineTo(64 + Math.cos(w) * r, 64 + Math.sin(w) * r); } s2.stroke();
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      const geo = new THREE.CircleGeometry(z.r * 1.15, 32); geo.rotateX(-Math.PI / 2);
+      const sand = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: t, transparent: true }));
+      sand.position.set(z.x, 1.3, z.y); sand.userData.sand = true; g.add(sand);
+    }
+  }
+})();
 function kugel(m, r, x, y, z, sx = 1, sy = 1, sz = 1) {
   const k = new THREE.Mesh(geoKugel, m); k.scale.set(r * sx, r * sy, r * sz); k.position.set(x, y, z); k.castShadow = r > 2.5; return k;
 }
@@ -1399,7 +1547,7 @@ function lobbyAufbauen(auf) {
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
   startCountdown = 0;
   if (zustand === 'pause') pauseVon = 'lobby'; else zustand = 'lobby';
-  if (!warLobby) { nurZeigen(null); audioStart(); musikModusSetzen('menu'); }
+  if (!warLobby) { nurZeigen(null); audioStart(); musikModusSetzen('menu', 'lobby'); }
 }
 function mpLobbyNeu() {   // Gastgeber: Lobby neu aufbauen und allen schicken
   const auf = lobbyAufstellung();
@@ -1807,7 +1955,7 @@ function neueRunde(auf, karteId, farben) {
   // Erst das Intro, dann 3-2-1-LOS
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;
-  audioStart(); musikModusSetzen('spiel'); ton('fanfare');
+  audioStart(); musikModusSetzen('spiel', karteId); ton('fanfare');
   zielRing.material.color.set(TEAMS[spieler.team].col);
   if (istHost()) { mp.farbe = []; mp.ev = []; mpAnAlle({ t: 'start', auf, karte: karteId, farben }); }
 }
@@ -1872,8 +2020,9 @@ function introEnde() {
 function meldung(text) { meldungen.push({ text, t: 3 }); if (meldungen.length > 4) meldungen.shift(); }
 
 // ================== HILFSFUNKTIONEN ==================
-function kollidiert(x, y, r) {
+function kollidiert(x, y, r, z = 0) {
   if (x < r || y < r || x > W - r || y > H - r) return true;
+  if (z > WAND_H + 2) return false;                     // hoch genug gesprungen: über die Mauer!
   for (const w of waende) {
     const cx = Math.max(w.x, Math.min(x, w.x + w.w)), cy = Math.max(w.y, Math.min(y, w.y + w.h));
     if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return true;
@@ -1908,6 +2057,22 @@ function botPitch(e, d, zielH) {
 }
 
 // ================== BEWEGEN ==================
+// In welcher Sonder-Zone steht man gerade? (Förderband, Sprung-Pad, Gebüsch, Treibsand)
+function zoneBei(x, y) {
+  const a = ARENEN[karte];
+  if (!a || !a.zonen || modus !== 'match') return null;
+  for (const z of a.zonen) if (z.r ? Math.hypot(x - z.x, y - z.y) < z.r : (x > z.x && x < z.x + z.w && y > z.y && y < z.y + z.h)) return z;
+  return null;
+}
+function imGebuesch(e) { const z = zoneBei(e.x, e.y); return !!z && z.art === 'busch' && e.z < 20 && !e.tot; }
+function sandsturm() { return karte === 'wueste' && modus === 'match' && zustand !== 'intro' && (RUNDE - rest) % 50 >= 40; }
+function freieStelle(x, y, r) {   // nächste Stelle, an der keine Wand ist
+  for (let d = 4; d <= 120; d += 4) for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2, nx = x + Math.cos(a) * d, ny = y + Math.sin(a) * d;
+    if (!kollidiert(nx, ny, r)) return { x: nx, y: ny };
+  }
+  return { x, y };
+}
 function bewege(e, dx, dy, dt) {
   // Springen / Fallen
   if (e.z > 0 || e.vz > 0) {
@@ -1916,17 +2081,29 @@ function bewege(e, dx, dy, dt) {
       e.z = 0; e.vz = 0; e.landT = 0.25;
       if (e.slam) { if (istGast()) { e.slam = false; mpSende({ t: 'slam' }); } else farbsturmLandung(e); }
     }
+    if (e.z < WAND_H + 2 && kollidiert(e.x, e.y, e.r)) { const f = freieStelle(e.x, e.y, e.r); e.x = f.x; e.y = f.y; }   // nicht in einer Mauer landen
   }
+  const zone = zoneBei(e.x, e.y);
+  e.boostCd = Math.max(0, (e.boostCd || 0) - dt);
   const feind = tauchenPruefen(e), amBoden = e.z <= 0;
   let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
+  if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
   if (e.laserT > 0) speed *= 0.5;
-  const k = Math.min(1, dt * (amBoden ? 12 : 3));
+  const glatt = ARENEN[karte] && ARENEN[karte].glatt && modus === 'match' && !e.taucht && Math.hypot(e.x - BASIS[e.team].x, e.y - BASIS[e.team].y) > 120;
+  const k = Math.min(1, dt * (amBoden ? (glatt ? 1.6 : 12) : 3));     // auf Glatteis rutscht man
   e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
-  const nx = e.x + e.vx * dt; if (!kollidiert(nx, e.y, e.r)) e.x = nx; else e.vx = 0;
-  const ny = e.y + e.vy * dt; if (!kollidiert(e.x, ny, e.r)) e.y = ny; else e.vy = 0;
+  let bx = 0, by = 0;
+  if (zone && zone.art === 'band' && amBoden) bx = zone.dx;                 // Förderband schiebt
+  const nx = e.x + (e.vx + bx) * dt; if (!kollidiert(nx, e.y, e.r, e.z)) e.x = nx; else e.vx = 0;
+  const ny = e.y + (e.vy + by) * dt; if (!kollidiert(e.x, ny, e.r, e.z)) e.y = ny; else e.vy = 0;
+  if (zone && zone.art === 'boost' && amBoden && !e.taucht && e.boostCd <= 0) {   // Sprung-Pad!
+    e.vz = 520; e.z = 0.01; e.boostCd = 0.8; e.vx *= 1.6; e.vy *= 1.6;
+    spritzer(e.x, e.y, 2, e.team, 8, 160);
+    if (e.spieler) ton('boing'); else if (spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 400) ton('boing', 0.4);
+  }
   // Die gegnerische Basis ist verboten!
   const gb = BASIS[1 - e.team], gd = Math.hypot(e.x - gb.x, e.y - gb.y);
   if (modus === 'match' && gd < 100) { e.x = gb.x + (e.x - gb.x) / gd * 100; e.y = gb.y + (e.y - gb.y) / gd * 100; }
@@ -1938,7 +2115,8 @@ function tauchenPruefen(e) {
   const unter = amBoden ? besitzer(e.x, e.y) : 0;
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
-  e.taucht = e.willTauchen && eigen && amBoden;
+  const zone = zoneBei(e.x, e.y);
+  e.taucht = e.willTauchen && eigen && amBoden && !(zone && zone.art === 'sand');   // im Treibsand kann man nicht abtauchen
   if (vorher !== e.taucht) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
@@ -2307,12 +2485,12 @@ function ausweichen(b, dx, dy) {
 
 function ki(b, dt) {
   const k = b.ki, w = WAFFEN[b.waffe];
-  const sichtweite = b.waffe === 'sniper' ? 560 : 330;
+  const sichtweite = sandsturm() ? 150 : b.waffe === 'sniper' ? 560 : 330;
   let feind = null, fd = 1e9;
   for (const e of kleckse) {
     if (e.team === b.team || e.tot) continue;
     const d = Math.hypot(e.x - b.x, e.y - b.y);
-    if (d > sichtweite || (e.taucht && d > 90)) continue;     // Abgetauchte Gegner sieht man fast nicht!
+    if (d > sichtweite || ((e.taucht || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
     if (!sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
   }
@@ -2687,9 +2865,23 @@ function animiereFigur(e, v, dt) {
 
 // ================== 3D-BILD AKTUALISIEREN ==================
 let augenHoehe = AUGE;
+let sturmVorher = false;
 function welt3D(dt) {
   bildZaehler++;
   if (farbeGeaendert && bildZaehler % 2 === 0) { bodenAktualisieren(); farbeGeaendert = false; }
+  for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
+  if (kartenGruppe[karte]) for (const o of kartenGruppe[karte].children) {
+    if (o.userData.boost) o.scale.setScalar(1 + Math.sin(zeit * 6) * 0.15);
+    if (o.userData.sand) o.rotation.y += dt * 0.6;
+  }
+  // Sandsturm: Nebel kommt ganz nah
+  const sturm = sandsturm();
+  if (sturm !== sturmVorher) {
+    sturmVorher = sturm;
+    if (sturm) { meldung('🌪️ SANDSTURM! Man sieht fast nichts!'); ton('wind'); } else if (modus === 'match') meldung('☀️ Der Sandsturm ist vorbei.');
+  }
+  scene.fog.near += ((sturm ? 30 : 900) - scene.fog.near) * Math.min(1, dt * 2);
+  scene.fog.far += ((sturm ? 320 : 2600) - scene.fog.far) * Math.min(1, dt * 2);
 
   for (const e of kleckse) {
     const g = e.gruppe;
@@ -2702,7 +2894,8 @@ function welt3D(dt) {
     e.tauchAnim += ((e.taucht ? 1 : 0) - e.tauchAnim) * Math.min(1, dt * 14);
     if (e.tot) e.tauchAnim = 0;
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
-    g.visible = !((e.tot && e.todT <= 0) || istIch || (e.taucht && e.tauchAnim > 0.9 && e.team !== spieler.team && !feindNah));
+    const versteckt = e.team !== spieler.team && !feindNah && ((e.taucht && e.tauchAnim > 0.9) || imGebuesch(e));
+    g.visible = !((e.tot && e.todT <= 0) || istIch || versteckt);
     let gx = 1, gy = 1, hoch = 0, dreh = 0;
     if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
       const f = 1 - e.todT / 0.5;
@@ -2806,6 +2999,13 @@ function hud() {
   if (zustand === 'stadt') { stadtHud(cw, ch); return; }
   if (!spieler || zustand === 'menu') return;
   if (zustand === 'intro') { introHud(cw, ch); return; }
+  if (sandsturm()) {   // Sand vor den Augen
+    ctx.fillStyle = 'rgba(201,150,90,0.35)'; ctx.fillRect(0, 0, cw, ch);
+    ctx.fillStyle = 'rgba(255,230,180,0.5)'; for (let i = 0; i < 120; i++) ctx.fillRect((i * 97 + zeit * 900 * (1 + i % 3)) % cw, (i * 53 + Math.sin(zeit + i) * 20) % ch, 3, 1);
+  }
+  const z0 = zoneBei(spieler.x, spieler.y);
+  if (z0 && z0.art === 'busch' && !spieler.tot) { ctx.fillStyle = 'rgba(40,120,50,0.25)'; ctx.fillRect(0, 0, cw, ch); }
+  if (z0 && z0.art === 'sand' && !spieler.tot) { ctx.fillStyle = 'rgba(156,122,60,0.25)'; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.taucht) { ctx.globalAlpha = 0.18; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1; }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
@@ -2857,6 +3057,7 @@ function hud() {
   const mw = Math.min(220, cw * 0.28), mh = mw * H / W, mx = cw - mw - 16, my = ch - mh - 16;
   ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12);
   ctx.drawImage(bodenCv, mx, my, mw, mh); ctx.drawImage(farbCv, mx, my, mw, mh); ctx.drawImage(wandCv, mx, my, mw, mh);
+  if (sandsturm()) { ctx.fillStyle = '#c9965a'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12); ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui'; ctx.textAlign = 'center'; ctx.fillText('🌪️ Sandsturm', mx + mw / 2, my + mh / 2); }
   for (const e of kleckse) {
     if (e.tot || e.team !== spieler.team) continue;
     const ex = mx + e.x / W * mw, ey = my + e.y / H * mh;
@@ -2964,7 +3165,7 @@ function introHud(cw, ch) {
     ctx.globalAlpha = Math.min(rein, raus);
     textMitRand('⚔️ FARBSCHLACHT ⚔️', cw / 2 - (1 - rein) * cw, ch * 0.4, Math.min(80, cw / 10), '#ffd166');
     textMitRand(`Arena: ${ARENEN[karte].emoji} ${ARENEN[karte].name}`, cw / 2 + (1 - rein) * cw, ch * 0.4 + 60, Math.min(40, cw / 18));
-    ctx.font = '20px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText('Mal in 3 Minuten mehr Boden an als die Gegner!', cw / 2, ch * 0.4 + 100);
+    ctx.font = 'bold 22px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(ARENEN[karte].spezial || 'Mal in 3 Minuten mehr Boden an als die Gegner!', cw / 2, ch * 0.4 + 100);
   } else if (t < 5.5) {
     const f = weich((t - 3) * 3), raus = 1 - weich((t - 5.1) * 3);
     ctx.globalAlpha = raus;
@@ -3391,7 +3592,7 @@ function stadtBetreten() {
   stadtSp.vx = stadtSp.vy = stadtSp.vz = stadtSp.z = 0;
   zustand = 'stadt';
   sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA);
-  audioStart(); musikModusSetzen('menu');
+  audioStart(); musikModusSetzen('menu', 'stadt');
   mausFangen();
 }
 function stadtBetretenTaste() {
