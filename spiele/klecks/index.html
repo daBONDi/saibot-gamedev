@@ -35,7 +35,8 @@
   a { color: #c9c3ff; }
   .overlay.links { justify-content: flex-start; background: linear-gradient(90deg, #14172ef2 0%, #14172ee6 42%, #14172e00 75%); }
   .overlay.links .box { max-width: 36rem; margin: auto 0; }
-  input#kontoName { font: 1.2rem system-ui, sans-serif; padding: 0.5rem 0.8rem; border-radius: 0.7rem; border: 2px solid #3d4266; background: #1b1f3a; color: #fff; width: 80%; }
+  input#raumCode { text-transform: uppercase; letter-spacing: 0.3em; text-align: center; width: 10rem !important; }
+  input#kontoName, input#raumCode { font: 1.2rem system-ui, sans-serif; padding: 0.5rem 0.8rem; border-radius: 0.7rem; border: 2px solid #3d4266; background: #1b1f3a; color: #fff; width: 80%; }
   .farben { display: flex; gap: 0.5rem; justify-content: center; }
   .farben button { width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 3px solid #3d4266; cursor: pointer; }
   .farben button.an { border-color: #ffd166; transform: scale(1.15); }
@@ -121,6 +122,22 @@
     <p id="shopInfo">Klick auf ein Teil, um es anzuprobieren!</p>
     <div class="items" id="shopItems"></div>
     <button class="gross" id="shopZurueck">⬅ Zurück</button>
+  </div>
+</div>
+
+<div id="arenaWahl" class="overlay links hidden">
+  <div class="box">
+    <h1 style="font-size:2.2rem">🏟️ ARENA</h1>
+    <p>Wie willst du spielen?</p>
+    <button class="gross" id="wahlBots">🤖 Gegen Bots</button>
+    <h2>👫 Mit Freunden online</h2>
+    <button class="gross" id="wahlRaum">🏠 Raum erstellen</button>
+    <p style="margin-top:1rem">… oder den Raum-Code von deinem Freund eingeben:</p>
+    <input id="raumCode" maxlength="4" placeholder="z. B. K7PX" autocomplete="off">
+    <button class="gross" id="wahlBeitreten">🚪 Beitreten</button>
+    <p id="mpStatus" class="fehler"></p>
+    <p class="kleinText">🌐 Online über PeerJS (wie bei deinen anderen Spielen). Mitspieler sehen nur deinen Spielernamen und deine Figur. Gib den Code nur an Freunde weiter!</p>
+    <button class="klein" id="wahlZurueck">⬅ Zurück in die Stadt</button>
   </div>
 </div>
 
@@ -361,6 +378,7 @@ wandKarteMalen();
 
 // Farbe spritzen! Malt einen Klecks auf das Bild UND merkt sich im Feld, wem der Boden gehört.
 function klecks(x, y, r, team, wer, ultiLaden = true) {
+  if (mp.rolle === 'host' && mp.gaeste.size) mp.farbe.push(r0(x), r0(y), r0(r), team);   // Freunde malen das auch
   fctx.fillStyle = TEAMS[team].col;
   fctx.beginPath(); fctx.arc(x, y, r, 0, 7); fctx.fill();
   for (let i = 0; i < 3; i++) {
@@ -1102,6 +1120,12 @@ addEventListener('keydown', e => {
   tasten[e.code] = true;
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; }
   if (e.code === 'KeyE' && zustand === 'stadt') stadtBetretenTaste();
+  if (e.code === 'Enter' && modus === 'lobby' && zustand === 'lobby' && !istGast()) neueRunde();   // Match starten (Bots füllen auf)
+  if (e.code === 'KeyT' && modus === 'lobby' && zustand === 'lobby') {
+    mp.wunschTeam = 1 - mp.wunschTeam;
+    meldung(`Dein Team fürs Match: ${mp.wunschTeam ? '🟣 Lila' : '🟠 Orange'}`); ton('klick');
+    if (istGast()) mpSende({ t: 'wahl', team: mp.wunschTeam });
+  }
   if (e.code === 'KeyQ') ultiWunsch = true;
   if (e.code === 'KeyV') ichSicht = !ichSicht;
   if (e.code === 'KeyM') musikUmschalten();
@@ -1128,7 +1152,7 @@ document.addEventListener('pointerlockchange', () => {
   maus.links = maus.rechts = false;
   if (zustand === 'spiel' || zustand === 'lobby' || zustand === 'intro') {
     pauseVon = zustand; zustand = 'pause';
-    document.getElementById('aufgeben').textContent = pauseVon === 'lobby' ? '🏙️ Lobby verlassen (zur Stadt)' : '🏳️ Runde abbrechen';
+    document.getElementById('aufgeben').textContent = pauseVon === 'lobby' || istGast() ? '🏙️ Verlassen (zur Stadt)' : '🏳️ Runde abbrechen';
     document.getElementById('pause').classList.remove('hidden');
   } else if (zustand === 'stadt') menuZeigen();   // Esc in der Stadt = Menü
 });
@@ -1136,6 +1160,434 @@ glCv.addEventListener('click', () => {
   if (['spiel', 'lobby', 'stadt'].includes(zustand) && document.pointerLockElement !== glCv) mausFangen();
   if (zustand === 'intro') introSkip = true;
 });
+
+// ================== ONLINE MIT FREUNDEN (PeerJS) ==================
+// Einer ist Gastgeber: Sein Browser rechnet das ganze Spiel. Freunde geben den 4-stelligen Raum-Code ein.
+// Freunde schicken nur, wo sie sind und was sie drücken. Der Gastgeber schickt 15x pro Sekunde, wo alles ist.
+// PeerJS wird erst geladen, wenn jemand einen Raum erstellt oder beitritt.
+const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+const MP_VORSILBE = 'klecks-krieg-';   // Damit unsere Raum-Codes nicht mit anderen Spielen zusammenstoßen
+const MP_SENDE_RATE = 15, MP_EINGABE_RATE = 20, MP_MAX = 8;
+const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand'];
+const r0 = v => Math.round(v), r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
+const zahl = (v, lo, hi, nichts) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : nichts;
+const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), meineId: 'host',
+  farbe: [], ev: [], sendeT: 0, eingabeT: 0, bitte: {}, status: '', wunschTeam: 0, verbinde: false, objId: 0, schussT: 0 };
+const istGast = () => mp.aktiv && mp.rolle === 'gast';
+const istHost = () => mp.aktiv && mp.rolle === 'host';
+function mpEreignis(e) { if (istHost() && mp.gaeste.size && mp.ev.length < 400) mp.ev.push(e); }
+const objId = o => o.id || (o.id = ++mp.objId);
+
+function mpLadePeerJS() {
+  if (window.Peer) return Promise.resolve();
+  return new Promise((ok, fehler) => {
+    const sc = document.createElement('script');
+    sc.src = MP_PEERJS; sc.onload = ok; sc.onerror = () => fehler(new Error('PeerJS nicht geladen'));
+    document.head.appendChild(sc);
+  });
+}
+function mpNeuerCode() {   // 4 Zeichen, ohne verwechselbare wie 0/O und 1/I
+  const z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let k = 0; k < 4; k++) c += z[Math.floor(Math.random() * z.length)];
+  return c;
+}
+function mpFehlerText(e) {
+  if (e && (e.type === 'network' || e.type === 'server-error')) return 'Keine Verbindung zum Vermittlungs-Server (Internet?)';
+  if (e && e.type === 'browser-incompatible') return 'Dein Browser kann das leider nicht';
+  if (e && e.type === 'peer-unavailable') return 'Raum nicht gefunden – stimmt der Code?';
+  return (e && (e.type || e.message)) || 'unbekannt';
+}
+function mpSendeAn(g, n) { try { if (g.conn && g.conn.open) g.conn.send(n); } catch (e) { /* egal */ } }
+function mpAnAlle(n) { for (const g of mp.gaeste.values()) mpSendeAn(g, n); }
+function mpSende(n) { try { if (mp.conn && mp.conn.open) mp.conn.send(n); } catch (e) { /* egal */ } }
+function mpBeenden() {
+  try { if (mp.peer) mp.peer.destroy(); } catch (e) { /* egal */ }
+  mp.gaeste.clear();
+  Object.assign(mp, { aktiv: false, rolle: null, code: '', peer: null, conn: null, meineId: 'host', farbe: [], ev: [], bitte: {}, verbinde: false });
+}
+function mpVerbindungWeg(text) {
+  const imSpiel = ['lobby', 'spiel', 'intro', 'ende', 'pause'].includes(zustand);
+  mpBeenden();
+  mp.status = '❌ ' + text; $('mpStatus').textContent = mp.status;
+  if (imSpiel) { stadtBetreten(); meldung('❌ ' + text); }
+}
+
+// ----- Was man von sich verrät: nur Spielername, Aussehen und Ausrüstung -----
+function zufallsLook() {
+  return { aussehen: { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) },
+           an: { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) } };
+}
+function mpMeineDaten() {
+  return { name: konto.name, set: konto.an.waffe, aussehen: kontoAussehen(),
+    an: { hemd: konto.an.hemd, schuhe: konto.an.schuhe, kopf: konto.an.kopf }, team: mp.wunschTeam };
+}
+function lookPruefen(a = {}, an = {}) {   // Nur erlaubte Werte annehmen
+  return {
+    aussehen: { haut: HAUTFARBEN.includes(a.haut) ? a.haut : HAUTFARBEN[1], haar: HAARFARBEN.includes(a.haar) ? a.haar : HAARFARBEN[0],
+                frisur: hat(FRISUREN, a.frisur) ? a.frisur : 'kurz' },
+    an: { hemd: hat(HEMDEN, an.hemd) ? an.hemd : 'tshirt', schuhe: hat(SCHUHE, an.schuhe) ? an.schuhe : 'turnschuhe', kopf: hat(KOEPFE, an.kopf) ? an.kopf : 'keine' },
+  };
+}
+function mpDatenPruefen(d = {}) {
+  const name = typeof d.name === 'string' && NAME_OK.test(d.name) ? d.name : 'Gast';
+  return { name, set: hat(SETS, d.set) ? d.set : 'spritzer', team: d.team === 1 ? 1 : 0, ...lookPruefen(d.aussehen, d.an) };
+}
+function aufZuExtra(a) {
+  const look = lookPruefen(a.aussehen, a.an);
+  return { set: hat(SETS, a.set) ? a.set : 'spritzer', name: String(a.name || 'Bot').slice(0, 16), aussehen: look.aussehen, an: look.an,
+    mensch: typeof a.mensch === 'string' ? a.mensch : null, spieler: a.mensch === mp.meineId, puppe: !!a.puppe,
+    heim: a.heim ? { x: zahl(a.heim.x, 0, W, 800), y: zahl(a.heim.y, 0, H, 500) } : null };
+}
+
+// ----- Aufstellungen -----
+const BOT_NAMEN = [['Blubb', 'Spritzi', 'Klacks', 'Farbfred'], ['Gloop', 'Schmatz', 'Plörre', 'Kleckerich']];
+function lobbyAufstellung() {
+  const auf = [{ ...mpMeineDaten(), team: 0, nr: 0, mensch: 'host' }];
+  let nr = 1;
+  for (const g of mp.gaeste.values()) auf.push({ ...g.daten, team: 0, nr: nr++, mensch: g.id });
+  [{ x: 1020, y: 400 }, { x: 1020, y: 600 }].forEach((heim, i) => auf.push({ team: 1, nr: i, puppe: true, heim, name: 'Übungspuppe', set: 'spritzer', ...zufallsLook() }));
+  return auf;
+}
+function matchAufstellung() {
+  const menschen = [{ ...mpMeineDaten(), mensch: 'host' }, ...[...mp.gaeste.values()].map(g => ({ ...g.daten, mensch: g.id }))];
+  const teams = [[], []];
+  for (const m of menschen) { let t = m.team === 1 ? 1 : 0; if (teams[t].length >= 4) t = 1 - t; teams[t].push(m); }
+  const auf = [];
+  for (let t = 0; t < 2; t++) for (let nr = 0; nr < 4; nr++) {
+    const m = teams[t][nr];
+    auf.push(m ? { ...m, team: t, nr } : { team: t, nr, name: BOT_NAMEN[t][nr], set: zufall(SETS), ...zufallsLook() });
+  }
+  return auf;
+}
+function lobbyAufbauen(auf) {
+  const warLobby = karte === 'lobby' && modus === 'lobby' && kleckse.length > 0;
+  weltLeeren(true);
+  modus = 'lobby'; if (!warLobby) karteLaden('lobby');
+  kleckse = auf.map(a => neuerKlecks(a.team === 1 ? 1 : 0, zahl(a.nr, 0, 7, 0), aufZuExtra(a)));
+  spieler = kleckse.find(e => e.spieler) || kleckse[0];
+  baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
+  startCountdown = 0;
+  if (zustand === 'pause') pauseVon = 'lobby'; else zustand = 'lobby';
+  if (!warLobby) { nurZeigen(null); audioStart(); musikModusSetzen('menu'); }
+}
+function mpLobbyNeu() {   // Gastgeber: Lobby neu aufbauen und allen schicken
+  const auf = lobbyAufstellung();
+  lobbyAufbauen(auf);
+  mp.farbe = []; mp.ev = [];
+  mpAnAlle({ t: 'lobby', auf, code: mp.code });
+}
+
+// ----- Gastgeber -----
+async function mpRaumErstellen(versuch = 0) {
+  if ((mp.peer || mp.verbinde) && versuch === 0) return;
+  mp.verbinde = true; mp.status = '⏳ Raum wird erstellt …';
+  try { await mpLadePeerJS(); } catch (e) { mp.verbinde = false; mp.status = '❌ Online-Spiel konnte nicht geladen werden (Internet?)'; meldung(mp.status); return; }
+  const code = mpNeuerCode();
+  const peer = new window.Peer(MP_VORSILBE + code);
+  mp.peer = peer;
+  peer.on('open', () => {
+    Object.assign(mp, { aktiv: true, rolle: 'host', code, meineId: 'host', verbinde: false, status: '' });
+    meldung(`🏠 Raum ist offen! Code: ${code}`); ton('kauf');
+  });
+  peer.on('connection', conn => mpNeuerGast(conn));
+  peer.on('disconnected', () => { try { if (mp.peer === peer) peer.reconnect(); } catch (e) { /* egal */ } });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id' && versuch < 3) { peer.destroy(); mp.peer = null; mpRaumErstellen(versuch + 1); return; }   // Code schon vergeben? Neuer Code!
+    if (!mp.aktiv) { peer.destroy(); mp.peer = null; mp.verbinde = false; mp.status = '❌ ' + mpFehlerText(e); meldung(mp.status); }
+  });
+}
+function mpNeuerGast(conn) {
+  conn.on('open', () => {
+    const inLobby = modus === 'lobby' && (zustand === 'lobby' || (zustand === 'pause' && pauseVon === 'lobby'));
+    if (mp.gaeste.size + 1 >= MP_MAX) { conn.send({ t: 'nein', grund: 'Der Raum ist voll (8 Spieler).' }); setTimeout(() => conn.close(), 500); return; }
+    if (!inLobby) { conn.send({ t: 'nein', grund: 'Dort läuft gerade ein Match. Versuch es gleich nochmal!' }); setTimeout(() => conn.close(), 500); return; }
+    const g = { id: conn.peer, conn, daten: mpDatenPruefen(conn.metadata || {}), e: null };
+    mp.gaeste.set(g.id, g);
+    meldung(`🙋 ${g.daten.name} ist beigetreten!`); ton('plopp');
+    mpLobbyNeu();
+  });
+  conn.on('data', d => { const g = mp.gaeste.get(conn.peer); if (g) mpVomGast(g, d); });
+  conn.on('close', () => mpGastWeg(conn.peer));
+  conn.on('error', () => mpGastWeg(conn.peer));
+}
+function mpGastWeg(id) {
+  const g = mp.gaeste.get(id);
+  if (!g) return;
+  mp.gaeste.delete(id);
+  meldung(`👋 ${g.daten.name} ist gegangen.`);
+  if (modus === 'lobby') { if (kleckse.length) mpLobbyNeu(); return; }
+  const e = kleckse.find(k => k.mensch === id);
+  if (e) { e.mensch = null; e.name += ' 🤖'; mpEreignis({ k: 'weg', i: kleckse.indexOf(e) }); }   // Ein Bot übernimmt
+}
+const mpLaeuft = () => (zustand === 'spiel' || zustand === 'lobby' || zustand === 'pause') && !(modus === 'match' && startCountdown > 0);
+function mpVomGast(g, d) {
+  if (!d || typeof d !== 'object') return;
+  const e = kleckse.find(k => k.mensch === g.id);
+  if (d.t === 'e') {
+    g.e = { x: zahl(d.x, 0, W, null), y: zahl(d.y, 0, H, null), z: zahl(d.z, 0, 300, 0), w: zahl(d.w, -1e4, 1e4, 0), p: zahl(d.p, -1.3, 1.1, 0),
+            vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, n: d.n | 0 };
+    if (!e || e.tot || !mpLaeuft()) return;
+    if (Array.isArray(d.b)) { e.winkel = g.e.w; bombeWerfen(e, zahl(d.b[0], 0, W, e.x), zahl(d.b[1], 0, H, e.y)); }
+    if (Array.isArray(d.uz)) { e.winkel = g.e.w; ultiStarten(e, zahl(d.uz[0], 0, W, e.x), zahl(d.uz[1], 0, H, e.y)); }
+  } else if (d.t === 'wahl') {
+    g.daten.team = d.team === 1 ? 1 : 0;
+  } else if (d.t === 'slam') {
+    if (e && !e.tot) farbsturmLandung(e);
+  }
+}
+// Gastgeber: einen Freund so bewegen, wie er es geschickt hat
+function mpMenschAnwenden(e, dt) {
+  const g = mp.gaeste.get(e.mensch), d = g && g.e;
+  if (d && d.x !== null && d.y !== null && d.n === (e.lebenNr || 0)) {
+    e.x = d.x; e.y = d.y; e.z = d.z; e.winkel = d.w; e.pitch = d.p; e.vx = d.vx; e.vy = d.vy;
+    e.schiesst = d.s; e.willTauchen = d.u;
+  } else e.schiesst = false;
+  const feind = tauchenPruefen(e);
+  werte(e, dt, feind);
+}
+function mpSchnappschussSenden() {
+  const s = {
+    t: 's', r: r1(rest),
+    e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte]),
+    s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.gross ? 1 : 0]),
+    b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.ulti ? 'rakete' : o.art)]),
+    g: geraete.map(o => [objId(o), GERAET_ARTEN.indexOf(o.art), r0(o.x), r0(o.y), o.team, r2(o.winkel), r1(o.t), o.zuend >= 0 ? 1 : 0, o.treffer > 0 ? 1 : 0]),
+    w: wellen.map(o => [objId(o), r0(o.x), r0(o.y), r2(o.winkel), r2(o.t), o.dauer, o.team]),
+    to: tornados.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
+    wo: wolken.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
+    k: mp.farbe, ev: mp.ev,
+  };
+  mpAnAlle(s);
+  mp.farbe = []; mp.ev = [];
+}
+
+// ----- Freund (Gast) -----
+async function mpBeitreten(code) {
+  code = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { mp.status = 'Der Code hat 4 Zeichen, z. B. K7PX'; $('mpStatus').textContent = mp.status; return; }
+  if (mp.peer || mp.verbinde) return;
+  mp.verbinde = true; mp.status = '⏳ Verbinde …'; $('mpStatus').textContent = mp.status;
+  try { await mpLadePeerJS(); } catch (e) { mp.verbinde = false; mp.status = '❌ Online-Spiel konnte nicht geladen werden (Internet?)'; $('mpStatus').textContent = mp.status; return; }
+  const peer = new window.Peer();
+  mp.peer = peer;
+  peer.on('open', id => {
+    const conn = peer.connect(MP_VORSILBE + code, { serialization: 'json', reliable: true, metadata: mpMeineDaten() });
+    mp.conn = conn;
+    conn.on('open', () => { Object.assign(mp, { aktiv: true, rolle: 'gast', code, meineId: id, verbinde: false, status: '' }); $('mpStatus').textContent = '✅ Verbunden! Gleich geht\'s in die Lobby …'; });
+    conn.on('data', d => mpVomHost(d));
+    conn.on('close', () => { if (mp.conn === conn) mpVerbindungWeg('Die Verbindung zum Gastgeber ist weg.'); });
+  });
+  peer.on('error', e => { if (mp.peer === peer) mpVerbindungWeg(mpFehlerText(e)); });
+}
+function mpVomHost(d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'lobby' && Array.isArray(d.auf)) { mp.code = String(d.code || mp.code).slice(0, 4); lobbyAufbauen(d.auf); mausFangen(); }
+  else if (d.t === 'start' && Array.isArray(d.auf)) neueRunde(d.auf);
+  else if (d.t === 's') mpSchnappschuss(d);
+  else if (d.t === 'ende') rundenEnde(d);
+  else if (d.t === 'nein') mpVerbindungWeg(String(d.grund || 'Abgelehnt'));
+  else if (d.t === 'wirbel' && spieler && !spieler.tot) { spieler.vz = 560; spieler.z = Math.max(spieler.z, 1); spieler.slam = true; }
+}
+function proxySync(liste, daten, erzeugen, setzen) {   // Dinge vom Gastgeber nachbauen (neu / bewegen / weg)
+  if (!Array.isArray(daten)) return liste;
+  const alt = new Map(liste.map(o => [o.id, o])), neu = [];
+  for (const a of daten) {
+    let o = alt.get(a[0]);
+    if (o) alt.delete(a[0]); else { o = erzeugen(a); o.id = a[0]; scene.add(o.mesh); }
+    setzen(o, a); neu.push(o);
+  }
+  for (const o of alt.values()) scene.remove(o.mesh);
+  return neu;
+}
+function mpSchnappschuss(d) {
+  if (!spieler) return;
+  const k = Array.isArray(d.k) ? d.k : [];
+  for (let i = 0; i + 3 < k.length; i += 4) {   // Farbe vom Gastgeber malen
+    const t = k[i + 3] === 1 ? 1 : 0;
+    klecks(k[i], k[i + 1], k[i + 2], t, null);
+    if (k[i + 2] >= 20) spritzer(k[i], k[i + 1], 5, t, 6, 150);
+  }
+  if (Array.isArray(d.ev)) for (const ev of d.ev) mpEreignisAusfuehren(ev);
+  if (modus === 'match' && Number.isFinite(d.r)) rest = d.r;
+  if (Array.isArray(d.e)) d.e.forEach((a, i) => {
+    const e = kleckse[i];
+    if (!e || !Array.isArray(a)) return;
+    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte] = a;
+    const tot = !!(fl & 1);
+    if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
+    Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schwingT, schwingSeite,
+      letzterTreffer: lt, wiederT, ko, tode, punkte });
+    e.rueck = Math.max(e.rueck, rueck);
+    const neuGeboren = lebenNr !== (e.lebenNr || 0);
+    if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
+    if (e === spieler) {
+      if (e.ulti < 1 && ulti >= 1) { meldung('⚡ Ulti bereit! Drück Q!'); ton('ulti'); }
+      e.ulti = ulti;
+    } else {
+      e.ziel = { x, y, z, w }; e.pitch = pi; e.vx = vx; e.vy = vy; e.taucht = !!(fl & 2); e.ulti = ulti;
+    }
+  });
+  schuesse = proxySync(schuesse, d.s, a => ({ mesh: new THREE.Mesh(geoTropfen, teamMat[a[7] ? 1 : 0]), team: a[7], w: { gross: a[8] ? WAFFEN.kanone.gross : 1 } }),
+    (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.vx = a[4]; o.vy = a[5]; o.vz = a[6]; });
+  bomben = proxySync(bomben, d.b, a => {
+    const art = BOMBEN_ARTEN[a[5]] || 'klecks', team = a[4] ? 1 : 0;
+    const mesh = art === 'rakete' ? baueRakete(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : baueBombe(team);
+    mesh.position.set(a[1], a[3], a[2]);
+    return { mesh, ulti: art === 'rakete', art, team };
+  }, (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; });
+  geraete = proxySync(geraete, d.g, a => {
+    const art = GERAET_ARTEN[a[1]] || 'klebe', team = a[4] ? 1 : 0;
+    const mesh = art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
+    mesh.position.set(a[2], art === 'klebe' ? 6 : 0, a[3]); mesh.rotation.y = -a[5];
+    return { mesh, art, team, x: a[2], y: a[3], winkel: a[5], treffer: 0 };
+  }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; });
+  wellen = proxySync(wellen, d.w, a => ({ mesh: baueWelle(a[6] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.winkel = a[3]; o.t = a[4]; o.dauer = a[5]; });
+  tornados = proxySync(tornados, d.to, a => ({ mesh: baueTornado(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
+  wolken = proxySync(wolken, d.wo, a => ({ mesh: baueWolke(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
+}
+function mpEreignisAusfuehren(ev) {
+  if (!ev || typeof ev !== 'object') return;
+  const e = kleckse[ev.i], wer = kleckse[ev.w];
+  if (ev.k === 'ko' && e) { koMeldung(e, wer); }
+  else if (ev.k === 'tr' && e) {
+    if (e === spieler) { rotBlitz = Math.min(0.4, rotBlitz + (ev.s || 10) / 150); ton('aua'); }
+    else if (wer === spieler) ton('treffer');
+  } else if (ev.k === 'ulti' && e) {
+    const u = ULTIS[e.ultiArt];
+    meldung(e === spieler ? `⚡ ${u.emoji} ${u.name}!` : `${e.name}: ${u.emoji} ${u.name}!`);
+    if (e === spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('ulti');
+  } else if (ev.k === 'strahl' && Array.isArray(ev.a)) {
+    strahlZeigen(ev.a[0], ev.a[1], ev.a[2], ev.a[3], ev.a[4], ev.team ? 1 : 0);
+    if (Math.hypot(ev.a[0] - spieler.x, ev.a[1] - spieler.y) < 500) ton('sniper');
+  } else if (ev.k === 'boom') {
+    spritzer(ev.x, ev.y, 5, ev.team ? 1 : 0, 20, 300);
+    const d = Math.hypot(spieler.x - ev.x, spieler.y - ev.y);
+    if (d < 500) ton('platsch', Math.min(1, (ev.r || 60) / 60) * (1 - d / 600));
+  } else if (ev.k === 'weg' && e) { e.name += ' 🤖'; meldung(`👋 ${e.name} – ein Bot übernimmt.`); }
+}
+// Freund: eigenes Bild weiterrechnen (eigene Figur selbst bewegen, den Rest vom Gastgeber)
+function gastUpdate(dt) {
+  zeit += dt; klatschCd -= dt;
+  let darf = zustand !== 'pause';
+  if (modus === 'match' && startCountdown > 0) {
+    const vorher = Math.ceil(startCountdown);
+    startCountdown -= dt;
+    const jetzt = Math.ceil(startCountdown);
+    if (jetzt !== vorher) ton(jetzt > 0 ? 'piep' : 'los');
+    if (startCountdown <= 0) meldung('LOS! Mal alles an! 🎨');
+    darf = false;
+  } else if (modus === 'match') {
+    rest = Math.max(0, rest - dt);
+    if (rest <= 30 && musikModus === 'spiel') { musikModusSetzen('eile'); meldung('🔥 Letzte 30 Sekunden!'); }
+    if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung('⏰ Noch 10 Sekunden!'); }
+    if (rest <= 3 && rest > 0 && Math.ceil(rest) !== letzteSek) { letzteSek = Math.ceil(rest); ton('piep'); }
+  }
+  const p = spieler;
+  if (!p.tot && darf) steuerung(p, dt);
+  else { p.schiesst = false; if (!p.tot) bewege(p, 0, 0, dt); }
+  const w = WAFFEN[p.waffe];
+  mp.schussT -= dt;
+  if (p.schiesst && !p.taucht && w.speed && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
+  if (p.schiesst && p.tinte < 2) leerHinweis = 1.5;
+  // Die anderen gleiten weich zu ihrer Position
+  const k = Math.min(1, dt * 12);
+  for (const e of kleckse) {
+    if (e !== p && e.ziel) { e.x += (e.ziel.x - e.x) * k; e.y += (e.ziel.y - e.y) * k; e.z += (e.ziel.z - e.z) * k; e.winkel += winkelDiff(e.winkel, e.ziel.w) * k; }
+    if (e.laserT > 0) e.laserT -= dt;
+    laserZeigen(e);
+    e.rueck = Math.max(0, e.rueck - dt * 8);
+    if (e.schwingT > 0) e.schwingT -= dt;
+  }
+  // Tropfen, Geräte, Wellen und Tornados zwischen zwei Nachrichten weiterbewegen
+  for (const s of schuesse) { s.vz -= G_SCHUSS * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.h = Math.max(0, s.h + s.vz * dt); }
+  for (const g of geraete) { g.t += dt; g.treffer = Math.max(0, g.treffer - dt); geraetAnim(g); }
+  for (const we of wellen) {
+    we.t += dt; we.x += Math.cos(we.winkel) * 270 * dt; we.y += Math.sin(we.winkel) * 270 * dt;
+    we.mesh.position.set(we.x, 0, we.y); we.mesh.rotation.y = -we.winkel;
+    we.mesh.scale.y = Math.max(0.05, Math.min(1.4, we.t * 6, (we.dauer - we.t) * 4));
+  }
+  for (const tn of tornados) {
+    tn.t -= dt; tn.mesh.position.set(tn.x, 0, tn.y); tn.mesh.rotation.y += dt * 9;
+    tn.mesh.scale.setScalar(Math.max(0.05, Math.min(1, (7 - tn.t) * 3, tn.t * 2)));
+  }
+  for (const wo of wolken) wo.t -= dt;
+  for (let i = strahlen.length - 1; i >= 0; i--) {
+    const s = strahlen[i]; s.t -= dt; s.mesh.material.opacity = Math.max(0, s.t * 4);
+    if (s.t <= 0) { scene.remove(s.mesh); strahlen.splice(i, 1); }
+  }
+  for (let i = partikel.length - 1; i >= 0; i--) {
+    const q = partikel[i];
+    q.vh -= 600 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.h += q.vh * dt; q.vx *= 0.95; q.vy *= 0.95; q.leben -= dt;
+    if (q.leben <= 0 || q.h < 0) partikel.splice(i, 1);
+  }
+  for (const m of meldungen) m.t -= dt;
+  meldungen = meldungen.filter(m => m.t > 0);
+  rotBlitz = Math.max(0, rotBlitz - dt); leerHinweis = Math.max(0, leerHinweis - dt);
+  if (p.tot) zielRing.visible = false;
+  bombeLos = ultiWunsch = sprungWunsch = false;
+}
+// Jeden Bild-Schritt: Nachrichten verschicken
+function mpTick(dt) {
+  if (!mp.aktiv || !kleckse.length) return;
+  const dabei = ['lobby', 'spiel', 'intro', 'pause'].includes(zustand);
+  if (istHost()) {
+    mp.sendeT -= dt;
+    if (dabei && mp.gaeste.size && mp.sendeT <= 0) { mp.sendeT = 1 / MP_SENDE_RATE; mpSchnappschussSenden(); }
+  } else if (istGast() && spieler) {
+    mp.eingabeT -= dt;
+    if (dabei && mp.eingabeT <= 0) {
+      mp.eingabeT = 1 / MP_EINGABE_RATE;
+      const p = spieler;
+      mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u });
+      mp.bitte = {};
+    }
+  }
+}
+// Nur das Aussehen von liegenden Bomben (für Freunde)
+function geraetAnim(g) {
+  const ud = g.mesh.userData;
+  if (g.art === 'klebe') { ud.licht.emissiveIntensity = Math.sin(g.t * (10 + g.t * 30)) > 0 ? 2 : 0.1; g.mesh.scale.setScalar(1 + g.t * 0.3); }
+  else if (g.art === 'sprinkler') ud.kopf.rotation.y = -g.t * 4;
+  else if (g.art === 'mine') {
+    g.mesh.visible = g.team === spieler.team || g.zuend >= 0;
+    ud.licht.emissiveIntensity = g.zuend >= 0 ? (Math.sin(g.t * 60) > 0 ? 3 : 0) : (Math.sin(g.t * 3) > 0.7 ? 1.5 : 0.2);
+  } else if (g.art === 'wand') {
+    ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
+    ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
+    g.mesh.scale.y = Math.min(1, g.t * 6);
+  }
+}
+function laserZeigen(e) {
+  const m = e.laserMesh;
+  m.visible = e.laserT > 0 && !e.tot;
+  if (!m.visible) return;
+  const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
+  let laenge = 700;
+  for (let d = 10; d <= 700; d += 6) if (istWand(e.x + c * d, e.y + s * d) || feindWand(e.x + c * d, e.y + s * d, 22, e.team)) { laenge = d; break; }
+  m.position.set(e.x + c * 14, e.z + (e.spieler ? 26 : 22), e.y + s * 14);
+  m.rotation.y = -e.winkel;
+  m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
+}
+function strahlZeigen(x1, y1, x2, y2, h, team) {
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1, h, y1), new THREE.Vector3(x2, h, y2)]);
+  const linie = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: TEAMS[team].hell, transparent: true }));
+  scene.add(linie); strahlen.push({ mesh: linie, t: 0.25 });
+}
+function baueWolke(team) {
+  const g = new THREE.Group(), m = mat(TEAMS[team].hell, { roughness: 0.9 });
+  for (let i = 0; i < 7; i++) g.add(kugel(m, 30 + Math.random() * 20, (Math.random() - 0.5) * 120, Math.random() * 20, (Math.random() - 0.5) * 120));
+  return g;
+}
+// Kill-Meldung aus Sicht von diesem Computer
+function koMeldung(e, wer) {
+  if (e.spieler) { meldung(`💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
+  else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
+  else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
+}
 
 // ================== SPIELZUSTAND ==================
 let zustand = 'menu', zeit = 0, rest = RUNDE;
@@ -1146,16 +1598,16 @@ let spieler = null, rotBlitz = 0, leerHinweis = 0, pfiff10 = false, bildZaehler 
 
 function spawnPunkt(e) {
   if (e.heim) return { ...e.heim };
-  if (modus === 'lobby') return { ...LOBBY_SPAWN };
+  if (modus === 'lobby') return { x: LOBBY_SPAWN.x + (e.nr % 2) * 40, y: LOBBY_SPAWN.y + ((e.nr >> 1) - 1.5) * 60 };
   return { x: BASIS[e.team].x, y: H / 2 + (e.nr - 1.5) * 70 };
 }
 function zufallAus(liste) { return liste[(Math.random() * liste.length) | 0]; }
 function zufall(obj) { const k = Object.keys(obj); return k[(Math.random() * k.length) | 0]; }
 
 function neuerKlecks(team, nr, extra = {}) {
-  const sp = team === 0 && nr === 0;
+  const sp = extra.spieler !== undefined ? extra.spieler : team === 0 && nr === 0;
   const e = {
-    team, nr, spieler: sp, name: NAMEN[team][nr],
+    team, nr, spieler: sp, name: NAMEN[team][nr] || 'Bot', mensch: null, lebenNr: 0,
     set: sp ? konto.an.waffe : zufall(SETS), waffe: null,
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0, pitch: 0,
     tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
@@ -1170,8 +1622,8 @@ function neuerKlecks(team, nr, extra = {}) {
   // 3D-Modell
   e.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   e.gruppe = new THREE.Group();
-  const aussehen = sp ? kontoAussehen() : { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) };
-  const an = sp ? konto.an : { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) };
+  const aussehen = extra.aussehen || (sp ? kontoAussehen() : { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) });
+  const an = extra.an || (sp ? konto.an : { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) });
   e.bonus = bonusVon(an);
   e.ultiArt = SETS[e.set].ulti;                           // jede Waffen-Variante hat feste Bombe und Ulti
   e.bombe = SETS[e.set].bombe;
@@ -1198,50 +1650,48 @@ function aufraeumen() {
   for (const s of strahlen) scene.remove(s.mesh);
 }
 
-function weltLeeren() {
+function weltLeeren(meldungenBehalten = false) {
   aufraeumen();
-  kleckse = []; schuesse = []; bomben = []; wolken = []; strahlen = []; partikel = []; meldungen = [];
+  kleckse = []; schuesse = []; bomben = []; wolken = []; strahlen = []; partikel = [];
+  if (!meldungenBehalten) meldungen = [];
   geraete = []; wellen = []; tornados = [];
   bombeLos = ultiWunsch = sprungWunsch = false;
 }
-function neueRunde() {
-  weltLeeren();
+function neueRunde(auf) {
+  if (!auf) auf = matchAufstellung();
+  weltLeeren(true);
   modus = 'match'; karteLaden('arena');
-  for (let t = 0; t < 2; t++) {
-    klecks(BASIS[t].x, BASIS[t].y, 110, t, null);
-    for (let n = 0; n < 4; n++) kleckse.push(neuerKlecks(t, n));
-  }
-  spieler = kleckse[0];
+  for (let t = 0; t < 2; t++) klecks(BASIS[t].x, BASIS[t].y, 110, t, null);
+  kleckse = auf.map(a => neuerKlecks(a.team === 1 ? 1 : 0, zahl(a.nr, 0, 3, 0), aufZuExtra(a)));
+  spieler = kleckse.find(e => e.spieler) || kleckse[0];
+  spieler.spieler = true;
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
-  rest = RUNDE; zeit = 0; pfiff10 = false;
+  rest = RUNDE; zeit = 0; pfiff10 = false; lobbySuche = null;
   // Erst das Intro, dann 3-2-1-LOS
+  nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;
   audioStart(); musikModusSetzen('spiel'); ton('fanfare');
+  if (istHost()) { mp.farbe = []; mp.ev = []; mpAnAlle({ t: 'start', auf }); }
 }
 
 // ================== LOBBY ==================
 let lobbySuche = null;
-function lobbyBetreten() {
-  weltLeeren();
-  modus = 'lobby'; karteLaden('lobby');
-  spieler = neuerKlecks(0, 0);
-  kleckse = [spieler];
-  [{ x: 1020, y: 400 }, { x: 1020, y: 600 }].forEach((heim, i) => {
-    const p = neuerKlecks(1, i, { puppe: true, heim, name: 'Übungspuppe' });
-    p.winkel = Math.PI; kleckse.push(p);
-  });
-  baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
-  // Wer kommt in welcher Reihenfolge dazu?
-  const namen = [...NAMEN[0].slice(1), ...NAMEN[1]].sort(() => Math.random() - 0.5);
-  lobbySuche = { t: 0, gefunden: 1, naechster: 1.2, namen, startT: -1 };
-  zustand = 'lobby'; zeit = 0; startCountdown = 0;
-  nurZeigen(null); sprungWunsch = false;
-  meldung('🔎 Suche Mitspieler … kleckse dich solange warm!');
-  audioStart(); musikModusSetzen('menu');
+function lobbyBetreten(mitFreunden = false) {
+  if (istHost()) { mpLobbyNeu(); mausFangen(); return; }        // Nochmal mit denselben Freunden
+  lobbyAufbauen(lobbyAufstellung());
+  if (mitFreunden) { lobbySuche = null; meldung('⏳ Raum wird erstellt …'); }
+  else {
+    // Wer kommt in welcher Reihenfolge dazu?
+    const namen = [...BOT_NAMEN[0].slice(0, 3), ...BOT_NAMEN[1]].sort(() => Math.random() - 0.5);
+    lobbySuche = { t: 0, gefunden: 1, naechster: 1.2, namen, startT: -1 };
+    meldung('🔎 Suche Mitspieler … kleckse dich solange warm!');
+  }
+  zeit = 0; sprungWunsch = false;
   mausFangen();
 }
 function lobbyUpdate(dt) {
   const L = lobbySuche;
+  if (!L) return;                  // Mit Freunden: Der Gastgeber startet mit Enter
   L.t += dt;
   if (L.gefunden < 8 && L.t >= L.naechster) {
     const name = L.namen[L.gefunden - 1];
@@ -1326,18 +1776,10 @@ function bewege(e, dx, dy, dt) {
     e.vz -= SCHWERKRAFT * dt; e.z += e.vz * dt;
     if (e.z <= 0) {
       e.z = 0; e.vz = 0; e.landT = 0.25;
-      if (e.slam) farbsturmLandung(e);
+      if (e.slam) { if (istGast()) { e.slam = false; mpSende({ t: 'slam' }); } else farbsturmLandung(e); }
     }
   }
-  const amBoden = e.z <= 0;
-  const unter = amBoden ? besitzer(e.x, e.y) : 0;
-  const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
-  const vorher = e.taucht;
-  e.taucht = e.willTauchen && eigen && amBoden;
-  if (vorher !== e.taucht) {
-    spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
-    if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
-  }
+  const feind = tauchenPruefen(e), amBoden = e.z <= 0;
   let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
@@ -1350,7 +1792,23 @@ function bewege(e, dx, dy, dt) {
   // Die gegnerische Basis ist verboten!
   const gb = BASIS[1 - e.team], gd = Math.hypot(e.x - gb.x, e.y - gb.y);
   if (modus === 'match' && gd < 100) { e.x = gb.x + (e.x - gb.x) / gd * 100; e.y = gb.y + (e.y - gb.y) / gd * 100; }
-  // Tinte auffüllen
+  werte(e, dt, feind);
+}
+// Steht man in eigener Farbe und taucht ab? Gibt zurück, ob man in Gegnerfarbe steht.
+function tauchenPruefen(e) {
+  const amBoden = e.z <= 0;
+  const unter = amBoden ? besitzer(e.x, e.y) : 0;
+  const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
+  const vorher = e.taucht;
+  e.taucht = e.willTauchen && eigen && amBoden;
+  if (vorher !== e.taucht) {
+    spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
+    if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
+  }
+  return feind;
+}
+// Tinte und Leben auffüllen (oder in Gegnerfarbe verlieren)
+function werte(e, dt, feind) {
   if (e.taucht) e.tinte = Math.min(100, e.tinte + 45 * dt);
   else if (!e.schiesst && !e.laden) e.tinte = Math.min(100, e.tinte + 5 * dt);
   // Leben
@@ -1517,10 +1975,8 @@ function sniperSchuss(e) {
   if (opfer) treffen(opfer, 35 + 85 * lad, e);
   // Leuchtstrahl
   const h0 = e.z + (e.spieler ? 28 : 24);
-  const geo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(e.x + dx * 14, h0, e.y + dy * 14), new THREE.Vector3(e.x + dx * ende, h0, e.y + dy * ende)]);
-  const linie = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: TEAMS[e.team].hell, transparent: true }));
-  scene.add(linie); strahlen.push({ mesh: linie, t: 0.25 });
+  strahlZeigen(e.x + dx * 14, e.y + dy * 14, e.x + dx * ende, e.y + dy * ende, h0, e.team);
+  mpEreignis({ k: 'strahl', a: [r0(e.x + dx * 14), r0(e.y + dy * 14), r0(e.x + dx * ende), r0(e.y + dy * ende), r0(h0)], team: e.team });
   if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('sniper');
 }
 
@@ -1571,6 +2027,7 @@ function feindWand(x, y, h, team) {
 }
 // Platscher mit Schaden (Bomben, Kanone, Minen …)
 function explodieren(x, y, r, schaden, team, wer, ultiLaden = true) {
+  mpEreignis({ k: 'boom', x: r0(x), y: r0(y), r: r0(r), team });
   klecks(x, y, r, team, wer, ultiLaden);
   spritzer(x, y, 5, team, Math.round(r * 0.6), 300);
   for (const e of kleckse) {
@@ -1601,11 +2058,11 @@ function ultiStarten(e, zx, zy) {
   const u = ULTIS[e.ultiArt];
   if (e.spieler) meldung(`⚡ ${u.emoji} ${u.name}!`);
   else meldung(`${e.name}: ${u.emoji} ${u.name}!`);
+  mpEreignis({ k: 'ulti', i: kleckse.indexOf(e) });
   if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('ulti');
   switch (e.ultiArt) {
     case 'regen': {
-      const g = new THREE.Group(), m = mat(TEAMS[e.team].hell, { roughness: 0.9 });
-      for (let i = 0; i < 7; i++) g.add(kugel(m, 30 + Math.random() * 20, (Math.random() - 0.5) * 120, Math.random() * 20, (Math.random() - 0.5) * 120));
+      const g = baueWolke(e.team);
       scene.add(g);
       wolken.push({ x: zx, y: zy, t: 7, team: e.team, wer: e, tropfT: 0, schadenT: 0, mesh: g });
       break;
@@ -1622,7 +2079,8 @@ function ultiStarten(e, zx, zy) {
       e.schild = 6;
       break;
     case 'wirbel':
-      e.vz = 560; e.z = Math.max(e.z, 1); e.slam = true;
+      if (e.mensch && !e.spieler && istHost()) { const g = mp.gaeste.get(e.mensch); if (g) mpSendeAn(g, { t: 'wirbel' }); }   // der Freund springt selbst
+      else { e.vz = 560; e.z = Math.max(e.z, 1); e.slam = true; }
       break;
     case 'welle': {
       const mesh = baueWelle(e.team); scene.add(mesh);
@@ -1664,7 +2122,7 @@ function treffen(e, schaden, wer) {
   if (e.tot || e.schild > 0) return;
   e.hp -= schaden * (1 - e.bonus.schutz); e.letzterTreffer = 0;
   if (e.spieler) rotBlitz = Math.min(0.4, rotBlitz + schaden / 150);
-  if (schaden > 6) { if (e.spieler) ton('aua'); else if (wer && wer.spieler) ton('treffer'); }
+  if (schaden > 6) { if (e.spieler) ton('aua'); else if (wer && wer.spieler) ton('treffer'); mpEreignis({ k: 'tr', i: kleckse.indexOf(e), w: wer ? kleckse.indexOf(wer) : -1, s: r0(schaden) }); }
   if (e.hp <= 0) erwischt(e, wer);
 }
 
@@ -1674,9 +2132,8 @@ function erwischt(e, wer) {
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
   if (wer) wer.ko++;
-  if (e.spieler) { meldung(`💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
-  else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
-  else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
+  koMeldung(e, wer);
+  mpEreignis({ k: 'ko', i: kleckse.indexOf(e), w: wer ? kleckse.indexOf(wer) : -1 });
 }
 
 // ================== COMPUTER-GEGNER (KI) ==================
@@ -1798,6 +2255,7 @@ function ki(b, dt) {
 
 // ================== SPIELER ==================
 function steuerung(p, dt) {
+  if (zustand === 'pause') { p.schiesst = false; p.willTauchen = false; bewege(p, 0, 0, dt); return; }   // (online läuft das Spiel weiter)
   const vor = (tasten.KeyW || tasten.ArrowUp ? 1 : 0) - (tasten.KeyS || tasten.ArrowDown ? 1 : 0);
   const seit = (tasten.KeyD || tasten.ArrowRight ? 1 : 0) - (tasten.KeyA || tasten.ArrowLeft ? 1 : 0);
   const c = Math.cos(p.winkel), s = Math.sin(p.winkel);
@@ -1810,9 +2268,15 @@ function steuerung(p, dt) {
   const z = bombenZiel(p);
   zielRing.visible = !!tasten.KeyE && BOMBEN[p.bombe].wurf && p.tinte >= bombeKosten(p) && !p.taucht;
   zielRing.position.x = z.x; zielRing.position.z = z.y;
-  if (bombeLos) bombeWerfen(p, z.x, z.y);
+  if (bombeLos) {
+    if (!istGast()) bombeWerfen(p, z.x, z.y);
+    else if (p.tinte >= bombeKosten(p) && !p.taucht) { mp.bitte.b = [r0(z.x), r0(z.y)]; ton('wurf'); }   // Gastgeber wirft für uns
+  }
   if (ultiWunsch) {
-    if (p.ulti >= 1) { const uz = { x: p.x + Math.cos(p.winkel) * 260, y: p.y + Math.sin(p.winkel) * 260 }; ultiStarten(p, uz.x, uz.y); }
+    if (p.ulti >= 1) {
+      const uz = { x: p.x + Math.cos(p.winkel) * 260, y: p.y + Math.sin(p.winkel) * 260 };
+      if (istGast()) mp.bitte.u = [r0(uz.x), r0(uz.y)]; else ultiStarten(p, uz.x, uz.y);
+    }
     else meldung(`Ulti noch nicht voll (${Math.floor(p.ulti * 100)}%) – mal mehr an!`);
   }
   bewege(p, dx, dy, dt);
@@ -1844,12 +2308,13 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, schwingT: 0 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1 });
         if (e.spieler) ton('plopp');
       }
       continue;
     }
     if (e.spieler) steuerung(e, dt);
+    else if (e.mensch) mpMenschAnwenden(e, dt);              // ein Freund (online)
     else if (e.puppe) { e.winkel = drehe(e.winkel, Math.atan2(spieler.y - e.y, spieler.x - e.x), dt * 2); bewege(e, 0, 0, dt); }   // Übungspuppe steht nur rum
     else ki(e, dt);
     schiessen(e, dt);
@@ -2289,6 +2754,9 @@ function hud() {
   }
   ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffffffaa';
   ctx.fillText(musikAn ? '🎵 M = Musik aus' : '🔇 M = Musik an', cw - 16, 22);
+  if ((zustand === 'spiel' || zustand === 'lobby') && document.pointerLockElement !== glCv) {
+    ctx.textAlign = 'center'; textMitRand('🖱️ Klick ins Bild, um zu steuern', cw / 2, ch / 2 + 80, 26, '#ffd166');
+  }
   // Fadenkreuz in der Mitte
   if (zustand === 'spiel' && !spieler.tot) {
     const x = cw / 2, y = ichSicht ? ch / 2 : ch / 2;
@@ -2312,6 +2780,21 @@ function textMitRand(text, x, y, groesse, farbe = '#fff') {
 }
 function lobbyHud(cw, ch) {
   const L = lobbySuche;
+  if (!L) {   // Lobby mit Freunden
+    const bw = Math.min(520, cw - 40), bx = (cw - bw) / 2;
+    ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx, 8, bw, 92, 14); ctx.fill();
+    ctx.textAlign = 'center';
+    if (mp.aktiv) textMitRand(`🏠 Raum-Code: ${mp.code}`, cw / 2, 42, 28, '#ffd166');
+    else { ctx.fillStyle = '#fff'; ctx.font = 'bold 20px system-ui'; ctx.fillText(mp.status || '⏳ Raum wird erstellt …', cw / 2, 40); }
+    const menschen = kleckse.filter(e => e.mensch).length;
+    ctx.font = 'bold 15px system-ui'; ctx.fillStyle = '#fff';
+    const team = mp.wunschTeam ? '🟣 Lila' : '🟠 Orange';
+    ctx.fillText(istGast() ? `👥 ${menschen} Spieler · Warte, bis der Gastgeber startet … · [T] Team: ${team}`
+                           : `👥 ${menschen} Spieler · [Enter] Match starten (Bots füllen auf) · [T] Team: ${team}`, cw / 2, 68);
+    ctx.font = '13px system-ui'; ctx.fillStyle = '#c9c3ff';
+    ctx.fillText(istGast() ? 'Du bist online bei einem Freund!' : 'Sag deinen Freunden den Code – sie geben ihn bei der Arena ein.', cw / 2, 90);
+    return;
+  }
   const bw = Math.min(460, cw - 40), bx = (cw - bw) / 2;
   ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx, 8, bw, 70, 14); ctx.fill();
   ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = 'bold 20px system-ui';
@@ -2323,7 +2806,7 @@ function lobbyHud(cw, ch) {
     ctx.beginPath(); ctx.arc(x, 58, 11, 0, 7); ctx.fill();
   }
   ctx.font = '14px system-ui'; ctx.fillStyle = '#c9c3ff';
-  ctx.fillText('Kleckse ein bisschen herum und probier deine Waffe an den Übungspuppen aus!', cw / 2, ch - 24);
+  ctx.fillText('Kleckse ein bisschen herum und probier deine Waffe an den Übungspuppen aus!  ·  [Enter] = sofort starten', cw / 2, ch - 24);
 }
 function introHud(cw, ch) {
   const t = introT;
@@ -2366,16 +2849,25 @@ function introHud(cw, ch) {
 }
 
 // ================== RUNDEN-ENDE ==================
-function rundenEnde() {
+function rundenEnde(daten) {
   zustand = 'ende';
+  $('pause').classList.add('hidden');
   zielRing.visible = false;
   if (document.pointerLockElement) document.exitPointerLock();
   musikModusSetzen('aus');
-  const pO = zaehler[1] / flaeche * 100, pL = zaehler[2] / flaeche * 100;
-  const gewonnen = pO > pL;
+  const pO = daten ? zahl(daten.pO, 0, 100, 0) : zaehler[1] / flaeche * 100, pL = daten ? zahl(daten.pL, 0, 100, 0) : zaehler[2] / flaeche * 100;
+  if (daten && Array.isArray(daten.st)) {   // eigene Punkte vom Gastgeber
+    const st = daten.st[kleckse.indexOf(spieler)];
+    if (Array.isArray(st)) { spieler.punkte = zahl(st[0], 0, 1e6, 0); spieler.ko = zahl(st[1], 0, 999, 0); spieler.tode = zahl(st[2], 0, 999, 0); }
+  }
+  if (istHost()) mpAnAlle({ t: 'ende', pO: r1(pO), pL: r1(pL), st: kleckse.map(e => [e.punkte, e.ko, e.tode]) });
+  $('nochmal').disabled = istGast();
+  $('nochmal').textContent = istGast() ? '⏳ Warte auf den Gastgeber …' : istHost() ? '🔁 Nochmal mit Freunden (Lobby)' : '🔁 Nochmal (Lobby)';
+  const meinTeam = spieler.team;
+  const gewonnen = meinTeam === 0 ? pO > pL : pL > pO;
   ton(gewonnen ? 'sieg' : 'niederlage');
   setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu'); }, 3000);
-  document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : gewonnen ? '🏆 Orange gewinnt!' : '😵 Lila gewinnt!';
+  document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : (pO > pL ? 'Orange gewinnt!' : 'Lila gewinnt!') + (gewonnen ? ' 🏆' : ' 😵');
   const summe = pO + pL || 1;
   const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
   bO.style.width = bL.style.width = '0';
@@ -2398,7 +2890,7 @@ function rundenEnde() {
 // ================== MENÜ, KONTO & SHOPS ==================
 const $ = id => document.getElementById(id);
 function nurZeigen(id) {
-  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause']) $(o).classList.toggle('hidden', o !== id);
+  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl']) $(o).classList.toggle('hidden', o !== id);
   $('zurueck').classList.toggle('hidden', !['konto', 'menu', 'shop'].includes(id));
 }
 function knopf(inhalt, beiKlick, klasse) {   // Knopf bauen (Text immer mit textContent – sicher!)
@@ -2571,7 +3063,7 @@ $('weiter').onclick = () => {
 $('aufgeben').onclick = e => {
   e.preventDefault();
   $('pause').classList.add('hidden');
-  if (pauseVon === 'lobby') stadtBetreten(); else rundenEnde();
+  if (pauseVon === 'lobby' || istGast()) stadtBetreten(); else rundenEnde();
 };
 // ================== DIE STADT ==================
 const STADT = { x: W / 2, z: -4200 };
@@ -2745,7 +3237,8 @@ function npcUpdate(n, dt) {
 }
 
 function stadtBetreten() {
-  weltLeeren(); spieler = null; modus = 'match';
+  if (mp.peer) mpBeenden();                            // Wer in die Stadt geht, verlässt den Online-Raum
+  weltLeeren(true); spieler = null; modus = 'match';
   nurZeigen(null); anprobe = null;
   stadtFigurBauen();
   if (!shopVonStadt) { stadtSp.x = 0; stadtSp.y = 150; stadtSp.winkel = -Math.PI / 2; }
@@ -2759,7 +3252,12 @@ function stadtBetreten() {
 function stadtBetretenTaste() {
   if (!stadtZiel) return;
   ton('klick');
-  if (stadtZiel.arena) { lobbyBetreten(); return; }
+  if (stadtZiel.arena) {
+    zustand = 'wahl';
+    if (document.pointerLockElement) document.exitPointerLock();
+    nurZeigen('arenaWahl'); $('mpStatus').textContent = mp.status.startsWith('❌') ? mp.status : '';
+    return;
+  }
   zustand = 'menu'; shopVonStadt = true; shopTab = stadtZiel.slot; anprobe = null;
   if (document.pointerLockElement) document.exitPointerLock();
   shopZeigen(); vorschauBauen();
@@ -2785,6 +3283,8 @@ function stadtUpdate(dt) {
   }
   p.landT = Math.max(0, p.landT - dt);
   for (const n of npcs) npcUpdate(n, dt);
+  for (const m of meldungen) m.t -= dt;
+  meldungen = meldungen.filter(m => m.t > 0);
   stadtZiel = null;
   for (const z of STADT_ZIELE) if (Math.hypot(p.x - z.x, p.y - z.y) < z.r) stadtZiel = z;
 }
@@ -2828,9 +3328,18 @@ function stadtHud(cw, ch) {
     ctx.fillStyle = '#1b1f3add'; ctx.beginPath(); ctx.roundRect(cw / 2 - 190 * puls, ch - 120, 380 * puls, 54, 14); ctx.fill();
     ctx.fillStyle = '#ffd166'; ctx.font = 'bold 22px system-ui'; ctx.fillText(`[E]  ${stadtZiel.text}`, cw / 2, ch - 85);
   }
+  ctx.font = 'bold 18px system-ui';
+  meldungen.forEach((m, i) => { ctx.globalAlpha = Math.min(1, m.t); ctx.fillStyle = '#fff'; ctx.fillText(m.text, cw / 2, 40 + i * 26); });
+  ctx.globalAlpha = 1;
   ctx.font = '14px system-ui'; ctx.fillStyle = '#ffffffcc';
   ctx.fillText('WASD laufen · Shift rennen · Leertaste springen · Maus umschauen · V Kamera · Esc Menü', cw / 2, ch - 18);
 }
+
+$('wahlBots').onclick = () => { ton('klick'); lobbyBetreten(); };
+$('wahlRaum').onclick = () => { ton('klick'); mp.status = ''; lobbyBetreten(true); mpRaumErstellen(); };
+$('wahlBeitreten').onclick = () => { ton('klick'); mpBeitreten($('raumCode').value); };
+$('wahlZurueck').onclick = () => { ton('klick'); stadtBetreten(); };
+$('raumCode').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('wahlBeitreten').click(); });
 
 if (konto) menuZeigen(); else kontoZeigen();
 
@@ -2840,12 +3349,14 @@ let letzt = performance.now();
 bodenAktualisieren();
 function schleife(t) {
   const dt = Math.min(0.05, (t - letzt) / 1000); letzt = t;
-  if (zustand === 'spiel' || zustand === 'lobby') update(dt);
+  const onlinePause = zustand === 'pause' && mp.aktiv;     // online läuft das Spiel auch in der Pause weiter
+  if (zustand === 'spiel' || zustand === 'lobby' || onlinePause) { if (istGast()) gastUpdate(dt); else update(dt); }
   if (zustand === 'intro') introUpdate(dt);
   if (zustand === 'stadt') stadtUpdate(dt);
+  mpTick(dt);
   if (zustand === 'menu') vorschauZeigen(dt);           // Menü & Shops: dein Junge dreht sich auf dem Podest
-  else if (zustand === 'stadt') stadtZeigen(dt);
-  else if (spieler) { vmHalter.visible = true; welt3D(['spiel', 'lobby', 'intro'].includes(zustand) ? dt : 0); }
+  else if (zustand === 'stadt' || zustand === 'wahl') stadtZeigen(zustand === 'stadt' ? dt : 0);
+  else if (spieler) { vmHalter.visible = true; welt3D(['spiel', 'lobby', 'intro'].includes(zustand) || onlinePause ? dt : 0); }
   hud();
   requestAnimationFrame(schleife);
 }
