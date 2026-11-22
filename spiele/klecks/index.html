@@ -171,15 +171,24 @@ const W = 1600, H = 1000;          // Größe der Arena (x und "y" = Boden-Richt
 const CELL = 8;                    // Größe von einem "Farbkästchen"
 const GW = W / CELL, GH = H / CELL;
 const RUNDE = 180;                 // Rundenzeit in Sekunden
-const WAND_H = 80;                 // Wandhöhe
+let WAND_H = 80;                   // Wandhöhe (jede Karte hat ihre eigene)
 const AUGE = 38;                   // Augenhöhe in der Ich-Sicht
 const SCHWERKRAFT = 900;           // für Springen
 const G_SCHUSS = 500;              // Schwerkraft für Farbtropfen
 const ULTI_PUNKTE = 900;           // So viele Kästchen malen, bis die Ulti voll ist
-const TEAMS = [
-  { name: 'Orange', col: '#ff8a1f', hell: '#ffb36b', dunkel: '#b85400' },
-  { name: 'Lila',   col: '#a347ff', hell: '#c994ff', dunkel: '#6418b8' },
+// Jedes Match bekommt ein Farbpaar
+const FARB_PAARE = [
+  [{ name: 'Orange', emoji: '🟠', col: '#ff8a1f', hell: '#ffb36b', dunkel: '#b85400' }, { name: 'Lila', emoji: '🟣', col: '#a347ff', hell: '#c994ff', dunkel: '#6418b8' }],
+  [{ name: 'Grün', emoji: '🟢', col: '#3ddc5a', hell: '#8af0a0', dunkel: '#1f8a35' }, { name: 'Pink', emoji: '🩷', col: '#ff4fb0', hell: '#ff9ad3', dunkel: '#b8237a' }],
+  [{ name: 'Blau', emoji: '🔵', col: '#2f7bff', hell: '#86b2ff', dunkel: '#1a4cb3' }, { name: 'Gelb', emoji: '🟡', col: '#ffd21f', hell: '#ffe680', dunkel: '#b38f00' }],
+  [{ name: 'Türkis', emoji: '🩵', col: '#1fd6c8', hell: '#8cefe7', dunkel: '#12857c' }, { name: 'Rot', emoji: '🔴', col: '#ff3b3b', hell: '#ff8f8f', dunkel: '#b31f1f' }],
+  [{ name: 'Limette', emoji: '💚', col: '#b5f01f', hell: '#dcff80', dunkel: '#7a9f12' }, { name: 'Violett', emoji: '💜', col: '#6a3bff', hell: '#a98fff', dunkel: '#3d1fb3' }],
+  [{ name: 'Himmelblau', emoji: '💙', col: '#4fc3ff', hell: '#a6e2ff', dunkel: '#1f7db3' }, { name: 'Koralle', emoji: '🧡', col: '#ff6f4f', hell: '#ffb09f', dunkel: '#b33a1f' }],
+  [{ name: 'Mint', emoji: '🍃', col: '#5effa0', hell: '#aaffcc', dunkel: '#1fa85a' }, { name: 'Magenta', emoji: '💗', col: '#e01fff', hell: '#ef8fff', dunkel: '#8f12a8' }],
+  [{ name: 'Gold', emoji: '⭐', col: '#ffb21f', hell: '#ffd88a', dunkel: '#a86c00' }, { name: 'Petrol', emoji: '🌊', col: '#1f8fa8', hell: '#7fd0e0', dunkel: '#0f5566' }],
 ];
+const TEAMS = [{ ...FARB_PAARE[0][0] }, { ...FARB_PAARE[0][1] }];
+let farbNr = 0;
 const NAMEN = [['Du', 'Blubb', 'Spritzi', 'Klacks'], ['Gloop', 'Schmatz', 'Plörre', 'Kleckerich']];
 const BASIS = [{ x: 80, y: H / 2 }, { x: W - 80, y: H / 2 }];
 
@@ -333,14 +342,39 @@ wand(560, 440, 40, 120);
 const feld = new Uint8Array(GW * GH);
 const zaehler = [0, 0, 0];
 let flaeche = 0;
-// Zwei Karten: die große Arena und ein kleiner Lobby-Raum (Rest ist "Wand")
+// Die Arenen. spiegel(): jede Wand gibt es auch auf der anderen Seite (fair für beide Teams)
+function spiegel(liste) {
+  const aus = [];
+  for (const [x, y, w, h, sp = true] of liste) { aus.push({ x, y, w, h }); if (sp) aus.push({ x: W - x - w, y, w, h }); }
+  return aus;
+}
+const ARENEN = {
+  farbhafen: { name: 'Farbhafen', emoji: '⚓', wandH: 80, waende: waende.slice(),
+    thema: { boden: '#d8d3c6', linie: '#c3bcab', wand: '#5a6091', himmel: '#9fd8ff', draussen: '#6b7bb0', muster: 'fliesen' } },
+  skatepark: { name: 'Skatepark', emoji: '🛹', wandH: 34,
+    waende: spiegel([[300, 200, 200, 30], [300, 770, 200, 30], [600, 330, 30, 340], [450, 470, 60, 60], [700, 100, 200, 30, false], [700, 870, 200, 30, false], [760, 460, 80, 80, false]]),
+    thema: { boden: '#b9bcc4', linie: '#a3a7b1', wand: '#ff7a59', himmel: '#ffc4d6', draussen: '#8a7f9e', muster: 'beton' } },
+  dschungel: { name: 'Dschungel', emoji: '🌴', wandH: 90,
+    waende: spiegel([[300, 150, 50, 50], [300, 800, 50, 50], [480, 320, 50, 50], [480, 630, 50, 50], [650, 180, 50, 50], [650, 770, 50, 50],
+                     [620, 475, 50, 50], [230, 410, 40, 40], [230, 550, 40, 40], [775, 300, 50, 50, false], [775, 650, 50, 50, false]]),
+    thema: { boden: '#7fae5a', linie: '#6c9a4b', wand: '#7d5128', himmel: '#b6f0c8', draussen: '#3f7a3a', muster: 'gras' } },
+  eispalast: { name: 'Eispalast', emoji: '❄️', wandH: 70,
+    waende: spiegel([[250, 0, 40, 370], [250, 630, 40, 370], [450, 250, 300, 40], [450, 710, 300, 40], [550, 420, 40, 160], [700, 480, 200, 40, false]]),
+    thema: { boden: '#e3f4ff', linie: '#c6e6fb', wand: '#9fdcff', glas: true, himmel: '#dff6ff', draussen: '#cfe8f7', muster: 'eis' } },
+  wueste: { name: 'Wüstentempel', emoji: '🏜️', wandH: 100,
+    waende: spiegel([[700, 400, 200, 200, false], [350, 150, 150, 120], [350, 730, 150, 120], [520, 470, 60, 60], [650, 120, 300, 40, false], [650, 840, 300, 40, false],
+                     [250, 0, 60, 90], [250, 910, 60, 90]]),
+    thema: { boden: '#e8cf98', linie: '#d6b97a', wand: '#c9965a', himmel: '#ffe2b0', draussen: '#d9b26f', muster: 'sand' } },
+};
+const STANDARD_THEMA = ARENEN.farbhafen.thema;
+// Alle Karten: die Arenen und ein kleiner Lobby-Raum (Rest ist "Wand")
 const KARTEN = {
-  arena: waende.slice(),
   lobby: [{ x: 0, y: 0, w: 500, h: H }, { x: 1100, y: 0, w: 500, h: H }, { x: 500, y: 0, w: 600, h: 300 }, { x: 500, y: 700, w: 600, h: 300 },
           { x: 780, y: 470, w: 40, h: 60 }],
 };
+for (const id in ARENEN) KARTEN[id] = ARENEN[id].waende;
 const LOBBY_SPAWN = { x: 570, y: 500 };
-let karte = 'arena', modus = 'match';
+let karte = 'farbhafen', modus = 'match';
 function feldBerechnen() {
   flaeche = 0;
   for (let cy = 0; cy < GH; cy++) for (let cx = 0; cx < GW; cx++) {
@@ -363,13 +397,33 @@ const BODEN_SKALA = 0.75;                                   // Boden-Textur etwa
 const bodenTexCv = leinwand(W * BODEN_SKALA, H * BODEN_SKALA);
 const fctx = farbCv.getContext('2d');
 let farbeGeaendert = true;
-(function bodenMalen() {
+function bodenMalen(th = STANDARD_THEMA) {
   const b = bodenCv.getContext('2d');
-  b.fillStyle = '#d8d3c6'; b.fillRect(0, 0, W, H);
-  b.strokeStyle = '#c3bcab'; b.lineWidth = 3;
-  for (let x = 0; x <= W; x += 80) { b.beginPath(); b.moveTo(x, 0); b.lineTo(x, H); b.stroke(); }
-  for (let y = 0; y <= H; y += 80) { b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke(); }
-})();
+  let z = 7;
+  const zz = () => { z = (z * 16807) % 2147483647; return z / 2147483647; };   // immer gleiche "Zufallszahlen"
+  b.fillStyle = th.boden; b.fillRect(0, 0, W, H);
+  b.strokeStyle = th.linie; b.lineWidth = 3;
+  if (th.muster === 'fliesen' || th.muster === 'beton') {
+    const g = th.muster === 'beton' ? 160 : 80;
+    for (let x = 0; x <= W; x += g) { b.beginPath(); b.moveTo(x, 0); b.lineTo(x, H); b.stroke(); }
+    for (let y = 0; y <= H; y += g) { b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke(); }
+    if (th.muster === 'beton') for (let i = 0; i < 300; i++) { b.fillStyle = zz() < 0.5 ? '#a8abb4' : '#c8cbd2'; b.fillRect(zz() * W, zz() * H, 3, 3); }
+  } else if (th.muster === 'gras') {
+    for (let i = 0; i < 2500; i++) {
+      b.strokeStyle = zz() < 0.5 ? '#6c9a4b' : '#93c26b'; b.lineWidth = 2;
+      const x = zz() * W, y = zz() * H; b.beginPath(); b.moveTo(x, y); b.lineTo(x + (zz() - 0.5) * 6, y - 8); b.stroke();
+    }
+  } else if (th.muster === 'sand') {
+    for (let i = 0; i < 3000; i++) { b.fillStyle = zz() < 0.5 ? '#d6b97a' : '#f3dfb0'; b.fillRect(zz() * W, zz() * H, 2, 2); }
+    b.strokeStyle = th.linie; b.lineWidth = 3;
+    for (let y = 40; y < H; y += 90) { b.beginPath(); for (let x = 0; x <= W; x += 20) b.lineTo(x, y + Math.sin(x / 70 + y) * 12); b.stroke(); }
+  } else if (th.muster === 'eis') {
+    b.strokeStyle = '#ffffff'; b.lineWidth = 2;
+    for (let i = 0; i < 40; i++) { let x = zz() * W, y = zz() * H; b.beginPath(); b.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (zz() - 0.5) * 120; y += (zz() - 0.5) * 120; b.lineTo(x, y); } b.stroke(); }
+    for (let i = 0; i < 400; i++) { b.fillStyle = '#ffffff'; b.fillRect(zz() * W, zz() * H, 2, 2); }
+  }
+}
+bodenMalen();
 function wandKarteMalen() {                                 // nur für die Mini-Karte
   const w = wandCv.getContext('2d'); w.clearRect(0, 0, W, H);
   for (const r of waende) { w.fillStyle = '#3d4266'; w.fillRect(r.x, r.y, r.w, r.h); }
@@ -581,20 +635,27 @@ function bodenAktualisieren() {
 // Wände
 const wandMat = new THREE.MeshStandardMaterial({ color: '#5a6091', roughness: 0.7 });
 const randMat = new THREE.MeshStandardMaterial({ color: '#3d4266', roughness: 0.7 });
-const kartenGruppe = { arena: new THREE.Group(), lobby: new THREE.Group() };
-scene.add(kartenGruppe.arena, kartenGruppe.lobby);
+const kartenGruppe = {};
+for (const name in KARTEN) { kartenGruppe[name] = new THREE.Group(); kartenGruppe[name].visible = false; scene.add(kartenGruppe[name]); }
 function wandKlotz(x, y, w, h, hoehe, m, ziel = scene) {
   const k = new THREE.Mesh(new THREE.BoxGeometry(w, hoehe, h), m);
   k.position.set(x + w / 2, hoehe / 2, y + h / 2); k.castShadow = true; k.receiveShadow = true; ziel.add(k);
 }
-for (const name of ['arena', 'lobby']) for (const r of KARTEN[name]) wandKlotz(r.x, r.y, r.w, r.h, WAND_H, wandMat, kartenGruppe[name]);
+for (const r of KARTEN.lobby) wandKlotz(r.x, r.y, r.w, r.h, 80, wandMat, kartenGruppe.lobby);
+for (const [id, a] of Object.entries(ARENEN)) {
+  const th = a.thema;
+  const m = th.glas ? new THREE.MeshStandardMaterial({ color: th.wand, transparent: true, opacity: 0.8, roughness: 0.05, metalness: 0.3 })
+                    : new THREE.MeshStandardMaterial({ color: th.wand, roughness: 0.7 });
+  for (const r of a.waende) wandKlotz(r.x, r.y, r.w, r.h, a.wandH, m, kartenGruppe[id]);
+}
 wandKlotz(-24, -24, W + 48, 24, 50, randMat); wandKlotz(-24, H, W + 48, 24, 50, randMat);
 wandKlotz(-24, 0, 24, H, 50, randMat); wandKlotz(W, 0, 24, H, 50, randMat);
-// Basis-Ringe (nur in der Arena)
-for (let t = 0; t < 2; t++) {
+// Basis-Ringe (in allen Arenen)
+const basisRingMat = TEAMS.map(t => new THREE.MeshBasicMaterial({ color: t.dunkel }));
+for (const id in ARENEN) for (let t = 0; t < 2; t++) {
   const rg = new THREE.RingGeometry(94, 104, 48); rg.rotateX(-Math.PI / 2);
-  const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: TEAMS[t].dunkel }));
-  ring.position.set(BASIS[t].x, 0.6, BASIS[t].y); kartenGruppe.arena.add(ring);
+  const ring = new THREE.Mesh(rg, basisRingMat[t]);
+  ring.position.set(BASIS[t].x, 0.6, BASIS[t].y); kartenGruppe[id].add(ring);
 }
 // Lobby: großes Schild an der Wand
 (function lobbySchild() {
@@ -606,7 +667,6 @@ for (let t = 0; t < 2; t++) {
   const sch = new THREE.Mesh(new THREE.PlaneGeometry(200, 50), new THREE.MeshBasicMaterial({ map: t }));
   sch.position.set(800, 50, 300.5); kartenGruppe.lobby.add(sch);
 })();
-kartenGruppe.lobby.visible = false;
 // Karte wechseln: Wände, Farbfeld und Mini-Karte neu machen
 function karteLaden(name) {
   karte = name;
@@ -614,16 +674,23 @@ function karteLaden(name) {
   feldBerechnen(); wandKarteMalen();
   zaehler[0] = flaeche; zaehler[1] = zaehler[2] = 0;
   fctx.clearRect(0, 0, W, H); farbeGeaendert = true;
-  kartenGruppe.arena.visible = name === 'arena'; kartenGruppe.lobby.visible = name === 'lobby';
+  for (const k in kartenGruppe) kartenGruppe[k].visible = k === name;
+  const th = ARENEN[name] ? ARENEN[name].thema : STANDARD_THEMA;
+  WAND_H = ARENEN[name] ? ARENEN[name].wandH : 80;
+  bodenMalen(th); himmelSetzen(th);
   sonneAuf(W / 2, H / 2);
+}
+function himmelSetzen(th) {
+  scene.background.set(th.himmel); scene.fog.color.set(th.himmel); draussen.material.color.set(th.draussen);
 }
 function sonneAuf(x, z) { sonne.position.set(x - 500, 1000, z - 400); sonne.target.position.set(x, 0, z); }
 // Deko: Farbtürme draußen
+const turmMats = [];
 for (let i = 0; i < 14; i++) {
   const a = i / 14 * Math.PI * 2, rx = W / 2 + Math.cos(a) * 1200, rz = H / 2 + Math.sin(a) * 850;
   const h = 150 + (i * 97) % 200;
-  const t = new THREE.Mesh(new THREE.CylinderGeometry(40, 50, h, 12),
-    new THREE.MeshStandardMaterial({ color: i % 2 ? TEAMS[0].col : TEAMS[1].col }));
+  const tm = new THREE.MeshStandardMaterial({ color: i % 2 ? TEAMS[0].col : TEAMS[1].col }); turmMats.push(tm);
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(40, 50, h, 12), tm);
   t.position.set(rx, h / 2, rz); scene.add(t);
 }
 
@@ -633,6 +700,58 @@ function mat(c, extra = {}) { return new THREE.MeshStandardMaterial({ color: c, 
 const MAT_WEISS = mat('#ffffff'), MAT_SCHWARZ = mat('#1b1f3a'), MAT_GRAU = mat('#4a4f73', { roughness: 0.3, metalness: 0.4 });
 const MAT_CREME = mat('#f3e7cf'), MAT_GLOW = mat('#6fe3ff', { emissive: '#6fe3ff' });
 const teamMat = TEAMS.map(t => mat(t.col, { roughness: 0.35 }));
+// Farben fürs nächste Match setzen
+function farbenSetzen(nr) {
+  farbNr = nr;
+  for (let t = 0; t < 2; t++) Object.assign(TEAMS[t], FARB_PAARE[nr][t]);
+  teamMat.forEach((m, t) => m.color.set(TEAMS[t].col));
+  basisRingMat.forEach((m, t) => m.color.set(TEAMS[t].dunkel));
+  turmMats.forEach((m, i) => m.color.set(TEAMS[i % 2].col));
+  document.getElementById('balkenO').style.background = TEAMS[0].col;
+  document.getElementById('balkenL').style.background = TEAMS[1].col;
+}
+// Deko rund um die Arenen
+function arenaDeko() {
+  const d = (id, ...teile) => kartenGruppe[id].add(...teile);
+  // ⚓ Farbhafen: Container und ein Leuchtturm
+  [['#e63946', -110, 180], ['#3b6fd8', -110, 700], ['#2a9d8f', W + 110, 300], ['#ff9f1c', W + 110, 820]].forEach(([f, x, z]) => {
+    d('farbhafen', klotz(mat(f), 60, 50, 140, x, 25, z), klotz(mat(f), 60, 50, 140, x, 75, z + 20));
+  });
+  for (let i = 0; i < 6; i++) d('farbhafen', zylinder(mat(i % 2 ? '#ffffff' : '#e63946'), 28 - i * 2, 30 - i * 2, 40, -260, 20 + i * 40, -180));
+  d('farbhafen', kugel(mat('#fff4c2', { emissive: '#ffd166', emissiveIntensity: 1 }), 16, -260, 260, -180));
+  // 🛹 Skatepark: Halfpipes und Rampen
+  for (const x of [-170, W + 170]) {
+    const hp = new THREE.Mesh(new THREE.CylinderGeometry(90, 90, 700, 24, 1, true, Math.PI / 2, Math.PI), mat('#8f95a3', { side: THREE.DoubleSide }));
+    hp.rotation.x = Math.PI / 2; hp.position.set(x, 90, H / 2); d('skatepark', hp);
+  }
+  for (const [x, z, r] of [[200, -140, 0.3], [W - 200, -140, -0.3], [W / 2, H + 140, 0]]) { const rp = klotz(mat('#ff7a59'), 160, 10, 80, x, 30, z); rp.rotation.x = r || 0.35; d('skatepark', rp); }
+  // 🌴 Dschungel: Baumkronen auf den Säulen und Palmen draußen
+  for (const r of ARENEN.dschungel.waende) {
+    d('dschungel', kugel(mat('#3f9b4b', { roughness: 0.9 }), r.w * 0.9, r.x + r.w / 2, 100, r.y + r.h / 2), kugel(mat('#56b862', { roughness: 0.9 }), r.w * 0.6, r.x + r.w / 2 + 10, 125, r.y + r.h / 2 - 8));
+  }
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2, x = W / 2 + Math.cos(a) * 980, z = H / 2 + Math.sin(a) * 640;
+    d('dschungel', zylinder(mat('#8a5a2e'), 6, 9, 140, x, 70, z));
+    for (let k = 0; k < 5; k++) { const b = klotz(mat('#2f8f3a'), 80, 3, 18, x + Math.cos(k * 1.26) * 35, 142, z + Math.sin(k * 1.26) * 35); b.rotation.y = -k * 1.26; b.rotation.z = -0.4; d('dschungel', b); }
+  }
+  // ❄️ Eispalast: Eiskristalle und Schneemänner
+  const eis = new THREE.MeshStandardMaterial({ color: '#bfeaff', transparent: true, opacity: 0.75, roughness: 0.05, metalness: 0.3 });
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * Math.PI * 2, k = new THREE.Mesh(new THREE.ConeGeometry(30, 120 + (i * 53) % 160, 6), eis);
+    k.position.set(W / 2 + Math.cos(a) * 960, 60, H / 2 + Math.sin(a) * 640); d('eispalast', k);
+  }
+  for (const [x, z] of [[-90, 200], [W + 90, 800]]) d('eispalast', kugel(MAT_WEISS, 24, x, 24, z), kugel(MAT_WEISS, 17, x, 58, z), kugel(MAT_WEISS, 12, x, 82, z), kugel(mat('#ff8a1f'), 3, x + 12, 82, z));
+  // 🏜️ Wüstentempel: Stufen auf dem Tempel, Pyramiden und Kakteen
+  for (let i = 0; i < 3; i++) d('wueste', klotz(mat('#d9a86a'), 180 - i * 50, 18, 180 - i * 50, W / 2, 109 + i * 18, H / 2));
+  for (const [x, z] of [[700, 400], [900, 400], [700, 600], [900, 600]]) d('wueste', zylinder(mat('#e0bb80'), 9, 9, 130, x, 65, z));
+  for (const [x, z, s] of [[-500, -300, 1], [W + 450, H + 250, 1.3], [W / 2, -650, 0.8]]) {
+    const pyr = new THREE.Mesh(new THREE.ConeGeometry(260 * s, 300 * s, 4), mat('#d9b26f')); pyr.position.set(x, 150 * s, z); pyr.rotation.y = Math.PI / 4; d('wueste', pyr);
+  }
+  for (const [x, z] of [[-80, 120], [W + 80, 880], [W + 90, 150]]) {
+    const g = mat('#3f9b4b'); d('wueste', zylinder(g, 7, 8, 60, x, 30, z), zylinder(g, 4, 4, 22, x + 12, 40, z), zylinder(g, 4, 4, 20, x - 12, 34, z));
+  }
+}
+arenaDeko();
 function kugel(m, r, x, y, z, sx = 1, sy = 1, sz = 1) {
   const k = new THREE.Mesh(geoKugel, m); k.scale.set(r * sx, r * sy, r * sz); k.position.set(x, y, z); k.castShadow = r > 2.5; return k;
 }
@@ -1121,9 +1240,18 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; }
   if (e.code === 'KeyE' && zustand === 'stadt') stadtBetretenTaste();
   if (e.code === 'Enter' && modus === 'lobby' && zustand === 'lobby' && !istGast()) neueRunde();   // Match starten (Bots füllen auf)
+  if (e.code === 'KeyK' && modus === 'lobby' && zustand === 'lobby' && !istGast()) {
+    const liste = ['zufall', ...Object.keys(ARENEN)];
+    mp.karteWahl = liste[(liste.indexOf(mp.karteWahl) + 1) % liste.length];
+    meldung(`🗺️ Karte: ${karteText()}`); ton('klick');
+  }
+  if (e.code === 'KeyF' && modus === 'lobby' && zustand === 'lobby' && !istGast()) {
+    mp.farbWahl = mp.farbWahl + 1 >= FARB_PAARE.length ? -1 : mp.farbWahl + 1;
+    meldung(`🎨 Farben: ${farbText()}`); ton('klick');
+  }
   if (e.code === 'KeyT' && modus === 'lobby' && zustand === 'lobby') {
     mp.wunschTeam = 1 - mp.wunschTeam;
-    meldung(`Dein Team fürs Match: ${mp.wunschTeam ? '🟣 Lila' : '🟠 Orange'}`); ton('klick');
+    meldung(`Dein Team fürs Match: ${teamText(mp.wunschTeam)}`); ton('klick');
     if (istGast()) mpSende({ t: 'wahl', team: mp.wunschTeam });
   }
   if (e.code === 'KeyQ') ultiWunsch = true;
@@ -1172,6 +1300,7 @@ const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete'], GERAET_ARTEN = 
 const r0 = v => Math.round(v), r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const zahl = (v, lo, hi, nichts) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : nichts;
 const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), meineId: 'host',
+  karteWahl: 'zufall', farbWahl: -1,
   farbe: [], ev: [], sendeT: 0, eingabeT: 0, bitte: {}, status: '', wunschTeam: 0, verbinde: false, objId: 0, schussT: 0 };
 const istGast = () => mp.aktiv && mp.rolle === 'gast';
 const istHost = () => mp.aktiv && mp.rolle === 'host';
@@ -1264,6 +1393,7 @@ function lobbyAufbauen(auf) {
   const warLobby = karte === 'lobby' && modus === 'lobby' && kleckse.length > 0;
   weltLeeren(true);
   modus = 'lobby'; if (!warLobby) karteLaden('lobby');
+  zielRing.material.color.set(TEAMS[0].col);
   kleckse = auf.map(a => neuerKlecks(a.team === 1 ? 1 : 0, zahl(a.nr, 0, 7, 0), aufZuExtra(a)));
   spieler = kleckse.find(e => e.spieler) || kleckse[0];
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
@@ -1348,7 +1478,7 @@ function mpMenschAnwenden(e, dt) {
 }
 function mpSchnappschussSenden() {
   const s = {
-    t: 's', r: r1(rest),
+    t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
       (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
       r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte]),
@@ -1385,7 +1515,7 @@ async function mpBeitreten(code) {
 function mpVomHost(d) {
   if (!d || typeof d !== 'object') return;
   if (d.t === 'lobby' && Array.isArray(d.auf)) { mp.code = String(d.code || mp.code).slice(0, 4); lobbyAufbauen(d.auf); mausFangen(); }
-  else if (d.t === 'start' && Array.isArray(d.auf)) neueRunde(d.auf);
+  else if (d.t === 'start' && Array.isArray(d.auf)) neueRunde(d.auf, d.karte, d.farben);
   else if (d.t === 's') mpSchnappschuss(d);
   else if (d.t === 'ende') rundenEnde(d);
   else if (d.t === 'nein') mpVerbindungWeg(String(d.grund || 'Abgelehnt'));
@@ -1412,6 +1542,8 @@ function mpSchnappschuss(d) {
   }
   if (Array.isArray(d.ev)) for (const ev of d.ev) mpEreignisAusfuehren(ev);
   if (modus === 'match' && Number.isFinite(d.r)) rest = d.r;
+  if (d.kw === 'zufall' || hat(ARENEN, d.kw)) mp.karteWahl = d.kw;
+  if (Number.isInteger(d.fw) && d.fw >= -1 && d.fw < FARB_PAARE.length) mp.farbWahl = d.fw;
   if (Array.isArray(d.e)) d.e.forEach((a, i) => {
     const e = kleckse[i];
     if (!e || !Array.isArray(a)) return;
@@ -1477,7 +1609,7 @@ function gastUpdate(dt) {
     startCountdown -= dt;
     const jetzt = Math.ceil(startCountdown);
     if (jetzt !== vorher) ton(jetzt > 0 ? 'piep' : 'los');
-    if (startCountdown <= 0) meldung('LOS! Mal alles an! 🎨');
+    if (startCountdown <= 0) meldung(`LOS! Mal alles ${TEAMS[spieler.team].name} an! ${TEAMS[spieler.team].emoji}`);
     darf = false;
   } else if (modus === 'match') {
     rest = Math.max(0, rest - dt);
@@ -1657,10 +1789,15 @@ function weltLeeren(meldungenBehalten = false) {
   geraete = []; wellen = []; tornados = [];
   bombeLos = ultiWunsch = sprungWunsch = false;
 }
-function neueRunde(auf) {
+function neueRunde(auf, karteId, farben) {
   if (!auf) auf = matchAufstellung();
+  if (karteId === undefined) karteId = mp.karteWahl === 'zufall' ? zufall(ARENEN) : mp.karteWahl;
+  if (farben === undefined) farben = mp.farbWahl < 0 ? Math.floor(Math.random() * FARB_PAARE.length) : mp.farbWahl;
+  if (!hat(ARENEN, karteId)) karteId = 'farbhafen';
+  farben = zahl(farben, 0, FARB_PAARE.length - 1, 0) | 0;
+  farbenSetzen(farben);
   weltLeeren(true);
-  modus = 'match'; karteLaden('arena');
+  modus = 'match'; karteLaden(karteId);
   for (let t = 0; t < 2; t++) klecks(BASIS[t].x, BASIS[t].y, 110, t, null);
   kleckse = auf.map(a => neuerKlecks(a.team === 1 ? 1 : 0, zahl(a.nr, 0, 3, 0), aufZuExtra(a)));
   spieler = kleckse.find(e => e.spieler) || kleckse[0];
@@ -1671,7 +1808,8 @@ function neueRunde(auf) {
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;
   audioStart(); musikModusSetzen('spiel'); ton('fanfare');
-  if (istHost()) { mp.farbe = []; mp.ev = []; mpAnAlle({ t: 'start', auf }); }
+  zielRing.material.color.set(TEAMS[spieler.team].col);
+  if (istHost()) { mp.farbe = []; mp.ev = []; mpAnAlle({ t: 'start', auf, karte: karteId, farben }); }
 }
 
 // ================== LOBBY ==================
@@ -2291,7 +2429,7 @@ function update(dt) {
     startCountdown -= dt;
     const jetzt = Math.ceil(startCountdown);
     if (jetzt !== vorher) ton(jetzt > 0 ? 'piep' : 'los');
-    if (startCountdown <= 0) meldung('LOS! Mal alles orange an! 🎨');
+    if (startCountdown <= 0) meldung(`LOS! Mal alles ${TEAMS[spieler.team].name} an! ${TEAMS[spieler.team].emoji}`);
     return;
   }
   else {
@@ -2668,7 +2806,7 @@ function hud() {
   if (zustand === 'stadt') { stadtHud(cw, ch); return; }
   if (!spieler || zustand === 'menu') return;
   if (zustand === 'intro') { introHud(cw, ch); return; }
-  if (spieler.taucht) { ctx.fillStyle = 'rgba(255,138,31,0.18)'; ctx.fillRect(0, 0, cw, ch); }
+  if (spieler.taucht) { ctx.globalAlpha = 0.18; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1; }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
 
@@ -2696,7 +2834,7 @@ function hud() {
   ctx.fillText(`${WAFFEN[spieler.waffe].emoji} TINTE`, tx + 2, ty - 12);
   ctx.fillStyle = '#ffffff22'; ctx.beginPath(); ctx.roundRect(tx, ty, 44, 130, 10); ctx.fill();
   const fh = 130 * spieler.tinte / 100;
-  ctx.fillStyle = spieler.tinte < 15 ? '#ff6060' : TEAMS[0].col;
+  ctx.fillStyle = spieler.tinte < 15 ? '#ff6060' : TEAMS[spieler.team].col;
   if (fh > 1) { ctx.beginPath(); ctx.roundRect(tx, ty + 130 - fh, 44, fh, 10); ctx.fill(); }
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tx, ty + 65); ctx.lineTo(tx + 8, ty + 65); ctx.stroke();
   ctx.font = '20px system-ui'; ctx.globalAlpha = spieler.tinte >= bombeKosten(spieler) ? 1 : 0.3; ctx.fillText(BOMBEN[spieler.bombe].emoji, tx + 56, ty + 22);
@@ -2708,7 +2846,7 @@ function hud() {
   // Ulti-Kreis
   const ux = tx + 140, uy = ty + 100, voll = spieler.ulti >= 1;
   ctx.fillStyle = '#ffffff22'; ctx.beginPath(); ctx.arc(ux, uy, 24, 0, 7); ctx.fill();
-  ctx.strokeStyle = voll ? (Math.sin(zeit * 10) > 0 ? '#ffd166' : '#fff') : TEAMS[0].col; ctx.lineWidth = 6;
+  ctx.strokeStyle = voll ? (Math.sin(zeit * 10) > 0 ? '#ffd166' : '#fff') : TEAMS[spieler.team].col; ctx.lineWidth = 6;
   ctx.beginPath(); ctx.arc(ux, uy, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * spieler.ulti); ctx.stroke();
   ctx.font = '20px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
   ctx.fillText(ULTIS[spieler.ultiArt].emoji, ux, uy + 7);
@@ -2720,14 +2858,14 @@ function hud() {
   ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12);
   ctx.drawImage(bodenCv, mx, my, mw, mh); ctx.drawImage(farbCv, mx, my, mw, mh); ctx.drawImage(wandCv, mx, my, mw, mh);
   for (const e of kleckse) {
-    if (e.tot || e.team !== 0) continue;
+    if (e.tot || e.team !== spieler.team) continue;
     const ex = mx + e.x / W * mw, ey = my + e.y / H * mh;
     if (e.spieler) {
       ctx.fillStyle = '#fff'; ctx.beginPath();
       ctx.moveTo(ex + Math.cos(e.winkel) * 8, ey + Math.sin(e.winkel) * 8);
       ctx.lineTo(ex + Math.cos(e.winkel + 2.5) * 5, ey + Math.sin(e.winkel + 2.5) * 5);
       ctx.lineTo(ex + Math.cos(e.winkel - 2.5) * 5, ey + Math.sin(e.winkel - 2.5) * 5); ctx.fill();
-    } else { ctx.fillStyle = TEAMS[0].dunkel; ctx.beginPath(); ctx.arc(ex, ey, 3, 0, 7); ctx.fill(); }
+    } else { ctx.fillStyle = TEAMS[spieler.team].dunkel; ctx.beginPath(); ctx.arc(ex, ey, 3, 0, 7); ctx.fill(); }
   }
 
   // Meldungen
@@ -2762,7 +2900,7 @@ function hud() {
     const x = cw / 2, y = ichSicht ? ch / 2 : ch / 2;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(x, y, 10, 0, 7); ctx.stroke();
-    ctx.strokeStyle = TEAMS[0].col; ctx.lineWidth = 2;
+    ctx.strokeStyle = TEAMS[spieler.team].col; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, 10, 0, 7);
     ctx.moveTo(x - 16, y); ctx.lineTo(x - 5, y); ctx.moveTo(x + 5, y); ctx.lineTo(x + 16, y);
     ctx.moveTo(x, y - 16); ctx.lineTo(x, y - 5); ctx.moveTo(x, y + 5); ctx.lineTo(x, y + 16); ctx.stroke();
@@ -2778,21 +2916,26 @@ function textMitRand(text, x, y, groesse, farbe = '#fff') {
   ctx.lineWidth = Math.max(3, groesse / 8); ctx.strokeStyle = '#1b1f3a'; ctx.lineJoin = 'round';
   ctx.strokeText(text, x, y); ctx.fillStyle = farbe; ctx.fillText(text, x, y);
 }
+function karteText() { return mp.karteWahl === 'zufall' ? '🎲 Zufall' : `${ARENEN[mp.karteWahl].emoji} ${ARENEN[mp.karteWahl].name}`; }
+function farbText() { if (mp.farbWahl < 0) return '🎲 Zufall'; const [a, b] = FARB_PAARE[mp.farbWahl]; return `${a.emoji} ${a.name} gegen ${b.emoji} ${b.name}`; }
+function teamText(t) { return t ? 'Team B (rechts)' : 'Team A (links)'; }
 function lobbyHud(cw, ch) {
   const L = lobbySuche;
   if (!L) {   // Lobby mit Freunden
     const bw = Math.min(520, cw - 40), bx = (cw - bw) / 2;
-    ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx, 8, bw, 92, 14); ctx.fill();
+    ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx, 8, bw, 116, 14); ctx.fill();
     ctx.textAlign = 'center';
     if (mp.aktiv) textMitRand(`🏠 Raum-Code: ${mp.code}`, cw / 2, 42, 28, '#ffd166');
     else { ctx.fillStyle = '#fff'; ctx.font = 'bold 20px system-ui'; ctx.fillText(mp.status || '⏳ Raum wird erstellt …', cw / 2, 40); }
     const menschen = kleckse.filter(e => e.mensch).length;
     ctx.font = 'bold 15px system-ui'; ctx.fillStyle = '#fff';
-    const team = mp.wunschTeam ? '🟣 Lila' : '🟠 Orange';
+    const team = teamText(mp.wunschTeam);
     ctx.fillText(istGast() ? `👥 ${menschen} Spieler · Warte, bis der Gastgeber startet … · [T] Team: ${team}`
                            : `👥 ${menschen} Spieler · [Enter] Match starten (Bots füllen auf) · [T] Team: ${team}`, cw / 2, 68);
     ctx.font = '13px system-ui'; ctx.fillStyle = '#c9c3ff';
     ctx.fillText(istGast() ? 'Du bist online bei einem Freund!' : 'Sag deinen Freunden den Code – sie geben ihn bei der Arena ein.', cw / 2, 90);
+    ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px system-ui';
+    ctx.fillText(`🗺️ ${karteText()}  ·  🎨 ${farbText()}` + (istGast() ? '' : '   [K] Karte  [F] Farben'), cw / 2, 112);
     return;
   }
   const bw = Math.min(460, cw - 40), bx = (cw - bw) / 2;
@@ -2807,6 +2950,8 @@ function lobbyHud(cw, ch) {
   }
   ctx.font = '14px system-ui'; ctx.fillStyle = '#c9c3ff';
   ctx.fillText('Kleckse ein bisschen herum und probier deine Waffe an den Übungspuppen aus!  ·  [Enter] = sofort starten', cw / 2, ch - 24);
+  ctx.fillStyle = '#ffd166'; ctx.font = 'bold 15px system-ui';
+  ctx.fillText(`🗺️ ${karteText()}  ·  🎨 ${farbText()}   [K] Karte  [F] Farben`, cw / 2, ch - 46);
 }
 function introHud(cw, ch) {
   const t = introT;
@@ -2818,7 +2963,7 @@ function introHud(cw, ch) {
     const rein = weich(t * 2), raus = 1 - weich((t - 2.5) * 2);
     ctx.globalAlpha = Math.min(rein, raus);
     textMitRand('⚔️ FARBSCHLACHT ⚔️', cw / 2 - (1 - rein) * cw, ch * 0.4, Math.min(80, cw / 10), '#ffd166');
-    textMitRand('Arena: Farbhafen', cw / 2 + (1 - rein) * cw, ch * 0.4 + 60, Math.min(40, cw / 18));
+    textMitRand(`Arena: ${ARENEN[karte].emoji} ${ARENEN[karte].name}`, cw / 2 + (1 - rein) * cw, ch * 0.4 + 60, Math.min(40, cw / 18));
     ctx.font = '20px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText('Mal in 3 Minuten mehr Boden an als die Gegner!', cw / 2, ch * 0.4 + 100);
   } else if (t < 5.5) {
     const f = weich((t - 3) * 3), raus = 1 - weich((t - 5.1) * 3);
@@ -2867,7 +3012,7 @@ function rundenEnde(daten) {
   const gewonnen = meinTeam === 0 ? pO > pL : pL > pO;
   ton(gewonnen ? 'sieg' : 'niederlage');
   setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu'); }, 3000);
-  document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : (pO > pL ? 'Orange gewinnt!' : 'Lila gewinnt!') + (gewonnen ? ' 🏆' : ' 😵');
+  document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : (pO > pL ? `${TEAMS[0].emoji} ${TEAMS[0].name} gewinnt!` : `${TEAMS[1].emoji} ${TEAMS[1].name} gewinnt!`) + (gewonnen ? ' 🏆' : ' 😵');
   const summe = pO + pL || 1;
   const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
   bO.style.width = bL.style.width = '0';
@@ -3245,7 +3390,7 @@ function stadtBetreten() {
   shopVonStadt = false;
   stadtSp.vx = stadtSp.vy = stadtSp.vz = stadtSp.z = 0;
   zustand = 'stadt';
-  sonneAuf(STADT.x, STADT.z);
+  sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA);
   audioStart(); musikModusSetzen('menu');
   mausFangen();
 }
