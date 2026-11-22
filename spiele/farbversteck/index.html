@@ -288,7 +288,7 @@ for (const R of RAEUME) {
   kiste(4, 0, 9.6, 2.4, 0.5, 0.5, farbMat('#26272b')); kiste(4, 0.5, 9.75, 1.8, 1.0, 0.08, farbMat('#111318'), false);   // Fernseher
   walze(0.6, 0, 9.3, 0.3, 0.5, farbMat('#c8642a'), true); walze(0.6, 0.5, 9.3, 0.45, 1.1, farbMat('#3f9b4b'));        // Pflanze
   kiste(0.08, 0.6, 5.5, 0.06, 1.8, 2.6, texMat(TEX.streifen('#8a3ad8', '#a35ae8'), 1, 2), false);               // Vorhang
-  walze(10.8, 0, 8.8, 0.15, 1.6, farbMat('#333333'), true); walze(10.8, 1.6, 8.8, 0.35, 0.4, farbMat('#fff4c2'));   // Stehlampe
+  walze(9.3, 0, 9.4, 0.15, 1.6, farbMat('#333333'), true); walze(9.3, 1.6, 9.4, 0.35, 0.4, farbMat('#fff4c2'));   // Stehlampe
   // 🍳 Küche
   const mint = farbMat('#7fd8c0');
   kiste(16, 0, 0.4, 7.6, 0.9, 0.7, mint); kiste(16, 0.9, 0.4, 7.6, 0.05, 0.72, farbMat('#c9a26a'), false);      // Unterschränke + Arbeitsplatte
@@ -336,7 +336,7 @@ function formGeo(form, t) {
     return zus(new THREE.CylinderGeometry(0.035, 0.035, l, 6).translate(0, -l / 2, 0), new THREE.SphereGeometry(0.065, 8, 6), new THREE.SphereGeometry(0.075, 8, 6).translate(0, -l, 0));
   }
   if (form === 'spitz') {
-    if (t === 'kopf') return new THREE.ConeGeometry(0.25, 0.6, 8).translate(0, 0.08, 0);
+    if (t === 'kopf') return new THREE.ConeGeometry(0.25, 0.48, 8);
     if (t === 'koerper') return new THREE.ConeGeometry(0.34, 0.8, 8).rotateX(Math.PI);
     const l = arm ? 0.5 : 0.5;
     return new THREE.ConeGeometry(arm ? 0.1 : 0.12, l, 6).rotateX(Math.PI).translate(0, -l / 2, 0);
