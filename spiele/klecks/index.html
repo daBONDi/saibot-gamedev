@@ -114,7 +114,12 @@ const WAFFEN = {
   eimer:    { name: 'Farbeimer',  emoji: '🪣', info: 'Schwappt viel Farbe auf einmal',
               cd: 0.6, kosten: 7, speed: 520, bremse: 2.5, schaden: 22, klecks: 15, spur: 7, streu: 0.5, anzahl: 6, reichweite: 170 },
   sniper:   { name: 'Farbsniper', emoji: '🎯', info: 'Halten zum Aufladen – weit & stark', reichweite: 520 },
-  roller:   { name: 'Farbroller', emoji: '🛞', info: 'Rollt breite Streifen, platt walzen!', reichweite: 110 },
+  roller:   { name: 'Farbroller', emoji: '🛞', info: 'Halten = rollen, Klicken = schwingen!', reichweite: 110,
+              nah: { rollBreite: 22, rollSchaden: 8, rollTempo: 130, rollKosten: 3, schwingCd: 0.6, schwingDauer: 0.42, abwurf: 0.2, art: 'hoch' },
+              schwung: { anzahl: 7, streu: 0.8, speed: 480, bremse: 2.6, schaden: 35, klecks: 16, spur: 7, kosten: 9 } },
+  pinsel:   { name: 'Riesenpinsel', emoji: '🖌️', info: 'Halten = schieben (schnell!), Klicken = schwingen', reichweite: 150,
+              nah: { rollBreite: 14, rollSchaden: 3, rollTempo: 215, rollKosten: 1.5, schwingCd: 0.24, schwingDauer: 0.24, abwurf: 0.1, art: 'seite' },
+              schwung: { anzahl: 4, streu: 0.5, speed: 430, bremse: 2.8, schaden: 24, klecks: 12, spur: 6, kosten: 3 } },
 };
 const ULTIS = {
   regen:   { name: 'Farbregen',    emoji: '🌧️', info: 'Eine Wolke lässt Farbe regnen' },
@@ -242,6 +247,8 @@ const SOUNDS = {
   klatsch: (t, v) => krach(900, 0.09, 0.06 * v, t),
   platsch: (t, v) => { krach(600, 0.4, 0.4 * v, t); osz('sine', 200, 50, 0.3, 0.25 * v, t); },
   roll:    (t, v) => krach(300, 0.08, 0.05 * v, t),
+  pinsel:  (t, v) => krach(3200, 0.06, 0.035 * v, t, sfxGain, 'bandpass'),
+  wusch:   (t, v) => { krach(900, 0.2, 0.12 * v, t, sfxGain, 'bandpass'); osz('sine', 220, 110, 0.16, 0.05 * v, t); },
   treffer: (t, v) => osz('square', 700, 900, 0.07, 0.06 * v, t),
   aua:     (t, v) => osz('sawtooth', 320, 140, 0.15, 0.1 * v, t, sfxGain, 1500),
   ko:      (t, v) => { osz('square', 900, 900, 0.08, 0.08 * v, t); osz('square', 1350, 1350, 0.15, 0.08 * v, t + 0.08); },
@@ -562,6 +569,26 @@ function baueWaffe(art, m, team) {
       for (const s of [-1, 1]) walze.add(zylinderZ(MAT_GRAU, 4.5, 4.5, 0.6, 0, 0, s * 14.3), kugel(MAT_METALL, 0.9, 2.5, 0, s * 14.7));
       break;
     }
+    case 'pinsel': {
+      // Langer Holzstiel schräg nach unten, unten ein riesiger Pinselkopf
+      const ende = { x: 15, y: -9 }, len = Math.hypot(ende.x, ende.y);
+      const holz = mat('#b07a45', { roughness: 0.7 }), holzDunkel = mat('#7d5128', { roughness: 0.7 });
+      const stiel = new THREE.Group(); stiel.rotation.z = Math.atan2(-ende.x, ende.y); g.add(stiel);
+      stiel.add(zylinder(holz, 1.1, 1.3, len + 6, 0, len / 2 - 3, 0), kugel(holzDunkel, 1.6, 0, -6, 0));
+      const schlaufe = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.3, 6, 12), MAT_GUMMI); schlaufe.position.y = -8; stiel.add(schlaufe);
+      stiel.add(zylinder(MAT_GUMMI, 1.6, 1.6, 4, 0, 0.5, 0));
+      for (let i = 0; i < 3; i++) stiel.add(zylinder(holzDunkel, 1.38, 1.38, 0.6, 0, 4.5 + i * 2.2, 0));
+      stiel.add(zylinder(m, 1.4, 1.4, 2.4, 0, 12.5, 0));
+      const kopf = new THREE.Group(); kopf.position.set(ende.x, ende.y, 0); g.add(kopf); ud.pinselKopf = kopf;
+      kopf.add(klotz(MAT_METALL, 4, 4, 15, 0, 0, 0), klotz(MAT_GRAU, 4.3, 0.6, 15.3, 0, 1, 0), klotz(MAT_GRAU, 4.3, 0.6, 15.3, 0, -1, 0));
+      kopf.add(kugel(MAT_METALL, 0.6, 2.1, 0, -5), kugel(MAT_METALL, 0.6, 2.1, 0, 5));   // Nieten
+      kopf.add(klotz(mat('#f3e7cf', { roughness: 0.95 }), 3.6, 5, 14.5, 0.4, -4.5, 0));  // trockene Borsten
+      kopf.add(klotz(tinte, 3.9, 3.5, 14.9, 0.9, -8.5, 0));                                // mit Tinte vollgesogen
+      for (let i = 0; i < 9; i++) kopf.add(klotz(tinte, 0.9, 2.2 + (i * 37 % 5) * 0.4, 0.9, 0.6 + (i % 3) * 0.6, -10.6, -7 + i * 1.75));   // einzelne Borsten
+      kopf.add(kugel(tinte, 1, 2, -12.4, 3, 1, 1.8, 1), kugel(tinte, 0.8, 0.5, -12, -4, 1, 2, 1));     // Tropfen
+      ud.blitz = kugel(blitzMat, 2.5, 5, -9, 0); kopf.add(ud.blitz);
+      break;
+    }
     default: { // Spritzer
       g.add(klotz(m, 12, 6, 5, 6, 1, 0), klotz(MAT_GRAU, 12.4, 1.2, 5.4, 6, -1.6, 0));       // Gehäuse
       const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 1.5, -5, 0); griff.rotation.z = 0.25; g.add(griff);
@@ -597,6 +624,7 @@ function animiereWaffe(ud, e, dt, vf) {
   if (ud.spulen) ud.spulen.rotation.x += dt * (0.5 + e.ladung * 25);
   if (ud.schwing) ud.schwing.rotation.z = e.rueck * 0.8;
   if (ud.walze) ud.walze.rotation.z -= vf * dt / 6;
+  if (ud.pinselKopf) ud.pinselKopf.rotation.z += ((e.rollt ? -0.35 : 0) - ud.pinselKopf.rotation.z) * Math.min(1, dt * 12);   // Borsten ziehen nach hinten
 }
 
 // Farbbombe mit Metallband und blinkendem Lämpchen
@@ -636,8 +664,8 @@ const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 // ---------- Ich-Sicht-Waffe (hängt an der Kamera) ----------
 let haendeWaffe = null, swayX = 0, swayY = 0;
 const vmHalter = new THREE.Group(); kamera.add(vmHalter);
-const VM_POS = { spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55] };
-const VM_HAENDE = { spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]] };
+const VM_POS = { spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
+const VM_HAENDE = { spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
 function baueHaendeWaffe(art) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
   haendeWaffe = baueWaffe(art, teamMat[0], 0);
@@ -721,7 +749,7 @@ function neuerKlecks(team, nr) {
     ultiArt: sp ? auswahl.ulti : zufall(ULTIS),
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0, pitch: 0,
     tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
-    ladung: 0, laden: false, rollT: 0, rollt: false, schild: 0, slam: false, ulti: 0, rueck: 0,
+    ladung: 0, laden: false, rollT: 0, rollt: false, schwingT: 0, schwingSeite: 1, haltT: 0, vorherSchiesst: false, schild: 0, slam: false, ulti: 0, rueck: 0,
     letzterTreffer: 9, ko: 0, tode: 0, punkte: 0,
     spawnT: 0.45, landT: 0, todT: 0, tauchAnim: 0, lauf: 0, vmPhase: 0,
     ki: { ziel: null, zielT: 0, stuckT: 0, lastX: 0, lastY: 0, tanken: false, strafe: 1, strafeT: 0, seite: 1, umwegT: 0, umwegA: 0, pause: 0 },
@@ -828,7 +856,7 @@ function bewege(e, dx, dy, dt) {
   }
   let speed = e.taucht ? 290 : feind ? 75 : 160;
   if ((e.schiesst || e.laden) && !e.taucht) speed *= e.waffe === 'sniper' ? 0.5 : 0.8;
-  if (e.rollt) speed = Math.max(speed, 130);
+  if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
   const k = Math.min(1, dt * (amBoden ? 12 : 3));
   e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
@@ -866,21 +894,42 @@ function schiessen(e, dt) {
     return;
   }
 
-  if (e.waffe === 'roller') {
-    if (!e.schiesst || e.taucht || e.z > 0) return;
+  if (w.nah) {   // Farbroller und Riesenpinsel
+    const n = w.nah;
+    const neuGedrueckt = e.schiesst && !e.vorherSchiesst;
+    e.vorherSchiesst = e.schiesst;
+    e.haltT = e.schiesst ? e.haltT + dt : 0;
+    // Ein Schwung läuft gerade: im richtigen Moment fliegt die Farbe los
+    if (e.schwingT > 0) {
+      const vorher = e.schwingT, abwurf = n.schwingDauer - n.abwurf;
+      e.schwingT -= dt;
+      if (vorher > abwurf && e.schwingT <= abwurf) schwungWerfen(e, w);
+      return;
+    }
+    if (e.taucht || e.z > 0) return;
+    const steht = Math.hypot(e.vx, e.vy) < 30;
+    // Klicken = schwingen (Pinsel: gedrückt halten im Stehen = immer weiter schwingen)
+    if ((neuGedrueckt || (e.waffe === 'pinsel' && e.schiesst && steht)) && e.schussCd <= 0) {
+      if (e.tinte < w.schwung.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
+      e.schwingT = n.schwingDauer; e.schussCd = n.schwingCd; e.schwingSeite = -e.schwingSeite;
+      if (e.spieler) ton('wusch');
+      return;
+    }
+    // Gedrückt halten = rollen / schieben
+    if (!e.schiesst || e.haltT < 0.2 || (e.waffe === 'pinsel' && steht)) return;
     if (e.tinte < 0.5) { if (e.spieler) leerHinweis = 1.5; return; }
     e.rollt = true;
-    e.tinte -= (3 + Math.hypot(e.vx, e.vy) * 0.035) * dt;
+    e.tinte -= (n.rollKosten + Math.hypot(e.vx, e.vy) * 0.03) * dt;
     e.rollT -= dt;
     if (e.rollT <= 0) {
       e.rollT = 0.04;
       const fx = e.x + Math.cos(e.winkel) * 20, fy = e.y + Math.sin(e.winkel) * 20;
-      if (!istWand(fx, fy)) klecks(fx, fy, 22, e.team, e);
+      if (!istWand(fx, fy)) klecks(fx, fy, n.rollBreite, e.team, e);
       for (const f of kleckse) {
         if (f.team === e.team || f.tot || f.z > 20) continue;
-        if (Math.hypot(f.x - fx, f.y - fy) < 32) treffen(f, 8, e);
+        if (Math.hypot(f.x - fx, f.y - fy) < n.rollBreite + 10) treffen(f, n.rollSchaden, e);
       }
-      if (e.spieler && Math.hypot(e.vx, e.vy) > 40 && Math.random() < 0.3) ton('roll');
+      if (e.spieler && Math.hypot(e.vx, e.vy) > 40 && Math.random() < 0.3) ton(e.waffe === 'pinsel' ? 'pinsel' : 'roll');
     }
     return;
   }
@@ -902,6 +951,40 @@ function schiessen(e, dt) {
   }
   if (e.spieler) ton('schuss');
   else { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 350) ton('schuss', 0.6 * (1 - d / 350)); }
+}
+
+// Beim Schwingen fliegt ein Fächer aus Farbtropfen nach vorne
+function schwungWerfen(e, w) {
+  const sw = w.schwung;
+  e.tinte = Math.max(0, e.tinte - sw.kosten); e.rueck = 1;
+  for (let i = 0; i < sw.anzahl; i++) {
+    const a = e.winkel + (i / (sw.anzahl - 1) - 0.5) * sw.streu + (Math.random() - 0.5) * 0.08;
+    const sp = sw.speed * (0.8 + Math.random() * 0.3);
+    const p = Math.max(-0.2, e.pitch) + 0.18 + Math.random() * 0.12;
+    const vh = Math.cos(p) * sp;
+    const s = { x: e.x + Math.cos(a) * 18, y: e.y + Math.sin(a) * 18, h: e.z + 20,
+      vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp,
+      team: e.team, wer: e, w: sw, spurT: 0.03, leben: 3 };
+    s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
+    schuesse.push(s);
+  }
+  const fx = e.x + Math.cos(e.winkel) * 30, fy = e.y + Math.sin(e.winkel) * 30;
+  if (!istWand(fx, fy)) klecks(fx, fy, w.nah.rollBreite, e.team, e);
+  spritzer(fx, fy, 10, e.team, 8, 160);
+  const d = Math.hypot(e.x - spieler.x, e.y - spieler.y);
+  if (d < 400) ton('platsch', e.spieler ? 0.35 : 0.3 * (1 - d / 400));
+}
+
+// Wie weit ist der Schwung? hoch = Roller über den Kopf, seite = Pinsel zur Seite
+function schwungKurve(e) {
+  const w = WAFFEN[e.waffe];
+  if (!w.nah || !(e.schwingT > 0)) return { hoch: 0, seite: 0 };
+  const f = 1 - e.schwingT / w.nah.schwingDauer;
+  if (w.nah.art === 'hoch') {
+    const hoch = f < 0.4 ? Math.sin(f / 0.4 * Math.PI / 2) * 2.4 : f < 0.6 ? 2.4 - (f - 0.4) / 0.2 * 2.8 : -0.4 * (1 - (f - 0.6) / 0.4);
+    return { hoch, seite: 0 };
+  }
+  return { hoch: Math.sin(f * Math.PI) * 0.5, seite: e.schwingSeite * Math.cos(f * Math.PI) * 1.3 };
 }
 
 function sniperSchuss(e) {
@@ -1085,14 +1168,15 @@ function ki(b, dt) {
     const gutGezielt = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
     if (b.waffe === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
-    } else if (b.waffe === 'roller') {
-      b.schiesst = fd < 140;
+    } else if (w.nah) {
+      if (fd < 70) b.schiesst = true;                                   // drüberrollen / schieben
+      else if (fd < w.reichweite + 50 && gutGezielt) { k.tap = !k.tap; b.schiesst = k.tap; }   // schwingen
     } else b.schiesst = gutGezielt && fd < w.reichweite;
     k.strafeT -= dt;
     if (k.strafeT <= 0) { k.strafeT = 0.7 + Math.random(); k.strafe = Math.random() < 0.5 ? 1 : -1; }
     const r = w.reichweite;
-    const vor = b.waffe === 'roller' ? 1 : fd > r * 0.85 ? 1 : fd < r * 0.5 ? -1 : 0;
-    const quer = b.waffe === 'roller' ? 0.3 : 0.8;
+    const vor = w.nah ? (fd > 50 ? 1 : 0) : fd > r * 0.85 ? 1 : fd < r * 0.5 ? -1 : 0;
+    const quer = w.nah ? 0.3 : 0.8;
     dx = Math.cos(a) * vor + Math.cos(a + Math.PI / 2) * k.strafe * quer;
     dy = Math.sin(a) * vor + Math.sin(a + Math.PI / 2) * k.strafe * quer;
     if (b.bombeCd <= 0 && b.tinte > 60 && fd > 110 && fd < 230 && Math.random() < dt * 0.6) {
@@ -1111,7 +1195,7 @@ function ki(b, dt) {
       b.willTauchen = true;                    // Durch eigene Farbe schnell schwimmen
     } else {
       // Farbe verteilen
-      b.winkel = drehe(b.winkel, a + (b.waffe === 'roller' ? 0 : Math.sin(zeit * 4 + b.nr * 2) * 0.6), dt * 6);
+      b.winkel = drehe(b.winkel, a + (w.nah ? 0 : Math.sin(zeit * 4 + b.nr * 2) * 0.6), dt * 6);
       b.pitch = botPitch(b, 120, 0);
       if (b.waffe === 'sniper') {
         b.schiesst = !(b.laden && b.ladung > 0.35);
@@ -1179,7 +1263,7 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, schwingT: 0 });
         if (e.spieler) ton('plopp');
       }
       continue;
@@ -1283,7 +1367,7 @@ function update(dt) {
 
 // ================== ANIMATION DER FARBTAUCHER ==================
 // [Schulter-Winkel, Ellbogen-Winkel, wie stark die Arme beim Zielen hoch/runter gehen]
-const HALTUNG = { spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0] };
+const HALTUNG = { spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0], pinsel: [0.75, 0.25, 0] };
 function animiereFigur(e, v, dt) {
   const ud = e.koerper.userData, inLuft = e.z > 0;
   const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
@@ -1310,7 +1394,9 @@ function animiereFigur(e, v, dt) {
   ud.tankFuell.scale.y = Math.max(0.02, e.tinte / 100);
   // Arme halten die Waffe und zielen mit
   const [a0, b0, pf] = HALTUNG[e.waffe];
-  const a = a0 + e.pitch * pf - e.rueck * 0.12 + (inLuft ? -0.2 : 0);
+  const schwung = schwungKurve(e);
+  const a = a0 + e.pitch * pf - (WAFFEN[e.waffe].nah ? 0 : e.rueck * 0.12) + (inLuft ? -0.2 : 0) + schwung.hoch * 0.8;
+  ud.ober.rotation.y = schwung.seite * 0.4;   // Oberkörper dreht beim Pinsel-Schwung mit
   ud.arme.forEach(arm => { arm.schulter.rotation.z = a; arm.ellbogen.rotation.z = b0; });
   if (e.waffe === 'eimer') {   // freie Hand schwingt beim Laufen
     ud.arme[0].schulter.rotation.z = Math.sin(ph) * 0.5 * amp + 0.15; ud.arme[0].ellbogen.rotation.z = 0.3;
@@ -1318,7 +1404,8 @@ function animiereFigur(e, v, dt) {
   const hx = (6 * Math.sin(a) + 6 * Math.sin(a + b0)) * 0.88, hy = 14 - 6 * Math.cos(a) - 6 * Math.cos(a + b0);
   const w = e.waffenModell;
   w.position.set(hx, hy, e.waffe === 'eimer' ? 4 : 0);
-  w.rotation.z = (e.waffe === 'roller' ? 0 : e.pitch * pf) + e.rueck * 0.2;
+  w.rotation.z = (WAFFEN[e.waffe].nah ? schwung.hoch : e.pitch * pf + e.rueck * 0.2);
+  w.rotation.y = schwung.seite;
   animiereWaffe(w.userData, e, dt, vf);
 }
 
@@ -1424,8 +1511,10 @@ function welt3D(dt) {
     y -= p.tauchAnim * 14 + p.spawnT * 30;                                   // Abtauchen / Auftauchen
     if (p.laden) { z += p.ladung; if (p.ladung >= 1) x += Math.sin(zeit * 70) * 0.06; }
     if (p.rollt) y -= 0.8;
-    vmHalter.position.set(x - sx * 4, y + sy * 3, z);                         // Waffe schwingt beim Umschauen nach
-    vmHalter.rotation.set(sy + p.rueck * 0.1, sx, Math.sin(ph) * 0.025 * amp);
+    const sch = schwungKurve(p);                                             // Roller/Pinsel-Schwung
+    if (WAFFEN[p.waffe].nah) z -= p.rueck * 1.6;
+    vmHalter.position.set(x - sx * 4 - sch.seite * 4, y + sy * 3 + sch.hoch * 3, z);   // Waffe schwingt beim Umschauen nach
+    vmHalter.rotation.set(sy + (WAFFEN[p.waffe].nah ? sch.hoch * 0.55 : p.rueck * 0.1), sx + sch.seite * 0.6, Math.sin(ph) * 0.025 * amp + sch.seite * 0.2);
     haendeWaffe.visible = ichSicht && !p.tot && p.tauchAnim < 0.9;
     animiereWaffe(haendeWaffe.userData, p, dt, p.vx * Math.cos(p.winkel) + p.vy * Math.sin(p.winkel));
   }
