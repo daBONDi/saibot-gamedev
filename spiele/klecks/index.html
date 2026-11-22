@@ -220,8 +220,8 @@ Object.assign(WAFFEN, {
   miniroller: { typ: 'roller', name: 'Miniroller', emoji: '🐭', info: 'Blitzschnell rollen und werfen – wenig Reichweite', reichweite: 80, modell: { ganz: 0.7 },
     nah: { rollBreite: 15, rollSchaden: 5, rollTempo: 205, rollKosten: 1.8, schwingCd: 0.3, schwingDauer: 0.25, abwurf: 0.1, art: 'hoch' },
     schwung: { anzahl: 5, streu: 0.6, speed: 330, bremse: 3.2, schaden: 22, klecks: 11, spur: 5, kosten: 4 } },
-  blubber: { typ: 'blubber', name: 'Blubberwerfer', emoji: '🫧', info: 'Blubberblasen, die über den Boden hüpfen', huepfen: 3, gross: 2.6,
-    cd: 0.35, kosten: 4, speed: 380, bremse: 1.2, schaden: 30, klecks: 16, spur: 0, streu: 0.06, anzahl: 1, reichweite: 220 },
+  blubber: { typ: 'eimer', name: 'Blubberwerfer', emoji: '🫧', info: 'Ein Eimer voller Blubberblasen, die über den Boden hüpfen', huepfen: 3, gross: 2.2,
+    cd: 0.65, kosten: 8, speed: 420, bremse: 1.6, schaden: 28, klecks: 15, spur: 0, streu: 0.4, anzahl: 3, reichweite: 200 },
   miniliter: { typ: 'sniper', name: 'Farb-Miniliter', emoji: '🏹', info: 'Lädt superschnell – aber weniger Reichweite', reichweite: 330, modell: { ganz: 0.8 },
     ladezeit: 0.45, laenge: [120, 260], schadenB: [30, 70] },
   liter: { typ: 'sniper', name: 'Farb-Liter', emoji: '🔭', info: 'Riesige Reichweite – dafür langes Aufladen', reichweite: 720, modell: { ganz: 1.15 },
@@ -236,9 +236,9 @@ const ULTIS = {
   welle:   { name: 'Farbwelle',    emoji: '🌊', info: 'Eine riesige Welle rollt nach vorne' },
   laser:   { name: 'Megalaser',    emoji: '🔆', info: '3 Sek. ein riesiger Farbstrahl' },
   tornado: { name: 'Farbtornado',  emoji: '🌪️', info: 'Ein Wirbelsturm jagt die Gegner' },
-  panzer:  { name: 'Farbpanzer',   emoji: '🦺', info: 'Dein ganzes Team bekommt eine Schutz-Rüstung' },
+  panzer:  { name: 'Farbpanzer',   emoji: '🚜', info: 'Steig in einen Panzer mit Minigun!' },
   werfer:  { name: 'Raketenwerfer', emoji: '🧨', info: '4 Riesenraketen selbst zielen und abfeuern' },
-  kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Werde zur rollenden Riesen-Farbkugel – BUMM am Ende!' },
+  kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Hochfliegen, Klicken klicken klicken, werfen – sie bläht sich riesig auf!' },
 };
 // Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
 const BOMBEN = {
@@ -1135,18 +1135,6 @@ function baueWaffe(art, m, team, watzo = false) {
   const tinte = tintenMaterial(team);
   const blitzMat = new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.85 });
   switch (typ) {
-    case 'blubber': {   // Blubberwerfer: Glaskugel voller Tinte und eine Trompeten-Düse
-      g.add(klotz(m, 10, 6, 5, 4, 0.5, 0), klotz(MAT_GRAU, 10.4, 1.2, 5.4, 4, -2.2, 0));
-      const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 1, -5.5, 0); griff.rotation.z = 0.25; g.add(griff);
-      abzugBauen(g, 5);
-      g.add(kugel(glasRohrMat, 5.5, 3, 7.5, 0)); ud.tinteKugel = kugel(tinte, 4.5, 3, 7.5, 0); g.add(ud.tinteKugel);
-      g.add(zylinder(MAT_METALL, 2, 2, 1.5, 3, 2.6, 0));
-      for (const [x, y, z, r] of [[7, 13, 2, 1.4], [5, 16, -1, 1], [9, 18, 1, 0.7]]) g.add(kugel(glasRohrMat, r, x, y, z));   // kleine Blasen
-      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
-      lauf.add(zylinderX(MAT_METALL, 1.8, 1.8, 6, 12, 1, 0), zylinderX(m, 5, 1.8, 6, 17, 1, 0), ringX(MAT_GOLD, 5, 0.6, 20, 1, 0));
-      ud.blitz = kugel(new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.6 }), 4, 23, 1, 0); lauf.add(ud.blitz);
-      break;
-    }
     case 'eimer': {
       // Der Eimer hängt am Henkel und schwappt beim Werfen nach vorne
       const schwing = new THREE.Group(); g.add(schwing); ud.schwing = schwing;
@@ -1272,6 +1260,7 @@ function baueWaffe(art, m, team, watzo = false) {
   const mod = WAFFEN[art] && WAFFEN[art].modell;
   if (mod && mod.walzeBreite && ud.walze) { ud.walze.scale.z = mod.walzeBreite; g.add(zylinderZ(MAT_METALL, 0.9, 0.9, 28 * mod.walzeBreite + 3, 14, -10, 0)); }
   if (mod && mod.ganz) g.scale.setScalar(mod.ganz);
+  if (art === 'blubber' && ud.schwing) for (const [x, y, z, r] of [[2, -4, 2, 2], [-3, -2, -1, 1.5], [1, 0.5, -2, 1], [4, -6.5, -3, 1.6], [-1, 3, 1, 0.8]]) ud.schwing.add(kugel(glasRohrMat, r, x, y, z));   // Blasen quellen aus dem Eimer
   if (watzo && art !== 'doppel') g.add(kugel(MAT_GOLD, 1.6, 4, 3, 3.4), kugel(MAT_GOLD, 1.6, 4, 3, -3.4), ringX(MAT_GOLD, 1.2, 0.35, 4, 3, 3.6));   // goldene Watzo-Sterne
   return g;
 }
@@ -1361,6 +1350,49 @@ function baueLaser(team) {
   g.visible = false;
   return g;
 }
+// Farbpanzer (für die Ulti): Wanne, Ketten, Turm mit Minigun und Farbtank
+const MINIGUN_W = { bremse: 1.8, klecks: 13, spur: 5, schaden: 9 };
+function baueMinigun() {
+  const g = new THREE.Group();
+  g.add(zylinderX(MAT_GRAU, 4, 4, 8, 4, 0, 0));
+  const laeufe = new THREE.Group(); laeufe.position.x = 8; g.add(laeufe);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; laeufe.add(zylinderX(MAT_METALL, 1, 1, 22, 11, Math.cos(a) * 2.6, Math.sin(a) * 2.6)); }
+  laeufe.add(ringX(MAT_GOLD, 3.6, 0.6, 18, 0, 0), ringX(MAT_GRAU, 3.6, 0.8, 4, 0, 0));
+  g.userData.laeufe = laeufe;
+  return g;
+}
+function baueFarbpanzer(team) {
+  const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.4 }), d = mat(TEAMS[team].dunkel), ketten = mat('#2b2f4a', { roughness: 0.9 });
+  g.add(klotz(m, 54, 16, 34, 0, 14, 0), klotz(d, 58, 4, 36, 0, 22.5, 0), klotz(MAT_GOLD, 2, 6, 36.2, 18, 14, 0));   // Wanne mit Streifen
+  for (const s of [-1, 1]) {
+    g.add(klotz(ketten, 60, 12, 9, 0, 7, s * 21));
+    for (let i = 0; i < 5; i++) g.add(zylinderZ(MAT_GRAU, 5, 5, 10, -22 + i * 11, 7, s * 21));
+  }
+  const turm = new THREE.Group(); turm.position.set(-2, 26, 0); g.add(turm);
+  turm.add(zylinder(m, 13, 15, 10, 0, 4, 0), kugel(d, 6, -4, 10, 0, 1, 0.6, 1));
+  const kanone = baueMinigun(); kanone.position.set(10, 5, 0); turm.add(kanone);
+  g.add(zylinderZ(glasRohrMat, 7, 7, 26, -24, 26, 0), zylinderZ(tintenMaterial(team, 0.4), 5.5, 5.5, 25, -24, 26, 0));
+  const licht = mat('#fff4c2', { emissive: '#ffd166', emissiveIntensity: 1 });
+  g.add(kugel(licht, 2.5, 27, 17, 10), kugel(licht, 2.5, 27, 17, -10));
+  g.userData = { kanone, laeufe: kanone.userData.laeufe };
+  g.visible = false;
+  return g;
+}
+// Die riesige Tuffkugel-Blase
+function baueTuffBlase(team) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(30, 28, 18), new THREE.MeshStandardMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.7, roughness: 0.1, emissive: TEAMS[team].col, emissiveIntensity: 0.3 })));
+  g.add(kugel(mat('#ffffff', { transparent: true, opacity: 0.6 }), 8, -12, 14, -10));
+  for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(30.5, 1.2, 6, 30), mat(TEAMS[team].hell)); r.rotation.set(i * 1.05, i * 0.7, 0); g.add(r); }
+  return g;
+}
+function blaseZeigen(b) {
+  const r = b.rAkt || b.r;
+  b.mesh.position.set(b.x, b.phase === 'flug' ? b.h : r * 0.6, b.y);
+  const wabbel = 1 + Math.sin(zeit * 9) * 0.04;
+  b.mesh.scale.set(r / 30 * wabbel, r / 30 / wabbel, r / 30 * wabbel);
+  b.mesh.rotation.y += 0.02;
+}
 // Raketenwerfer (für die Ulti): dickes Rohr auf der Schulter
 function baueWerfer(m) {
   const g = new THREE.Group();
@@ -1397,10 +1429,10 @@ const welleGeo = new THREE.RingGeometry(8, 12, 20); welleGeo.rotateX(-Math.PI / 
 const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 
 // ---------- Ich-Sicht-Waffe (hängt an der Kamera) ----------
-let haendeWaffe = null, haendeWerfer = null, swayX = 0, swayY = 0;
+let haendeWaffe = null, haendeWerfer = null, haendeMinigun = null, swayX = 0, swayY = 0;
 const vmHalter = new THREE.Group(); kamera.add(vmHalter);
 const VM_POS = { doppel: [0, -6, -9, 0.45], kanone: [5, -7, -10, 0.5], spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
-const VM_EXTRA_POS = { blubber: [5, -7, -10, 0.5] }, VM_EXTRA_HAENDE = { blubber: [[1, -5.5, 0], [12, -3, 0]] };
+const VM_EXTRA_POS = {}, VM_EXTRA_HAENDE = {};
 const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0], [13, -4, 0]], spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
@@ -1409,6 +1441,9 @@ function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWerfer) vmHalter.remove(haendeWerfer);
   haendeWerfer = baueWerfer(teamMat[tm]); haendeWerfer.rotation.y = Math.PI / 2 + 0.07; haendeWerfer.position.set(6, -5, -10); haendeWerfer.scale.setScalar(0.55);
   vmHalter.add(haendeWerfer);
+  if (haendeMinigun) vmHalter.remove(haendeMinigun);
+  haendeMinigun = baueMinigun(); haendeMinigun.rotation.y = Math.PI / 2 + 0.07; haendeMinigun.position.set(4, -7, -9); haendeMinigun.scale.setScalar(0.6); haendeMinigun.visible = false;
+  vmHalter.add(haendeMinigun);
   const [x, y, z, sk] = VM_POS[art] || VM_EXTRA_POS[art] || VM_POS[typVon(art)];
   haendeWaffe.position.set(x, y, z); haendeWaffe.scale.setScalar(sk);
   haendeWaffe.rotation.y = Math.PI / 2 + 0.07;                 // zeigt nach vorne, leicht zur Mitte
@@ -1468,7 +1503,8 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { tasten[e.code] = false; if (e.code === 'KeyE') bombeLos = true; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; maus.links = maus.rechts = false; });
-addEventListener('mousedown', e => { if (e.button === 0) maus.links = true; if (e.button === 2) maus.rechts = true; });
+let mausKlicks = 0;
+addEventListener('mousedown', e => { if (e.button === 0) { maus.links = true; mausKlicks++; } if (e.button === 2) maus.rechts = true; });
 addEventListener('mouseup', e => { if (e.button === 0) maus.links = false; if (e.button === 2) maus.rechts = false; });
 addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => {
@@ -1666,6 +1702,7 @@ function mpVomGast(g, d) {
     g.e = { x: zahl(d.x, 0, W, null), y: zahl(d.y, 0, H, null), z: zahl(d.z, 0, 300, 0), w: zahl(d.w, -1e4, 1e4, 0), p: zahl(d.p, -1.3, 1.1, 0),
             vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, n: d.n | 0 };
     if (!e || e.tot || !mpLaeuft()) return;
+    if (d.kk > 0 && e.kugelT > 0) e.kugelKraft = Math.min(25, (e.kugelKraft || 0) + Math.min(10, d.kk | 0));
     if (Array.isArray(d.b)) { e.winkel = g.e.w; bombeWerfen(e, zahl(d.b[0], 0, W, e.x), zahl(d.b[1], 0, H, e.y)); }
     if (Array.isArray(d.uz)) { e.winkel = g.e.w; ultiStarten(e, zahl(d.uz[0], 0, W, e.x), zahl(d.uz[1], 0, H, e.y)); }
   } else if (d.t === 'wahl') {
@@ -1688,14 +1725,15 @@ function mpSchnappschussSenden() {
   const s = {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
-      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss]),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0)]),
     s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.ulti ? 'rakete' : o.art)]),
     g: geraete.map(o => [objId(o), GERAET_ARTEN.indexOf(o.art), r0(o.x), r0(o.y), o.team, r2(o.winkel), r1(o.t), o.zuend >= 0 ? 1 : 0, o.treffer > 0 ? 1 : 0]),
     w: wellen.map(o => [objId(o), r0(o.x), r0(o.y), r2(o.winkel), r2(o.t), o.dauer, o.team]),
     to: tornados.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
     wo: wolken.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
+    bl: blasen.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), r1(o.rAkt || o.r), o.team, o.phase === 'flug' ? 1 : 0]),
     k: mp.farbe, ev: mp.ev,
   };
   mpAnAlle(s);
@@ -1755,15 +1793,16 @@ function mpSchnappschuss(d) {
   if (Array.isArray(d.e)) d.e.forEach((a, i) => {
     const e = kleckse[i];
     if (!e || !Array.isArray(a)) return;
-    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte, panzer, werferT, kugelT, werferSchuss] = a;
+    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte, panzer, werferT, kugelT, werferSchuss, kugelKraft] = a;
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0,
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0,
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
     if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
+    if (e !== spieler || !(e.kugelT > 0)) e.kugelKraft = kugelKraft || 0;   // eigene Klicks zählen wir selbst
     if (e === spieler) {
       if (e.ulti < 1 && ulti >= 1) { meldung('⚡ Ulti bereit! Drück Q!'); ton('ulti'); }
       e.ulti = ulti;
@@ -1787,6 +1826,7 @@ function mpSchnappschuss(d) {
   }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; });
   wellen = proxySync(wellen, d.w, a => ({ mesh: baueWelle(a[6] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.winkel = a[3]; o.t = a[4]; o.dauer = a[5]; });
   tornados = proxySync(tornados, d.to, a => ({ mesh: baueTornado(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
+  blasen = proxySync(blasen, d.bl, a => ({ mesh: baueTuffBlase(a[5] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.rAkt = o.r = a[4]; o.phase = a[6] ? 'flug' : 'wachsen'; });
   wolken = proxySync(wolken, d.wo, a => ({ mesh: baueWolke(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
 }
 function mpEreignisAusfuehren(ev) {
@@ -1856,6 +1896,8 @@ function gastUpdate(dt) {
     tn.mesh.scale.setScalar(Math.max(0.05, Math.min(1, (7 - tn.t) * 3, tn.t * 2)));
   }
   for (const wo of wolken) wo.t -= dt;
+  for (const b of blasen) blaseZeigen(b);
+  for (const e of kleckse) if (e.panzerT > 0) e.panzerT -= dt;
   for (let i = strahlen.length - 1; i >= 0; i--) {
     const s = strahlen[i]; s.t -= dt; s.mesh.material.opacity = Math.max(0, s.t * 4);
     if (s.t <= 0) { scene.remove(s.mesh); strahlen.splice(i, 1); }
@@ -1884,7 +1926,7 @@ function mpTick(dt) {
       mp.eingabeT = 1 / MP_EINGABE_RATE;
       const p = spieler;
       mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
-        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u });
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk });
       mp.bitte = {};
     }
   }
@@ -1933,7 +1975,7 @@ function koMeldung(e, wer) {
 
 // ================== SPIELZUSTAND ==================
 let zustand = 'menu', zeit = 0, rest = RUNDE;
-let geraete = [], wellen = [], tornados = [];
+let geraete = [], wellen = [], tornados = [], blasen = [];
 let kleckse = [], schuesse = [], bomben = [], wolken = [], strahlen = [], partikel = [], meldungen = [];
 let startCountdown = 0, letzteSek = 99, klatschCd = 0;
 let spieler = null, rotBlitz = 0, leerHinweis = 0, pfiff10 = false, bildZaehler = 0;
@@ -1984,16 +2026,15 @@ function neuerKlecks(team, nr, extra = {}) {
   e.kugelMesh.add(new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16), new THREE.MeshStandardMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.45, roughness: 0.1, emissive: TEAMS[team].col, emissiveIntensity: 0.2 })));
   for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(30, 1.5, 6, 30), mat(TEAMS[team].hell)); r.rotation.set(i * 1.05, i * 0.7, 0); e.kugelMesh.add(r); }
   e.kugelMesh.visible = false;
-  e.panzerMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(30, 1), new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, wireframe: true, transparent: true, opacity: 0.6 }));
-  e.panzerMesh.visible = false;
-  e.panzer = 0; e.panzerT = 0; e.werferT = 0; e.werferSchuss = 0; e.kugelT = 0;
+  e.panzerMesh = baueFarbpanzer(team);
+  e.panzer = 0; e.panzerT = 0; e.werferT = 0; e.werferSchuss = 0; e.kugelT = 0; e.kugelKraft = 0;
   scene.add(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh);
   return e;
 }
 
 function aufraeumen() {
   for (const e of kleckse) scene.remove(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh);
-  for (const g of [...geraete, ...wellen, ...tornados]) scene.remove(g.mesh);
+  for (const g of [...geraete, ...wellen, ...tornados, ...blasen]) scene.remove(g.mesh);
   for (const s of schuesse) scene.remove(s.mesh);
   for (const b of bomben) scene.remove(b.mesh);
   for (const w of wolken) scene.remove(w.mesh);
@@ -2004,7 +2045,7 @@ function weltLeeren(meldungenBehalten = false) {
   aufraeumen();
   kleckse = []; schuesse = []; bomben = []; wolken = []; strahlen = []; partikel = [];
   if (!meldungenBehalten) meldungen = [];
-  geraete = []; wellen = []; tornados = [];
+  geraete = []; wellen = []; tornados = []; blasen = [];
   bombeLos = ultiWunsch = sprungWunsch = false;
 }
 function neueRunde(auf, karteId, farben) {
@@ -2144,8 +2185,9 @@ function freieStelle(x, y, r) {   // nächste Stelle, an der keine Wand ist
   return { x, y };
 }
 function bewege(e, dx, dy, dt) {
-  // Springen / Fallen
-  if (e.z > 0 || e.vz > 0) {
+  // Springen / Fallen (mit der Tuffkugel schwebt man oben)
+  if (e.kugelT > 0) { e.vz = e.z < 110 ? 380 : 0; e.z = Math.min(110, e.z + e.vz * dt); }
+  else if (e.z > 0 || e.vz > 0) {
     e.vz -= SCHWERKRAFT * dt; e.z += e.vz * dt;
     if (e.z <= 0) {
       e.z = 0; e.vz = 0; e.landT = 0.25;
@@ -2162,9 +2204,10 @@ function bewege(e, dx, dy, dt) {
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
   if (e.laserT > 0) speed *= 0.5;
-  if (e.kugelT > 0) speed = 270;
+  if (e.kugelT > 0) speed = 60;
+  if (e.panzerT > 0) speed = 125;
   const glatt = ARENEN[karte] && ARENEN[karte].glatt && modus === 'match' && !e.taucht && Math.hypot(e.x - BASIS[e.team].x, e.y - BASIS[e.team].y) > 120;
-  const k = Math.min(1, dt * (amBoden ? (glatt ? 1.6 : e.kugelT > 0 ? 5 : 12) : 3));     // auf Glatteis rutscht man
+  const k = Math.min(1, dt * (amBoden ? (glatt ? 1.6 : 12) : 3));     // auf Glatteis rutscht man
   e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
   let bx = 0, by = 0;
   if (zone && zone.art === 'band' && amBoden) bx = zone.dx;                 // Förderband schiebt
@@ -2187,7 +2230,7 @@ function tauchenPruefen(e) {
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
   const zone = zoneBei(e.x, e.y);
-  e.taucht = e.willTauchen && eigen && amBoden && !(zone && zone.art === 'sand') && !(e.kugelT > 0);   // im Treibsand kann man nicht abtauchen
+  e.taucht = e.willTauchen && eigen && amBoden && !(zone && zone.art === 'sand') && !(e.kugelT > 0) && !(e.panzerT > 0);   // im Treibsand kann man nicht abtauchen
   if (vorher !== e.taucht) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
@@ -2212,6 +2255,15 @@ function schiessen(e, dt) {
   e.schussCd -= dt;
   e.rollt = false;
   if (e.tot || e.laserT > 0 || e.kugelT > 0) return;
+  if (e.panzerT > 0) {   // Farbpanzer: Minigun
+    if (e.schiesst && e.schussCd <= 0) {
+      e.schussCd = 0.05; e.rueck = 0.6;
+      const a = e.winkel + (Math.random() - 0.5) * 0.12, pi = e.pitch + 0.03 + (Math.random() - 0.5) * 0.05;
+      tropfen(e.x + Math.cos(a) * 30, e.y + Math.sin(a) * 30, e.z + 31, a, pi, 700, MINIGUN_W, e.team, e);
+      if (e.spieler) ton('schuss', 0.7);
+    }
+    return;
+  }
   if (e.werferT > 0) {   // Raketenwerfer: Klick = Riesenrakete
     if (e.schiesst && e.schussCd <= 0 && e.werferSchuss > 0) {
       let zx, zy;
@@ -2325,16 +2377,52 @@ function laserUpdate(e, dt) {
   m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
 }
 
-// Tuffkugel: rollt, malt, rammt Gegner und platzt am Ende
+// Tuffkugel: oben schweben und mit Klicks Kraft sammeln, dann werfen
 function kugelUpdate(e, dt) {
-  e.kugelT -= dt; e.kugelTick = (e.kugelTick || 0) - dt;
-  if (e.kugelTick <= 0) {
-    e.kugelTick = 0.05;
-    klecks(e.x, e.y, 30, e.team, e, false);
-    for (const f of kleckse) if (f.team !== e.team && !f.tot && Math.hypot(f.x - e.x, f.y - e.y) < 40) treffen(f, 9, e);
-    if (e.spieler && Math.random() < 0.3) ton('roll');
+  e.kugelT -= dt;
+  if (!e.spieler && !e.mensch) e.kugelKraft = Math.min(25, (e.kugelKraft || 0) + dt * 7);   // Bots klicken auch
+  if (e.kugelT <= 0 || (e.kugelKraft || 0) >= 25) tuffWerfen(e);
+}
+function tuffWerfen(e) {
+  let d;
+  if (!e.spieler && !e.mensch && e.ki.zielPunkt) d = Math.hypot(e.ki.zielPunkt.x - e.x, e.ki.zielPunkt.y - e.y);
+  else d = 200 + Math.max(0, e.pitch + 0.4) * 300;
+  d = Math.max(120, Math.min(450, d));
+  const zx = Math.max(20, Math.min(W - 20, e.x + Math.cos(e.winkel) * d)), zy = Math.max(20, Math.min(H - 20, e.y + Math.sin(e.winkel) * d));
+  const kraft = Math.min(25, e.kugelKraft || 0);
+  const mesh = baueTuffBlase(e.team); scene.add(mesh);
+  const b = { sx: e.x, sy: e.y, sh: e.z + 62, zx, zy, x: e.x, y: e.y, h: e.z + 62, t: 0, flug: 0.9, phase: 'flug',
+    r: 14 + kraft * 0.8, R: 90 + kraft * 5, rAkt: 0, team: e.team, wer: e, malT: 0, mesh };
+  blasen.push(b); blaseZeigen(b);
+  e.kugelT = 0; e.kugelKraft = 0; e.vz = 0;
+  if (e.spieler || (spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600)) ton('wurf');
+}
+function blasenUpdate(dt) {   // fliegen, landen, aufblähen, PLATSCH
+  for (let i = blasen.length - 1; i >= 0; i--) {
+    const b = blasen[i];
+    b.t += dt;
+    if (b.phase === 'flug') {
+      const f = Math.min(1, b.t / b.flug);
+      b.x = b.sx + (b.zx - b.sx) * f; b.y = b.sy + (b.zy - b.sy) * f;
+      b.h = b.sh * (1 - f) + Math.sin(f * Math.PI) * 90 + b.r * f;
+      if (f >= 1) { b.phase = 'wachsen'; b.t = 0; b.rAkt = b.r; ton('blubb'); }
+    } else {
+      const f = Math.min(1, b.t / 2.5);
+      b.rAkt = b.r + (b.R - b.r) * f * f;
+      b.malT -= dt;
+      if (b.malT <= 0) {
+        b.malT = 0.3;
+        klecks(b.x, b.y, b.rAkt * 0.9, b.team, b.wer, false);
+        for (const e of kleckse) if (e.team !== b.team && !e.tot && Math.hypot(e.x - b.x, e.y - b.y) < b.rAkt) treffen(e, 12, b.wer);
+      }
+      if (f >= 1) {
+        explodieren(b.x, b.y, b.R, 140, b.team, b.wer, false);
+        spritzer(b.x, b.y, 40, b.team, 80, 500);
+        scene.remove(b.mesh); blasen.splice(i, 1); continue;
+      }
+    }
+    blaseZeigen(b);
   }
-  if (e.kugelT <= 0) { e.kugelT = 0; explodieren(e.x, e.y, 110, 120, e.team, e, false); spritzer(e.x, e.y, 30, e.team, 40, 350); }
 }
 
 // Beim Schwingen fliegt ein Fächer aus Farbtropfen nach vorne
@@ -2511,14 +2599,15 @@ function ultiStarten(e, zx, zy) {
       e.laserT = 3; e.laserTick = 0;
       if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 700) ton('laser', e.spieler ? 1 : 0.5);
       break;
-    case 'panzer':   // das ganze Team bekommt eine Rüstung
-      for (const f of kleckse) if (f.team === e.team && !f.tot) { f.panzer = 50; f.panzerT = 10; spritzer(f.x, f.y, 25, f.team, 12, 120); }
+    case 'panzer':   // in den Farbpanzer steigen
+      e.panzer = 100; e.panzerT = 9; e.taucht = false; e.z = 0; e.vz = 0;
+      spritzer(e.x, e.y, 20, e.team, 25, 200);
       break;
     case 'werfer':
       e.werferT = 8; e.werferSchuss = 4; e.schussCd = 0.3;
       break;
-    case 'kugel':
-      e.kugelT = 6; e.kugelTick = 0; e.taucht = false;
+    case 'kugel':    // hochfliegen und Kraft sammeln
+      e.kugelT = 3; e.kugelKraft = 0; e.taucht = false;
       break;
     case 'tornado': {
       const mesh = baueTornado(e.team); scene.add(mesh);
@@ -2609,13 +2698,11 @@ function ki(b, dt) {
     if (!sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
   }
-  if (b.kugelT > 0) {   // als Tuffkugel einfach auf den nächsten Gegner zurollen
+  if (b.kugelT > 0) {   // Tuffkugel: oben schweben und auf den nächsten Gegner zielen
     let z = feind;
     if (!z) { let best = 1e9; for (const f of kleckse) if (f.team !== b.team && !f.tot) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < best) { best = d; z = f; } } }
-    z = z || k.ziel || { x: W / 2, y: H / 2 };
-    const l = Math.hypot(z.x - b.x, z.y - b.y) || 1;
-    const [rx, ry] = ausweichen(b, (z.x - b.x) / l, (z.y - b.y) / l);
-    b.schiesst = false; b.willTauchen = false; bewege(b, rx, ry, dt); return;
+    if (z) { b.winkel = drehe(b.winkel, Math.atan2(z.y - b.y, z.x - b.x), dt * 4); k.zielPunkt = { x: z.x, y: z.y }; }
+    b.schiesst = false; b.willTauchen = false; bewege(b, 0, 0, dt); return;
   }
   let dx = 0, dy = 0;
   b.schiesst = false; b.willTauchen = false;
@@ -2640,7 +2727,8 @@ function ki(b, dt) {
     b.winkel = drehe(b.winkel, zielA, dt * 5);
     b.pitch = botPitch(b, fd, feind.z + 22);
     const gutGezielt = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
-    if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
+    if (b.panzerT > 0) b.schiesst = gutGezielt && fd < 330;
+    else if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
     else if (typVon(b.waffe) === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
     } else if (w.nah) {
@@ -2703,7 +2791,12 @@ function steuerung(p, dt) {
   const l = Math.hypot(dx, dy); if (l) { dx /= l; dy /= l; }
   p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || maus.rechts;
   p.schiesst = maus.links;
-  if (sprungWunsch && p.z <= 0) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
+  const neueKlicks = mausKlicks - (p.klickStand || 0); p.klickStand = mausKlicks;
+  if (p.kugelT > 0 && neueKlicks > 0) {   // Tuffkugel: schnell klicken = mehr Kraft
+    if (istGast()) mp.bitte.kk = (mp.bitte.kk || 0) + neueKlicks;
+    p.kugelKraft = Math.min(25, (p.kugelKraft || 0) + neueKlicks); ton('klick');
+  }
+  if (sprungWunsch && p.z <= 0 && !(p.panzerT > 0) && !(p.kugelT > 0)) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
   // Bombe: E halten = zielen, loslassen = werfen
   const z = bombenZiel(p);
   zielRing.visible = !!tasten.KeyE && BOMBEN[p.bombe].wurf && p.tinte >= bombeKosten(p) && !p.taucht;
@@ -2927,6 +3020,7 @@ function update(dt) {
     if (w.t <= 0) { scene.remove(w.mesh); wolken.splice(i, 1); }
   }
 
+  blasenUpdate(dt);
   // Sniper-Strahlen verblassen
   for (let i = strahlen.length - 1; i >= 0; i--) {
     const s = strahlen[i]; s.t -= dt; s.mesh.material.opacity = Math.max(0, s.t * 4);
@@ -2979,18 +3073,19 @@ function animiereFigur(e, v, dt) {
   const a = a0 + e.pitch * pf - (WAFFEN[e.waffe].nah ? 0 : e.rueck * 0.12) + (inLuft ? -0.2 : 0) + schwung.hoch * 0.8;
   ud.ober.rotation.y = schwung.seite * 0.4;   // Oberkörper dreht beim Pinsel-Schwung mit
   ud.arme.forEach(arm => { arm.schulter.rotation.z = a; arm.ellbogen.rotation.z = b0; });
-  if (e.waffe === 'eimer') {   // freie Hand schwingt beim Laufen
+  if (typVon(e.waffe) === 'eimer') {   // freie Hand schwingt beim Laufen
     ud.arme[0].schulter.rotation.z = Math.sin(ph) * 0.5 * amp + 0.15; ud.arme[0].ellbogen.rotation.z = 0.3;
   }
   const hx = (6 * Math.sin(a) + 6 * Math.sin(a + b0)) * 0.88, hy = 14 - 6 * Math.cos(a) - 6 * Math.cos(a + b0);
   const w = e.waffenModell;
-  w.position.set(hx, hy, e.waffe === 'eimer' ? 4 : 0);
+  w.position.set(hx, hy, typVon(e.waffe) === 'eimer' ? 4 : 0);
   w.rotation.z = (WAFFEN[e.waffe].nah ? schwung.hoch : e.pitch * pf + e.rueck * 0.2);
   w.rotation.y = schwung.seite;
   animiereWaffe(w.userData, e, dt, vf);
+  if (e.kugelT > 0) { w.visible = false; ud.arme.forEach(arm => { arm.schulter.rotation.z = 2.9; arm.ellbogen.rotation.z = 0.2; }); }   // Kugel mit beiden Händen hochhalten
   if (e.werferModell) {   // Raketenwerfer statt Waffe
     const werfer = e.werferT > 0;
-    e.werferModell.visible = werfer; w.visible = !werfer;
+    e.werferModell.visible = werfer; if (werfer) w.visible = false; else if (!(e.kugelT > 0)) w.visible = true;
     e.werferModell.position.copy(w.position); e.werferModell.rotation.z = e.pitch * 0.6;
   }
 }
@@ -3054,10 +3149,16 @@ function welt3D(dt) {
     e.welle.scale.setScalar(1 + (zeit * 3 % 1) * 0.6);
     e.blase.visible = !e.tot && e.schild > 0 && !istIch;
     e.blase.position.set(e.x, e.z + 24, e.y);
-    e.kugelMesh.visible = !e.tot && e.kugelT > 0;
-    if (e.kugelMesh.visible) { e.kugelMesh.position.set(e.x, e.z + 30, e.y); e.kugelMesh.rotation.x += e.vy * dt / 30; e.kugelMesh.rotation.z -= e.vx * dt / 30; }
-    e.panzerMesh.visible = !e.tot && e.panzer > 0 && !istIch;
-    if (e.panzerMesh.visible) { e.panzerMesh.position.set(e.x, e.z + 25, e.y); e.panzerMesh.rotation.y += dt; }
+    e.kugelMesh.visible = !e.tot && e.kugelT > 0;            // Tuffkugel über dem Kopf, wird mit jedem Klick größer
+    if (e.kugelMesh.visible) { e.kugelMesh.position.set(e.x, e.z + 64, e.y); e.kugelMesh.scale.setScalar((12 + (e.kugelKraft || 0) * 0.8) / 30); e.kugelMesh.rotation.y += dt * 3; }
+    const imPanzer = !e.tot && e.panzerT > 0;
+    e.panzerMesh.visible = imPanzer && !istIch;
+    if (imPanzer) {
+      e.koerper.visible = false;
+      const pud = e.panzerMesh.userData;
+      e.panzerMesh.position.set(e.x, e.z, e.y); e.panzerMesh.rotation.y = -e.winkel;
+      pud.kanone.rotation.z = e.pitch * 0.8; pud.laeufe.rotation.x += dt * (e.rueck > 0.1 ? 30 : 2);
+    }
   }
   for (const s of schuesse) {   // Tropfen sind länglich in Flugrichtung
     s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); const gr = s.w.gross || 1; s.mesh.scale.set(0.8 * gr, 0.8 * gr, 1.7 * gr);
@@ -3087,7 +3188,7 @@ function welt3D(dt) {
 
   // Kamera
   const p = spieler;
-  const zielAuge = p.taucht ? 9 : p.kugelT > 0 ? 30 : AUGE;
+  const zielAuge = p.taucht ? 9 : AUGE;
   augenHoehe += (zielAuge - augenHoehe) * Math.min(1, dt * 12);
   const fx = Math.cos(p.winkel) * Math.cos(p.pitch), fy = Math.sin(p.pitch), fz = Math.sin(p.winkel) * Math.cos(p.pitch);
   if (kameraOverride) {
@@ -3122,8 +3223,9 @@ function welt3D(dt) {
     if (WAFFEN[p.waffe].nah) z -= p.rueck * 1.6;
     vmHalter.position.set(x - sx * 4 - sch.seite * 4, y + sy * 3 + sch.hoch * 3, z);   // Waffe schwingt beim Umschauen nach
     vmHalter.rotation.set(sy + (WAFFEN[p.waffe].nah ? sch.hoch * 0.55 : p.rueck * 0.1), sx + sch.seite * 0.6, Math.sin(ph) * 0.025 * amp + sch.seite * 0.2);
-    haendeWaffe.visible = ichSicht && !p.tot && p.tauchAnim < 0.9 && !kameraOverride && !(p.werferT > 0) && !(p.kugelT > 0);
+    haendeWaffe.visible = ichSicht && !p.tot && p.tauchAnim < 0.9 && !kameraOverride && !(p.werferT > 0) && !(p.kugelT > 0) && !(p.panzerT > 0);
     if (haendeWerfer) haendeWerfer.visible = ichSicht && !p.tot && !kameraOverride && p.werferT > 0;
+    if (haendeMinigun) { haendeMinigun.visible = ichSicht && !p.tot && !kameraOverride && p.panzerT > 0; haendeMinigun.userData.laeufe.rotation.x += dt * (p.rueck > 0.1 ? 30 : 2); }
     animiereWaffe(haendeWaffe.userData, p, dt, p.vx * Math.cos(p.winkel) + p.vy * Math.sin(p.winkel));
   }
   renderer.render(scene, kamera);
@@ -3145,12 +3247,19 @@ function hud() {
   if (z0 && z0.art === 'sand' && !spieler.tot) { ctx.fillStyle = 'rgba(156,122,60,0.25)'; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.taucht) { ctx.globalAlpha = 0.18; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1; }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
-  if (spieler.kugelT > 0) {
-    ctx.globalAlpha = 0.25; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1;
-    ctx.textAlign = 'center'; textMitRand(`🔮 TUFFKUGEL! BUMM in ${Math.ceil(spieler.kugelT)}`, cw / 2, ch * 0.75, 30, '#fff');
+  if (spieler.kugelT > 0) {   // Tuffkugel: Klick-Anzeige
+    const kraft = Math.min(25, spieler.kugelKraft || 0), puls = 1 + Math.sin(zeit * 20) * 0.06;
+    ctx.textAlign = 'center'; textMitRand('🔮 KLICK! KLICK! KLICK!', cw / 2, ch * 0.7, 34 * puls, '#ffd166');
+    const bw = 300, bx = cw / 2 - bw / 2, by = ch * 0.7 + 16;
+    ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(bx - 4, by - 4, bw + 8, 26);
+    ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(bx, by, bw * kraft / 25, 18);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui'; ctx.fillText(`Kraft ${Math.round(kraft)} / 25 · Wurf in ${spieler.kugelT.toFixed(1)} s`, cw / 2, by + 14);
   }
   if (spieler.werferT > 0) { ctx.textAlign = 'center'; textMitRand(`🧨 ${spieler.werferSchuss} Raketen – Klick = Feuer! (${Math.ceil(spieler.werferT)} s)`, cw / 2, ch * 0.75, 26, '#ffd166'); }
-  if (spieler.panzer > 0) { ctx.strokeStyle = TEAMS[spieler.team].hell; ctx.globalAlpha = 0.5; ctx.lineWidth = 10; ctx.strokeRect(5, 5, cw - 10, ch - 10); ctx.globalAlpha = 1; }
+  if (spieler.panzerT > 0) {   // im Farbpanzer
+    ctx.strokeStyle = '#2b2f4a'; ctx.globalAlpha = 0.6; ctx.lineWidth = 40; ctx.strokeRect(0, 0, cw, ch); ctx.globalAlpha = 1;
+    ctx.textAlign = 'center'; textMitRand(`🚜 FARBPANZER – Minigun! (${Math.ceil(spieler.panzerT)} s)`, cw / 2, ch * 0.78, 26, '#ffd166');
+  }
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
 
   if (modus === 'lobby') lobbyHud(cw, ch);
@@ -3185,7 +3294,7 @@ function hud() {
   ctx.font = '20px system-ui'; ctx.fillText('❤️', tx + 56, ty + 56);
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(tx + 84, ty + 44, 60, 10);
   ctx.fillStyle = spieler.hp > 40 ? '#5be37d' : '#ff4d4d'; ctx.fillRect(tx + 84, ty + 44, 60 * Math.max(0, spieler.hp) / 100, 10);
-  if (spieler.panzer > 0) { ctx.fillStyle = '#9fe8ff'; ctx.fillRect(tx + 84, ty + 56, 60 * spieler.panzer / 50, 5); }   // Farbpanzer
+  if (spieler.panzer > 0) { ctx.fillStyle = '#9fe8ff'; ctx.fillRect(tx + 84, ty + 56, 60 * spieler.panzer / 100, 5); }   // Farbpanzer
   ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`🎯 ${spieler.ko}`, tx + 56, ty + 82);
   // Ulti-Kreis
   const ux = tx + 140, uy = ty + 100, voll = spieler.ulti >= 1;
@@ -3755,7 +3864,7 @@ function stadtBetretenTaste() {
 function stadtUpdate(dt) {
   zeit += dt;
   const p = stadtSp;
-  if (sprungWunsch && p.z <= 0) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
+  if (sprungWunsch && p.z <= 0 && !(p.panzerT > 0) && !(p.kugelT > 0)) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
   sprungWunsch = false;
   const vor = (tasten.KeyW || tasten.ArrowUp ? 1 : 0) - (tasten.KeyS || tasten.ArrowDown ? 1 : 0);
   const seit = (tasten.KeyD || tasten.ArrowRight ? 1 : 0) - (tasten.KeyA || tasten.ArrowLeft ? 1 : 0);
