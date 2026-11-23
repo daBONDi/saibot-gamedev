@@ -265,6 +265,7 @@ const ULTIS = {
   werfer:  { name: 'Raketenwerfer', emoji: '🧨', info: '4 Riesenraketen selbst zielen und abfeuern' },
   gigafisch: { name: 'Gigafisch',  emoji: '🦑', info: 'Werde zu einem riesigen Tintenfisch und ramme deine Gegner weg!' },
   trifarb: { name: 'TriFarb-Artillerie', emoji: '📡', info: 'Wirf 3 Peilsender – dann schießen Farbstrahlen vom Boden in den Himmel!' },
+  lautsprecher: { name: 'Megalautsprecher', emoji: '📢', info: 'Stell ihn hin – sein Schallstrahl macht alles vor ihm platt!' },
   kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Hochfliegen, Klicken klicken klicken, werfen – sie bläht sich riesig auf!' },
 };
 // Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
@@ -297,6 +298,12 @@ const SET_DATEN = [
   ['klecksling', 'sprinkler', 'panzer', 450, 'klebe',    'trifarb', 600],
   ['schwerling', 'wand',  'werfer',  600,   'mine',      'regen',   750],
 ];
+// Jede Waffe gibt es außerdem von den 3 Firmen – jede Firma mit eigener Bombe und Ulti (wie Watzo)
+const FIRMEN_VARIANTEN = {
+  zwecko: { bomben: ['klebe', 'sprinkler', 'klecks'], ultis: ['wirbel', 'gigafisch', 'tornado', 'kugel', 'welle'], plus: 150 },
+  altra:  { bomben: ['mine', 'wand', 'klebe'], ultis: ['laser', 'trifarb', 'lautsprecher', 'raketen', 'werfer'], plus: 200 },
+  u24:    { bomben: ['wand', 'klecks', 'sprinkler'], ultis: ['panzer', 'lautsprecher', 'schild', 'regen', 'werfer'], plus: 250 },
+};
 const SETS = {};
 for (const [w, b1, u1, p1, b2, u2, p2] of SET_DATEN) {
   for (const [id, bombe, ulti, preis, watzo] of [[w, b1, u1, p1, false], [w + '_watzo', b2, u2, p2, true]]) {
@@ -305,6 +312,16 @@ for (const [w, b1, u1, p1, b2, u2, p2] of SET_DATEN) {
       info: `${WAFFEN[w].info} · 💣 ${BOMBEN[bombe].name} · ⚡ ${ULTIS[ulti].name}` };
   }
 }
+SET_DATEN.forEach(([w, b1, u1, p1, b2, u2], i) => {
+  for (const [f, V] of Object.entries(FIRMEN_VARIANTEN)) {
+    const bombe = V.bomben[i % V.bomben.length];
+    let ulti = V.ultis[i % V.ultis.length];
+    for (let k = 0; k < V.ultis.length && (ulti === u1 || ulti === u2); k++) ulti = V.ultis[(i + k + 1) % V.ultis.length];   // andere Ulti als normal/Watzo
+    SETS[w + '_' + f] = { basis: w, bombe, ulti, preis: p1 + V.plus, watzo: false, firma: f, variante: f,
+      name: `${WAFFEN[w].name} ${FIRMEN[f].name}`, emoji: WAFFEN[w].emoji + FIRMEN[f].emoji,
+      info: `${WAFFEN[w].info} · 💣 ${BOMBEN[bombe].name} · ⚡ ${ULTIS[ulti].name}` };
+  }
+});
 const HEMDEN = {
   tshirt:   { name: 'Basic-T-Shirt', emoji: '👕', preis: 0,   info: 'Ganz normal, aber bequem', bonus: {}, farbe: '#f4f4f4', aermel: 'kurz' },
   streifen: { name: 'Ringelshirt',   emoji: '🦓', preis: 150, info: '🎨 Tinte sparen +6%', bonus: { tinte: 0.06 }, farbe: '#3b6fd8', streifen: '#ffffff', aermel: 'kurz' },
@@ -774,6 +791,7 @@ const SOUNDS = {
   grollen: (t, v) => { krach(120, 2.2, 0.45 * v, t); osz('sawtooth', 45, 30, 2.2, 0.12 * v, t, sfxGain, 200); },
   ausbruch:(t, v) => { krach(250, 1.5, 0.6 * v, t); osz('sine', 90, 30, 1.2, 0.35 * v, t); krach(1500, 0.6, 0.15 * v, t + 0.1, sfxGain, 'bandpass'); },
   strahl:  (t, v) => { osz('sawtooth', 120, 1400, 0.5, 0.12 * v, t, sfxGain, 2500); krach(2000, 0.6, 0.35 * v, t, sfxGain, 'bandpass'); osz('sine', 80, 40, 0.5, 0.3 * v, t); },
+  megaton: (t, v) => { [55, 58, 62].forEach((n, i) => osz('sawtooth', NOTE(n - 12), NOTE(n - 12), 5.6, 0.07 * v, t + i * 0.02, sfxGain, 700)); osz('square', 45, 45, 5.6, 0.1 * v, t, sfxGain, 300); krach(400, 5.6, 0.12 * v, t); },
   zisch:   (t, v) => krach(4000, 0.25, 0.08 * v, t, sfxGain, 'highpass'),
   ramm:    (t, v) => { osz('sawtooth', 160, 50, 0.3, 0.15 * v, t, sfxGain, 900); krach(500, 0.3, 0.3 * v, t); },
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
@@ -1518,7 +1536,7 @@ function abzugBauen(g, x) {
   buegel.rotation.z = Math.PI; buegel.position.set(x, -2.2, 0);
   g.add(buegel, klotz(MAT_METALL, 0.8, 2.6, 1, x, -2.6, 0));
 }
-function baueWaffe(art, m, team, watzo = false) {
+function baueWaffe(art, m, team, watzo = false, variante = null) {
   const g = new THREE.Group(), ud = g.userData;
   const typ = typVon(art);
   const tinte = tintenMaterial(team);
@@ -1541,7 +1559,7 @@ function baueWaffe(art, m, team, watzo = false) {
       break;
     }
     case 'doppel': {   // zwei kleine Spritzer nebeneinander
-      const l = baueWaffe('spritzer', m, team, watzo), r = baueWaffe('spritzer', m, team, watzo);
+      const l = baueWaffe('spritzer', m, team, watzo, variante), r = baueWaffe('spritzer', m, team, watzo, variante);
       l.position.z = -6; r.position.z = 6; l.scale.setScalar(0.85); r.scale.setScalar(0.85);
       g.add(l, r); ud.teile = [l.userData, r.userData];
       break;
@@ -1671,7 +1689,8 @@ function baueWaffe(art, m, team, watzo = false) {
   if (mod && mod.walzeBreite && ud.walze) { ud.walze.scale.z = mod.walzeBreite; g.add(zylinderZ(MAT_METALL, 0.9, 0.9, 28 * mod.walzeBreite + 3, 14, -10, 0)); }
   if (mod && mod.ganz) g.scale.setScalar(mod.ganz);
   if (art === 'blubber' && ud.schwing) for (const [x, y, z, r] of [[2, -4, 2, 2], [-3, -2, -1, 1.5], [1, 0.5, -2, 1], [4, -6.5, -3, 1.6], [-1, 3, 1, 0.8]]) ud.schwing.add(kugel(glasRohrMat, r, x, y, z));   // Blasen quellen aus dem Eimer
-  const firma = WAFFEN[art] && WAFFEN[art].firma;
+  const firma = variante || (WAFFEN[art] && WAFFEN[art].firma);
+  if (variante && art !== 'doppel') g.add(kugel(mat(FIRMEN[variante].farbe, { emissive: FIRMEN[variante].farbe, emissiveIntensity: 0.4 }), 1.5, 4, 3, 3.4), kugel(mat(FIRMEN[variante].farbe2), 1.5, 4, 3, -3.4));   // Firmen-Kugeln (wie die Watzo-Sterne)
   if (firma && art !== 'doppel') {   // Firmen-Band am Griff + kleines Logo
     g.add(ringX(mat(FIRMEN[firma].farbe), 2.4, 0.55, -1.5, 0.5, 0));
     const ty = typVon(art);
@@ -1823,6 +1842,32 @@ function baueGigafisch(team) {
   return g;
 }
 // Peilsender für die TriFarb-Artillerie: mit Antenne, rotem Warnring und der Farbbombe, die vom Himmel fällt
+// Megalautsprecher: Riesenbox auf Beinen mit großem Trichter – vorne kommen Schallwellen raus
+const LAUT_LAENGE = 650;
+function schallLaenge(g) {   // wie weit kommt der Schall, bis eine Wand im Weg ist?
+  const c = Math.cos(g.winkel), s = Math.sin(g.winkel);
+  for (let d = 20; d <= LAUT_LAENGE; d += 10) if (istWand(g.x + c * d, g.y + s * d)) return d;
+  return LAUT_LAENGE;
+}
+function baueLautsprecher(team) {
+  const g = new THREE.Group(), dunkel = mat('#23263d', { roughness: 0.6 }), farbe = teamMat[team];
+  for (const [x, z] of [[-10, -10], [-10, 10], [8, -10], [8, 10]]) { const b = zylinder(MAT_METALL, 1.2, 1.2, 18, x, 9, z); b.rotation.z = x < 0 ? 0.2 : -0.2; g.add(b); }   // Beine
+  g.add(klotz(dunkel, 26, 34, 30, 0, 34, 0), klotz(farbe, 27, 3, 31, 0, 52, 0), klotz(farbe, 27, 3, 31, 0, 17, 0));   // Box
+  g.add(zylinderX(MAT_GRAU, 6, 6, 2, 13.5, 26, 0));                                     // kleiner Lautsprecher unten
+  const trichter = new THREE.Mesh(new THREE.CylinderGeometry(22, 9, 22, 28, 1, true), mat(TEAMS[team].hell, { side: THREE.DoubleSide, roughness: 0.4 }));
+  trichter.rotation.z = -Math.PI / 2; trichter.position.set(24, 38, 0); g.add(trichter);
+  const membran = zylinderX(farbe, 8.5, 8.5, 1, 14, 38, 0); g.add(membran);
+  g.add(ringX(MAT_METALL, 22, 1.2, 35, 38, 0), kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 2, -6, 55, 8));
+  // Schallwellen und Schall-Kegel (zeigen nach vorne = +x)
+  const wMat = new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+  const wellen = [];
+  for (let i = 0; i < 7; i++) { const w = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 6, 28), wMat.clone()); w.rotation.y = Math.PI / 2; w.position.y = 38; w.visible = false; g.add(w); wellen.push(w); }
+  const kg = new THREE.ConeGeometry(1, 1, 28, 1, true); kg.translate(0, -0.5, 0); kg.rotateZ(Math.PI / 2);
+  const kegel = new THREE.Mesh(kg, new THREE.MeshBasicMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+  kegel.position.set(30, 38, 0); kegel.visible = false; g.add(kegel);
+  g.userData = { membran, wellen, kegel };
+  return g;
+}
 function baueTracker(team) {
   const g = new THREE.Group(), licht = mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 });
   g.add(zylinder(MAT_GRAU, 3, 4, 4, 0, 2, 0), ringY(teamMat[team], 3.6, 0.7, 0, 3, 0), zylinder(MAT_METALL, 0.4, 0.4, 12, 0, 10, 0), kugel(licht, 1.4, 0, 16.5, 0));
@@ -1897,7 +1942,7 @@ const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0]
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
   const tm = spieler ? spieler.team : 0;
-  haendeWaffe = baueWaffe(art, teamMat[tm], tm, !!(SETS[an.waffe] && SETS[an.waffe].watzo));
+  haendeWaffe = baueWaffe(art, teamMat[tm], tm, !!(SETS[an.waffe] && SETS[an.waffe].watzo), SETS[an.waffe] && SETS[an.waffe].variante);
   if (haendeWerfer) vmHalter.remove(haendeWerfer);
   haendeWerfer = baueWerfer(teamMat[tm]); haendeWerfer.rotation.y = Math.PI / 2 + 0.07; haendeWerfer.position.set(6, -5, -10); haendeWerfer.scale.setScalar(0.55);
   vmHalter.add(haendeWerfer);
@@ -2015,7 +2060,7 @@ glCv.addEventListener('click', () => {
 const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const MP_VORSILBE = 'klecks-krieg-';   // Damit unsere Raum-Codes nicht mit anderen Spielen zusammenstoßen
 const MP_SENDE_RATE = 15, MP_EINGABE_RATE = 20, MP_MAX = 8;
-const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete', 'tracker'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand', 'tracker'];
+const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete', 'tracker'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand', 'tracker', 'lautsprecher'];
 const r0 = v => Math.round(v), r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const zahl = (v, lo, hi, nichts) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : nichts;
 const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), meineId: 'host',
@@ -2296,7 +2341,7 @@ function mpSchnappschuss(d) {
   }, (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; });
   geraete = proxySync(geraete, d.g, a => {
     const art = GERAET_ARTEN[a[1]] || 'klebe', team = a[4] ? 1 : 0;
-    const mesh = art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
+    const mesh = art === 'lautsprecher' ? baueLautsprecher(team) : art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
     mesh.position.set(a[2], bodenHoehe(a[2], a[3]) + (art === 'klebe' ? 6 : 0), a[3]); mesh.rotation.y = -a[5];
     return { mesh, art, team, x: a[2], y: a[3], winkel: a[5], treffer: 0 };
   }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; });
@@ -2433,6 +2478,17 @@ function geraetAnim(g) {
       ud.strahl.scale.set(breit, Math.min(900, k * 3500), breit);
       ud.aussen.rotation.y += 0.3;
     }
+  } else if (g.art === 'lautsprecher') {
+    const an = g.t > 0.8 && g.t < 6.6, L = schallLaenge(g);
+    ud.membran.scale.x = 1 + (an ? Math.sin(g.t * 70) * 2.5 : 0);
+    ud.kegel.visible = an; if (an) { ud.kegel.scale.set(L, 25 + L * 0.1, 25 + L * 0.1); ud.kegel.material.opacity = 0.14 + Math.sin(g.t * 40) * 0.05; }
+    ud.wellen.forEach((w, i) => {
+      w.visible = an; if (!an) return;
+      const k = (g.t * 1.6 + i / ud.wellen.length) % 1, d = 30 + k * L;
+      w.position.x = d; w.scale.setScalar(25 + d * 0.1); w.material.opacity = 0.7 * (1 - k);
+    });
+    g.mesh.scale.setScalar(Math.min(1, g.t * 4));                                 // ploppt beim Hinstellen auf
+    if (g.t > 0.8 && !g.droehnt) { g.droehnt = true; if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 900) ton('megaton'); }
   } else if (g.art === 'wand') {
     ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
     ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
@@ -2506,7 +2562,7 @@ function neuerKlecks(team, nr, extra = {}) {
   e.ultiArt = SETS[e.set].ulti;                           // jede Waffen-Variante hat feste Bombe und Ulti
   e.bombe = SETS[e.set].bombe;
   e.koerper = baueJunge(e.mat, team, aussehen, an);
-  e.waffenModell = baueWaffe(e.waffe, e.mat, team, SETS[e.set].watzo);
+  e.waffenModell = baueWaffe(e.waffe, e.mat, team, SETS[e.set].watzo, SETS[e.set].variante);
   e.koerper.userData.ober.add(e.waffenModell);           // Waffe bewegt sich mit dem Oberkörper
   e.gruppe.add(e.koerper);
   e.schildName = sp ? null : namensSchild(e.name, TEAMS[team].hell);
@@ -3313,6 +3369,12 @@ function ultiStarten(e, zx, zy) {
     case 'trifarb':     // 3 Peilsender werfen
       e.trifT = 8; e.trifRest = 3; e.trifCd = 0.2;
       break;
+    case 'lautsprecher': {   // vor sich hinstellen – zeigt dahin, wo man hinschaut
+      const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
+      const f = freieStelle(e.x + c * 30, e.y + s * 30, 16, hAbs(e));
+      geraetSetzen('lautsprecher', f.x, f.y, e.team, e, e.winkel, baueLautsprecher(e.team));
+      break;
+    }
     case 'kugel':    // hochfliegen und Kraft sammeln
       e.kugelT = 3; e.kugelKraft = 0; e.taucht = false;
       break;
@@ -3477,7 +3539,7 @@ function ki(b, dt) {
   // Ulti benutzen
   if (b.ulti >= 1) {
     const art = b.ultiArt;
-    const nurMitFeind = ['wirbel', 'laser', 'schild', 'panzer', 'werfer', 'kugel', 'gigafisch'].includes(art);
+    const nurMitFeind = ['wirbel', 'laser', 'schild', 'panzer', 'werfer', 'kugel', 'gigafisch', 'lautsprecher'].includes(art);
     if (feind && (art !== 'wirbel' || fd < 150) && (art !== 'welle' || fd < 350) && (art !== 'kugel' || fd < 300)) ultiStarten(b, feind.x, feind.y);
     else if (!feind && !nurMitFeind && Math.random() < dt * 0.3) {
       const z = k.ziel || { x: W / 2, y: H / 2 }; b.winkel = Math.atan2(z.y - b.y, z.x - b.x); ultiStarten(b, z.x, z.y);
@@ -3701,6 +3763,7 @@ function update(dt) {
   // Liegende Bomben: Klebebombe, Sprinkler, Mine, Farbwand
   for (let i = geraete.length - 1; i >= 0; i--) {
     const g = geraete[i], ud = g.mesh.userData;
+    if (g.kaputt) { spritzer(g.x, g.y, 10, 1 - g.team, 12, 200); scene.remove(g.mesh); geraete.splice(i, 1); continue; }   // vom Lautsprecher zerstört
     g.t += dt; g.treffer = Math.max(0, g.treffer - dt);
     let weg = false;
     if (g.art === 'klebe') {
@@ -3734,6 +3797,30 @@ function update(dt) {
         if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 700) ton('strahl');
       }
       if (g.t >= 1.95) weg = true;
+    } else if (g.art === 'lautsprecher') {   // Megalautsprecher: der Schallstrahl macht alles platt
+      geraetAnim(g);
+      if (g.t > 0.8 && g.t < 6.6) {
+        g.schallT = (g.schallT || 0) - dt;
+        if (g.schallT <= 0) {
+          g.schallT = 0.15;
+          const c = Math.cos(g.winkel), s = Math.sin(g.winkel), L = schallLaenge(g);
+          for (let d = 35; d < L; d += 32) klecks(g.x + c * d, g.y + s * d, 18 + d * 0.09, g.team, g.wer, false);
+          for (const f of kleckse) {
+            if (f.team === g.team || f.tot) continue;
+            const dx = f.x - g.x, dy = f.y - g.y, laengs = dx * c + dy * s, quer = Math.abs(-dx * s + dy * c);
+            if (laengs > 0 && laengs < L && quer < 28 + laengs * 0.1) {
+              treffen(f, 20, g.wer);                                                     // ~130 Schaden pro Sekunde!
+              if (!f.mensch && !f.spieler) { f.vx += c * 160; f.vy += s * 160; }         // wird weggedrückt
+            }
+          }
+          for (const h of geraete) {                                                     // Gegner-Bomben und -Wände gehen kaputt
+            if (h === g || h.team === g.team) continue;
+            const dx = h.x - g.x, dy = h.y - g.y, laengs = dx * c + dy * s, quer = Math.abs(-dx * s + dy * c);
+            if (laengs > 0 && laengs < L && quer < 28 + laengs * 0.1) h.kaputt = true;
+          }
+        }
+      }
+      if (g.t > 7) weg = true;
     } else if (g.art === 'wand') {
       ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
       ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
@@ -4376,7 +4463,7 @@ function vorschauBauen() {
     ladung: 0, landT: 0, lauf: 0, nr: 0, schwingT: 0, schwingSeite: 1 };
   e.mat = mat(TEAMS[0].col, { roughness: 0.35 });
   e.koerper = baueJunge(e.mat, 0, aussehen, an);
-  e.waffenModell = baueWaffe(e.waffe, e.mat, 0, SETS[an.waffe].watzo); e.koerper.userData.ober.add(e.waffenModell);
+  e.waffenModell = baueWaffe(e.waffe, e.mat, 0, SETS[an.waffe].watzo, SETS[an.waffe].variante); e.koerper.userData.ober.add(e.waffenModell);
   e.gruppe = new THREE.Group(); e.gruppe.add(e.koerper);
   e.gruppe.position.set(VORSCHAU.x, 3, VORSCHAU.z); e.gruppe.rotation.y = dreh; e.gruppe.scale.setScalar(1.15);
   scene.add(e.gruppe); vorschau = e;
@@ -4681,7 +4768,7 @@ function stadtFigurBauen() {
   e.waffe = SETS[konto.an.waffe].basis; e.bonus = bonusVon(konto.an);
   e.mat = mat(TEAMS[0].col, { roughness: 0.35 });
   e.koerper = baueJunge(e.mat, 0, kontoAussehen(), konto.an);
-  e.waffenModell = baueWaffe(e.waffe, e.mat, 0, SETS[konto.an.waffe].watzo); e.koerper.userData.ober.add(e.waffenModell);
+  e.waffenModell = baueWaffe(e.waffe, e.mat, 0, SETS[konto.an.waffe].watzo, SETS[konto.an.waffe].variante); e.koerper.userData.ober.add(e.waffenModell);
   e.gruppe = new THREE.Group(); e.gruppe.add(e.koerper); stadtGruppe.add(e.gruppe);
 }
 function stadtKollidiert(x, y, r) {
