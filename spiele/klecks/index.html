@@ -584,6 +584,11 @@ function wandKarteMalen() {                                 // nur für die Mini
   const w = wandCv.getContext('2d'); w.clearRect(0, 0, W, H);
   for (const r of waende) { w.fillStyle = '#3d4266'; w.fillRect(r.x, r.y, r.w, r.h); }
   for (const z of lavaListe()) { w.fillStyle = '#ff6a00'; w.fillRect(z.x, z.y, z.w, z.h); }
+  for (const s of stufenListe()) {   // Podeste: weißer Rand, Rampen gestrichelt
+    w.strokeStyle = 'rgba(255,255,255,0.85)'; w.lineWidth = 6; w.setLineDash(s.rampe ? [14, 10] : []);
+    w.strokeRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
+  }
+  w.setLineDash([]);
 }
 wandKarteMalen();
 
@@ -2674,10 +2679,10 @@ function bewege(e, dx, dy, dt) {
   werte(e, dt, feind);
 }
 // Hochschwimmen: Shift halten und gegen eine Kletterwand in deiner Farbe laufen
-function kletterZiel(e, dx, dy, bh) {
+function kletterZiel(e, dx, dy, bh, weite = 6) {
   const l = Math.hypot(dx, dy); if (l < 0.1) return null;
   dx /= l; dy /= l;
-  const ha = bh + e.z, vx = e.x + dx * (e.r + 6), vy = e.y + dy * (e.r + 6);
+  const ha = bh + e.z, vx = e.x + dx * (e.r + weite), vy = e.y + dy * (e.r + weite);
   for (const s of stufenListe()) {
     if (s.rampe || s.hoehe <= ha + 1) continue;
     if (vx < s.x || vx > s.x + s.w || vy < s.y || vy > s.y + s.h) continue;
@@ -2870,7 +2875,7 @@ function gigaUpdate(e, dt) {
       treffen(f, e.dashT > 0 ? 120 : 45, e);
       if (!f.mensch && !f.spieler && !f.tot) {   // weggeschleudert
         const nx = (f.x - e.x) / (d || 1), ny = (f.y - e.y) / (d || 1);
-        for (let k = 0; k < 12; k++) { const px = f.x + nx * 6, py = f.y + ny * 6; if (kollidiert(px, py, f.r)) break; f.x = px; f.y = py; }
+        for (let k = 0; k < 12; k++) { const px = f.x + nx * 6, py = f.y + ny * 6; if (kollidiert(px, py, f.r, hAbs(f))) break; f.x = px; f.y = py; }
         f.vx = nx * 300; f.vy = ny * 300; f.vz = 200; f.z = 0.01;
       }
       spritzer(f.x, f.y, 20, e.team, 15, 250);
@@ -3221,12 +3226,38 @@ function neuesZiel(b) {
   k.zielT = 4; k.seite = Math.random() < 0.5 ? 1 : -1;
 }
 
+// Bot will auf ein Podest: Abstand nehmen, die Wand von unten bis oben anmalen, dann hochschwimmen
+function spalteFertig(F, u, team, ab) {
+  for (let v = ab; v < F.rows * WAND_ZELLE; v += WAND_ZELLE) if (wandBesitzer(F, u, v) !== team + 1) return false;
+  return true;
+}
+function botKlettern(b, dx, dy, dt) {
+  const k = b.ki, bh = bodenHoehe(b.x, b.y), kz = kletterZiel(b, dx, dy, bh, 70);
+  if (!kz) { k.kletterT = 0; return false; }
+  k.kletterT = (k.kletterT || 0) + dt;
+  if (k.kletterT > 7) { k.kletterT = 0; neuesZiel(b); return false; }     // klappt nicht – lieber woanders hin
+  const sd = seite(kz.s, kz.f), abstand = -((b.x - sd.ox) * sd.ix + (b.y - sd.oy) * sd.iy) - b.r;
+  const F = kz.s.flaechen[kz.f], fertig = spalteFertig(F, kz.u, b.team, kz.ha + 4);
+  const zuWand = Math.atan2(sd.iy, sd.ix);
+  b.willTauchen = false; b.schiesst = false;
+  if (fertig || b.amKlettern) {                                   // hin zur Wand und hochschwimmen
+    b.willTauchen = abstand < 30 || b.amKlettern; b.winkel = drehe(b.winkel, zuWand, dt * 6);
+    bewege(b, sd.ix, sd.iy, dt); return true;
+  }
+  b.winkel = drehe(b.winkel, zuWand, dt * 8);
+  b.pitch = -0.25 + ((zeit * 0.6 + b.nr * 0.37) % 1) * 1.0;      // mal tief, mal hoch – damit die ganze Wand Farbe abbekommt
+  if (WAFFEN[b.waffe].nah) { k.tap = !k.tap; b.schiesst = k.tap; } else b.schiesst = b.tinte > 3;
+  if (b.tinte < 5) { k.kletterT = 0; return false; }
+  const vor = abstand > 65 ? 1 : abstand < 35 ? -1 : 0;           // gut 50 weg von der Wand stehen
+  bewege(b, sd.ix * vor, sd.iy * vor, dt);
+  return true;
+}
 function ausweichen(b, dx, dy) {
   const basis = Math.atan2(dy, dx);
   for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) {
     const a = basis + off * b.ki.seite;
     const nx = b.x + Math.cos(a) * 26, ny = b.y + Math.sin(a) * 26;
-    if (!kollidiert(nx, ny, b.r) && !lavaNah(nx, ny, b.r)) return [Math.cos(a), Math.sin(a)];
+    if (!kollidiert(nx, ny, b.r, hAbs(b)) && !lavaNah(nx, ny, b.r)) return [Math.cos(a), Math.sin(a)];
   }
   return [dx, dy];
 }
@@ -3338,6 +3369,8 @@ function ki(b, dt) {
       if (bombeWerfen(b, b.x + dx * 200, b.y + dy * 200)) b.bombeCd = 8;
     }
   }
+  // Ziel liegt oben auf einem Podest? Dann die Kletterwand anmalen und hochschwimmen
+  if (!feind && k.ziel && (dx || dy) && !k.tanken && bodenHoehe(k.ziel.x, k.ziel.y) > bodenHoehe(b.x, b.y) + STUFE_MAX && botKlettern(b, dx, dy, dt)) return;
   // Festgesteckt? Dann einen Umweg probieren
   k.stuckT += dt;
   if (k.stuckT > 0.8) {
