@@ -630,8 +630,10 @@ function istWand(x, y) { return besitzer(x, y) === 255; }
 // Bilder für den Boden
 function leinwand(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 const bodenCv = leinwand(W, H), farbCv = leinwand(W, H), wandCv = leinwand(W, H);
+for (const c of [bodenCv, farbCv, wandCv]) c.getContext('2d', { willReadFrequently: true });   // bleiben im Arbeitsspeicher: so muss der Browser nichts von der Grafikkarte zurückholen
 const BODEN_SKALA = 0.55;                                   // Boden-Textur kleiner = schneller (die Arenen sind groß geworden!)
 const bodenTexCv = leinwand(W * BODEN_SKALA, H * BODEN_SKALA);
+bodenTexCv.getContext('2d', { willReadFrequently: true });
 const fctx = farbCv.getContext('2d');
 let farbeGeaendert = true;
 function bodenMalen(th = STANDARD_THEMA) {
@@ -1005,6 +1007,16 @@ function bodenAktualisieren() {
   b.drawImage(bodenCv, 0, 0, bodenTexCv.width, bodenTexCv.height);
   b.drawImage(farbCv, 0, 0, bodenTexCv.width, bodenTexCv.height);
   bodenTex.needsUpdate = true;
+  miniNeu = true;
+}
+// Die Mini-Karte: ein kleines Bild, das nur neu gemalt wird, wenn sich die Farbe geändert hat
+const miniCv = leinwand(320, 200); miniCv.getContext('2d', { willReadFrequently: true });
+let miniNeu = true, miniKarte = null;
+function miniMalen() {
+  const m = miniCv.getContext('2d');
+  m.drawImage(bodenTexCv, 0, 0, miniCv.width, miniCv.height);
+  m.drawImage(wandCv, 0, 0, miniCv.width, miniCv.height);
+  miniNeu = false;
 }
 
 // Wände
@@ -1248,7 +1260,7 @@ function stufenZuruecksetzen(id) {
         let m = rampenSeite;
         if (s.flaechen) {
           const F = s.flaechen[f];
-          F.cv = leinwand(Math.max(2, Math.ceil(F.len * WAND_PX)), Math.max(2, Math.ceil(s.hoehe * WAND_PX)));
+          F.cv = leinwand(Math.max(2, Math.ceil(F.len * WAND_PX)), Math.max(2, Math.ceil(s.hoehe * WAND_PX))); F.cv.getContext('2d', { willReadFrequently: true });
           kletterGrund(F, s, a.thema.wand);
           F.tex = new THREE.CanvasTexture(F.cv); F.tex.colorSpace = THREE.SRGBColorSpace;
           m = new THREE.MeshStandardMaterial({ map: F.tex, roughness: 0.7, side: THREE.DoubleSide });
@@ -2583,13 +2595,22 @@ function neuerKlecks(team, nr, extra = {}) {
   return e;
 }
 
+// Grafik-Speicher wieder freigeben (sonst wird das Spiel mit jeder Runde langsamer)
+function entsorgen(o) {
+  if (!o) return;
+  o.traverse(k => {
+    if (k.geometry && k.geometry !== geoKugel && k.geometry !== geoTropfen) k.geometry.dispose();
+    if (k.material && !(Array.isArray(k.material))) k.material.dispose();
+  });
+}
+function wegUndEntsorgen(o) { if (!o) return; scene.remove(o); entsorgen(o); }
 function aufraeumen() {
-  for (const e of kleckse) scene.remove(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh);
-  for (const g of [...geraete, ...wellen, ...tornados, ...blasen]) scene.remove(g.mesh);
+  for (const e of kleckse) for (const o of [e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh]) wegUndEntsorgen(o);
+  for (const g of [...geraete, ...wellen, ...tornados, ...blasen]) wegUndEntsorgen(g.mesh);
   for (const s of schuesse) scene.remove(s.mesh);
-  for (const b of bomben) scene.remove(b.mesh);
-  for (const w of wolken) scene.remove(w.mesh);
-  for (const s of strahlen) scene.remove(s.mesh);
+  for (const b of bomben) wegUndEntsorgen(b.mesh);
+  for (const w of wolken) wegUndEntsorgen(w.mesh);
+  for (const s of strahlen) wegUndEntsorgen(s.mesh);
 }
 
 // ================== 🌋 VULKAN-AUSBRUCH ==================
@@ -3756,14 +3777,14 @@ function update(dt) {
       bomben.splice(i, 1);
       if (b.art === 'klebe' || b.art === 'sprinkler' || b.art === 'tracker') { geraetSetzen(b.art, b.x, b.y, b.team, b.wer, 0, b.mesh); continue; }
       explodieren(b.x, b.y, b.r, b.schaden, b.team, b.wer, !b.ulti);
-      scene.remove(b.mesh);
+      wegUndEntsorgen(b.mesh);
     }
   }
 
   // Liegende Bomben: Klebebombe, Sprinkler, Mine, Farbwand
   for (let i = geraete.length - 1; i >= 0; i--) {
     const g = geraete[i], ud = g.mesh.userData;
-    if (g.kaputt) { spritzer(g.x, g.y, 10, 1 - g.team, 12, 200); scene.remove(g.mesh); geraete.splice(i, 1); continue; }   // vom Lautsprecher zerstört
+    if (g.kaputt) { spritzer(g.x, g.y, 10, 1 - g.team, 12, 200); wegUndEntsorgen(g.mesh); geraete.splice(i, 1); continue; }   // vom Lautsprecher zerstört
     g.t += dt; g.treffer = Math.max(0, g.treffer - dt);
     let weg = false;
     if (g.art === 'klebe') {
@@ -3827,7 +3848,7 @@ function update(dt) {
       g.mesh.scale.y = Math.min(1, g.t * 6);
       if (g.t > 5) weg = true;
     }
-    if (weg) { scene.remove(g.mesh); geraete.splice(i, 1); }
+    if (weg) { wegUndEntsorgen(g.mesh); geraete.splice(i, 1); }
   }
 
   // Farbwellen rollen nach vorne
@@ -4225,7 +4246,8 @@ function hud() {
   // Mini-Karte unten rechts
   const mw = Math.min(220, cw * 0.28), mh = mw * H / W, mx = cw - mw - 16, my = ch - mh - 16;
   ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12);
-  ctx.drawImage(bodenCv, mx, my, mw, mh); ctx.drawImage(farbCv, mx, my, mw, mh); ctx.drawImage(wandCv, mx, my, mw, mh);
+  if (miniNeu || miniKarte !== karte) { miniKarte = karte; miniMalen(); }
+  ctx.drawImage(miniCv, mx, my, mw, mh);
   if (sandsturm()) { ctx.fillStyle = '#c9965a'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12); ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui'; ctx.textAlign = 'center'; ctx.fillText('🌪️ Sandsturm', mx + mw / 2, my + mh / 2); }
   for (const e of kleckse) {
     if (e.tot || e.team !== spieler.team) continue;
