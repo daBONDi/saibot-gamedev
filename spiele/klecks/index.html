@@ -2570,7 +2570,15 @@ function kollidiert(x, y, r, z = 0) {
   if (x < r || y < r || x > W - r || y > H - r) return true;
   for (const s of stufenListe()) {   // Podeste und Rampen: zu hoch = wie eine Wand
     const cx = Math.max(s.x, Math.min(x, s.x + s.w)), cy = Math.max(s.y, Math.min(y, s.y + s.h));
-    if ((x - cx) ** 2 + (y - cy) ** 2 < r * r && stufeHoehe(s, cx, cy) > z + STUFE_MAX) return true;
+    const d2 = (x - cx) ** 2 + (y - cy) ** 2;
+    if (d2 >= r * r) continue;
+    const hp = stufeHoehe(s, cx, cy);
+    if (hp <= z + STUFE_MAX) continue;
+    if (d2 > 0.01) {   // geht der Boden dort gleich hoch weiter (z. B. eine Rampe)? Dann ist es keine Wand
+      const d = Math.sqrt(d2), qx = cx + (x - cx) / d * 1.5, qy = cy + (y - cy) / d * 1.5;
+      if (bodenHoehe(qx, qy) >= hp - STUFE_MAX) continue;
+    }
+    return true;
   }
   if (z > WAND_H + 2) return false;                     // hoch genug gesprungen: über die Mauer!
   for (const w of waende) {
@@ -3219,6 +3227,7 @@ function neuesZiel(b) {
     else {
       const vorwaerts = b.team === 0 ? x : W - x;
       s = (v === b.team + 1 ? -400 : v === 0 ? 0 : 150) - d * 0.5 + vorwaerts * 0.15 + Math.random() * 100;
+      if (bodenHoehe(x, y) > 50) s += 120;     // oben auf Podesten ist es spannend – da will man hin!
     }
     if (s > bs) { bs = s; best = { x, y }; }
   }
