@@ -1530,7 +1530,7 @@ function baueFarbpanzer(team) {
 // Gigafisch: ein riesiger Comic-Tintenfisch (eigenes Design), Mantel nach vorne, Arme nach hinten
 function baueGigafisch(team) {
   const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.3 }), hell = mat(TEAMS[team].hell, { roughness: 0.3 }), d = mat(TEAMS[team].dunkel);
-  const koerper = new THREE.Group(); koerper.position.y = 32; g.add(koerper);
+  const koerper = new THREE.Group(); koerper.position.y = 12; g.add(koerper);   // schwimmt halb eingetaucht am Boden
   koerper.add(kugel(m, 24, 14, 0, 0, 1.7, 1, 1));                                           // Mantel
   for (const s2 of [-1, 1]) { const f = kugel(d, 12, 42, 4, s2 * 14, 1, 0.3, 1.1); f.rotation.y = s2 * 0.5; koerper.add(f); }   // Flossen
   for (const [x, y, z] of [[20, 18, 8], [30, 14, -10], [8, 22, -4], [28, 20, 4], [12, 16, 12]]) koerper.add(kugel(hell, 3.5, x, y, z, 1, 0.5, 1));
@@ -2487,7 +2487,7 @@ function bewege(e, dx, dy, dt) {
   if (zone && zone.art === 'band' && amBoden) bx = zone.dx;                 // Förderband schiebt
   const nx = e.x + (e.vx + bx) * dt; if (!kollidiert(nx, e.y, e.r, e.z)) e.x = nx; else e.vx = 0;
   const ny = e.y + (e.vy + by) * dt; if (!kollidiert(e.x, ny, e.r, e.z)) e.y = ny; else e.vy = 0;
-  if (zone && zone.art === 'boost' && amBoden && !e.taucht && e.boostCd <= 0) {   // Sprung-Pad!
+  if (zone && zone.art === 'boost' && amBoden && !e.taucht && !(e.gigaT > 0) && e.boostCd <= 0) {   // Sprung-Pad!
     e.vz = 520; e.z = 0.01; e.boostCd = 0.8; e.vx *= 1.6; e.vy *= 1.6;
     spritzer(e.x, e.y, 2, e.team, 8, 160);
     if (e.spieler) ton('boing'); else if (spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 400) ton('boing', 0.4);
@@ -2960,7 +2960,7 @@ function naheKlatsch(x, y) {
 }
 
 function treffen(e, schaden, wer) {
-  if (e.tot || e.schild > 0 || e.gigaT > 0) return;                 // Gigafisch ist unverwundbar
+  if (e.tot || e.schild > 0 || e.gigaT > 0 || e.kugelT > 0) return;   // Gigafisch und Tuffkugel sind unverwundbar
   if (e.panzer > 0) {   // Farbpanzer fängt Schaden ab
     const ab = Math.min(e.panzer, schaden); e.panzer -= ab; schaden -= ab;
     if (schaden <= 0) { if (e.spieler) ton('treffer'); return; }
@@ -3154,7 +3154,7 @@ function steuerung(p, dt) {
     if (istGast()) mp.bitte.kk = (mp.bitte.kk || 0) + neueKlicks;
     p.kugelKraft = Math.min(25, (p.kugelKraft || 0) + neueKlicks); ton('klick');
   }
-  if (sprungWunsch && p.z <= 0 && !(p.panzerT > 0) && !(p.kugelT > 0)) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
+  if (sprungWunsch && p.z <= 0 && !(p.panzerT > 0) && !(p.kugelT > 0) && !(p.gigaT > 0)) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
   // Bombe: E halten = zielen, loslassen = werfen
   const z = bombenZiel(p);
   zielRing.visible = !!tasten.KeyE && BOMBEN[p.bombe].wurf && p.tinte >= bombeKosten(p) && !p.taucht;
@@ -3526,7 +3526,8 @@ function welt3D(dt) {
     if (alsFisch) {
       e.koerper.visible = false;
       const gud = e.gigaMesh.userData, v2 = Math.hypot(e.vx, e.vy);
-      e.gigaMesh.position.set(e.x, e.z + Math.sin(zeit * 4) * 3, e.y); e.gigaMesh.rotation.y = -e.winkel;
+      e.gigaMesh.position.set(e.x, Math.sin(zeit * 4) * 1.5, e.y); e.gigaMesh.rotation.y = -e.winkel;
+      if (v2 > 60 && Math.random() < dt * 25) spritzer(e.x - Math.cos(e.winkel) * 40, e.y - Math.sin(e.winkel) * 40, 2, e.team, 2, 90);   // Farbe spritzt hinter ihm
       gud.koerper.rotation.z = -Math.min(0.3, v2 / 1500) - (e.dashT > 0 ? 0.2 : 0);
       gud.arme.forEach((arm, i) => { arm.rotation.z = Math.sin((i / 8) * Math.PI * 2) * 0.25 + Math.sin(zeit * (8 + v2 / 40) + i) * 0.3; });
     }
@@ -3567,7 +3568,7 @@ function welt3D(dt) {
 
   // Kamera
   const p = spieler;
-  const zielAuge = p.taucht ? 9 : AUGE;
+  const zielAuge = p.taucht ? 9 : p.gigaT > 0 ? 26 : AUGE;   // als Gigafisch ganz nah am Boden
   augenHoehe += (zielAuge - augenHoehe) * Math.min(1, dt * 12);
   const fx = Math.cos(p.winkel) * Math.cos(p.pitch), fy = Math.sin(p.pitch), fz = Math.sin(p.winkel) * Math.cos(p.pitch);
   if (kameraOverride) {
@@ -3641,6 +3642,7 @@ function hud() {
   if (spieler.kugelT > 0) {   // Tuffkugel: Klick-Anzeige
     const kraft = Math.min(25, spieler.kugelKraft || 0), puls = 1 + Math.sin(zeit * 20) * 0.06;
     ctx.textAlign = 'center'; textMitRand('🔮 KLICK! KLICK! KLICK!', cw / 2, ch * 0.7, 34 * puls, '#ffd166');
+    textMitRand('🛡️ Unverwundbar!', cw / 2, ch * 0.7 - 40, 22, '#ffffff');
     const bw = 300, bx = cw / 2 - bw / 2, by = ch * 0.7 + 16;
     ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(bx - 4, by - 4, bw + 8, 26);
     ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(bx, by, bw * kraft / 25, 18);
@@ -4284,7 +4286,7 @@ function stadtBetretenTaste() {
 function stadtUpdate(dt) {
   zeit += dt;
   const p = stadtSp;
-  if (sprungWunsch && p.z <= 0 && !(p.panzerT > 0) && !(p.kugelT > 0)) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
+  if (sprungWunsch && p.z <= 0 && !(p.panzerT > 0) && !(p.kugelT > 0) && !(p.gigaT > 0)) { p.vz = 330 * Math.sqrt(1 + p.bonus.sprung); p.z = 0.01; ton('sprung'); }
   sprungWunsch = false;
   const vor = (tasten.KeyW || tasten.ArrowUp ? 1 : 0) - (tasten.KeyS || tasten.ArrowDown ? 1 : 0);
   const seit = (tasten.KeyD || tasten.ArrowRight ? 1 : 0) - (tasten.KeyA || tasten.ArrowLeft ? 1 : 0);
