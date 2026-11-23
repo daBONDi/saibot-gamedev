@@ -192,6 +192,13 @@ let farbNr = 0;
 const NAMEN = [['Du', 'Blubb', 'Spritzi', 'Klacks'], ['Gloop', 'Schmatz', 'Plörre', 'Kleckerich']];
 const BASIS = [{ x: 80, y: H / 2 }, { x: W - 80, y: H / 2 }];
 
+// ================== FIRMEN ==================
+// 3 Firmen machen Waffen UND Kleidung. Trägst du 3 Sachen von derselben Firma, bekommst du ihren Firmen-Bonus!
+const FIRMEN = {
+  zwecko: { name: 'Zwecko', emoji: '🦊', farbe: '#ff5f1f', farbe2: '#1b1b22', stil: 'Sportlich & schnell', bonus: { tempo: 0.06, tauchen: 0.08 }, bonusText: '🏃 +6% Laufen, 🌊 +8% Abtauchen' },
+  altra:  { name: 'Altra',  emoji: '💠', farbe: '#3b6fd8', farbe2: '#c9cfe6', stil: 'Hightech & genau',   bonus: { tinte: 0.08, ulti: 0.08 },   bonusText: '🎨 +8% Tinte sparen, ⚡ +8% Ulti' },
+  u24:    { name: 'U24',    emoji: '🛡️', farbe: '#1f9d55', farbe2: '#ffd21f', stil: 'Robust & stark',     bonus: { schutz: 0.08, heilen: 0.15 }, bonusText: '🛡️ 8% weniger Schaden, ❤️ +15% Heilen' },
+};
 const WAFFEN = {
   spritzer: { name: 'Spritzer',   emoji: '🔫', info: 'Schnell & einfach', ulti: 'raketen',
               cd: 0.12, kosten: 1.5, speed: 650, bremse: 2, schaden: 24, klecks: 17, spur: 6, streu: 0.08, anzahl: 1, reichweite: 260 },
@@ -227,6 +234,22 @@ Object.assign(WAFFEN, {
   liter: { typ: 'sniper', name: 'Farb-Liter', emoji: '🔭', info: 'Riesige Reichweite – dafür langes Aufladen', reichweite: 720, modell: { ganz: 1.15 },
     ladezeit: 1.5, laenge: [200, 650], schadenB: [45, 110], zoom: 20 },
 });
+// Klecksling: eine Farb-Minigun. Halten = aufladen (die Läufe drehen immer schneller), loslassen = Dauerfeuer!
+// Je länger aufgeladen, desto länger schießt sie.
+Object.assign(WAFFEN, {
+  klecksling: { typ: 'ling', name: 'Klecksling', emoji: '🌀', info: 'Halten = aufladen, loslassen = Dauerfeuer!',
+    ladezeit: 0.9, feuerzeit: 2.0, cd: 0.06, kosten: 0.9, speed: 700, bremse: 1.8, schaden: 15, klecks: 13, spur: 5, streu: 0.07, anzahl: 1, reichweite: 300 },
+  schwerling: { typ: 'ling', name: 'Schwerling', emoji: '🐘', info: 'Lädt lange – schießt dafür weiter und viel länger', modell: { ganz: 1.3 },
+    ladezeit: 1.6, feuerzeit: 3.4, cd: 0.055, kosten: 0.8, speed: 830, bremse: 1.35, schaden: 17, klecks: 14, spur: 6, streu: 0.06, anzahl: 1, reichweite: 430 },
+  miniling: { typ: 'ling', name: 'Miniling', emoji: '🐹', info: 'Lädt blitzschnell – schießt aber kürzer und nicht so weit', modell: { ganz: 0.75 },
+    ladezeit: 0.4, feuerzeit: 1.0, cd: 0.065, kosten: 1, speed: 560, bremse: 2.4, schaden: 13, klecks: 12, spur: 5, streu: 0.09, anzahl: 1, reichweite: 220 },
+});
+// Welche Firma baut welche Waffe?
+for (const [f, liste] of Object.entries({
+  zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller'],
+  altra:  ['sniper', 'miniliter', 'liter', 'kanone'],
+  u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling'],
+})) for (const w of liste) WAFFEN[w].firma = f;
 const typVon = id => (WAFFEN[id] && WAFFEN[id].typ) || id;
 const ULTIS = {
   regen:   { name: 'Farbregen',    emoji: '🌧️', info: 'Eine Wolke lässt Farbe regnen' },
@@ -268,11 +291,14 @@ const SET_DATEN = [
   ['breitroller', 'klebe', 'panzer', 450,   'sprinkler', 'gigafisch', 600],
   ['gigaroller', 'klecks', 'werfer', 550,   'wand',      'kugel',   700],
   ['liter',    'klebe',  'laser',   600,   'mine',      'panzer',  750],
+  ['miniling', 'klecks', 'schild',  350,   'sprinkler', 'kugel',   500],
+  ['klecksling', 'sprinkler', 'panzer', 450, 'klebe',    'trifarb', 600],
+  ['schwerling', 'wand',  'werfer',  600,   'mine',      'regen',   750],
 ];
 const SETS = {};
 for (const [w, b1, u1, p1, b2, u2, p2] of SET_DATEN) {
   for (const [id, bombe, ulti, preis, watzo] of [[w, b1, u1, p1, false], [w + '_watzo', b2, u2, p2, true]]) {
-    SETS[id] = { basis: w, bombe, ulti, preis, watzo,
+    SETS[id] = { basis: w, bombe, ulti, preis, watzo, firma: WAFFEN[w].firma,
       name: WAFFEN[w].name + (watzo ? ' Watzo' : ''), emoji: WAFFEN[w].emoji + (watzo ? '⭐' : ''),
       info: `${WAFFEN[w].info} · 💣 ${BOMBEN[bombe].name} · ⚡ ${ULTIS[ulti].name}` };
   }
@@ -289,6 +315,12 @@ const HEMDEN = {
   regenjacke: { name: 'Regenjacke',  emoji: '☔', preis: 280, info: '🌊 Abtauchen 10% schneller', bonus: { tauchen: 0.1 }, farbe: '#ffd21f', kapuze: true, tasche: '#c9a400', aermel: 'lang' },
   sterne:   { name: 'Sternenshirt',  emoji: '🌌', preis: 320, info: '⚡ Ulti +12%', bonus: { ulti: 0.12 }, farbe: '#1b1f5a', punkte: true, aermel: 'kurz' },
   anzug:    { name: 'Schicker Anzug', emoji: '🤵', preis: 600, info: '🛡️ 10% weniger Schaden, 🎨 Tinte -5%', bonus: { schutz: 0.1, tinte: 0.05 }, farbe: '#1b1b22', jacke: true, fliege: true, aermel: 'lang' },
+  zwecko_trikot: { name: 'Zwecko Sporttrikot', emoji: '🧡', preis: 380, info: '🏃 Laufen +8%', bonus: { tempo: 0.08 }, farbe: '#ff5f1f', akzent: '#1b1b22', aermel: 'kurz', firma: 'zwecko' },
+  zwecko_jacke:  { name: 'Zwecko Trainingsjacke', emoji: '🏃', preis: 520, info: '🏃 +6% Laufen, 🌊 +8% Abtauchen', bonus: { tempo: 0.06, tauchen: 0.08 }, farbe: '#1b1b22', streifen: '#ff5f1f', jacke: true, aermel: 'lang', firma: 'zwecko' },
+  altra_shirt:   { name: 'Altra Tech-Shirt', emoji: '💠', preis: 360, info: '🎨 Tinte sparen +8%', bonus: { tinte: 0.08 }, farbe: '#3b6fd8', streifen: '#c9cfe6', aermel: 'kurz', firma: 'altra' },
+  altra_jacke:   { name: 'Altra Hightech-Jacke', emoji: '🔬', preis: 560, info: '⚡ Ulti +12%, 🎨 Tinte -5%', bonus: { ulti: 0.12, tinte: 0.05 }, farbe: '#c9cfe6', jacke: true, aermel: 'lang', firma: 'altra' },
+  u24_hoodie:    { name: 'U24 Hoodie', emoji: '💚', preis: 400, info: '❤️ Heilt 25% schneller', bonus: { heilen: 0.25 }, farbe: '#1f9d55', kapuze: true, tasche: '#ffd21f', aermel: 'lang', firma: 'u24' },
+  u24_arbeit:    { name: 'U24 Arbeitsjacke', emoji: '🦺', preis: 580, info: '🛡️ 12% weniger Schaden', bonus: { schutz: 0.12 }, farbe: '#ffd21f', streifen: '#1f9d55', jacke: true, aermel: 'lang', firma: 'u24' },
   held:     { name: 'Heldenkostüm',  emoji: '🦸', preis: 800, info: '🏃 +8% Laufen, ⬆️ +20% Springen – mit Umhang!', bonus: { tempo: 0.08, sprung: 0.2 }, farbe: '#3b6fd8', umhang: '#e63946', logo: true, aermel: 'lang' },
 };
 const SCHUHE = {
@@ -302,6 +334,9 @@ const SCHUHE = {
   flossen:    { name: 'Schwimmflossen', emoji: '🤿', preis: 220, info: '🌊 Abtauchen +18%, aber Laufen -5%', bonus: { tauchen: 0.18, tempo: -0.05 }, farbe: '#1fd6c8', akzent: '#ffffff', sohle: '#12857c' },
   cowboy:     { name: 'Cowboystiefel', emoji: '🤠', preis: 260, info: '🛡️ 5% weniger Schaden', bonus: { schutz: 0.05 }, farbe: '#8a5a2e' },
   leucht:     { name: 'Leucht-Sneaker', emoji: '💡', preis: 380, info: '🏃 Laufen +10%', bonus: { tempo: 0.1 }, farbe: '#1b1f3a', akzent: '#6fe3ff', sohle: '#6fe3ff', leucht: true },
+  zwecko_renner: { name: 'Zwecko Renner', emoji: '🔥', preis: 420, info: '🏃 Laufen +12%', bonus: { tempo: 0.12 }, farbe: '#ff5f1f', akzent: '#1b1b22', sohle: '#ffffff', firma: 'zwecko' },
+  altra_gleiter: { name: 'Altra Gleiter', emoji: '🛸', preis: 400, info: '🌊 Abtauchen +15%', bonus: { tauchen: 0.15 }, farbe: '#c9cfe6', akzent: '#3b6fd8', sohle: '#6fe3ff', leucht: true, firma: 'altra' },
+  u24_boots:     { name: 'U24 Boots', emoji: '🥾', preis: 380, info: '🟣 Gegnerfarbe stört 40% weniger, 🛡️ +4%', bonus: { feindfarbe: 0.4, schutz: 0.04 }, farbe: '#1f9d55', modell: 'stiefel', firma: 'u24' },
   raketen:    { name: 'Raketenschuhe', emoji: '🚀', preis: 700, info: '⬆️ 50% höher springen', bonus: { sprung: 0.5 }, farbe: '#c9cfe6', akzent: '#e63946', sohle: '#4a4f73' },
 };
 const KOEPFE = {
@@ -318,6 +353,9 @@ const KOEPFE = {
   propeller:  { name: 'Propellermütze', emoji: '🚁', preis: 220, info: '⬆️ 15% höher springen', bonus: { sprung: 0.15 } },
   zauberhut:  { name: 'Zauberhut',    emoji: '🧙', preis: 300,  info: '⚡ Ulti +10%', bonus: { ulti: 0.1 }, farbe: '#3d1fb3' },
   wikinger:   { name: 'Wikingerhelm', emoji: '⚔️', preis: 450,  info: '🛡️ 10% weniger Schaden', bonus: { schutz: 0.1 } },
+  zwecko_cap:  { name: 'Zwecko Cap', emoji: '🧢', preis: 260, info: '🏃 Laufen +4%, ⚡ Ulti +5%', bonus: { tempo: 0.04, ulti: 0.05 }, farbe: '#ff5f1f', modell: 'cap', firma: 'zwecko' },
+  altra_headset: { name: 'Altra Headset', emoji: '🎧', preis: 320, info: '💣 Bomben 18% billiger', bonus: { bombe: 0.18 }, farbe: '#3b6fd8', modell: 'kopfhoerer', firma: 'altra' },
+  u24_muetze:  { name: 'U24 Mütze', emoji: '🧶', preis: 240, info: '❤️ Heilt 15% schneller, 🛡️ +3%', bonus: { heilen: 0.15, schutz: 0.03 }, farbe: '#1f9d55', modell: 'muetze', firma: 'u24' },
   astronaut:  { name: 'Astronautenhelm', emoji: '👨‍🚀', preis: 900, info: '🛡️ 8% weniger Schaden, ⚡ Ulti +10%', bonus: { schutz: 0.08, ulti: 0.1 } },
 };
 const FRISUREN = { kurz: { name: 'Kurz', emoji: '💇' }, stachel: { name: 'Stacheln', emoji: '🦔' }, locken: { name: 'Locken', emoji: '🌀' } };
@@ -333,7 +371,16 @@ function bonusVon(an) {
   for (const [liste, id] of [[HEMDEN, an.hemd], [SCHUHE, an.schuhe], [KOEPFE, an.kopf]]) {
     if (hat(liste, id)) for (const k in liste[id].bonus) b[k] += liste[id].bonus[k];
   }
+  const f = firmenSet(an);
+  if (f) for (const k in FIRMEN[f].bonus) b[k] += FIRMEN[f].bonus[k];   // 3 Sachen von einer Firma = Firmen-Bonus
   return b;
+}
+function firmaVon(slot, id) { const l = SLOT_LISTE[slot]; return hat(l, id) ? l[id].firma || null : null; }
+function firmenSet(an) {   // welche Firma trägst du mindestens 3-mal? (Waffe, Hemd, Schuhe, Kopf)
+  const zahl = {};
+  for (const slot of ['waffe', 'hemd', 'schuhe', 'kopf']) { const f = firmaVon(slot, an[slot]); if (f) zahl[f] = (zahl[f] || 0) + 1; }
+  for (const f in zahl) if (zahl[f] >= 3) return f;
+  return null;
 }
 function bombeKosten(e) { return BOMBEN[e.bombe].kosten * (1 - e.bonus.bombe); }
 
@@ -1200,6 +1247,18 @@ const trikotNummer = (() => {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 
+// Firmen-Logo als kleines Bild (für Hemden, Waffen und Läden)
+const logoCache = {};
+function firmenLogo(f) {
+  if (logoCache[f]) return logoCache[f];
+  const F = FIRMEN[f], c = leinwand(128, 64), x = c.getContext('2d');
+  x.fillStyle = F.farbe; x.beginPath(); x.roundRect ? x.roundRect(2, 2, 124, 60, 14) : x.rect(2, 2, 124, 60); x.fill();
+  x.strokeStyle = F.farbe2; x.lineWidth = 5; x.stroke();
+  x.fillStyle = F.farbe2 === '#1b1b22' ? '#ffffff' : F.farbe2; x.font = 'bold 38px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(F.name.toUpperCase(), 64, 34);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return (logoCache[f] = tex);
+}
 function schuhBauen(g, id, haut) {
   const s = SCHUHE[id] || SCHUHE.turnschuhe;
   if (id === 'sandalen') {
@@ -1214,6 +1273,7 @@ function schuhBauen(g, id, haut) {
     return;
   }
   const sm = mat(s.farbe, { roughness: 0.6 });
+  if (s.modell === 'stiefel') { g.add(zylinder(sm, 3.1, 3.1, 6, 0, -3.4, 0), klotz(sm, 7, 3, 4.8, 1.3, -5.7, 0), kugel(sm, 2.4, 4.6, -5.7, 0, 1, 0.6, 1), klotz(MAT_GUMMI, 7.8, 0.9, 5, 1.3, -7, 0), ringY(mat(FIRMEN.u24.farbe2), 3.1, 0.5, 0, -0.6, 0)); return; }
   if (id === 'stiefel' || id === 'cowboy') {
     g.add(zylinder(sm, 3.1, 3.1, 6, 0, -3.4, 0), klotz(sm, 7, 3, 4.8, 1.3, -5.7, 0), kugel(sm, 2.4, 4.6, -5.7, 0, 1, 0.6, 1));
     g.add(klotz(MAT_GUMMI, 7.8, 0.9, 5, 1.3, -7, 0), ringY(MAT_WEISS, 3.1, 0.4, 0, -0.6, 0));
@@ -1256,6 +1316,7 @@ function haareBauen(kopf, frisur, haar) {
 function hutBauen(kopf, id) {
   const h = KOEPFE[id], dreh = [];
   if (!h || id === 'keine') return dreh;
+  id = h.modell || id;   // Firmen-Sachen benutzen ein vorhandenes Modell in ihrer Farbe
   if (id === 'cap') {
     const m = mat(h.farbe);
     const kuppel = new THREE.Mesh(new THREE.SphereGeometry(8.2, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), m); kuppel.position.y = 2; kopf.add(kuppel);
@@ -1270,7 +1331,7 @@ function hutBauen(kopf, id) {
     kopf.add(klotz(glas, 8, 0.5, 0.5, 3.5, 1.9, -7.3), klotz(glas, 8, 0.5, 0.5, 3.5, 1.9, 7.3));
   } else if (id === 'kopfhoerer') {
     const buegel = new THREE.Mesh(new THREE.TorusGeometry(8.4, 0.8, 6, 20, Math.PI), MAT_SCHWARZ); buegel.rotation.y = Math.PI / 2; kopf.add(buegel);
-    const pink = mat('#ff5fa2');
+    const pink = mat(h.farbe || '#ff5fa2');
     for (const z of [-8.4, 8.4]) kopf.add(zylinderZ(MAT_SCHWARZ, 3.2, 3.2, 2.2, 0, 0, z), zylinderZ(pink, 2.4, 2.4, 2.4, 0, 0, z));
   } else if (id === 'piratenhut') {
     const m = mat('#1b1b1f', { roughness: 0.8 });
@@ -1359,6 +1420,10 @@ function baueJunge(m, team, aussehen, an) {
       ober.add(kugel(mat(farben[i % 4]), 1.1, Math.cos(a) * 6.5, y, Math.sin(a) * 6.5));
     }
     for (const y of [4, 7, 10, 13]) ober.add(kugel(MAT_WEISS, 0.6, 6.7, y, 0));
+  }
+  if (hemd.firma) {   // Firmen-Logo vorne auf der Brust
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(5, 2.5), new THREE.MeshBasicMaterial({ map: firmenLogo(hemd.firma), transparent: true }));
+    logo.rotation.y = Math.PI / 2; logo.position.set(6.62, 11.2, -2.4); ober.add(logo);
   }
   if (hemd.kapuze) {
     ober.add(kugel(hemdM, 5.5, -5, 15.5, 0, 0.75, 0.8, 1.15), klotz(mat(hemd.tasche || '#1f7a6f'), 1, 4, 8, 6.5, 5, 0));
@@ -1497,6 +1562,27 @@ function baueWaffe(art, m, team, watzo = false) {
       g.add(klotz(MAT_GRAU, 3, 1.5, 1.5, 26, -1.3, 1.6), kugel(mat('#ff3b3b', { emissive: '#ff3b3b' }), 0.6, 27.6, -1.3, 1.6));
       break;
     }
+    case 'ling': {
+      // Klecksling: eine Farb-Minigun mit 6 drehenden Läufen und dickem Tank
+      g.add(klotz(m, 12, 7, 7, 3, 0, 0), klotz(MAT_GRAU, 12.4, 1.2, 7.4, 3, -3, 0));
+      const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 0.5, -5.5, 0); griff.rotation.z = 0.25; g.add(griff);
+      abzugBauen(g, 4.5);
+      g.add(klotz(MAT_GUMMI, 2.5, 2.5, 9, 6, 6, 0), zylinderZ(MAT_METALL, 0.5, 0.5, 9, 6, 7.2, 0));     // Tragegriff oben
+      // runder Glastank an der Seite
+      g.add(zylinderX(glasRohrMat, 3.6, 3.6, 9, 1, 0, -6.5), ringX(MAT_METALL, 3.6, 0.6, -3.5, 0, -6.5), ringX(MAT_METALL, 3.6, 0.6, 5.5, 0, -6.5));
+      const tank = new THREE.Group(); tank.position.set(-3.2, 0, -6.5); g.add(tank); ud.tinteFuell = tank;
+      tank.add(zylinderX(tinte, 3, 3, 8.4, 4.2, 0, 0));
+      g.add(zylinderZ(MAT_METALL, 0.7, 0.7, 4, 3, -2, -3.5));
+      // Lade-Ring: leuchtet beim Aufladen immer heller
+      ud.ladeMat = tintenMaterial(team, 0.2);
+      g.add(ringX(ud.ladeMat, 4.2, 0.9, 9.7, 0.5, 0));
+      // Die Trommel mit 6 Läufen
+      const trommel = new THREE.Group(); trommel.position.set(10, 0.5, 0); g.add(trommel); ud.trommel = trommel;
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; trommel.add(zylinderX(MAT_METALL, 0.85, 0.85, 19, 10, Math.cos(a) * 2.5, Math.sin(a) * 2.5)); }
+      trommel.add(zylinderX(MAT_GRAU, 1.2, 1.2, 19, 10, 0, 0), ringX(MAT_GRAU, 3.4, 0.6, 2, 0, 0), ringX(MAT_GRAU, 3.4, 0.6, 11, 0, 0), ringX(m, 3.5, 0.8, 19, 0, 0));
+      ud.blitz = kugel(blitzMat, 3.2, 21.5, 0.5, 0); g.add(ud.blitz);
+      break;
+    }
     case 'roller': {
       // Stiel geht von den Händen schräg nach unten zur Walze
       const ende = { x: 14, y: -10 }, len = Math.hypot(ende.x, ende.y);
@@ -1562,6 +1648,15 @@ function baueWaffe(art, m, team, watzo = false) {
   if (mod && mod.walzeBreite && ud.walze) { ud.walze.scale.z = mod.walzeBreite; g.add(zylinderZ(MAT_METALL, 0.9, 0.9, 28 * mod.walzeBreite + 3, 14, -10, 0)); }
   if (mod && mod.ganz) g.scale.setScalar(mod.ganz);
   if (art === 'blubber' && ud.schwing) for (const [x, y, z, r] of [[2, -4, 2, 2], [-3, -2, -1, 1.5], [1, 0.5, -2, 1], [4, -6.5, -3, 1.6], [-1, 3, 1, 0.8]]) ud.schwing.add(kugel(glasRohrMat, r, x, y, z));   // Blasen quellen aus dem Eimer
+  const firma = WAFFEN[art] && WAFFEN[art].firma;
+  if (firma && art !== 'doppel') {   // Firmen-Band am Griff + kleines Logo
+    g.add(ringX(mat(FIRMEN[firma].farbe), 2.4, 0.55, -1.5, 0.5, 0));
+    const ty = typVon(art);
+    if (!['roller', 'pinsel', 'eimer'].includes(ty)) {
+      const logo = new THREE.Mesh(new THREE.PlaneGeometry(4, 2), new THREE.MeshBasicMaterial({ map: firmenLogo(firma), transparent: true, side: THREE.DoubleSide }));
+      logo.position.set(ty === 'ling' ? 2 : 4, 1.2, ty === 'ling' ? 3.6 : ty === 'kanone' ? 3.1 : ty === 'sniper' ? 2.3 : 2.8); g.add(logo);
+    }
+  }
   if (watzo && art !== 'doppel') g.add(kugel(MAT_GOLD, 1.6, 4, 3, 3.4), kugel(MAT_GOLD, 1.6, 4, 3, -3.4), ringX(MAT_GOLD, 1.2, 0.35, 4, 3, 3.6));   // goldene Watzo-Sterne
   return g;
 }
@@ -1577,6 +1672,7 @@ function animiereWaffe(ud, e, dt, vf) {
   if (ud.blitz) { ud.blitz.visible = e.rueck > 0.55; ud.blitz.scale.setScalar(1.6 + e.rueck * 1.4); }
   if (ud.ladeMat) ud.ladeMat.emissiveIntensity = 0.15 + e.ladung * 2.2 * (e.ladung >= 1 ? 0.75 + Math.sin(zeit * 30) * 0.25 : 1);
   if (ud.spulen) ud.spulen.rotation.x += dt * (0.5 + e.ladung * 25);
+  if (ud.trommel) ud.trommel.rotation.x += dt * (e.lingT > 0 || e.rueck > 0.3 ? 40 : e.laden ? 3 + e.ladung * 30 : 0.8);   // Läufe drehen sich
   if (ud.schwing) ud.schwing.rotation.z = e.rueck * 0.8;
   if (ud.walze) ud.walze.rotation.z -= vf * dt / 6;
   if (ud.pinselKopf) ud.pinselKopf.rotation.z += ((e.rollt ? -0.35 : 0) - ud.pinselKopf.rotation.z) * Math.min(1, dt * 12);   // Borsten ziehen nach hinten
@@ -2236,7 +2332,7 @@ function gastUpdate(dt) {
   else { p.schiesst = false; if (!p.tot) bewege(p, 0, 0, dt); }
   const w = WAFFEN[p.waffe];
   mp.schussT -= dt;
-  if (p.schiesst && !p.taucht && w.speed && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
+  if (p.schiesst && !p.taucht && w.speed && !w.typ && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
   if (p.schiesst && p.tinte < 2) leerHinweis = 1.5;
   // Die anderen gleiten weich zu ihrer Position
   const k = Math.min(1, dt * 12);
@@ -2651,7 +2747,8 @@ function bewege(e, dx, dy, dt) {
   e.boostCd = Math.max(0, (e.boostCd || 0) - dt);
   const feind = tauchenPruefen(e), amBoden = e.z <= 0;
   let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
-  if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : 0.8;
+  if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : typVon(e.waffe) === 'ling' ? 0.6 : 0.8;
+  if (e.lingT > 0 && !e.taucht) speed *= 0.75;   // Klecksling feuert: langsamer laufen
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
@@ -2785,6 +2882,31 @@ function schiessen(e, dt) {
     return;
   }
 
+  if (typVon(e.waffe) === 'ling') {   // Klecksling: aufladen, dann Dauerfeuer
+    if (e.lingT > 0) {
+      e.lingT -= dt; e.laden = false; e.ladung = 0;
+      if (e.taucht) { e.lingT = 0; return; }
+      if (e.schussCd <= 0) {
+        if (e.tinte < w.kosten) { e.lingT = 0; if (e.spieler) leerHinweis = 1.5; return; }
+        e.schussCd = w.cd; e.tinte -= w.kosten * (1 - e.bonus.tinte); e.rueck = 0.7;
+        tropfenSchiessen(e, w);
+        if (e.spieler) ton('schuss', 0.6);
+        else { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 350) ton('schuss', 0.4 * (1 - d / 350)); }
+      }
+      return;
+    }
+    if (e.schiesst && !e.taucht && e.tinte >= 5) {
+      e.laden = true; const vorher = e.ladung; e.ladung = Math.min(1, e.ladung + dt / w.ladezeit);
+      if (e.spieler && vorher < 1 && e.ladung >= 1) ton('ding');
+      if (e.spieler && Math.random() < dt * 12) ton('klick', 0.3 + e.ladung * 0.4);   // surrt beim Aufladen
+    } else if (e.laden) {
+      e.laden = false;
+      if (e.ladung > 0.1 && !e.taucht) { e.lingT = e.ladung * w.feuerzeit; e.schussCd = 0; }
+      e.ladung = 0;
+    } else if (e.schiesst && e.tinte < 5 && e.spieler) leerHinweis = 1.5;
+    return;
+  }
+
   if (w.nah) {   // Farbroller und Riesenpinsel
     const n = w.nah;
     const neuGedrueckt = e.schiesst && !e.vorherSchiesst;
@@ -2829,6 +2951,12 @@ function schiessen(e, dt) {
   if (!e.schiesst || e.taucht || e.schussCd > 0) return;
   if (e.tinte < w.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
   e.schussCd = w.cd; e.tinte -= w.kosten * (1 - e.bonus.tinte); e.rueck = 1;
+  tropfenSchiessen(e, w);
+  if (e.spieler) ton('schuss');
+  else { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 350) ton('schuss', 0.6 * (1 - d / 350)); }
+}
+// Farbtropfen aus der Waffe abfeuern (Spritzer, Eimer, Kanone, Klecksling …)
+function tropfenSchiessen(e, w) {
   let vx0 = 0, vy0 = 0;
   if (w.doppel) { e.doppelSeite = -(e.doppelSeite || 1); vx0 = Math.cos(e.winkel + Math.PI / 2) * 6 * e.doppelSeite; vy0 = Math.sin(e.winkel + Math.PI / 2) * 6 * e.doppelSeite; }
   for (let i = 0; i < w.anzahl; i++) {
@@ -2843,8 +2971,6 @@ function schiessen(e, dt) {
     s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
     schuesse.push(s);
   }
-  if (e.spieler) ton('schuss');
-  else { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 350) ton('schuss', 0.6 * (1 - d / 350)); }
 }
 
 // Megalaser: ein langer Strahl, der malt und trifft (stoppt an Wänden)
@@ -3202,7 +3328,7 @@ function treffen(e, schaden, wer) {
 }
 
 function erwischt(e, wer) {
-  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0; e.panzerT = 0; e.gigaT = 0; e.trifT = 0; e.dashT = 0;
+  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0; e.panzerT = 0; e.gigaT = 0; e.trifT = 0; e.dashT = 0;
   const farbe = wer ? wer.team : 1 - e.team;
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
@@ -3255,7 +3381,9 @@ function botKlettern(b, dx, dy, dt) {
   }
   b.winkel = drehe(b.winkel, zuWand, dt * 8);
   b.pitch = -0.25 + ((zeit * 0.6 + b.nr * 0.37) % 1) * 1.0;      // mal tief, mal hoch – damit die ganze Wand Farbe abbekommt
-  if (WAFFEN[b.waffe].nah) { k.tap = !k.tap; b.schiesst = k.tap; } else b.schiesst = b.tinte > 3;
+  if (WAFFEN[b.waffe].nah) { k.tap = !k.tap; b.schiesst = k.tap; }
+  else if (typVon(b.waffe) === 'ling') b.schiesst = b.tinte > 3 && !(b.laden && b.ladung > 0.8);
+  else b.schiesst = b.tinte > 3;
   if (b.tinte < 5) { k.kletterT = 0; return false; }
   const vor = abstand > 65 ? 1 : abstand < 35 ? -1 : 0;           // gut 50 weg von der Wand stehen
   bewege(b, sd.ix * vor, sd.iy * vor, dt);
@@ -3341,6 +3469,8 @@ function ki(b, dt) {
     else if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
     else if (typVon(b.waffe) === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
+    } else if (typVon(b.waffe) === 'ling') {
+      b.schiesst = fd < w.reichweite * 1.15 && !(b.laden && b.ladung >= 0.7 + (b.nr % 2) * 0.3);   // aufladen, dann loslassen
     } else if (w.nah) {
       if (fd < 70) b.schiesst = true;                                   // drüberrollen / schieben
       else if (fd < w.reichweite + 50 && gutGezielt) { k.tap = !k.tap; b.schiesst = k.tap; }   // schwingen
@@ -3372,6 +3502,8 @@ function ki(b, dt) {
       b.pitch = botPitch(b, 120, bodenHoehe(b.x, b.y));
       if (typVon(b.waffe) === 'sniper') {
         b.schiesst = !(b.laden && b.ladung > 0.35);
+      } else if (typVon(b.waffe) === 'ling') {
+        b.schiesst = !(b.laden && b.ladung > 0.6);
       } else b.schiesst = true;
     }
     if (!k.tanken && b.bombeCd <= 0 && b.tinte > 90 && Math.random() < dt * 0.15) {
@@ -4052,7 +4184,12 @@ function hud() {
     ctx.beginPath(); ctx.arc(x, y, 10, 0, 7);
     ctx.moveTo(x - 16, y); ctx.lineTo(x - 5, y); ctx.moveTo(x + 5, y); ctx.lineTo(x + 16, y);
     ctx.moveTo(x, y - 16); ctx.lineTo(x, y - 5); ctx.moveTo(x, y + 5); ctx.lineTo(x, y + 16); ctx.stroke();
-    if (spieler.laden) {   // Sniper lädt auf
+    if (spieler.lingT > 0) {   // Klecksling feuert: wie lange noch?
+      const w = WAFFEN[spieler.waffe];
+      ctx.strokeStyle = TEAMS[spieler.team].col; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(x, y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, spieler.lingT / w.feuerzeit)); ctx.stroke();
+    }
+    if (spieler.laden) {   // Sniper / Klecksling lädt auf
       ctx.strokeStyle = spieler.ladung >= 1 ? '#ffd166' : '#fff'; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(x, y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * spieler.ladung); ctx.stroke();
     }
