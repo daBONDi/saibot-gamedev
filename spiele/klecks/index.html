@@ -630,7 +630,7 @@ function istWand(x, y) { return besitzer(x, y) === 255; }
 // Bilder für den Boden
 function leinwand(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 const bodenCv = leinwand(W, H), farbCv = leinwand(W, H), wandCv = leinwand(W, H);
-const BODEN_SKALA = 0.75;                                   // Boden-Textur etwas kleiner = schneller
+const BODEN_SKALA = 0.55;                                   // Boden-Textur kleiner = schneller (die Arenen sind groß geworden!)
 const bodenTexCv = leinwand(W * BODEN_SKALA, H * BODEN_SKALA);
 const fctx = farbCv.getContext('2d');
 let farbeGeaendert = true;
@@ -3978,9 +3978,9 @@ let sturmVorher = false, zoomStufe = 0;
 function fovSetzen(f) { if (Math.abs(kamera.fov - f) > 0.05) { kamera.fov = f; kamera.updateProjectionMatrix(); } }
 function welt3D(dt) {
   bildZaehler++;
-  if (farbeGeaendert && bildZaehler % 2 === 0) { bodenAktualisieren(); farbeGeaendert = false; }
+  if (farbeGeaendert && bildZaehler % 3 === 0) { bodenAktualisieren(); farbeGeaendert = false; }   // nur jedes 3. Bild – spart viel Arbeit für die Grafikkarte
   for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
-  for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
+  if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
   if (kartenGruppe[karte]) for (const o of kartenGruppe[karte].children) {
