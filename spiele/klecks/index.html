@@ -2178,7 +2178,7 @@ function mpSchnappschussSenden() {
   const s = {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
       r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0]),
     s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.art === 'tracker' ? 'tracker' : o.ulti ? 'rakete' : o.art)]),
@@ -2250,7 +2250,7 @@ function mpSchnappschuss(d) {
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, trifRest: trifRest || 0,
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0,
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
@@ -2358,7 +2358,7 @@ function gastUpdate(dt) {
   }
   for (const wo of wolken) wo.t -= dt;
   for (const b of blasen) blaseZeigen(b);
-  for (const e of kleckse) { if (e.panzerT > 0) e.panzerT -= dt; if (e.gigaT > 0) e.gigaT -= dt; if (e.trifT > 0) e.trifT -= dt; }
+  for (const e of kleckse) { if (e.lingT > 0) e.lingT -= dt; if (e.panzerT > 0) e.panzerT -= dt; if (e.gigaT > 0) e.gigaT -= dt; if (e.trifT > 0) e.trifT -= dt; }
   for (let i = strahlen.length - 1; i >= 0; i--) {
     const s = strahlen[i]; s.t -= dt; s.mesh.material.opacity = Math.max(0, s.t * 4);
     if (s.t <= 0) { scene.remove(s.mesh); strahlen.splice(i, 1); }
@@ -4436,21 +4436,27 @@ const SHOPS = {
 };
 let shopTab = 'waffe';
 function preisVon(slot, id) { return SHOPS[slot].liste[id].preis; }
-let shopVonStadt = false;
+let shopVonStadt = false, shopFirma = null;   // shopFirma: in einem Firmen-Laden (Zwecko, Altra, U24)
 function shopZeigen() {
   zustand = 'menu';
   nurZeigen('shop');
   $('shopTabs').classList.toggle('hidden', shopVonStadt);   // in der Stadt ist jeder Laden ein eigenes Geschäft
-  $('shopTitel').textContent = shopVonStadt ? `${SHOPS[shopTab].emoji} ${SHOPS[shopTab].name}-Laden` : '🛒 SHOPS';
+  const F = shopFirma && FIRMEN[shopFirma];
+  $('shopTitel').textContent = F ? `${F.emoji} ${F.name}-Store` : shopVonStadt ? `${SHOPS[shopTab].emoji} ${SHOPS[shopTab].name}-Laden` : '🛒 SHOPS';
   $('shopMuenzen').textContent = konto.muenzen;
   const tabs = $('shopTabs'); tabs.innerHTML = '';
   for (const [slot, sh] of Object.entries(SHOPS)) {
     tabs.append(knopf([`${sh.emoji} ${sh.name}`], () => { shopTab = slot; anprobe = null; ton('klick'); shopZeigen(); }, shopTab === slot ? 'an' : ''));
   }
-  $('shopInfo').textContent = SHOPS[shopTab].gruss + ' Klick auf ein Teil zum Anprobieren.';
+  const setF = firmenSet(konto.an);
+  $('shopInfo').textContent = (F ? `Willkommen bei ${F.name} – ${F.stil}! Trag 3 Sachen von ${F.name} (Waffe, Hemd, Schuhe oder Kopf) und du bekommst den Firmen-Bonus: ${F.bonusText}.`
+    : SHOPS[shopTab].gruss) + ' Klick auf ein Teil zum Anprobieren.' + (setF ? ` ✨ Du hast gerade den ${FIRMEN[setF].name}-Bonus!` : '');
   const box = $('shopItems'); box.innerHTML = '';
-  for (const [id, it] of Object.entries(SHOPS[shopTab].liste)) {
-    const preis = preisVon(shopTab, id), besitzt = konto.besitz[shopTab].includes(id), traegt = konto.an[shopTab] === id;
+  // Im Firmen-Laden: alles von dieser Firma (Waffen und Kleidung) – sonst nur die Sachen von diesem Laden
+  const eintraege = F ? Object.keys(SHOPS).flatMap(slot => Object.entries(SHOPS[slot].liste).filter(([, it]) => it.firma === shopFirma).map(([id, it]) => [slot, id, it]))
+                      : Object.entries(SHOPS[shopTab].liste).map(([id, it]) => [shopTab, id, it]);
+  for (const [slot, id, it] of eintraege) {
+    const preis = preisVon(slot, id), besitzt = konto.besitz[slot].includes(id), traegt = konto.an[slot] === id;
     const karte = document.createElement('div');
     karte.className = 'item' + (traegt ? ' an' : '') + (anprobe && anprobe.id === id ? ' vorschau' : '');
     const em = document.createElement('span'); em.className = 'em'; em.textContent = it.emoji;
@@ -4458,24 +4464,29 @@ function shopZeigen() {
     const info = document.createElement('small');
     info.textContent = it.info;
     karte.append(em, nm, info);
+    if (it.firma) {   // Firmen-Schild
+      const fs = document.createElement('div'), FF = FIRMEN[it.firma];
+      fs.textContent = `${FF.emoji} ${FF.name}`; fs.style.cssText = `background:${FF.farbe};color:${FF.farbe2 === '#1b1b22' ? '#fff' : FF.farbe2};border-radius:8px;padding:1px 8px;font-size:12px;font-weight:bold;align-self:center`;
+      karte.append(fs);
+    }
     if (traegt) {
-      const t = document.createElement('div'); t.textContent = shopTab === 'waffe' ? '✔ In der Hand' : '✔ Angezogen'; t.style.color = '#5be37d'; karte.append(t);
+      const t = document.createElement('div'); t.textContent = slot === 'waffe' ? '✔ In der Hand' : '✔ Angezogen'; t.style.color = '#5be37d'; karte.append(t);
     } else if (besitzt) {
-      karte.append(knopf([shopTab === 'waffe' ? '✋ Nehmen' : '👕 Anziehen'], ev => {
-        ev.stopPropagation(); konto.an[shopTab] = id; anprobe = null; speichern(); ton('klick'); shopZeigen(); vorschauBauen();
+      karte.append(knopf([slot === 'waffe' ? '✋ Nehmen' : '👕 Anziehen'], ev => {
+        ev.stopPropagation(); konto.an[slot] = id; anprobe = null; speichern(); ton('klick'); shopZeigen(); vorschauBauen();
       }));
     } else {
       const pr = document.createElement('div'); pr.className = 'preis'; pr.textContent = `🪙 ${preis}`; karte.append(pr);
       const kauf = knopf(['Kaufen'], ev => {
         ev.stopPropagation();
         if (konto.muenzen < preis) { ton('nein'); return; }
-        konto.muenzen -= preis; konto.besitz[shopTab].push(id); konto.an[shopTab] = id; anprobe = null;
+        konto.muenzen -= preis; konto.besitz[slot].push(id); konto.an[slot] = id; anprobe = null;
         speichern(); ton('kauf'); shopZeigen(); vorschauBauen();
       });
       if (konto.muenzen < preis) { kauf.disabled = true; kauf.textContent = `Noch ${preis - konto.muenzen} 🪙`; }
       karte.append(kauf);
     }
-    karte.onclick = () => { anprobe = { slot: shopTab, id }; ton('klick'); shopZeigen(); vorschauBauen(); };   // Anprobieren
+    karte.onclick = () => { anprobe = { slot, id }; ton('klick'); shopZeigen(); vorschauBauen(); };   // Anprobieren
     box.append(karte);
   }
 }
@@ -4564,6 +4575,27 @@ function sKlotz(m, w, h, d, x, y, z, hindernis) {   // Klotz in der Stadt (x/z =
     }
     const sch = schild(`${l.emoji} ${l.name}`, 'Laden', l.farbe, 170, 42); sch.position.set(l.x, 108, z + 61.5); stadtGruppe.add(sch);
     STADT_ZIELE.push({ slot: l.slot, x: l.x, y: z + 85, r: 55, text: `${l.emoji} ${l.name}-Laden betreten` });
+  }
+
+  // Die 3 Firmen-Läden: Zwecko, Altra und U24 (Waffen UND Kleidung)
+  for (const l of [{ firma: 'zwecko', x: -560, z: 0, dreh: Math.PI / 2 }, { firma: 'altra', x: 560, z: 0, dreh: -Math.PI / 2 }, { firma: 'u24', x: -430, z: 395, dreh: Math.PI }]) {
+    const F = FIRMEN[l.firma], g = new THREE.Group(); g.position.set(l.x, 0, l.z); g.rotation.y = l.dreh; stadtGruppe.add(g);
+    const f1 = mat(F.farbe, { roughness: 0.6 }), f2 = mat(F.farbe2, { roughness: 0.6 });
+    const glas = mat('#9fd8ff', { roughness: 0.05, metalness: 0.4, transparent: true, opacity: 0.85 });
+    g.add(klotz(mat('#2b2f3a', { roughness: 0.8 }), 160, 110, 100, 0, 55, 0));                 // Gebäude (modern & dunkel)
+    g.add(klotz(f1, 166, 8, 106, 0, 114, 0), klotz(f1, 4, 110, 4, -80, 55, 50), klotz(f1, 4, 110, 4, 80, 55, 50));   // Firmenfarbe als Rahmen
+    g.add(klotz(glas, 140, 50, 2, 0, 40, 50.5));                                                // riesiges Schaufenster
+    g.add(klotz(mat('#1b1b22'), 40, 60, 3, 0, 30, 51.5), klotz(f2, 42, 3, 3.5, 0, 61.5, 51.5));  // Tür
+    g.add(klotz(mat(F.farbe, { emissive: F.farbe, emissiveIntensity: 0.8 }), 150, 3, 3, 0, 72, 51));   // Leuchtstreifen
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(110, 55), new THREE.MeshBasicMaterial({ map: firmenLogo(l.firma) }));
+    logo.position.set(0, 92, 51.2); g.add(logo);
+    const sch = schild(`${F.emoji} ${F.name}`, 'Waffen & Kleidung', F.farbe, 120, 30); sch.position.set(0, 128, 0); sch.rotation.y = 0; g.add(sch);
+    const sch2 = sch.clone(); sch2.rotation.y = Math.PI; g.add(sch2);
+    // Kleiderständer im Schaufenster
+    for (const sx of [-45, 45]) g.add(zylinder(MAT_METALL, 0.8, 0.8, 34, sx, 17, 40), kugel(sx < 0 ? f1 : f2, 9, sx, 30, 40, 1, 1.3, 0.6));
+    const quer = Math.abs(Math.sin(l.dreh)) > 0.5;
+    stadtHindernisse.push(quer ? { x: l.x - 52, y: l.z - 82, w: 104, h: 164 } : { x: l.x - 82, y: l.z - 52, w: 164, h: 104 });
+    STADT_ZIELE.push({ firma: l.firma, x: l.x + Math.sin(l.dreh) * 78, y: l.z + Math.cos(l.dreh) * 78, r: 50, text: `${F.emoji} ${F.name}-Store betreten` });
   }
 
   // Die Arena
@@ -4673,7 +4705,7 @@ function stadtBetreten() {
   nurZeigen(null); anprobe = null;
   stadtFigurBauen();
   if (!shopVonStadt) { stadtSp.x = 0; stadtSp.y = 150; stadtSp.winkel = -Math.PI / 2; }
-  shopVonStadt = false;
+  shopVonStadt = false; shopFirma = null;
   stadtSp.vx = stadtSp.vy = stadtSp.vz = stadtSp.z = 0;
   zustand = 'stadt';
   sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA);
@@ -4689,7 +4721,7 @@ function stadtBetretenTaste() {
     nurZeigen('arenaWahl'); $('mpStatus').textContent = mp.status.startsWith('❌') ? mp.status : '';
     return;
   }
-  zustand = 'menu'; shopVonStadt = true; shopTab = stadtZiel.slot; anprobe = null;
+  zustand = 'menu'; shopVonStadt = true; shopFirma = stadtZiel.firma || null; shopTab = stadtZiel.slot || 'waffe'; anprobe = null;
   if (document.pointerLockElement) document.exitPointerLock();
   shopZeigen(); vorschauBauen();
 }
