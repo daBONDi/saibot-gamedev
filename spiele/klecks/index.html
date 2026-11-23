@@ -935,7 +935,7 @@ const basisRingMat = TEAMS.map(t => new THREE.MeshBasicMaterial({ color: t.dunke
 for (const id in ARENEN) for (let t = 0; t < 2; t++) {
   const rg = new THREE.RingGeometry(94, 104, 48); rg.rotateX(-Math.PI / 2);
   const ring = new THREE.Mesh(rg, basisRingMat[t]);
-  ring.position.set(BASIS[t].x, 0.6, BASIS[t].y); kartenGruppe[id].add(ring);
+  ring.position.set(BASIS[t].x, 40.6, BASIS[t].y); kartenGruppe[id].add(ring);   // auf der erhöhten Startplattform
 }
 // Lobby: großes Schild an der Wand
 (function lobbySchild() {
@@ -959,6 +959,7 @@ function karteLaden(name) {
   WAND_H = ARENEN[name] ? ARENEN[name].wandH : 80;
   bodenMalen(th); himmelSetzen(th);
   sonneAuf(W / 2, H / 2);
+  stufenZuruecksetzen(name);   // Kletterwände wieder sauber
 }
 function himmelSetzen(th) {
   scene.background.set(th.himmel); scene.fog.color.set(th.himmel); draussen.material.color.set(th.draussen);
@@ -1106,6 +1107,53 @@ const lavaBild = (() => {   // ein Bild von brodelnder Lava (wird wiederholt)
       g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: t })).translateX(z.x + z.w / 2).translateY(1.4).translateZ(z.y + z.h / 2));
       for (const [x0, y0, w0, h0] of [[z.x, z.y, z.w, 4], [z.x, z.y + z.h - 4, z.w, 4], [z.x, z.y, 4, z.h], [z.x + z.w - 4, z.y, 4, z.h]])   // dunkler Steinrand
         g.add(klotz(fels, w0 + 4, 5, h0 + 4, x0 + w0 / 2, 2.5, y0 + h0 / 2));
+    }
+  }
+})();
+// ---------- Podeste & Rampen in 3D ----------
+// Oben drauf liegt dasselbe Farbbild wie auf dem Boden – so sieht man die Farbe auch auf den Podesten.
+function viereck(punkte, uvs, m) {   // punkte: 4 × [x, höhe, y]
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(punkte.flat(), 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.flat(), 2));
+  geo.setIndex([0, 1, 2, 0, 2, 3]); geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, m); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+}
+function kletterGrund(F, s, farbe) {   // leere Kletterwand: Grundfarbe mit Kletter-Muster
+  const x = F.cv.getContext('2d'), w = F.cv.width, h = F.cv.height;
+  x.fillStyle = farbe; x.fillRect(0, 0, w, h);
+  x.fillStyle = 'rgba(255,255,255,0.13)';
+  for (let yy = 6; yy < h; yy += 24) for (let xx = ((yy / 24) % 2) * 12 + 6; xx < w; xx += 24) x.fillRect(xx, yy, 8, 8);
+  x.fillStyle = 'rgba(0,0,0,0.25)'; x.fillRect(0, 0, w, 4);   // Kante oben
+  F.raster.fill(0); F.neu = true;
+}
+function stufenZuruecksetzen(id) {
+  const a = ARENEN[id]; if (!a) return;
+  for (const s of a.stufen) if (s.flaechen) for (const F of s.flaechen) if (F.cv) kletterGrund(F, s, a.thema.wand);
+}
+(function stufenBauen() {
+  const oben = new THREE.MeshStandardMaterial({ map: bodenTex, roughness: 0.6, side: THREE.DoubleSide });
+  for (const [id, a] of Object.entries(ARENEN)) {
+    const g = kartenGruppe[id];
+    const rampenSeite = mat(a.thema.wand, { roughness: 0.8, side: THREE.DoubleSide });
+    for (const s of a.stufen) {
+      const ecken = [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]];
+      g.add(viereck(ecken.map(([x, y]) => [x, stufeHoehe(s, x, y) + 0.2, y]), ecken.map(([x, y]) => [x / W, 1 - y / H]), oben));
+      for (let f = 0; f < 4; f++) {
+        const sd = seite(s, f), x1 = sd.ox, y1 = sd.oy, x2 = sd.ox + sd.dx * sd.len, y2 = sd.oy + sd.dy * sd.len;
+        const h1 = stufeHoehe(s, x1, y1), h2 = stufeHoehe(s, x2, y2);
+        if (Math.max(h1, h2) < 0.5) continue;                                     // flaches Ende einer Rampe
+        if (s.rampe && s.rampe === ['n', 'o', 's', 'w'][f]) continue;              // hohe Seite der Rampe liegt am Podest
+        let m = rampenSeite;
+        if (s.flaechen) {
+          const F = s.flaechen[f];
+          F.cv = leinwand(Math.max(2, Math.ceil(F.len * WAND_PX)), Math.max(2, Math.ceil(s.hoehe * WAND_PX)));
+          kletterGrund(F, s, a.thema.wand);
+          F.tex = new THREE.CanvasTexture(F.cv); F.tex.colorSpace = THREE.SRGBColorSpace;
+          m = new THREE.MeshStandardMaterial({ map: F.tex, roughness: 0.7, side: THREE.DoubleSide });
+        }
+        g.add(viereck([[x1, 0, y1], [x2, 0, y2], [x2, h2, y2], [x1, h1, y1]], [[0, 0], [1, 0], [1, 1], [0, 1]], m));
+      }
     }
   }
 })();
@@ -2140,6 +2188,9 @@ function mpEreignisAusfuehren(ev) {
     spritzer(ev.x, ev.y, 5, ev.team ? 1 : 0, 20, 300);
     const d = Math.hypot(spieler.x - ev.x, spieler.y - ev.y);
     if (d < 500) ton('platsch', Math.min(1, (ev.r || 60) / 60) * (1 - d / 600));
+  } else if (ev.k === 'wk' && Array.isArray(ev.a)) {     // Farbe an einer Kletterwand
+    const s = stufenListe()[ev.a[0] | 0], f = ev.a[1] | 0;
+    if (s && f >= 0 && f < 4) wandMalen(s, f, zahl(ev.a[2], -50, 400, 0), zahl(ev.a[3], -50, 200, 0), zahl(ev.a[4], 0, 80, 0), ev.a[5] ? 1 : 0);
   } else if (ev.k === 'lava' && Array.isArray(ev.a)) {   // Vulkan-Ausbruch: Farbbrocken anzeigen
     for (let i = 0; i + 3 < ev.a.length && i < 200; i += 4) {
       const x = +ev.a[i], y = +ev.a[i + 1], d = +ev.a[i + 3] / 100;
@@ -2515,6 +2566,7 @@ function sicht(x1, y1, x2, y2) {
 function winkelDiff(a, b) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
 function drehe(a, ziel, max) { const d = winkelDiff(a, ziel); return a + Math.max(-max, Math.min(max, d)); }
 function spritzer(x, y, h, team, anzahl, kraft = 150) {
+  if (h < 40) h = Math.max(h, bodenHoehe(x, y) + 2);   // auf einem Podest spritzt es von oben
   for (let i = 0; i < anzahl; i++) {
     const a = Math.random() * 7, v = kraft * (0.3 + Math.random());
     partikel.push({ x, y, h: Math.max(2, h), vx: Math.cos(a) * v, vy: Math.sin(a) * v, vh: 80 + Math.random() * kraft,
@@ -2976,6 +3028,16 @@ function geraetSetzen(art, x, y, team, wer, winkel, mesh) {
   mesh.position.set(x, bodenHoehe(x, y) + (art === 'klebe' ? 6 : 0), y); mesh.rotation.set(0, -winkel, 0); scene.add(mesh);
   geraete.push({ art, x, y, team, wer, winkel, mesh, t: 0, spT: 0, dreh: 0, zuend: -1, treffer: 0 });
 }
+// Ein Tropfen klatscht seitlich an ein Podest: die Kletterwand an dieser Stelle anmalen
+function seiteTreffen(px, py, x, y, h, r, team) {
+  for (const s of stufenListe()) {
+    if (x < s.x || x > s.x + s.w || y < s.y || y > s.y + s.h) continue;
+    if (s.rampe) return;
+    const f = seiteVon(s, px, py); if (f < 0) return;
+    wandMalen(s, f, seiteU(s, f, px, py), Math.min(h, s.hoehe), r, team, true);
+    return;
+  }
+}
 // Steht hier eine Farbwand vom anderen Team im Weg?
 function feindWand(x, y, h, team) {
   if (h > 48) return null;
@@ -3297,7 +3359,7 @@ function steuerung(p, dt) {
   // Bombe: E halten = zielen, loslassen = werfen
   const z = bombenZiel(p);
   zielRing.visible = !!tasten.KeyE && BOMBEN[p.bombe].wurf && p.tinte >= bombeKosten(p) && !p.taucht;
-  zielRing.position.x = z.x; zielRing.position.z = z.y;
+  zielRing.position.x = z.x; zielRing.position.z = z.y; zielRing.position.y = bodenHoehe(z.x, z.y) + 1;
   if (bombeLos) {
     if (!istGast()) bombeWerfen(p, z.x, z.y);
     else if (p.tinte >= bombeKosten(p) && !p.taucht) { mp.bitte.b = [r0(z.x), r0(z.y)]; ton('wurf'); }   // Gastgeber wirft für uns
@@ -3365,12 +3427,18 @@ function update(dt) {
     let weg = false;
     const brems = Math.exp(-w.bremse * dt / 3);
     for (let k = 0; k < 3 && !weg; k++) {
+      const px = s.x, py = s.y, ph = s.h;
       s.vx *= brems; s.vy *= brems; s.vz -= G_SCHUSS * dt / 3;
       s.x += s.vx * dt / 3; s.y += s.vy * dt / 3; s.h += s.vz * dt / 3;
-      if (s.h <= 0) {
+      const bh = bodenHoehe(s.x, s.y);
+      if (s.h <= bh && bh > bodenHoehe(px, py) + STUFE_MAX && ph < bh) {   // seitlich gegen ein Podest: die Kletterwand wird angemalt
+        seiteTreffen(px, py, s.x, s.y, Math.max(2, s.h), w.klecks * 1.3, s.team);
+        spritzer(px, py, s.h, s.team, 4); naheKlatsch(px, py); weg = true; break;
+      }
+      if (s.h <= bh) {
         if (!istWand(s.x, s.y)) klecks(s.x, s.y, w.klecks, s.team, s.wer);
-        spritzer(s.x, s.y, 1, s.team, 3, 80); naheKlatsch(s.x, s.y);
-        if (w.huepfen && (s.sprung || 0) < w.huepfen) { s.sprung = (s.sprung || 0) + 1; s.h = 0.5; s.vz = 230 - s.sprung * 40; s.vx *= 0.85; s.vy *= 0.85; continue; }   // Blase hüpft weiter
+        spritzer(s.x, s.y, bh + 1, s.team, 3, 80); naheKlatsch(s.x, s.y);
+        if (w.huepfen && (s.sprung || 0) < w.huepfen) { s.sprung = (s.sprung || 0) + 1; s.h = bh + 0.5; s.vz = 230 - s.sprung * 40; s.vx *= 0.85; s.vy *= 0.85; continue; }   // Blase hüpft weiter
         weg = true; break;
       }
       if ((istWand(s.x, s.y) && s.h < WAND_H) || s.x < 0 || s.y < 0 || s.x > W || s.y > H) {
@@ -3405,7 +3473,7 @@ function update(dt) {
     b.t += dt;
     const f = Math.min(1, b.t / b.dauer);
     b.x = b.sx + (b.zx - b.sx) * f; b.y = b.sy + (b.zy - b.sy) * f;
-    b.h = b.h0 * (1 - f) + Math.sin(f * Math.PI) * b.hoehe + 6;
+    b.h = b.h0 * (1 - f) + bodenHoehe(b.zx, b.zy) * f + Math.sin(f * Math.PI) * b.hoehe + 6;
     if (f >= 1) {
       bomben.splice(i, 1);
       if (b.art === 'klebe' || b.art === 'sprinkler' || b.art === 'tracker') { geraetSetzen(b.art, b.x, b.y, b.team, b.wer, 0, b.mesh); continue; }
@@ -3536,7 +3604,7 @@ function update(dt) {
     const p = partikel[i];
     p.vh -= 600 * dt;
     p.x += p.vx * dt; p.y += p.vy * dt; p.h += p.vh * dt; p.vx *= 0.95; p.vy *= 0.95; p.leben -= dt;
-    if (p.leben <= 0 || p.h < 0 || (p.vz < 0 && p.h < bodenHoehe(p.x, p.y))) partikel.splice(i, 1);
+    if (p.leben <= 0 || p.h < 0 || (p.vh < 0 && p.h < bodenHoehe(p.x, p.y))) partikel.splice(i, 1);
   }
   if (partikel.length > PMAX * 1.6) partikel.splice(0, partikel.length - PMAX * 1.6);
   for (const m of meldungen) m.t -= dt;
@@ -3604,6 +3672,7 @@ function welt3D(dt) {
   bildZaehler++;
   if (farbeGeaendert && bildZaehler % 2 === 0) { bodenAktualisieren(); farbeGeaendert = false; }
   for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
+  for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
   if (kartenGruppe[karte]) for (const o of kartenGruppe[karte].children) {
