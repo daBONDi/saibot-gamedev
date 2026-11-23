@@ -167,7 +167,9 @@
 import * as THREE from 'three';
 
 // ================== GRUNDWERTE ==================
-const W = 1600, H = 1000;          // Größe der Arena (x und "y" = Boden-Richtung nach hinten)
+const W0 = 1600, H0 = 1000;        // so sind die Arenen gezeichnet …
+const KS = 1.4;                    // … und so viel größer sind sie im Spiel
+const W = W0 * KS, H = H0 * KS;    // Größe der Arena (x und "y" = Boden-Richtung nach hinten)
 const CELL = 8;                    // Größe von einem "Farbkästchen"
 const GW = W / CELL, GH = H / CELL;
 const RUNDE = 180;                 // Rundenzeit in Sekunden
@@ -190,7 +192,7 @@ const FARB_PAARE = [
 const TEAMS = [{ ...FARB_PAARE[0][0] }, { ...FARB_PAARE[0][1] }];
 let farbNr = 0;
 const NAMEN = [['Du', 'Blubb', 'Spritzi', 'Klacks'], ['Gloop', 'Schmatz', 'Plörre', 'Kleckerich']];
-const BASIS = [{ x: 80, y: H / 2 }, { x: W - 80, y: H / 2 }];
+const BASIS = [{ x: 80 * KS, y: H / 2 }, { x: W - 80 * KS, y: H / 2 }];
 
 // ================== FIRMEN ==================
 // 3 Firmen machen Waffen UND Kleidung. Trägst du 3 Sachen von derselben Firma, bekommst du ihren Firmen-Bonus!
@@ -424,7 +426,7 @@ function kontoAussehen() { return { haut: konto.haut, haar: konto.haar, frisur: 
 const waende = [];
 function wand(x, y, w, h, spiegeln = true) {
   waende.push({ x, y, w, h });
-  if (spiegeln) waende.push({ x: W - x - w, y, w, h });   // Die Arena ist für beide Teams gleich (gespiegelt)
+  if (spiegeln) waende.push({ x: W0 - x - w, y, w, h });   // Die Arena ist für beide Teams gleich (gespiegelt)
 }
 wand(740, 430, 120, 140, false);   // Mitte
 wand(400, 140, 60, 260); wand(400, 600, 60, 260);
@@ -440,7 +442,7 @@ let flaeche = 0;
 // Die Arenen. spiegel(): jede Wand gibt es auch auf der anderen Seite (fair für beide Teams)
 function spiegel(liste) {
   const aus = [];
-  for (const [x, y, w, h, sp = true] of liste) { aus.push({ x, y, w, h }); if (sp) aus.push({ x: W - x - w, y, w, h }); }
+  for (const [x, y, w, h, sp = true] of liste) { aus.push({ x, y, w, h }); if (sp) aus.push({ x: W0 - x - w, y, w, h }); }
   return aus;
 }
 const ARENEN = {
@@ -494,13 +496,35 @@ const STUFEN_DATEN = {
   wueste:    [[700, 330, 200, 70, 70, null, false], [770, 230, 60, 100, 70, 's', false], [700, 600, 200, 70, 70, null, false], [770, 670, 60, 100, 70, 'n', false]],
   vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
 };
+// Kletterblöcke: diese Wände werden zu Blöcken, die man anmalen und hochschwimmen kann  [x, y, b, t, höhe, spiegeln]
+const KLETTER_BLOECKE = {
+  farbhafen: [[740, 430, 120, 140, 90, false], [230, 290, 40, 120, 60], [230, 590, 40, 120, 60]],
+  skatepark: [[450, 470, 60, 60, 55], [760, 460, 80, 80, 75, false]],
+  dschungel: [[480, 320, 50, 50, 90], [480, 630, 50, 50, 90]],
+  eispalast: [[550, 420, 40, 160, 70], [700, 480, 200, 40, 60, false]],
+  wueste:    [[700, 400, 200, 200, 100, false], [520, 470, 60, 60, 60]],
+  vulkan:    [[300, 180, 60, 60, 60], [300, 760, 60, 60, 60], [600, 420, 40, 160, 70]],
+};
 const RAMPE_SPIEGEL = { w: 'o', o: 'w', n: 'n', s: 's' };
+const gleich = (r, x, y, w, h) => Math.abs(r.x - x) < 0.5 && Math.abs(r.y - y) < 0.5 && Math.abs(r.w - w) < 0.5 && Math.abs(r.h - h) < 0.5;
 for (const [id, a] of Object.entries(ARENEN)) {
   const liste = [];
   for (const [x, y, w, h, hoehe, rampe = null, sp = true] of [...BASIS_STUFEN, ...(STUFEN_DATEN[id] || [])]) {
     liste.push({ x, y, w, h, hoehe, rampe });
-    if (sp) liste.push({ x: W - x - w, y, w, h, hoehe, rampe: rampe && RAMPE_SPIEGEL[rampe] });
+    if (sp) liste.push({ x: W0 - x - w, y, w, h, hoehe, rampe: rampe && RAMPE_SPIEGEL[rampe] });
   }
+  for (const [x, y, w, h, hoehe, sp = true] of KLETTER_BLOECKE[id] || []) {   // Wand raus, Kletterblock rein
+    for (const [bx] of sp ? [[x], [W0 - x - w]] : [[x]]) {
+      const vorher = a.waende.length;
+      a.waende = a.waende.filter(r => !gleich(r, bx, y, w, h));
+      if (a.waende.length === vorher) console.warn('Kletterblock ohne Wand:', id, bx, y);
+      liste.push({ x: bx, y, w, h, hoehe, rampe: null });
+    }
+  }
+  // Alles größer machen (die Arenen sind in 1600 × 1000 gezeichnet)
+  a.waende = a.waende.map(r => ({ x: r.x * KS, y: r.y * KS, w: r.w * KS, h: r.h * KS }));
+  for (const z of a.zonen) { z.x *= KS; z.y *= KS; if (z.w) { z.w *= KS; z.h *= KS; } if (z.r) z.r *= KS; }
+  for (const s of liste) { s.x *= KS; s.y *= KS; s.w *= KS; s.h *= KS; }
   liste.forEach((s, i) => { s.nr = i; });
   a.stufen = liste;
 }
@@ -945,7 +969,7 @@ sonne.position.set(W / 2 - 500, 1000, H / 2 - 400);
 sonne.target.position.set(W / 2, 0, H / 2);
 sonne.castShadow = true;
 sonne.shadow.mapSize.set(2048, 2048);
-Object.assign(sonne.shadow.camera, { left: -1100, right: 1100, top: 1000, bottom: -1000, near: 10, far: 3000 });
+Object.assign(sonne.shadow.camera, { left: -1100 * KS, right: 1100 * KS, top: 1000 * KS, bottom: -1000 * KS, near: 10, far: 4000 });
 scene.add(sonne, sonne.target);
 
 // Boden mit Farbe
@@ -1023,13 +1047,13 @@ function karteLaden(name) {
 }
 function himmelSetzen(th) {
   scene.background.set(th.himmel); scene.fog.color.set(th.himmel); draussen.material.color.set(th.draussen);
-  scene.fog.near = 900; scene.fog.far = 2600;
+  scene.fog.near = 1100; scene.fog.far = 3400;
 }
 function sonneAuf(x, z) { sonne.position.set(x - 500, 1000, z - 400); sonne.target.position.set(x, 0, z); }
 // Deko: Farbtürme draußen
 const turmMats = [];
 for (let i = 0; i < 14; i++) {
-  const a = i / 14 * Math.PI * 2, rx = W / 2 + Math.cos(a) * 1200, rz = H / 2 + Math.sin(a) * 850;
+  const a = i / 14 * Math.PI * 2, rx = W / 2 + Math.cos(a) * 1200 * KS, rz = H / 2 + Math.sin(a) * 850 * KS;
   const h = 150 + (i * 97) % 200;
   const tm = new THREE.MeshStandardMaterial({ color: i % 2 ? TEAMS[0].col : TEAMS[1].col }); turmMats.push(tm);
   const t = new THREE.Mesh(new THREE.CylinderGeometry(40, 50, h, 12), tm);
@@ -1057,14 +1081,14 @@ function farbenSetzen(nr) {
 function arenaDeko() {
   const d = (id, ...teile) => kartenGruppe[id].add(...teile);
   // ⚓ Farbhafen: Container und ein Leuchtturm
-  [['#e63946', -110, 180], ['#3b6fd8', -110, 700], ['#2a9d8f', W + 110, 300], ['#ff9f1c', W + 110, 820]].forEach(([f, x, z]) => {
+  [['#e63946', -110, 180 * KS], ['#3b6fd8', -110, 700 * KS], ['#2a9d8f', W + 110, 300 * KS], ['#ff9f1c', W + 110, 820 * KS]].forEach(([f, x, z]) => {
     d('farbhafen', klotz(mat(f), 60, 50, 140, x, 25, z), klotz(mat(f), 60, 50, 140, x, 75, z + 20));
   });
   for (let i = 0; i < 6; i++) d('farbhafen', zylinder(mat(i % 2 ? '#ffffff' : '#e63946'), 28 - i * 2, 30 - i * 2, 40, -260, 20 + i * 40, -180));
   d('farbhafen', kugel(mat('#fff4c2', { emissive: '#ffd166', emissiveIntensity: 1 }), 16, -260, 260, -180));
   // 🛹 Skatepark: Halfpipes und Rampen
   for (const x of [-170, W + 170]) {
-    const hp = new THREE.Mesh(new THREE.CylinderGeometry(90, 90, 700, 24, 1, true, Math.PI / 2, Math.PI), mat('#8f95a3', { side: THREE.DoubleSide }));
+    const hp = new THREE.Mesh(new THREE.CylinderGeometry(90, 90, 700 * KS, 24, 1, true, Math.PI / 2, Math.PI), mat('#8f95a3', { side: THREE.DoubleSide }));
     hp.rotation.x = Math.PI / 2; hp.position.set(x, 90, H / 2); d('skatepark', hp);
   }
   for (const [x, z, r] of [[200, -140, 0.3], [W - 200, -140, -0.3], [W / 2, H + 140, 0]]) { const rp = klotz(mat('#ff7a59'), 160, 10, 80, x, 30, z); rp.rotation.x = r || 0.35; d('skatepark', rp); }
@@ -1073,7 +1097,7 @@ function arenaDeko() {
     d('dschungel', kugel(mat('#3f9b4b', { roughness: 0.9 }), r.w * 0.9, r.x + r.w / 2, 100, r.y + r.h / 2), kugel(mat('#56b862', { roughness: 0.9 }), r.w * 0.6, r.x + r.w / 2 + 10, 125, r.y + r.h / 2 - 8));
   }
   for (let i = 0; i < 12; i++) {
-    const a = i / 12 * Math.PI * 2, x = W / 2 + Math.cos(a) * 980, z = H / 2 + Math.sin(a) * 640;
+    const a = i / 12 * Math.PI * 2, x = W / 2 + Math.cos(a) * 980 * KS, z = H / 2 + Math.sin(a) * 640 * KS;
     d('dschungel', zylinder(mat('#8a5a2e'), 6, 9, 140, x, 70, z));
     for (let k = 0; k < 5; k++) { const b = klotz(mat('#2f8f3a'), 80, 3, 18, x + Math.cos(k * 1.26) * 35, 142, z + Math.sin(k * 1.26) * 35); b.rotation.y = -k * 1.26; b.rotation.z = -0.4; d('dschungel', b); }
   }
@@ -1081,32 +1105,31 @@ function arenaDeko() {
   const eis = new THREE.MeshStandardMaterial({ color: '#bfeaff', transparent: true, opacity: 0.75, roughness: 0.05, metalness: 0.3 });
   for (let i = 0; i < 16; i++) {
     const a = i / 16 * Math.PI * 2, k = new THREE.Mesh(new THREE.ConeGeometry(30, 120 + (i * 53) % 160, 6), eis);
-    k.position.set(W / 2 + Math.cos(a) * 960, 60, H / 2 + Math.sin(a) * 640); d('eispalast', k);
+    k.position.set(W / 2 + Math.cos(a) * 960 * KS, 60, H / 2 + Math.sin(a) * 640 * KS); d('eispalast', k);
   }
-  for (const [x, z] of [[-90, 200], [W + 90, 800]]) d('eispalast', kugel(MAT_WEISS, 24, x, 24, z), kugel(MAT_WEISS, 17, x, 58, z), kugel(MAT_WEISS, 12, x, 82, z), kugel(mat('#ff8a1f'), 3, x + 12, 82, z));
+  for (const [x, z] of [[-90, 200 * KS], [W + 90, 800 * KS]]) d('eispalast', kugel(MAT_WEISS, 24, x, 24, z), kugel(MAT_WEISS, 17, x, 58, z), kugel(MAT_WEISS, 12, x, 82, z), kugel(mat('#ff8a1f'), 3, x + 12, 82, z));
   // 🏜️ Wüstentempel: Stufen auf dem Tempel, Pyramiden und Kakteen
-  for (let i = 0; i < 3; i++) d('wueste', klotz(mat('#d9a86a'), 180 - i * 50, 18, 180 - i * 50, W / 2, 109 + i * 18, H / 2));
-  for (const [x, z] of [[700, 400], [900, 400], [700, 600], [900, 600]]) d('wueste', zylinder(mat('#e0bb80'), 9, 9, 130, x, 65, z));
+  for (const [x, z] of [[700, 400], [900, 400], [700, 600], [900, 600]]) d('wueste', zylinder(mat('#e0bb80'), 9, 9, 130, x * KS, 65, z * KS));   // Säulen an den Tempel-Ecken
   for (const [x, z, s] of [[-500, -300, 1], [W + 450, H + 250, 1.3], [W / 2, -650, 0.8]]) {
     const pyr = new THREE.Mesh(new THREE.ConeGeometry(260 * s, 300 * s, 4), mat('#d9b26f')); pyr.position.set(x, 150 * s, z); pyr.rotation.y = Math.PI / 4; d('wueste', pyr);
   }
-  for (const [x, z] of [[-80, 120], [W + 80, 880], [W + 90, 150]]) {
+  for (const [x, z] of [[-80, 120 * KS], [W + 80, 880 * KS], [W + 90, 150 * KS]]) {
     const g = mat('#3f9b4b'); d('wueste', zylinder(g, 7, 8, 60, x, 30, z), zylinder(g, 4, 4, 22, x + 12, 40, z), zylinder(g, 4, 4, 20, x - 12, 34, z));
   }
   // 🌋 Vulkaninsel: der große Vulkan in der Mitte, kleine Vulkane und glühende Felsen draußen
   const fels = mat('#2b2224', { roughness: 0.95 }), fels2 = mat('#3d3033', { roughness: 0.95 });
-  d('vulkan', zylinder(fels, 38, 100, 200, W / 2, 100, H / 2));
+  d('vulkan', zylinder(fels, 50, 140, 220, W / 2, 110, H / 2));
   for (let i = 0; i < 6; i++) {   // Lava-Streifen, die den Vulkan runterlaufen
-    const a = i / 6 * Math.PI * 2 + 0.3, s = klotz(VULKAN_GLUT, 10, 150, 4, W / 2 + Math.cos(a) * 70, 95, H / 2 + Math.sin(a) * 70);
+    const a = i / 6 * Math.PI * 2 + 0.3, s = klotz(VULKAN_GLUT, 12, 165, 4, W / 2 + Math.cos(a) * 96, 105, H / 2 + Math.sin(a) * 96);
     s.rotation.y = -a; s.rotation.z = 0.32; s.castShadow = false; d('vulkan', s);
   }
-  const krater = zylinder(VULKAN_GLUT, 32, 32, 4, W / 2, 199, H / 2); krater.castShadow = false; d('vulkan', krater);
+  const krater = zylinder(VULKAN_GLUT, 44, 44, 4, W / 2, 219, H / 2); krater.castShadow = false; d('vulkan', krater);
   for (const [x, z, s] of [[-450, -250, 1], [W + 420, H + 300, 1.4], [W + 380, -350, 0.8], [-380, H + 320, 1.1]]) {
     d('vulkan', zylinder(fels2, 40 * s, 200 * s, 260 * s, x, 130 * s, z));
     const k = zylinder(VULKAN_GLUT, 30 * s, 30 * s, 4, x, 261 * s, z); k.castShadow = false; d('vulkan', k);
   }
   for (let i = 0; i < 14; i++) {
-    const a = i / 14 * Math.PI * 2, x = W / 2 + Math.cos(a) * 950, z = H / 2 + Math.sin(a) * 650, gr = 30 + (i * 37) % 40;
+    const a = i / 14 * Math.PI * 2, x = W / 2 + Math.cos(a) * 950 * KS, z = H / 2 + Math.sin(a) * 650 * KS, gr = 30 + (i * 37) % 40;
     const f = kugel(i % 3 ? fels : fels2, gr, x, gr * 0.3, z, 1, 0.7, 1); d('vulkan', f);
   }
   for (const r of ARENEN.vulkan.waende) if (r.w < 100) d('vulkan', kugel(VULKAN_GLUT, 6, r.x + r.w / 2, 90, r.y + r.h / 2));   // glühende Spitzen auf den Felsen
@@ -2532,7 +2555,7 @@ function vulkanAusbruch() {   // nur Gastgeber / allein: Ziele auswürfeln
   const liste = [];
   for (let i = 0, versuche = 0; i < 22 && versuche < 400; versuche++) {
     const x = 150 + Math.random() * (W - 300), y = 40 + Math.random() * (H - 80);
-    if (istWand(x, y) || lavaNah(x, y, 30) || Math.hypot(x - W / 2, y - H / 2) < 140) continue;
+    if (istWand(x, y) || lavaNah(x, y, 30) || Math.hypot(x - W / 2, y - H / 2) < 200) continue;
     const team = i % 2, dauer = 1.4 + Math.random() * 1.3;
     lavaBrockenStarten(x, y, team, dauer); liste.push(r0(x), r0(y), team, Math.round(dauer * 100)); i++;
   }
@@ -2548,7 +2571,7 @@ function vulkanUpdate(dt) {
     if (vulkanPhaseVorher < 37 && ph >= 37 && ph < 40) { meldung('🌋 Der Vulkan grollt … gleich bricht er aus!'); ton('grollen'); }
     if (vulkanPhaseVorher < 40 && ph >= 40) {
       meldung('🌋💥 AUSBRUCH! Pass auf die Ringe am Boden auf!'); ton('ausbruch'); wackeln = 1.2;
-      for (let t = 0; t < 2; t++) spritzer(W / 2, H / 2, 200, t, 40, 450);
+      for (let t = 0; t < 2; t++) spritzer(W / 2, H / 2, 220, t, 40, 450);
     }
     if (ph >= 37 && ph < 40) wackeln = Math.max(wackeln, 0.3);
     VULKAN_GLUT.emissiveIntensity = ph >= 37 && ph < 43 ? 1.5 + Math.sin(zeit * 25) * 0.8 : 1 + Math.sin(zeit * 2) * 0.2;
@@ -2559,7 +2582,7 @@ function vulkanUpdate(dt) {
     const b = lavaBrocken[i];
     if (zustand !== 'pause') b.t += dt;
     const f = Math.min(1, b.t / b.dauer);
-    b.mesh.position.set(W / 2 + (b.zx - W / 2) * f, 200 + Math.sin(f * Math.PI) * 320 - 200 * f + 10, H / 2 + (b.zy - H / 2) * f);
+    b.mesh.position.set(W / 2 + (b.zx - W / 2) * f, 220 + Math.sin(f * Math.PI) * 360 - 220 * f + 10, H / 2 + (b.zy - H / 2) * f);
     b.mesh.rotation.x += dt * 5; b.mesh.rotation.y += dt * 3;
     b.ring.scale.setScalar(1 + Math.sin(zeit * 12) * 0.08); b.ring.material.opacity = 0.4 + f * 0.5;
     if (f >= 1) {
@@ -2643,14 +2666,14 @@ function introUpdate(dt) {
   if (vorher < 5.5 && t >= 5.5) ton('wusch');
   if (t < 3) {            // 1. Flug über die Arena
     const a = -2.5 + t * 0.4;
-    kameraOverride = { pos: [W / 2 + Math.cos(a) * 1000, 520 - t * 70, H / 2 + Math.sin(a) * 750], ziel: [W / 2, 0, H / 2] };
+    kameraOverride = { pos: [W / 2 + Math.cos(a) * 1000 * KS, 620 - t * 70, H / 2 + Math.sin(a) * 750 * KS], ziel: [W / 2, 0, H / 2] };
   } else if (t < 5.5) {   // 2. Beide Teams von der Seite
     const f = weich((t - 3) / 2.5);
-    kameraOverride = { pos: [W / 2, 300 - f * 60, H / 2 + 1080 - f * 100], ziel: [W / 2, 20, H / 2] };
+    kameraOverride = { pos: [W / 2, 380 - f * 60, H / 2 + 1080 * KS - f * 100], ziel: [W / 2, 20, H / 2] };
   } else {                // 3. Kamera fliegt in deinen Kopf
     const f = weich((t - 5.5) / 1.6);
     const auge = [p.x, AUGE, p.y], blick = [p.x + Math.cos(p.winkel) * 100, AUGE, p.y + Math.sin(p.winkel) * 100];
-    kameraOverride = { pos: mischen([W / 2, 240, H / 2 + 980], auge, f), ziel: mischen([W / 2, 20, H / 2], blick, f) };
+    kameraOverride = { pos: mischen([W / 2, 300, H / 2 + 980 * KS], auge, f), ziel: mischen([W / 2, 20, H / 2], blick, f) };
   }
   if (t >= INTRO_DAUER || introSkip) introEnde();
 }
@@ -2686,6 +2709,9 @@ function kollidiert(x, y, r, z = 0) {
 function sicht(x1, y1, x2, y2) {
   const d = Math.hypot(x2 - x1, y2 - y1), n = Math.ceil(d / 8);
   for (let i = 1; i < n; i++) if (istWand(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n)) return false;
+  // Hohe Kletterblöcke verdecken auch die Sicht
+  const hoch = Math.max(bodenHoehe(x1, y1), bodenHoehe(x2, y2)) + 45;
+  for (let i = 2; i < n; i += 2) if (bodenHoehe(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n) > hoch) return false;
   return true;
 }
 function winkelDiff(a, b) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
@@ -3881,8 +3907,8 @@ function welt3D(dt) {
     sturmVorher = sturm;
     if (sturm) { meldung('🌪️ SANDSTURM! Man sieht fast nichts!'); ton('wind'); } else if (modus === 'match') meldung('☀️ Der Sandsturm ist vorbei.');
   }
-  scene.fog.near += ((sturm ? 30 : 900) - scene.fog.near) * Math.min(1, dt * 2);
-  scene.fog.far += ((sturm ? 320 : 2600) - scene.fog.far) * Math.min(1, dt * 2);
+  scene.fog.near += ((sturm ? 30 : 1100) - scene.fog.near) * Math.min(1, dt * 2);
+  scene.fog.far += ((sturm ? 320 : 3400) - scene.fog.far) * Math.min(1, dt * 2);
 
   for (const e of kleckse) {
     const g = e.gruppe;
