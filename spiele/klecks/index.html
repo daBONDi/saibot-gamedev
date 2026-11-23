@@ -420,7 +420,19 @@ const ARENEN = {
     waende: spiegel([[700, 400, 200, 200, false], [350, 150, 150, 120], [350, 730, 150, 120], [520, 470, 60, 60], [650, 120, 300, 40, false], [650, 840, 300, 40, false],
                      [250, 0, 60, 90], [250, 910, 60, 90]]),
     thema: { boden: '#e8cf98', linie: '#d6b97a', wand: '#c9965a', himmel: '#ffe2b0', draussen: '#d9b26f', muster: 'sand' } },
+  vulkan: { name: 'Vulkaninsel', emoji: '🌋', wandH: 90, spezial: '🔥 Nicht in die Lava fallen! Und der Vulkan bricht aus!',
+    zonen: [{ art: 'lava', x: 440, y: 130, w: 50, h: 260 }, { art: 'lava', x: 440, y: 610, w: 50, h: 260 },
+            { art: 'lava', x: 1110, y: 130, w: 50, h: 260 }, { art: 'lava', x: 1110, y: 610, w: 50, h: 260 },
+            { art: 'lava', x: 700, y: 250, w: 200, h: 50 }, { art: 'lava', x: 700, y: 700, w: 200, h: 50 }],
+    waende: spiegel([[730, 430, 140, 140, false], [300, 180, 60, 60], [300, 760, 60, 60], [600, 420, 40, 160], [620, 80, 60, 60], [620, 860, 60, 60]]),
+    thema: { boden: '#4a3b38', linie: '#3a2d2b', wand: '#2b2224', himmel: '#5a2a2a', draussen: '#3a2420', muster: 'stein' } },
 };
+// Lava-Stellen jeder Arena (dort kann man nicht malen – und es tut weh!)
+for (const a of Object.values(ARENEN)) a.lava = (a.zonen || []).filter(z => z.art === 'lava');
+const KEINE_LAVA = [];
+function lavaListe() { return (ARENEN[karte] && ARENEN[karte].lava) || KEINE_LAVA; }
+function inLava(x, y) { for (const z of lavaListe()) if (x > z.x && x < z.x + z.w && y > z.y && y < z.y + z.h) return true; return false; }
+const VULKAN_TAKT = 45;   // alle 45 Sekunden bricht der Vulkan aus
 const STANDARD_THEMA = ARENEN.farbhafen.thema;
 // Alle Karten: die Arenen und ein kleiner Lobby-Raum (Rest ist "Wand")
 const KARTEN = {
@@ -435,7 +447,8 @@ function feldBerechnen() {
   for (let cy = 0; cy < GH; cy++) for (let cx = 0; cx < GW; cx++) {
     const x = cx * CELL + CELL / 2, y = cy * CELL + CELL / 2;
     const inWand = waende.some(w => x > w.x && x < w.x + w.w && y > w.y && y < w.y + w.h);
-    feld[cy * GW + cx] = inWand ? 255 : 0; if (!inWand) flaeche++;
+    const lava = !inWand && modus === 'match' && inLava(x, y);
+    feld[cy * GW + cx] = inWand ? 255 : lava ? 254 : 0; if (!inWand && !lava) flaeche++;
   }
 }
 feldBerechnen();
@@ -476,12 +489,20 @@ function bodenMalen(th = STANDARD_THEMA) {
     b.strokeStyle = '#ffffff'; b.lineWidth = 2;
     for (let i = 0; i < 40; i++) { let x = zz() * W, y = zz() * H; b.beginPath(); b.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (zz() - 0.5) * 120; y += (zz() - 0.5) * 120; b.lineTo(x, y); } b.stroke(); }
     for (let i = 0; i < 400; i++) { b.fillStyle = '#ffffff'; b.fillRect(zz() * W, zz() * H, 2, 2); }
+  } else if (th.muster === 'stein') {   // dunkler Vulkanstein mit glühenden Rissen
+    for (let i = 0; i < 2500; i++) { b.fillStyle = zz() < 0.5 ? '#3a2d2b' : '#5a4844'; b.fillRect(zz() * W, zz() * H, 3, 3); }
+    b.lineWidth = 2;
+    for (let i = 0; i < 35; i++) {
+      let x = zz() * W, y = zz() * H; b.strokeStyle = zz() < 0.5 ? '#c2410c' : '#7c2d12';
+      b.beginPath(); b.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (zz() - 0.5) * 90; y += (zz() - 0.5) * 90; b.lineTo(x, y); } b.stroke();
+    }
   }
 }
 bodenMalen();
 function wandKarteMalen() {                                 // nur für die Mini-Karte
   const w = wandCv.getContext('2d'); w.clearRect(0, 0, W, H);
   for (const r of waende) { w.fillStyle = '#3d4266'; w.fillRect(r.x, r.y, r.w, r.h); }
+  for (const z of lavaListe()) { w.fillStyle = '#ff6a00'; w.fillRect(z.x, z.y, z.w, z.h); }
 }
 wandKarteMalen();
 
@@ -494,6 +515,8 @@ function klecks(x, y, r, team, wer, ultiLaden = true) {
     const a = Math.random() * 7, d = r * (0.6 + Math.random() * 0.5);
     fctx.beginPath(); fctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, r * (0.2 + Math.random() * 0.25), 0, 7); fctx.fill();
   }
+  // Auf Lava bleibt keine Farbe – die verbrennt sofort
+  for (const z of lavaListe()) if (x + r * 1.6 > z.x && x - r * 1.6 < z.x + z.w && y + r * 1.6 > z.y && y - r * 1.6 < z.y + z.h) fctx.clearRect(z.x, z.y, z.w, z.h);
   farbeGeaendert = true;
   const id = team + 1;
   const x0 = Math.max(0, ((x - r) / CELL) | 0), x1 = Math.min(GW - 1, ((x + r) / CELL) | 0);
@@ -503,7 +526,7 @@ function klecks(x, y, r, team, wer, ultiLaden = true) {
     const mx = cx * CELL + CELL / 2 - x, my = cy * CELL + CELL / 2 - y;
     if (mx * mx + my * my > r * r) continue;
     const i = cy * GW + cx, alt = feld[i];
-    if (alt === 255 || alt === id) continue;
+    if (alt >= 254 || alt === id) continue;   // Wand oder Lava
     zaehler[alt]--; zaehler[id]++; feld[i] = id; neu++;
   }
   if (wer) {
@@ -581,6 +604,9 @@ const SOUNDS = {
   boing:   (t, v) => { osz('sine', 200, 900, 0.25, 0.12 * v, t); osz('square', 400, 1200, 0.15, 0.03 * v, t, sfxGain, 2000); },
   wind:    (t, v) => krach(400, 2.5, 0.3 * v, t),
   fallen:  (t, v) => osz('sine', 1800, 300, 0.7, 0.08 * v, t),
+  grollen: (t, v) => { krach(120, 2.2, 0.45 * v, t); osz('sawtooth', 45, 30, 2.2, 0.12 * v, t, sfxGain, 200); },
+  ausbruch:(t, v) => { krach(250, 1.5, 0.6 * v, t); osz('sine', 90, 30, 1.2, 0.35 * v, t); krach(1500, 0.6, 0.15 * v, t + 0.1, sfxGain, 'bandpass'); },
+  zisch:   (t, v) => krach(4000, 0.25, 0.08 * v, t, sfxGain, 'highpass'),
   ramm:    (t, v) => { osz('sawtooth', 160, 50, 0.3, 0.15 * v, t, sfxGain, 900); krach(500, 0.3, 0.3 * v, t); },
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
   pfiff:   (t, v) => osz('sine', 1200, 1500, 0.6, 0.15 * v, t),
@@ -643,6 +669,11 @@ const SONGS = {
     bass: '0..0..0.0..0..o.', arp: '',
     mel: ['4.5.4.3.4...3...', '4.5.6.5.4.......', '4.5.4.3.4...5.4.', '3...4...........', '6.5.4.5.6...4...', '5.4.3.4.5.......', '4.5.6.7.6.5.4.3.', '4...............'],
     kick: 'x..x..x...x.....', snare: '....x.......x...', tom: '..........x.x.x.', hat: 'x.x.x.x.x.x.x.x.' },
+  vulkan: { name: 'Magma-Stampfer', bpm: 140, lead: 'saege', arpArt: 'zupf', pad: 0.025,
+    akkorde: ['Cm', 'Ab', 'Bb', 'G', 'Cm', 'Ab', 'Fm', 'G'],
+    bass: '0.0o0.0.0.0o0.2.', arp: '0...2...1...2...',
+    mel: ['4...4.5.6...5.4.', '3...........2...', '4...4.5.6...7.6.', '5...........4...', '6.6.5.4.5...4...', '3...2...3.......', '4.3.2.1.2...3...', '2...............'],
+    kick: 'x...x.x.x...x.x.', snare: '....x.......x...', tom: '..............xx', hat: '..x...x...x...x.', clap: '............x...' },
 };
 let musikModus = 'aus', songName = 'stadt', schritt = 0, naechsterSchritt = 0, musikTimer = null, hallBus = null, echoBus = null;
 function musikModusSetzen(m, song) {
@@ -858,6 +889,7 @@ const geoKugel = new THREE.SphereGeometry(1, 20, 14);
 function mat(c, extra = {}) { return new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, ...extra }); }
 const MAT_WEISS = mat('#ffffff'), MAT_SCHWARZ = mat('#1b1f3a'), MAT_GRAU = mat('#4a4f73', { roughness: 0.3, metalness: 0.4 });
 const MAT_CREME = mat('#f3e7cf'), MAT_GLOW = mat('#6fe3ff', { emissive: '#6fe3ff' });
+const VULKAN_GLUT = mat('#ff6a00', { emissive: '#ff4500', emissiveIntensity: 1 });   // glühende Lava (leuchtet stärker beim Ausbruch)
 const teamMat = TEAMS.map(t => mat(t.col, { roughness: 0.35 }));
 // Farben fürs nächste Match setzen
 function farbenSetzen(nr) {
@@ -909,11 +941,40 @@ function arenaDeko() {
   for (const [x, z] of [[-80, 120], [W + 80, 880], [W + 90, 150]]) {
     const g = mat('#3f9b4b'); d('wueste', zylinder(g, 7, 8, 60, x, 30, z), zylinder(g, 4, 4, 22, x + 12, 40, z), zylinder(g, 4, 4, 20, x - 12, 34, z));
   }
+  // 🌋 Vulkaninsel: der große Vulkan in der Mitte, kleine Vulkane und glühende Felsen draußen
+  const fels = mat('#2b2224', { roughness: 0.95 }), fels2 = mat('#3d3033', { roughness: 0.95 });
+  d('vulkan', zylinder(fels, 38, 100, 200, W / 2, 100, H / 2));
+  for (let i = 0; i < 6; i++) {   // Lava-Streifen, die den Vulkan runterlaufen
+    const a = i / 6 * Math.PI * 2 + 0.3, s = klotz(VULKAN_GLUT, 10, 150, 4, W / 2 + Math.cos(a) * 70, 95, H / 2 + Math.sin(a) * 70);
+    s.rotation.y = -a; s.rotation.z = 0.32; s.castShadow = false; d('vulkan', s);
+  }
+  const krater = zylinder(VULKAN_GLUT, 32, 32, 4, W / 2, 199, H / 2); krater.castShadow = false; d('vulkan', krater);
+  for (const [x, z, s] of [[-450, -250, 1], [W + 420, H + 300, 1.4], [W + 380, -350, 0.8], [-380, H + 320, 1.1]]) {
+    d('vulkan', zylinder(fels2, 40 * s, 200 * s, 260 * s, x, 130 * s, z));
+    const k = zylinder(VULKAN_GLUT, 30 * s, 30 * s, 4, x, 261 * s, z); k.castShadow = false; d('vulkan', k);
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = i / 14 * Math.PI * 2, x = W / 2 + Math.cos(a) * 950, z = H / 2 + Math.sin(a) * 650, gr = 30 + (i * 37) % 40;
+    const f = kugel(i % 3 ? fels : fels2, gr, x, gr * 0.3, z, 1, 0.7, 1); d('vulkan', f);
+  }
+  for (const r of ARENEN.vulkan.waende) if (r.w < 100) d('vulkan', kugel(VULKAN_GLUT, 6, r.x + r.w / 2, 90, r.y + r.h / 2));   // glühende Spitzen auf den Felsen
 }
 arenaDeko();
 // Sonder-Zonen sichtbar machen
-const foerderTexturen = [];
+const foerderTexturen = [], lavaTexturen = [];
+const lavaBild = (() => {   // ein Bild von brodelnder Lava (wird wiederholt)
+  const c = leinwand(64, 64), x = c.getContext('2d');
+  x.fillStyle = '#ff5a00'; x.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 14; i++) {
+    const px = (i * 37) % 64, py = (i * 23) % 64, r = 4 + (i * 5) % 9;
+    const gr = x.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, '#ffe066'); gr.addColorStop(1, 'rgba(255,170,0,0)');
+    for (const [ox, oy] of [[0, 0], [64, 0], [-64, 0], [0, 64], [0, -64]]) { x.fillStyle = gr; x.save(); x.translate(ox, oy); x.fillRect(px - r, py - r, r * 2, r * 2); x.restore(); }
+  }
+  x.fillStyle = 'rgba(120,20,0,0.5)'; for (let i = 0; i < 6; i++) x.fillRect((i * 29) % 64, (i * 41) % 64, 10, 3);
+  return c;
+})();
 (function zonenBauen() {
+  const fels = mat('#2b2224', { roughness: 0.95 });
   const metall = mat('#c9cfe6', { roughness: 0.25, metalness: 0.8 }), grau = mat('#4a4f73', { roughness: 0.3, metalness: 0.4 });
   const pfeil = leinwand(64, 64), x = pfeil.getContext('2d');
   x.fillStyle = '#3a3d4a'; x.fillRect(0, 0, 64, 64);
@@ -947,6 +1008,13 @@ const foerderTexturen = [];
       const geo = new THREE.CircleGeometry(z.r * 1.15, 32); geo.rotateX(-Math.PI / 2);
       const sand = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: t, transparent: true }));
       sand.position.set(z.x, 1.3, z.y); sand.userData.sand = true; g.add(sand);
+    } else if (z.art === 'lava') {
+      const t = new THREE.CanvasTexture(lavaBild); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(z.w / 64, z.h / 64); lavaTexturen.push(t);
+      const geo = new THREE.PlaneGeometry(z.w, z.h); geo.rotateX(-Math.PI / 2);
+      g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: t })).translateX(z.x + z.w / 2).translateY(1.4).translateZ(z.y + z.h / 2));
+      for (const [x0, y0, w0, h0] of [[z.x, z.y, z.w, 4], [z.x, z.y + z.h - 4, z.w, 4], [z.x, z.y, 4, z.h], [z.x + z.w - 4, z.y, 4, z.h]])   // dunkler Steinrand
+        g.add(klotz(fels, w0 + 4, 5, h0 + 4, x0 + w0 / 2, 2.5, y0 + h0 / 2));
     }
   }
 })();
@@ -2107,7 +2175,7 @@ function baueWolke(team) {
 }
 // Kill-Meldung aus Sicht von diesem Computer
 function koMeldung(e, wer) {
-  if (e.spieler) { meldung(`💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
+  if (e.spieler) { meldung(!wer && inLava(e.x, e.y) ? '🌋 Autsch! Die Lava hat dich erwischt!' : `💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
   else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
   else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
 }
@@ -2372,7 +2440,7 @@ function tauchenPruefen(e) {
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
   const zone = zoneBei(e.x, e.y);
-  e.taucht = e.willTauchen && eigen && amBoden && !(zone && zone.art === 'sand') && !(e.kugelT > 0) && !(e.panzerT > 0) && !(e.gigaT > 0);   // im Treibsand kann man nicht abtauchen
+  e.taucht = e.willTauchen && eigen && amBoden && !(zone && (zone.art === 'sand' || zone.art === 'lava')) && !(e.kugelT > 0) && !(e.panzerT > 0) && !(e.gigaT > 0);   // im Treibsand kann man nicht abtauchen
   if (vorher !== e.taucht) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
@@ -2855,8 +2923,9 @@ function neuesZiel(b) {
   let best = null, bs = -1e9;
   for (let i = 0; i < 40; i++) {
     const cx = (Math.random() * GW) | 0, cy = (Math.random() * GH) | 0, v = feld[cy * GW + cx];
-    if (v === 255) continue;
+    if (v >= 254) continue;
     const x = cx * CELL + CELL / 2, y = cy * CELL + CELL / 2;
+    if (lavaNah(x, y, 20)) continue;
     if (Math.hypot(x - gb.x, y - gb.y) < 130) continue;
     const d = Math.hypot(x - b.x, y - b.y);
     let s;
@@ -2875,9 +2944,26 @@ function ausweichen(b, dx, dy) {
   const basis = Math.atan2(dy, dx);
   for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) {
     const a = basis + off * b.ki.seite;
-    if (!kollidiert(b.x + Math.cos(a) * 26, b.y + Math.sin(a) * 26, b.r)) return [Math.cos(a), Math.sin(a)];
+    const nx = b.x + Math.cos(a) * 26, ny = b.y + Math.sin(a) * 26;
+    if (!kollidiert(nx, ny, b.r) && !lavaNah(nx, ny, b.r)) return [Math.cos(a), Math.sin(a)];
   }
   return [dx, dy];
+}
+// Bots gehen nicht in die Lava (mit etwas Abstand)
+function lavaNah(x, y, r) {
+  for (const z of lavaListe()) if (x > z.x - r && x < z.x + z.w + r && y > z.y - r && y < z.y + z.h + r) return true;
+  return false;
+}
+// Wer in der Lava steht, verliert ganz schnell Leben (nur beim Gastgeber / allein)
+function lavaPruefen(e, dt) {
+  if (e.tot || e.z > 0 || modus !== 'match' || !inLava(e.x, e.y)) return;
+  e.lavaT = (e.lavaT || 0) - dt;
+  if (e.lavaT <= 0) { e.lavaT = 0.25; spritzer(e.x, e.y, 2, e.team, 4, 120); if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 300) ton('zisch'); }
+  treffen(e, 160 * dt, null);
+  if (!e.tot && !e.mensch && !e.spieler) {   // Bots springen sofort wieder raus
+    const z = lavaListe().find(l => e.x > l.x && e.x < l.x + l.w && e.y > l.y && e.y < l.y + l.h);
+    if (z) { const mx = z.x + z.w / 2, my = z.y + z.h / 2, raus = z.w < z.h ? [Math.sign(e.x - mx) || 1, 0] : [0, Math.sign(e.y - my) || 1]; e.vx = raus[0] * 200; e.vy = raus[1] * 200; if (e.z <= 0) { e.vz = 330; e.z = 0.01; } }
+  }
 }
 
 function ki(b, dt) {
@@ -2979,7 +3065,10 @@ function ki(b, dt) {
     }
     k.stuckT = 0; k.lastX = b.x; k.lastY = b.y;
   }
-  if (k.umwegT > 0) { k.umwegT -= dt; dx = Math.cos(k.umwegA); dy = Math.sin(k.umwegA); }
+  if (k.umwegT > 0) {
+    k.umwegT -= dt; dx = Math.cos(k.umwegA); dy = Math.sin(k.umwegA);
+    if (lavaNah(b.x + dx * 26, b.y + dy * 26, b.r)) { k.umwegA += Math.PI; dx = -dx; dy = -dy; }   // nicht in die Lava laufen
+  }
   else if (dx || dy) [dx, dy] = ausweichen(b, dx, dy);
   bewege(b, dx, dy, dt);
 }
@@ -3060,6 +3149,7 @@ function update(dt) {
     if (e.kugelT > 0) kugelUpdate(e, dt);
     if (e.gigaT > 0) gigaUpdate(e, dt);
     if (e.trifT > 0) trifUpdate(e, dt);
+    lavaPruefen(e, dt);
     e.rueck = Math.max(0, e.rueck - dt * 8);
   }
   if (spieler.tot) zielRing.visible = false;
