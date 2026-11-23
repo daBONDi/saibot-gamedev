@@ -239,7 +239,7 @@ const ULTIS = {
   panzer:  { name: 'Farbpanzer',   emoji: '🚜', info: 'Steig in einen Panzer mit Minigun!' },
   werfer:  { name: 'Raketenwerfer', emoji: '🧨', info: '4 Riesenraketen selbst zielen und abfeuern' },
   gigafisch: { name: 'Gigafisch',  emoji: '🦑', info: 'Werde zu einem riesigen Tintenfisch und ramme deine Gegner weg!' },
-  trifarb: { name: 'TriFarb-Artillerie', emoji: '📡', info: 'Wirf 3 Peilsender – dann krachen Farbbomben vom Himmel!' },
+  trifarb: { name: 'TriFarb-Artillerie', emoji: '📡', info: 'Wirf 3 Peilsender – dann schießen Farbstrahlen vom Boden in den Himmel!' },
   kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Hochfliegen, Klicken klicken klicken, werfen – sie bläht sich riesig auf!' },
 };
 // Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
@@ -697,6 +697,7 @@ const SOUNDS = {
   fallen:  (t, v) => osz('sine', 1800, 300, 0.7, 0.08 * v, t),
   grollen: (t, v) => { krach(120, 2.2, 0.45 * v, t); osz('sawtooth', 45, 30, 2.2, 0.12 * v, t, sfxGain, 200); },
   ausbruch:(t, v) => { krach(250, 1.5, 0.6 * v, t); osz('sine', 90, 30, 1.2, 0.35 * v, t); krach(1500, 0.6, 0.15 * v, t + 0.1, sfxGain, 'bandpass'); },
+  strahl:  (t, v) => { osz('sawtooth', 120, 1400, 0.5, 0.12 * v, t, sfxGain, 2500); krach(2000, 0.6, 0.35 * v, t, sfxGain, 'bandpass'); osz('sine', 80, 40, 0.5, 0.3 * v, t); },
   zisch:   (t, v) => krach(4000, 0.25, 0.08 * v, t, sfxGain, 'highpass'),
   ramm:    (t, v) => { osz('sawtooth', 160, 50, 0.3, 0.15 * v, t, sfxGain, 900); krach(500, 0.3, 0.3 * v, t); },
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
@@ -936,6 +937,13 @@ for (const id in ARENEN) for (let t = 0; t < 2; t++) {
   const rg = new THREE.RingGeometry(94, 104, 48); rg.rotateX(-Math.PI / 2);
   const ring = new THREE.Mesh(rg, basisRingMat[t]);
   ring.position.set(BASIS[t].x, 40.6, BASIS[t].y); kartenGruppe[id].add(ring);   // auf der erhöhten Startplattform
+  // Start-Pad: hier landet man nach dem Spawn-Sprung
+  const pg = new THREE.CircleGeometry(30, 32); pg.rotateX(-Math.PI / 2);
+  const pad = new THREE.Mesh(pg, basisRingMat[t]); pad.position.set(BASIS[t].x, 40.8, BASIS[t].y); kartenGruppe[id].add(pad);
+  for (let i = 0; i < 3; i++) {
+    const rg2 = new THREE.RingGeometry(40 + i * 14, 44 + i * 14, 40); rg2.rotateX(-Math.PI / 2);
+    const r2_ = new THREE.Mesh(rg2, basisRingMat[t]); r2_.position.set(BASIS[t].x, 40.7, BASIS[t].y); r2_.userData.spawnRing = i; kartenGruppe[id].add(r2_);
+  }
 }
 // Lobby: großes Schild an der Wand
 (function lobbySchild() {
@@ -1696,11 +1704,14 @@ function baueTracker(team) {
   g.add(zylinder(MAT_GRAU, 3, 4, 4, 0, 2, 0), ringY(teamMat[team], 3.6, 0.7, 0, 3, 0), zylinder(MAT_METALL, 0.4, 0.4, 12, 0, 10, 0), kugel(licht, 1.4, 0, 16.5, 0));
   const rg = new THREE.RingGeometry(86, 95, 48); rg.rotateX(-Math.PI / 2);
   const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: '#ff3b3b', transparent: true, opacity: 0.6 })); ring.position.y = 1; g.add(ring);
-  const granate = new THREE.Group(); granate.visible = false; g.add(granate);
-  granate.add(kugel(teamMat[team], 14, 0, 0, 0, 1, 1.3, 1));
-  const spitze = new THREE.Mesh(new THREE.ConeGeometry(10, 16, 16), teamMat[team]); spitze.rotation.x = Math.PI; spitze.position.y = -18; granate.add(spitze);
-  for (let i = 0; i < 4; i++) { const f = klotz(MAT_GRAU, 0.8, 10, 8, Math.cos(i * Math.PI / 2) * 9, 18, Math.sin(i * Math.PI / 2) * 9); f.rotation.y = -i * Math.PI / 2; granate.add(f); }
-  g.userData = { licht, ring, granate };
+  // Der Farbstrahl: schießt vom Boden bis in den Himmel
+  const strahl = new THREE.Group(); strahl.visible = false; g.add(strahl);
+  const sg = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true); sg.translate(0, 0.5, 0);
+  const aussen = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+  aussen.scale.set(75, 1, 75); strahl.add(aussen);
+  const kern = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
+  kern.scale.set(28, 1, 28); strahl.add(kern);
+  g.userData = { licht, ring, strahl, aussen };
   return g;
 }
 // Die riesige Tuffkugel-Blase
@@ -2142,7 +2153,7 @@ function mpSchnappschuss(d) {
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
-    if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
+    if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = e === spieler && modus === 'match' ? 260 : 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
     if (e !== spieler || !(e.kugelT > 0)) e.kugelKraft = kugelKraft || 0;   // eigene Klicks zählen wir selbst
     if (e === spieler) {
       if (e.ulti < 1 && ulti >= 1) { meldung('⚡ Ulti bereit! Drück Q!'); ton('ulti'); }
@@ -2291,8 +2302,13 @@ function geraetAnim(g) {
   } else if (g.art === 'tracker') {
     ud.licht.emissiveIntensity = Math.sin(g.t * (12 + g.t * 25)) > 0 ? 2 : 0.1;
     ud.ring.scale.setScalar(0.3 + Math.min(1, g.t) * 0.7); ud.ring.material.opacity = 0.35 + Math.sin(g.t * 20) * 0.25;
-    ud.granate.visible = g.t >= 1;
-    if (g.t >= 1) ud.granate.position.y = Math.max(0, 700 * (1 - (g.t - 1) / 0.7)) + 18;
+    ud.strahl.visible = g.t >= 1.4;
+    if (g.t >= 1.4 && !g.strahlTon && istGast()) { g.strahlTon = true; if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 700) ton('strahl'); }
+    if (g.t >= 1.4) {   // Strahl schießt von unten nach oben und wird dann dünner
+      const k = g.t - 1.4, breit = k < 0.3 ? 1 + Math.sin(k * 60) * 0.06 : Math.max(0.02, 1 - (k - 0.3) / 0.25);
+      ud.strahl.scale.set(breit, Math.min(900, k * 3500), breit);
+      ud.aussen.rotation.y += 0.3;
+    }
   } else if (g.art === 'wand') {
     ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
     ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
@@ -3400,7 +3416,7 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0, gigaT: 0, trifT: 0, dashT: 0 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, z: 260, vz: -60, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0, gigaT: 0, trifT: 0, dashT: 0 });
         if (e.spieler) ton('plopp');
       }
       continue;
@@ -3511,8 +3527,13 @@ function update(dt) {
       if (g.t > 40) weg = true;
     } else if (g.art === 'tracker') {   // Peilsender: Warnung, dann kracht eine Farbbombe vom Himmel
       geraetAnim(g);
-      if (g.t >= 1 && !g.gepfiffen) { g.gepfiffen = true; if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 600) ton('fallen'); }
-      if (g.t >= 1.7) { explodieren(g.x, g.y, 95, 140, g.team, g.wer, false); spritzer(g.x, g.y, 20, g.team, 40, 350); weg = true; }
+      if (g.t >= 1.4 && !g.gepfiffen) {   // Farbstrahl von unten nach oben!
+        g.gepfiffen = true;
+        explodieren(g.x, g.y, 95, 140, g.team, g.wer, false);
+        for (let k = 0; k < 4; k++) spritzer(g.x, g.y, bodenHoehe(g.x, g.y) + 40 + k * 60, g.team, 12, 260);
+        if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 700) ton('strahl');
+      }
+      if (g.t >= 1.95) weg = true;
     } else if (g.art === 'wand') {
       ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
       ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
@@ -3678,6 +3699,7 @@ function welt3D(dt) {
   if (kartenGruppe[karte]) for (const o of kartenGruppe[karte].children) {
     if (o.userData.boost) o.scale.setScalar(1 + Math.sin(zeit * 6) * 0.15);
     if (o.userData.sand) o.rotation.y += dt * 0.6;
+    if (o.userData.spawnRing !== undefined) { const k = (zeit * 0.8 + o.userData.spawnRing / 3) % 1; o.scale.setScalar(0.6 + k * 0.6); }   // Start-Pad pulsiert
   }
   // Sandsturm: Nebel kommt ganz nah
   const sturm = sandsturm();
