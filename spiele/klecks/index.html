@@ -211,12 +211,12 @@ const WAFFEN = {
 };
 // Neue Waffen: "typ" sagt, wie sie funktionieren (wie ein Roller, wie ein Sniper …)
 Object.assign(WAFFEN, {
-  breitroller: { typ: 'roller', name: 'Breitroller', emoji: '🧱', info: 'Riesig breite Walze – aber kaum Wurf', reichweite: 90, modell: { walzeBreite: 1.7 },
-    nah: { rollBreite: 34, rollSchaden: 9, rollTempo: 120, rollKosten: 3.5, schwingCd: 0.7, schwingDauer: 0.45, abwurf: 0.2, art: 'hoch' },
-    schwung: { anzahl: 4, streu: 0.6, speed: 330, bremse: 3, schaden: 28, klecks: 14, spur: 6, kosten: 7 } },
-  gigaroller: { typ: 'roller', name: 'Gigaroller', emoji: '🦣', info: 'Riesen-Wurf, aber langsames Rollen', reichweite: 170, modell: { ganz: 1.35 },
-    nah: { rollBreite: 26, rollSchaden: 10, rollTempo: 95, rollKosten: 4, schwingCd: 1.0, schwingDauer: 0.6, abwurf: 0.3, art: 'hoch' },
-    schwung: { anzahl: 11, streu: 1.0, speed: 560, bremse: 2.2, schaden: 45, klecks: 18, spur: 8, kosten: 14 } },
+  breitroller: { typ: 'roller', name: 'Breitroller', emoji: '🧱', info: 'Riesig breite Walze – aber kaum Wurf', reichweite: 90, modell: { walzeBreite: 2.6 },
+    nah: { rollBreite: 52, rollSchaden: 9, rollTempo: 120, rollKosten: 3.5, schwingCd: 0.7, schwingDauer: 0.45, abwurf: 0.2, art: 'hoch' },
+    schwung: { anzahl: 6, streu: 0.95, speed: 330, bremse: 3, schaden: 28, klecks: 14, spur: 6, kosten: 7 } },
+  gigaroller: { typ: 'roller', name: 'Gigaroller', emoji: '🦣', info: 'Riesen-Wurf, aber langsames Rollen', reichweite: 170, modell: { ganz: 1.35, walzeBreite: 1.8 },
+    nah: { rollBreite: 40, rollSchaden: 10, rollTempo: 95, rollKosten: 4, schwingCd: 1.0, schwingDauer: 0.6, abwurf: 0.3, art: 'hoch' },
+    schwung: { anzahl: 13, streu: 1.3, speed: 560, bremse: 2.2, schaden: 45, klecks: 18, spur: 8, kosten: 14 } },
   miniroller: { typ: 'roller', name: 'Miniroller', emoji: '🐭', info: 'Blitzschnell rollen und werfen – wenig Reichweite', reichweite: 80, modell: { ganz: 0.7 },
     nah: { rollBreite: 15, rollSchaden: 5, rollTempo: 205, rollKosten: 1.8, schwingCd: 0.3, schwingDauer: 0.25, abwurf: 0.1, art: 'hoch' },
     schwung: { anzahl: 5, streu: 0.6, speed: 330, bremse: 3.2, schaden: 22, klecks: 11, spur: 5, kosten: 4 } },
