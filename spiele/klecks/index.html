@@ -433,6 +433,87 @@ const KEINE_LAVA = [];
 function lavaListe() { return (ARENEN[karte] && ARENEN[karte].lava) || KEINE_LAVA; }
 function inLava(x, y) { for (const z of lavaListe()) if (x > z.x && x < z.x + z.w && y > z.y && y < z.y + z.h) return true; return false; }
 const VULKAN_TAKT = 45;   // alle 45 Sekunden bricht der Vulkan aus
+
+// ================== HÖHEN: Podeste, Rampen und Kletterwände ==================
+// [x, y, breite, tiefe, höhe, rampe, spiegeln]  rampe = welche Seite oben ist: 'n' (oben auf der Karte), 's', 'w' (links), 'o' (rechts)
+// Die Seiten von Podesten (nicht Rampen) sind Kletterwände: anmalen, Shift halten und dagegen laufen = hochschwimmen!
+const STUFE_MAX = 8;   // so hoch kann man einfach hochlaufen (für Rampen)
+const BASIS_STUFEN = [[0, 380, 190, 240, 40], [190, 460, 80, 80, 40, 'w']];   // erhöhte Startplattform mit Rampe (für jedes Team)
+const STUFEN_DATEN = {
+  farbhafen: [[700, 40, 200, 110, 70, null, false], [775, 150, 50, 80, 70, 'n', false], [700, 850, 200, 110, 70, null, false], [775, 770, 50, 80, 70, 's', false]],
+  skatepark: [[640, 380, 100, 240, 60], [660, 620, 60, 80, 60, 'n']],
+  dschungel: [[500, 40, 120, 90, 70], [530, 130, 60, 70, 70, 'n'], [500, 870, 120, 90, 70], [530, 800, 60, 70, 70, 's']],
+  eispalast: [[450, 60, 200, 110, 70], [650, 85, 90, 60, 70, 'w'], [450, 830, 200, 110, 70], [650, 855, 90, 60, 70, 'w']],
+  wueste:    [[700, 330, 200, 70, 70, null, false], [770, 230, 60, 100, 70, 's', false], [700, 600, 200, 70, 70, null, false], [770, 670, 60, 100, 70, 'n', false]],
+  vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
+};
+const RAMPE_SPIEGEL = { w: 'o', o: 'w', n: 'n', s: 's' };
+for (const [id, a] of Object.entries(ARENEN)) {
+  const liste = [];
+  for (const [x, y, w, h, hoehe, rampe = null, sp = true] of [...BASIS_STUFEN, ...(STUFEN_DATEN[id] || [])]) {
+    liste.push({ x, y, w, h, hoehe, rampe });
+    if (sp) liste.push({ x: W - x - w, y, w, h, hoehe, rampe: rampe && RAMPE_SPIEGEL[rampe] });
+  }
+  liste.forEach((s, i) => { s.nr = i; });
+  a.stufen = liste;
+}
+const KEINE_STUFEN = [];
+function stufenListe() { return (ARENEN[karte] && ARENEN[karte].stufen) || KEINE_STUFEN; }
+function stufeHoehe(s, x, y) {   // wie hoch ist dieses Podest / diese Rampe an der Stelle x, y?
+  if (!s.rampe) return s.hoehe;
+  const f = s.rampe === 'o' ? (x - s.x) / s.w : s.rampe === 'w' ? (s.x + s.w - x) / s.w : s.rampe === 's' ? (y - s.y) / s.h : (s.y + s.h - y) / s.h;
+  return s.hoehe * Math.max(0, Math.min(1, f));
+}
+function bodenHoehe(x, y) {     // wie hoch ist der Boden an dieser Stelle?
+  let h = 0;
+  for (const s of stufenListe()) if (x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) { const sh = stufeHoehe(s, x, y); if (sh > h) h = sh; }
+  return h;
+}
+function hAbs(e) { return bodenHoehe(e.x, e.y) + e.z; }   // e.z ist die Höhe ÜBER dem Boden – das hier ist die echte Höhe
+// Die 4 Seiten eines Podests: Startecke, Richtung entlang der Wand, Länge, Richtung nach innen
+function seite(s, f) {
+  return f === 0 ? { ox: s.x, oy: s.y, dx: 1, dy: 0, len: s.w, ix: 0, iy: 1 }
+       : f === 1 ? { ox: s.x + s.w, oy: s.y, dx: 0, dy: 1, len: s.h, ix: -1, iy: 0 }
+       : f === 2 ? { ox: s.x + s.w, oy: s.y + s.h, dx: -1, dy: 0, len: s.w, ix: 0, iy: -1 }
+       :           { ox: s.x, oy: s.y + s.h, dx: 0, dy: -1, len: s.h, ix: 1, iy: 0 };
+}
+// Welche Seite eines Podests ist von Punkt (x, y) aus vorne? (x, y liegt außerhalb)
+function seiteVon(s, x, y) {
+  if (y < s.y) return 0; if (x > s.x + s.w) return 1; if (y > s.y + s.h) return 2; if (x < s.x) return 3; return -1;
+}
+function seiteU(s, f, x, y) {    // Stelle entlang der Wand
+  const sd = seite(s, f); return Math.max(0, Math.min(sd.len, (x - sd.ox) * sd.dx + (y - sd.oy) * sd.dy));
+}
+// Farbe auf den Kletterwänden: pro Seite ein kleines Raster (8 x 8 Einheiten) und ein Bild
+const WAND_ZELLE = 8;
+for (const a of Object.values(ARENEN)) for (const s of a.stufen) {
+  if (s.rampe) continue;
+  s.flaechen = [0, 1, 2, 3].map(f => {
+    const len = seite(s, f).len, cols = Math.ceil(len / WAND_ZELLE), rows = Math.ceil(s.hoehe / WAND_ZELLE);
+    return { len, cols, rows, raster: new Uint8Array(cols * rows), cv: null, tex: null, neu: false };
+  });
+}
+function wandBesitzer(F, u, v) {
+  const c = Math.max(0, Math.min(F.cols - 1, (u / WAND_ZELLE) | 0)), r = (v / WAND_ZELLE) | 0;
+  if (r < 0) return 0; if (r >= F.rows) return F.raster[(F.rows - 1) * F.cols + c];
+  return F.raster[r * F.cols + c];
+}
+function wandMalen(s, f, u, v, r, team, senden = false) {
+  const F = s.flaechen && s.flaechen[f]; if (!F || r <= 0) return;
+  if (F.cv) {
+    const x = F.cv.getContext('2d'); x.fillStyle = TEAMS[team].col;
+    x.beginPath(); x.arc(u * WAND_PX, (s.hoehe - v) * WAND_PX, r * WAND_PX, 0, 7); x.fill();
+    F.neu = true;
+  }
+  const c0 = Math.max(0, ((u - r) / WAND_ZELLE) | 0), c1 = Math.min(F.cols - 1, ((u + r) / WAND_ZELLE) | 0);
+  const r0_ = Math.max(0, ((v - r) / WAND_ZELLE) | 0), r1_ = Math.min(F.rows - 1, ((v + r) / WAND_ZELLE) | 0);
+  for (let rr = r0_; rr <= r1_; rr++) for (let cc = c0; cc <= c1; cc++) {
+    const mx = cc * WAND_ZELLE + WAND_ZELLE / 2 - u, my = rr * WAND_ZELLE + WAND_ZELLE / 2 - v;
+    if (mx * mx + my * my <= (r + 3) * (r + 3)) F.raster[rr * F.cols + cc] = team + 1;
+  }
+  if (senden) mpEreignis({ k: 'wk', a: [s.nr, f, Math.round(u), Math.round(v), Math.round(r), team] });
+}
+const WAND_PX = 2;   // Bildpunkte pro Einheit auf den Kletterwand-Bildern
 const STANDARD_THEMA = ARENEN.farbhafen.thema;
 // Alle Karten: die Arenen und ein kleiner Lobby-Raum (Rest ist "Wand")
 const KARTEN = {
@@ -517,6 +598,16 @@ function klecks(x, y, r, team, wer, ultiLaden = true) {
   }
   // Auf Lava bleibt keine Farbe – die verbrennt sofort
   for (const z of lavaListe()) if (x + r * 1.6 > z.x && x - r * 1.6 < z.x + z.w && y + r * 1.6 > z.y && y - r * 1.6 < z.y + z.h) fctx.clearRect(z.x, z.y, z.w, z.h);
+  // Kleckse direkt neben einem Podest färben auch den unteren Teil der Kletterwand
+  for (const s of stufenListe()) {
+    if (s.rampe || x < s.x - r || x > s.x + s.w + r || y < s.y - r || y > s.y + s.h + r) continue;
+    const f = seiteVon(s, x, y); if (f < 0) continue;
+    const sd = seite(s, f), d = -((x - sd.ox) * sd.ix + (y - sd.oy) * sd.iy);   // Abstand zur Wand
+    if (d < 0 || d >= r) continue;
+    const u = (x - sd.ox) * sd.dx + (y - sd.oy) * sd.dy;
+    if (u < -r || u > sd.len + r) continue;
+    wandMalen(s, f, u, 0, Math.sqrt(r * r - d * d) * 1.2, team);
+  }
   farbeGeaendert = true;
   const id = team + 1;
   const x0 = Math.max(0, ((x - r) / CELL) | 0), x1 = Math.min(GW - 1, ((x + r) / CELL) | 0);
@@ -2023,7 +2114,7 @@ function mpSchnappschuss(d) {
   geraete = proxySync(geraete, d.g, a => {
     const art = GERAET_ARTEN[a[1]] || 'klebe', team = a[4] ? 1 : 0;
     const mesh = art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
-    mesh.position.set(a[2], art === 'klebe' ? 6 : 0, a[3]); mesh.rotation.y = -a[5];
+    mesh.position.set(a[2], bodenHoehe(a[2], a[3]) + (art === 'klebe' ? 6 : 0), a[3]); mesh.rotation.y = -a[5];
     return { mesh, art, team, x: a[2], y: a[3], winkel: a[5], treffer: 0 };
   }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; });
   wellen = proxySync(wellen, d.w, a => ({ mesh: baueWelle(a[6] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.winkel = a[3]; o.t = a[4]; o.dauer = a[5]; });
@@ -2099,7 +2190,7 @@ function gastUpdate(dt) {
     we.mesh.scale.y = Math.max(0.05, Math.min(1.4, we.t * 6, (we.dauer - we.t) * 4));
   }
   for (const tn of tornados) {
-    tn.t -= dt; tn.mesh.position.set(tn.x, 0, tn.y); tn.mesh.rotation.y += dt * 9;
+    tn.t -= dt; tn.mesh.position.set(tn.x, bodenHoehe(tn.x, tn.y), tn.y); tn.mesh.rotation.y += dt * 9;
     tn.mesh.scale.setScalar(Math.max(0.05, Math.min(1, (7 - tn.t) * 3, tn.t * 2)));
   }
   for (const wo of wolken) wo.t -= dt;
@@ -2164,7 +2255,7 @@ function laserZeigen(e) {
   const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
   let laenge = 700;
   for (let d = 10; d <= 700; d += 6) if (istWand(e.x + c * d, e.y + s * d) || feindWand(e.x + c * d, e.y + s * d, 22, e.team)) { laenge = d; break; }
-  m.position.set(e.x + c * 14, e.z + (e.spieler ? 26 : 22), e.y + s * 14);
+  m.position.set(e.x + c * 14, hAbs(e) + (e.spieler ? 26 : 22), e.y + s * 14);
   m.rotation.y = -e.winkel;
   m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
 }
@@ -2405,6 +2496,10 @@ function meldung(text) { meldungen.push({ text, t: 3 }); if (meldungen.length > 
 // ================== HILFSFUNKTIONEN ==================
 function kollidiert(x, y, r, z = 0) {
   if (x < r || y < r || x > W - r || y > H - r) return true;
+  for (const s of stufenListe()) {   // Podeste und Rampen: zu hoch = wie eine Wand
+    const cx = Math.max(s.x, Math.min(x, s.x + s.w)), cy = Math.max(s.y, Math.min(y, s.y + s.h));
+    if ((x - cx) ** 2 + (y - cy) ** 2 < r * r && stufeHoehe(s, cx, cy) > z + STUFE_MAX) return true;
+  }
   if (z > WAND_H + 2) return false;                     // hoch genug gesprungen: über die Mauer!
   for (const w of waende) {
     const cx = Math.max(w.x, Math.min(x, w.x + w.w)), cy = Math.max(w.y, Math.min(y, w.y + w.h));
@@ -2427,15 +2522,15 @@ function spritzer(x, y, h, team, anzahl, kraft = 150) {
   }
 }
 function trifftKoerper(e, x, y, h, extra = 4) {
-  const oben = e.z + (e.taucht ? 10 : 50);
-  return h >= e.z - 4 && h <= oben && Math.hypot(e.x - x, e.y - y) < e.r + extra;
+  const unten = hAbs(e), oben = unten + (e.taucht ? 10 : 50);
+  return h >= unten - 4 && h <= oben && Math.hypot(e.x - x, e.y - y) < e.r + extra;
 }
 // Wie steil muss ein Bot zielen, damit der Tropfen in Entfernung d auf Höhe zielH ankommt?
 function botPitch(e, d, zielH) {
   const w = WAFFEN[e.waffe]; if (!w.speed) return 0;
   const q = Math.min(0.93, w.bremse * d / w.speed);
   const t = -Math.log(1 - q) / w.bremse;
-  const vh = (zielH - (e.z + 24) + G_SCHUSS * t * t / 2) / t;
+  const vh = (zielH - (hAbs(e) + 24) + G_SCHUSS * t * t / 2) / t;
   return Math.asin(Math.max(-0.9, Math.min(0.9, vh / w.speed)));
 }
 
@@ -2449,23 +2544,27 @@ function zoneBei(x, y) {
 }
 function imGebuesch(e) { const z = zoneBei(e.x, e.y); return !!z && z.art === 'busch' && e.z < 20 && !e.tot; }
 function sandsturm() { return karte === 'wueste' && modus === 'match' && zustand !== 'intro' && (RUNDE - rest) % 50 >= 40; }
-function freieStelle(x, y, r) {   // nächste Stelle, an der keine Wand ist
+function freieStelle(x, y, r, z = 0) {   // nächste Stelle, an der keine Wand ist
   for (let d = 4; d <= 120; d += 4) for (let i = 0; i < 12; i++) {
     const a = i / 12 * Math.PI * 2, nx = x + Math.cos(a) * d, ny = y + Math.sin(a) * d;
-    if (!kollidiert(nx, ny, r)) return { x: nx, y: ny };
+    if (!kollidiert(nx, ny, r, z)) return { x: nx, y: ny };
   }
   return { x, y };
 }
 function bewege(e, dx, dy, dt) {
   // Springen / Fallen (mit der Tuffkugel schwebt man oben)
+  let bh = bodenHoehe(e.x, e.y);
+  const kletterte = e.klettert; e.amKlettern = kletterte; e.klettert = false;
   if (e.kugelT > 0) { e.vz = e.z < 110 ? 380 : 0; e.z = Math.min(110, e.z + e.vz * dt); }
+  else if (kletterte) { e.vz = 0; }                    // an der Wand fällt man nicht runter
+  else if (e.z > 0 && e.z < 5 && e.vz <= 0 && !e.slam && e.rampeT > 0) { e.z = 0; }   // Rampe runterlaufen: am Boden bleiben
   else if (e.z > 0 || e.vz > 0) {
     e.vz -= SCHWERKRAFT * dt; e.z += e.vz * dt;
     if (e.z <= 0) {
       e.z = 0; e.vz = 0; e.landT = 0.25;
       if (e.slam) { if (istGast()) { e.slam = false; mpSende({ t: 'slam' }); } else farbsturmLandung(e); }
     }
-    if (e.z < WAND_H + 2 && kollidiert(e.x, e.y, e.r)) { const f = freieStelle(e.x, e.y, e.r); e.x = f.x; e.y = f.y; }   // nicht in einer Mauer landen
+    if (e.z < WAND_H + 2 && kollidiert(e.x, e.y, e.r, bh + e.z)) { const f = freieStelle(e.x, e.y, e.r, bh + e.z); e.x = f.x; e.y = f.y; }   // nicht in einer Mauer landen
   }
   const zone = zoneBei(e.x, e.y);
   e.boostCd = Math.max(0, (e.boostCd || 0) - dt);
@@ -2485,8 +2584,17 @@ function bewege(e, dx, dy, dt) {
   e.vx += (dx * speed - e.vx) * k; e.vy += (dy * speed - e.vy) * k;
   let bx = 0, by = 0;
   if (zone && zone.art === 'band' && amBoden) bx = zone.dx;                 // Förderband schiebt
-  const nx = e.x + (e.vx + bx) * dt; if (!kollidiert(nx, e.y, e.r, e.z)) e.x = nx; else e.vx = 0;
-  const ny = e.y + (e.vy + by) * dt; if (!kollidiert(e.x, ny, e.r, e.z)) e.y = ny; else e.vy = 0;
+  const nx = e.x + (e.vx + bx) * dt; if (!kollidiert(nx, e.y, e.r, bh + e.z)) e.x = nx; else e.vx = 0;
+  const ny = e.y + (e.vy + by) * dt; if (!kollidiert(e.x, ny, e.r, bh + e.z)) e.y = ny; else e.vy = 0;
+  // Höhe anpassen: Rampe hoch = mitlaufen, Kante runter = fallen
+  const bhNeu = bodenHoehe(e.x, e.y);
+  if (bhNeu !== bh) {
+    e.z += bh - bhNeu;
+    if (e.z < 0) e.z = 0;
+    e.rampeT = e.z < 5 ? 0.1 : 0;          // kleine Stufe nach unten (Rampe): gleich wieder am Boden
+    bh = bhNeu;
+  } else e.rampeT = Math.max(0, (e.rampeT || 0) - dt);
+  kletternPruefen(e, dx, dy, dt, bh);
   if (zone && zone.art === 'boost' && amBoden && !e.taucht && !(e.gigaT > 0) && e.boostCd <= 0) {   // Sprung-Pad!
     e.vz = 520; e.z = 0.01; e.boostCd = 0.8; e.vx *= 1.6; e.vy *= 1.6;
     spritzer(e.x, e.y, 2, e.team, 8, 160);
@@ -2497,6 +2605,37 @@ function bewege(e, dx, dy, dt) {
   if (modus === 'match' && gd < 100) { e.x = gb.x + (e.x - gb.x) / gd * 100; e.y = gb.y + (e.y - gb.y) / gd * 100; }
   werte(e, dt, feind);
 }
+// Hochschwimmen: Shift halten und gegen eine Kletterwand in deiner Farbe laufen
+function kletterZiel(e, dx, dy, bh) {
+  const l = Math.hypot(dx, dy); if (l < 0.1) return null;
+  dx /= l; dy /= l;
+  const ha = bh + e.z, vx = e.x + dx * (e.r + 6), vy = e.y + dy * (e.r + 6);
+  for (const s of stufenListe()) {
+    if (s.rampe || s.hoehe <= ha + 1) continue;
+    if (vx < s.x || vx > s.x + s.w || vy < s.y || vy > s.y + s.h) continue;
+    const f = seiteVon(s, e.x, e.y); if (f < 0) continue;
+    return { s, f, u: seiteU(s, f, e.x, e.y), ha };
+  }
+  return null;
+}
+function kletternPruefen(e, dx, dy, dt, bh) {
+  if (!e.willTauchen || e.tot || e.panzerT > 0 || e.gigaT > 0 || e.kugelT > 0 || modus !== 'match') return;
+  const kz = kletterZiel(e, dx, dy, bh); if (!kz) return;
+  const F = kz.s.flaechen[kz.f];
+  if (wandBesitzer(F, kz.u, kz.ha + 4) !== e.team + 1) return;    // nur in der eigenen Farbe!
+  if (!e.klettertSchon && e.spieler) meldung('🧗 Du schwimmst die Wand hoch!');
+  e.klettertSchon = true;
+  e.klettert = true; e.vz = 0; e.vx *= 0.2; e.vy *= 0.2;
+  e.z += 170 * dt;
+  if (e.tinte < 100) e.tinte = Math.min(100, e.tinte + 20 * dt);
+  if (bh + e.z >= kz.s.hoehe - 2) {      // oben angekommen: rauf aufs Podest!
+    const sd = seite(kz.s, kz.f), ha = bh + e.z;
+    e.x += sd.ix * (e.r + 8); e.y += sd.iy * (e.r + 8);
+    e.z = Math.max(0, ha - kz.s.hoehe) + 1; e.vz = 200; e.klettert = false;
+    spritzer(e.x, e.y, kz.s.hoehe, e.team, 10, 140);
+    if (e.spieler) ton('auf');
+  }
+}
 // Steht man in eigener Farbe und taucht ab? Gibt zurück, ob man in Gegnerfarbe steht.
 function tauchenPruefen(e) {
   const amBoden = e.z <= 0;
@@ -2504,7 +2643,7 @@ function tauchenPruefen(e) {
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
   const zone = zoneBei(e.x, e.y);
-  e.taucht = e.willTauchen && eigen && amBoden && !(zone && (zone.art === 'sand' || zone.art === 'lava')) && !(e.kugelT > 0) && !(e.panzerT > 0) && !(e.gigaT > 0);   // im Treibsand kann man nicht abtauchen
+  e.taucht = (e.amKlettern && e.willTauchen) || e.willTauchen && eigen && amBoden && !(zone && (zone.art === 'sand' || zone.art === 'lava')) && !(e.kugelT > 0) && !(e.panzerT > 0) && !(e.gigaT > 0);   // im Treibsand kann man nicht abtauchen
   if (vorher !== e.taucht) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
@@ -2533,7 +2672,7 @@ function schiessen(e, dt) {
     if (e.schiesst && e.schussCd <= 0) {
       e.schussCd = 0.05; e.rueck = 0.6;
       const a = e.winkel + (Math.random() - 0.5) * 0.12, pi = e.pitch + 0.03 + (Math.random() - 0.5) * 0.05;
-      tropfen(e.x + Math.cos(a) * 30, e.y + Math.sin(a) * 30, e.z + 31, a, pi, 700, MINIGUN_W, e.team, e);
+      tropfen(e.x + Math.cos(a) * 30, e.y + Math.sin(a) * 30, hAbs(e) + 31, a, pi, 700, MINIGUN_W, e.team, e);
       if (e.spieler) ton('schuss', 0.7);
     }
     return;
@@ -2598,7 +2737,7 @@ function schiessen(e, dt) {
       const fx = e.x + Math.cos(e.winkel) * 20, fy = e.y + Math.sin(e.winkel) * 20;
       if (!istWand(fx, fy)) klecks(fx, fy, n.rollBreite, e.team, e);
       for (const f of kleckse) {
-        if (f.team === e.team || f.tot || f.z > 20) continue;
+        if (f.team === e.team || f.tot || Math.abs(hAbs(f) - hAbs(e)) > 20) continue;
         if (Math.hypot(f.x - fx, f.y - fy) < n.rollBreite + 10) treffen(f, n.rollSchaden, e);
       }
       if (e.spieler && Math.hypot(e.vx, e.vy) > 40 && Math.random() < 0.3) ton(e.waffe === 'pinsel' ? 'pinsel' : 'roll');
@@ -2617,7 +2756,7 @@ function schiessen(e, dt) {
     const sp = w.speed * (w.anzahl > 1 ? 0.75 + Math.random() * 0.35 : 1);
     const p = e.pitch + (Math.random() - 0.5) * 0.04 + (w.anzahl > 1 ? Math.random() * 0.1 : 0);
     const vh = Math.cos(p) * sp;
-    const s = { x: e.x + Math.cos(a) * 14 + vx0, y: e.y + Math.sin(a) * 14 + vy0, h: e.z + (e.spieler ? 30 : 24),
+    const s = { x: e.x + Math.cos(a) * 14 + vx0, y: e.y + Math.sin(a) * 14 + vy0, h: hAbs(e) + (e.spieler ? 30 : 24),
       vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp,
       team: e.team, wer: e, w, spurT: 0.04, leben: 3 };
     s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
@@ -2646,7 +2785,7 @@ function laserUpdate(e, dt) {
   }
   const m = e.laserMesh;
   m.visible = e.laserT > 0;
-  m.position.set(e.x + c * 14, e.z + (e.spieler ? 26 : 22), e.y + s * 14);
+  m.position.set(e.x + c * 14, hAbs(e) + (e.spieler ? 26 : 22), e.y + s * 14);
   m.rotation.y = -e.winkel;
   m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
 }
@@ -2709,7 +2848,7 @@ function tuffWerfen(e) {
   const zx = Math.max(20, Math.min(W - 20, e.x + Math.cos(e.winkel) * d)), zy = Math.max(20, Math.min(H - 20, e.y + Math.sin(e.winkel) * d));
   const kraft = Math.min(25, e.kugelKraft || 0);
   const mesh = baueTuffBlase(e.team); scene.add(mesh);
-  const b = { sx: e.x, sy: e.y, sh: e.z + 62, zx, zy, x: e.x, y: e.y, h: e.z + 62, t: 0, flug: 0.9, phase: 'flug',
+  const b = { sx: e.x, sy: e.y, sh: hAbs(e) + 62, zx, zy, x: e.x, y: e.y, h: hAbs(e) + 62, t: 0, flug: 0.9, phase: 'flug',
     r: 14 + kraft * 0.8, R: 90 + kraft * 5, rAkt: 0, team: e.team, wer: e, malT: 0, mesh };
   blasen.push(b); blaseZeigen(b);
   e.kugelT = 0; e.kugelKraft = 0; e.vz = 0;
@@ -2754,7 +2893,7 @@ function schwungWerfen(e, w) {
     const sp = sw.speed * (0.8 + Math.random() * 0.3) * (!roller ? 1 : senkrecht ? 1.3 : 0.85);
     const p = Math.max(-0.2, e.pitch) + (senkrecht ? 0.28 : 0.18) + Math.random() * 0.12;
     const vh = Math.cos(p) * sp;
-    const s = { x: e.x + Math.cos(a) * 18, y: e.y + Math.sin(a) * 18, h: e.z + 20,
+    const s = { x: e.x + Math.cos(a) * 18, y: e.y + Math.sin(a) * 18, h: hAbs(e) + 20,
       vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp,
       team: e.team, wer: e, w: sw, spurT: 0.03, leben: 3 };
     s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
@@ -2798,7 +2937,7 @@ function sniperSchuss(e) {
   spritzer(e.x + dx * ende, e.y + dy * ende, 10, e.team, 10, 180);
   if (opfer) treffen(opfer, s0 + s1 * lad, e);
   // Leuchtstrahl
-  const h0 = e.z + (e.spieler ? 28 : 24);
+  const h0 = hAbs(e) + (e.spieler ? 28 : 24);
   strahlZeigen(e.x + dx * 14, e.y + dy * 14, e.x + dx * ende, e.y + dy * ende, h0, e.team);
   mpEreignis({ k: 'strahl', a: [r0(e.x + dx * 14), r0(e.y + dy * 14), r0(e.x + dx * ende), r0(e.y + dy * ende), r0(h0)], team: e.team });
   if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('sniper');
@@ -2819,7 +2958,7 @@ function bombeWerfen(e, zx, zy, extra = {}) {
   const d = Math.hypot(zx - e.x, zy - e.y), max = extra.max || 240;
   if (d > max) { zx = e.x + (zx - e.x) / d * max; zy = e.y + (zy - e.y) / d * max; }
   zx = Math.max(10, Math.min(W - 10, zx)); zy = Math.max(10, Math.min(H - 10, zy));
-  const b = { sx: e.x, sy: e.y, zx, zy, x: e.x, y: e.y, h0: e.z + 20, t: 0, dauer: 0.6, hoehe: 70, r: 65, schaden: 90,
+  const b = { sx: e.x, sy: e.y, zx, zy, x: e.x, y: e.y, h0: hAbs(e) + 20, t: 0, dauer: 0.6, hoehe: 70, r: 65, schaden: 90,
     team: e.team, wer: e, ulti: false, art, ...extra };
   b.mesh = art === 'tracker' ? baueTracker(e.team) : b.ulti ? baueRakete(e.team) : art === 'klebe' ? baueKlebe(e.team) : art === 'sprinkler' ? baueSprinkler(e.team) : baueBombe(e.team);
   b.mesh.position.set(e.x, b.h0, e.y); scene.add(b.mesh);
@@ -2834,7 +2973,7 @@ function geraetSetzen(art, x, y, team, wer, winkel, mesh) {
   }
   x = Math.max(10, Math.min(W - 10, x)); y = Math.max(10, Math.min(H - 10, y));
   if (!mesh) mesh = art === 'mine' ? baueMine(team) : baueFarbwand(team);
-  mesh.position.set(x, art === 'klebe' ? 6 : 0, y); mesh.rotation.set(0, -winkel, 0); scene.add(mesh);
+  mesh.position.set(x, bodenHoehe(x, y) + (art === 'klebe' ? 6 : 0), y); mesh.rotation.set(0, -winkel, 0); scene.add(mesh);
   geraete.push({ art, x, y, team, wer, winkel, mesh, t: 0, spT: 0, dreh: 0, zuend: -1, treffer: 0 });
 }
 // Steht hier eine Farbwand vom anderen Team im Weg?
@@ -3078,7 +3217,7 @@ function ki(b, dt) {
     const a = Math.atan2(feind.y - b.y, feind.x - b.x);
     const zielA = a + Math.sin(zeit * 3 + b.nr * 7) * 0.12;   // Nicht ganz perfekt zielen
     b.winkel = drehe(b.winkel, zielA, dt * 5);
-    b.pitch = botPitch(b, fd, feind.z + 22);
+    b.pitch = botPitch(b, fd, hAbs(feind) + 22);
     const gutGezielt = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
     if (b.panzerT > 0) b.schiesst = gutGezielt && fd < 330;
     else if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
@@ -3112,7 +3251,7 @@ function ki(b, dt) {
     } else {
       // Farbe verteilen
       b.winkel = drehe(b.winkel, a + (w.nah ? 0 : Math.sin(zeit * 4 + b.nr * 2) * 0.6), dt * 6);
-      b.pitch = botPitch(b, 120, 0);
+      b.pitch = botPitch(b, 120, bodenHoehe(b.x, b.y));
       if (typVon(b.waffe) === 'sniper') {
         b.schiesst = !(b.laden && b.ladung > 0.35);
       } else b.schiesst = true;
@@ -3335,7 +3474,7 @@ function update(dt) {
       }
       spritzer(w.x - s2 * (Math.random() - 0.5) * 180, w.y + c * (Math.random() - 0.5) * 180, 30, w.team, 3, 120);
     }
-    w.mesh.position.set(w.x, 0, w.y); w.mesh.rotation.y = -w.winkel;
+    w.mesh.position.set(w.x, bodenHoehe(w.x, w.y), w.y); w.mesh.rotation.y = -w.winkel;
     w.mesh.scale.y = Math.max(0.05, Math.min(1.4, w.t * 6, (w.dauer - w.t) * 4));
     if (w.t >= w.dauer) { scene.remove(w.mesh); wellen.splice(i, 1); }
   }
@@ -3362,7 +3501,7 @@ function update(dt) {
       tn.schadenT = 0.25;
       for (const e of kleckse) if (e.team !== tn.team && !e.tot && Math.hypot(e.x - tn.x, e.y - tn.y) < 70) treffen(e, 12, tn.wer);
     }
-    tn.mesh.position.set(tn.x, 0, tn.y); tn.mesh.rotation.y += dt * 9;
+    tn.mesh.position.set(tn.x, bodenHoehe(tn.x, tn.y), tn.y); tn.mesh.rotation.y += dt * 9;
     tn.mesh.scale.setScalar(Math.max(0.05, Math.min(1, (7 - tn.t) * 3, tn.t * 2)));
     if (tn.t <= 0) { scene.remove(tn.mesh); tornados.splice(i, 1); }
   }
@@ -3397,7 +3536,7 @@ function update(dt) {
     const p = partikel[i];
     p.vh -= 600 * dt;
     p.x += p.vx * dt; p.y += p.vy * dt; p.h += p.vh * dt; p.vx *= 0.95; p.vy *= 0.95; p.leben -= dt;
-    if (p.leben <= 0 || p.h < 0) partikel.splice(i, 1);
+    if (p.leben <= 0 || p.h < 0 || (p.vz < 0 && p.h < bodenHoehe(p.x, p.y))) partikel.splice(i, 1);
   }
   if (partikel.length > PMAX * 1.6) partikel.splice(0, partikel.length - PMAX * 1.6);
   for (const m of meldungen) m.t -= dt;
@@ -3502,7 +3641,7 @@ function welt3D(dt) {
       gx = gy = Math.min(1, f * 1.4) + Math.sin(f * Math.PI) * 0.18;
     }
     if (e.landT > 0) { const q = Math.sin(e.landT / 0.25 * Math.PI); gy *= 1 - q * 0.16; gx *= 1 + q * 0.1; }   // Landen: zusammenstauchen
-    g.position.set(e.x, e.z + hoch, e.y);
+    g.position.set(e.x, hAbs(e) + hoch, e.y);
     g.rotation.y = -e.winkel + dreh;
     g.scale.set(gx, gy, gx);
     // Abtauchen: der Körper versinkt in der Farbe, dann kommt der Schnorchel
@@ -3515,18 +3654,18 @@ function welt3D(dt) {
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
     e.welle.visible = !e.tot && e.taucht && e.team !== spieler.team && v > 60 && Math.sin(zeit * 16 + e.nr) > 0.4;
-    e.welle.position.set(e.x, 0.8, e.y);
+    e.welle.position.set(e.x, bodenHoehe(e.x, e.y) + 0.8, e.y);
     e.welle.scale.setScalar(1 + (zeit * 3 % 1) * 0.6);
     e.blase.visible = !e.tot && e.schild > 0 && !istIch;
-    e.blase.position.set(e.x, e.z + 24, e.y);
+    e.blase.position.set(e.x, hAbs(e) + 24, e.y);
     e.kugelMesh.visible = !e.tot && e.kugelT > 0;            // Tuffkugel über dem Kopf, wird mit jedem Klick größer
-    if (e.kugelMesh.visible) { e.kugelMesh.position.set(e.x, e.z + 64, e.y); e.kugelMesh.scale.setScalar((12 + (e.kugelKraft || 0) * 0.8) / 30); e.kugelMesh.rotation.y += dt * 3; }
+    if (e.kugelMesh.visible) { e.kugelMesh.position.set(e.x, hAbs(e) + 64, e.y); e.kugelMesh.scale.setScalar((12 + (e.kugelKraft || 0) * 0.8) / 30); e.kugelMesh.rotation.y += dt * 3; }
     const alsFisch = !e.tot && e.gigaT > 0;
     e.gigaMesh.visible = alsFisch && !istIch;
     if (alsFisch) {
       e.koerper.visible = false;
       const gud = e.gigaMesh.userData, v2 = Math.hypot(e.vx, e.vy);
-      e.gigaMesh.position.set(e.x, Math.sin(zeit * 4) * 1.5, e.y); e.gigaMesh.rotation.y = -e.winkel;
+      e.gigaMesh.position.set(e.x, bodenHoehe(e.x, e.y) + Math.sin(zeit * 4) * 1.5, e.y); e.gigaMesh.rotation.y = -e.winkel;
       if (v2 > 60 && Math.random() < dt * 25) spritzer(e.x - Math.cos(e.winkel) * 40, e.y - Math.sin(e.winkel) * 40, 2, e.team, 2, 90);   // Farbe spritzt hinter ihm
       gud.koerper.rotation.z = -Math.min(0.3, v2 / 1500) - (e.dashT > 0 ? 0.2 : 0);
       gud.arme.forEach((arm, i) => { arm.rotation.z = Math.sin((i / 8) * Math.PI * 2) * 0.25 + Math.sin(zeit * (8 + v2 / 40) + i) * 0.3; });
@@ -3536,7 +3675,7 @@ function welt3D(dt) {
     if (imPanzer) {
       e.koerper.visible = false;
       const pud = e.panzerMesh.userData;
-      e.panzerMesh.position.set(e.x, e.z, e.y); e.panzerMesh.rotation.y = -e.winkel;
+      e.panzerMesh.position.set(e.x, hAbs(e), e.y); e.panzerMesh.rotation.y = -e.winkel;
       pud.kanone.rotation.z = e.pitch * 0.8; pud.laeufe.rotation.x += dt * (e.rueck > 0.1 ? 30 : 2);
     }
   }
@@ -3574,17 +3713,18 @@ function welt3D(dt) {
   if (kameraOverride) {
     kamera.position.set(...kameraOverride.pos); kamera.lookAt(...kameraOverride.ziel);
   } else if (ichSicht) {
-    kamera.position.set(p.x, p.z + augenHoehe, p.y);
-    kamera.lookAt(p.x + fx * 100, p.z + augenHoehe + fy * 100, p.y + fz * 100);
+    const ph = hAbs(p);
+    kamera.position.set(p.x, ph + augenHoehe, p.y);
+    kamera.lookAt(p.x + fx * 100, ph + augenHoehe + fy * 100, p.y + fz * 100);
   } else {
     // Sicht von hinten: Kamera geht nicht durch Wände
     let abstand = 90;
     for (let d = 10; d <= 90; d += 5) {
       if (istWand(p.x - Math.cos(p.winkel) * d, p.y - Math.sin(p.winkel) * d)) { abstand = d - 10; break; }
     }
-    const hoehe = p.z + 58 - fy * 40;
+    const ph = hAbs(p), hoehe = ph + 58 - fy * 40;
     kamera.position.set(p.x - Math.cos(p.winkel) * abstand, Math.max(8, hoehe), p.y - Math.sin(p.winkel) * abstand);
-    kamera.lookAt(p.x + fx * 200, p.z + 35 + fy * 200, p.y + fz * 200);
+    kamera.lookAt(p.x + fx * 200, ph + 35 + fy * 200, p.y + fz * 200);
   }
   if (wackeln > 0 && !kameraOverride) {   // Erdbeben beim Vulkan-Ausbruch
     const s = Math.min(1, wackeln) * 4;
