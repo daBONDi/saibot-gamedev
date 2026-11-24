@@ -1824,7 +1824,8 @@ function baueWaffe(art, m, team, watzo = false, variante = null) {
       ud.sehne = { spitze, hoch, teile: [-1, 1].map(sy => { const t = new THREE.Mesh(sehneGeo, sehneMat); t.position.set(spitze, sy * hoch, 0); t.userData.sy = sy; g.add(t); return t; }) };
       // Der Pfeil, der aufliegt (mit leuchtender Spitze beim Spannen)
       ud.ladeMat = tintenMaterial(team, 0.2);
-      const pfeil = new THREE.Group(); g.add(pfeil); ud.pfeilAuf = pfeil;
+      const kerbe = new THREE.Group(); g.add(kerbe); ud.kerbe = kerbe;   // wandert mit der Sehne (hier zieht die Hand)
+      const pfeil = new THREE.Group(); kerbe.add(pfeil); ud.pfeilAuf = pfeil;
       pfeil.add(zylinderX(mat('#c99a5b'), 0.55, 0.55, 19, 9.5, 0, 0), zylinderX(ud.ladeMat, 0.1, 1.9, 4.5, 21, 0, 0));
       for (let i = 0; i < 3; i++) { const f = klotz(m, 4, 2.4, 0.3, 2.5, 0, 0); f.rotation.x = i * Math.PI / 3; pfeil.add(f); }
       ud.blitz = kugel(blitzMat, 2.4, 24, 0, 0); g.add(ud.blitz);
@@ -1926,7 +1927,7 @@ function animiereWaffe(ud, e, dt, vf) {
       const dx = kerbe - ud.sehne.spitze, dy = -t.userData.sy * ud.sehne.hoch;
       t.scale.y = Math.hypot(dx, dy); t.rotation.z = Math.atan2(-dx, dy);
     }
-    ud.pfeilAuf.position.x = kerbe; ud.pfeilAuf.visible = e.tinte >= 4 && e.rueck < 0.5;
+    ud.kerbe.position.x = kerbe; ud.pfeilAuf.visible = e.tinte >= 4 && e.rueck < 0.5;
   }
   if (ud.spulen) ud.spulen.rotation.x += dt * (0.5 + e.ladung * 25);
   if (ud.trommel) ud.trommel.rotation.x += dt * (e.lingT > 0 || e.rueck > 0.3 ? 40 : e.laden ? 3 + e.ladung * 30 : 0.8);   // Läufe drehen sich
@@ -2156,7 +2157,7 @@ const VM_POS = { doppel: [0, -6, -9, 0.45], kanone: [5, -7, -10, 0.5], spritzer:
 const VM_EXTRA_POS = {}, VM_EXTRA_HAENDE = {};
 Object.assign(VM_POS, { ling: [4, -6.5, -9, 0.45], bogen: [5, -3, -14, 0.3] });   // nach Waffen-Typ (gilt für alle Lings und Bögen)
 const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0], [13, -4, 0]], spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
-Object.assign(VM_HAENDE, { ling: [[0.5, -5, 0], [10, -2, -3.5]], bogen: [[4, 0, 0], [-3, 0, 0]] });
+Object.assign(VM_HAENDE, { ling: [[0.5, -5, 0], [10, -2, -3.5]], bogen: [[4, -0.5, 1.5], [-1.5, 0, 0]] });
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
   const tm = spieler ? spieler.team : 0;
@@ -2172,11 +2173,12 @@ function baueHaendeWaffe(art, aussehen, an) {
   haendeWaffe.rotation.y = Math.PI / 2 + 0.07;                 // zeigt nach vorne, leicht zur Mitte
   if (typVon(art) === 'bogen') haendeWaffe.rotation.x = 0.5;   // Bogen schräg halten
   // Handschuhe + Ärmel vom Taucheranzug
-  for (const [hx, hy, hz] of VM_HAENDE[art] || VM_EXTRA_HAENDE[art] || VM_HAENDE[typVon(art)]) {
+  (VM_HAENDE[art] || VM_EXTRA_HAENDE[art] || VM_HAENDE[typVon(art)]).forEach(([hx, hy, hz], nr) => {
+    const ziel = typVon(art) === 'bogen' && nr === 1 ? haendeWaffe.userData.kerbe : haendeWaffe;   // Bogen: die Zieh-Hand geht mit der Sehne mit
     const hemd = HEMDEN[an.hemd] || HEMDEN.tshirt, haut = mat(aussehen.haut, { roughness: 0.6 });
     const aermel = zylinderX(hemd.aermel === 'lang' ? mat(hemd.farbe) : haut, 2.5, 3, 16, hx - 8.5, hy - 2.2, hz); aermel.rotation.z = -Math.PI / 2 + 0.25;
-    haendeWaffe.add(kugel(haut, 3, hx, hy, hz), ringX(teamMat[tm], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);   // Hand + Schweißband
-  }
+    ziel.add(kugel(haut, 3, hx, hy, hz), ringX(teamMat[tm], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);   // Hand + Schweißband
+  });
   haendeWaffe.traverse(o => { o.castShadow = false; });
   vmHalter.add(haendeWaffe);
 }
@@ -4298,7 +4300,7 @@ function update(dt) {
 
 // ================== ANIMATION DER FARBTAUCHER ==================
 // [Schulter-Winkel, Ellbogen-Winkel, wie stark die Arme beim Zielen hoch/runter gehen]
-const HALTUNG = { doppel: [1.15, 0.45, 0.6], kanone: [1.1, 0.5, 0.6], spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0], pinsel: [0.75, 0.25, 0] };
+const HALTUNG = { bogen: [1.4, 0.12, 0.6], ling: [1.0, 0.55, 0.5], doppel: [1.15, 0.45, 0.6], kanone: [1.1, 0.5, 0.6], spritzer: [1.15, 0.45, 0.6], sniper: [1.2, 0.35, 0.6], eimer: [0.6, 0.2, 0.2], roller: [0.75, 0.25, 0], pinsel: [0.75, 0.25, 0] };
 function animiereFigur(e, v, dt) {
   const ud = e.koerper.userData, inLuft = e.z > 0;
   const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
@@ -4325,6 +4327,14 @@ function animiereFigur(e, v, dt) {
   ud.kopf.rotation.z = e.pitch * 0.45 - zucken * 0.5;
   ud.augen.scale.y = ((zeit + e.nr * 0.77) % 3.3) < 0.12 ? 0.1 : 1;
   ud.tankFuell.scale.y = Math.max(0.02, e.tinte / 100);
+  // In der Stadt: keine Waffe – die Arme schwingen beim Gehen
+  if (e.ohneWaffe) {
+    ud.ober.rotation.y = 0;
+    ud.arme.forEach((arm, i) => { arm.schulter.rotation.z = (inLuft ? 0.9 : 0.05) + Math.sin(ph + (i ? 0 : Math.PI)) * 0.6 * amp; arm.ellbogen.rotation.z = 0.15 + 0.3 * amp; });
+    if (e.waffenModell) e.waffenModell.visible = false;
+    if (e.werferModell) e.werferModell.visible = false;
+    return;
+  }
   // Arme halten die Waffe und zielen mit
   const [a0, b0, pf] = HALTUNG[e.waffe] || HALTUNG[typVon(e.waffe)] || HALTUNG.kanone;
   const schwung = schwungKurve(e);
@@ -5147,7 +5157,7 @@ function stadtFigurBauen() {
   e.waffe = SETS[konto.an.waffe].basis; e.bonus = bonusVon(konto.an);
   e.mat = mat(TEAMS[0].col, { roughness: 0.35 });
   e.koerper = baueJunge(e.mat, 0, kontoAussehen(), konto.an);
-  e.waffenModell = baueWaffe(e.waffe, e.mat, 0, SETS[konto.an.waffe].watzo, SETS[konto.an.waffe].variante); e.koerper.userData.ober.add(e.waffenModell);
+  e.waffenModell = null; e.ohneWaffe = true;   // in der Stadt trägt keiner eine Waffe
   e.gruppe = new THREE.Group(); e.gruppe.add(e.koerper); stadtGruppe.add(e.gruppe);
 }
 function stadtKollidiert(x, y, r) {
@@ -5169,7 +5179,7 @@ for (let i = 0; i < 7; i++) {
   n.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   n.koerper = baueJunge(n.mat, team, { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) },
     { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) });
-  n.waffenModell = baueWaffe(n.waffe, n.mat, team); n.koerper.userData.ober.add(n.waffenModell);
+  n.waffenModell = null; n.ohneWaffe = true;   // in der Stadt trägt keiner eine Waffe
   n.gruppe = new THREE.Group(); n.gruppe.add(n.koerper); stadtGruppe.add(n.gruppe);
   npcs.push(n);
 }
