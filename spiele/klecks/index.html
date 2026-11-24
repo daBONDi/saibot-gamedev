@@ -1290,13 +1290,26 @@ function karteLaden(name) {
   for (const k in kartenGruppe) kartenGruppe[k].visible = k === name;
   const th = ARENEN[name] ? ARENEN[name].thema : STANDARD_THEMA;
   WAND_H = ARENEN[name] ? ARENEN[name].wandH : 80;
-  bodenMalen(th); himmelSetzen(th);
+  bodenMalen(th); himmelSetzen(th, name);
   sonneAuf(W / 2, H / 2);
   stufenZuruecksetzen(name);   // Kletterwände wieder sauber
 }
-function himmelSetzen(th) {
-  scene.background.set(th.himmel); scene.fog.color.set(th.himmel); draussen.material.color.set(th.draussen);
-  scene.fog.near = 1100; scene.fog.far = 3400;
+function himmelSetzen(th, id) {
+  const k = (typeof KULISSEN !== 'undefined' && KULISSEN[id]) || null;
+  if (!k) { scene.background.set(th.himmel); scene.fog.color.set(th.himmel); draussen.material.color.set(th.draussen); scene.fog.near = 1100; scene.fog.far = 3400; return; }
+  const u = himmelMat.uniforms;
+  u.oben.value.set(k.oben); u.horizont.value.set(k.horizont); u.sonneFarbe.value.set(k.sonne); u.wolken.value = k.wolken;
+  u.wolkenFarbe.value.set(k.wolkenFarbe || '#ffffff');
+  scene.background.set(k.horizont); scene.fog.color.set(k.horizont);
+  [nebelNah, nebelFern] = k.nebel; scene.fog.near = nebelNah; scene.fog.far = nebelFern;
+  if (!bodenBilder[k.boden]) bodenBilder[k.boden] = bodenBild(k.boden);
+  draussen.material.map = bodenBilder[k.boden]; draussen.material.color.set('#ffffff');
+  draussen.material.emissiveMap = k.boden === 'lava' ? bodenBilder[k.boden] : null; draussen.material.emissive.set(k.boden === 'lava' ? '#ff6a20' : '#000000');
+  draussen.material.roughness = k.boden === 'wasser' ? 0.25 : 0.9; draussen.material.metalness = k.boden === 'wasser' ? 0.2 : 0; draussen.material.needsUpdate = true;
+  const [hOben, hUnten, sStark, sFarbe] = k.licht;
+  if (himmelLicht) { himmelLicht.color.set(hOben); himmelLicht.groundColor.set(hUnten); }
+  sonne.intensity = sStark; sonne.color.set(sFarbe);
+  teilchenStarten(k.teilchen, id === 'stadt' ? STADT.x : W / 2, id === 'stadt' ? STADT.z : H / 2);
 }
 function sonneAuf(x, z) { sonne.position.set(x - 500, 1000, z - 400); sonne.target.position.set(x, 0, z); }
 // Deko: Farbtürme draußen
@@ -1441,6 +1454,200 @@ function bahnhofDeko(d) {
   zug.visible = false; zugMesh = zug; d('bahnhof', zug);
 }
 arenaDeko();
+
+// ================== 🌄 KULISSE: Himmel, Berge, Städte, Wälder, Wetter ==================
+// Jede Arena hat ihren eigenen Hintergrund. Alles weit draußen wirft keine Schatten (spart Rechenzeit).
+const KULISSEN = {
+  farbhafen: { oben: '#2f86e0', horizont: '#cdeaff', sonne: '#fff3c0', wolken: 0.55, nebel: [1300, 4300], boden: 'wasser',
+    licht: ['#ffffff', '#7f8fb0', 1.6, '#ffffff'],
+    berge: [[2500, 230, '#5f8f6a', null, 0.6, 1], [3350, 520, '#6f86a8', '#ffffff', 1, 2]], stadt: [[-2.3, -1.2, 3000, 70]] },
+  skatepark: { oben: '#ff7aa8', horizont: '#ffd9b8', sonne: '#ffc070', wolken: 0.4, nebel: [1300, 4300], boden: 'asphalt',
+    licht: ['#ffe2d0', '#8a6f9e', 1.5, '#ffd2a8'],
+    berge: [[3350, 380, '#8a6fa0', null, 0.7, 3]], stadt: [[0, Math.PI * 2, 2300, 130]] },
+  dschungel: { oben: '#4fb0d8', horizont: '#d4f2dc', sonne: '#fff6c8', wolken: 0.65, nebel: [1200, 4000], boden: 'gras', teilchen: 'blaetter',
+    licht: ['#f4fff0', '#4f7a40', 1.5, '#fff8e0'],
+    berge: [[2300, 360, '#3f8a45', null, 0.8, 4], [3200, 650, '#4f7a6a', null, 1.1, 5]], wald: 260 },
+  eispalast: { oben: '#6fa8f0', horizont: '#f0f8ff', sonne: '#ffffff', wolken: 0.5, nebel: [1300, 4300], boden: 'schnee', teilchen: 'schnee',
+    licht: ['#f0f6ff', '#9fb8d8', 1.5, '#e8f2ff'],
+    berge: [[2500, 520, '#9fb5cc', '#ffffff', 1.4, 6], [3350, 780, '#8aa0c0', '#ffffff', 1.6, 7]] },
+  wueste: { oben: '#e88a3c', horizont: '#ffe6b8', sonne: '#fff0b0', wolken: 0.15, nebel: [1300, 4300], boden: 'sand', teilchen: 'staub',
+    licht: ['#fff0d8', '#b08850', 1.7, '#fff2c8'],
+    berge: [[2400, 200, '#d9ae6a', null, 0.3, 8], [3300, 420, '#c9945a', null, 0.6, 9]] },
+  vulkan: { oben: '#1a0606', horizont: '#7a3018', sonne: '#ff7a30', wolken: 0.7, wolkenFarbe: '#3a2a2a', nebel: [1100, 3800], boden: 'lava', teilchen: 'asche',
+    licht: ['#ffc8a8', '#5a2a20', 1.3, '#ffb080'],
+    berge: [[2400, 480, '#2a1e1e', '#ff5a1a', 1.5, 10], [3300, 720, '#1e1414', null, 1.3, 11]] },
+  bahnhof: { oben: '#3f8fe0', horizont: '#dcecff', sonne: '#fff3c8', wolken: 0.5, nebel: [1300, 4300], boden: 'wiese',
+    licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'],
+    berge: [[3350, 420, '#7a90a8', '#ffffff', 0.9, 12]], stadt: [[-0.9, 2.2, 2400, 90], [2.2, 5.3, 2700, 60]] },
+  lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
+    licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], stadt: [[0, Math.PI * 2, 1800, 70]] },
+  stadt: { oben: '#4a96ee', horizont: '#e3f0ff', sonne: '#fff3c8', wolken: 0.5, nebel: [1300, 4300], boden: 'wiese',
+    licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], berge: [[2700, 480, '#6f8aa8', '#ffffff', 1, 13]], stadt: [[0, Math.PI * 2, 1350, 110]], wald: 120 },
+};
+// ---- Himmel: ein Farbverlauf mit Sonne und ziehenden Wolken (wird immer ganz hinten gemalt) ----
+const himmelMat = new THREE.ShaderMaterial({
+  uniforms: { oben: { value: new THREE.Color() }, horizont: { value: new THREE.Color() }, sonneFarbe: { value: new THREE.Color() },
+    sonneDir: { value: new THREE.Vector3(-0.4, 0.5, -0.5) }, wolken: { value: 0.5 }, wolkenFarbe: { value: new THREE.Color('#ffffff') }, zeit: { value: 0 } },
+  vertexShader: `varying vec3 vDir;
+    void main() { vDir = position; vec4 p = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0); gl_Position = p.xyww; }`,
+  fragmentShader: `uniform vec3 oben, horizont, sonneFarbe, wolkenFarbe; uniform vec3 sonneDir; uniform float wolken, zeit; varying vec3 vDir;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float rauschen(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * rauschen(p); p *= 2.03; a *= 0.5; } return v; }
+    void main() {
+      vec3 d = normalize(vDir); float h = d.y;
+      vec3 c = h > 0.0 ? mix(horizont, oben, pow(clamp(h, 0.0, 1.0), 0.5)) : horizont;
+      float s = max(0.0, dot(d, normalize(sonneDir)));
+      c += sonneFarbe * (smoothstep(0.9985, 0.9993, s) * 1.2 + pow(s, 18.0) * 0.35 + pow(s, 3.0) * 0.08);
+      if (h > 0.0 && wolken > 0.0) {
+        vec2 uv = d.xz / (h + 0.15) * 1.6 + vec2(zeit * 0.006, zeit * 0.003);
+        float n = fbm(uv);
+        float w = smoothstep(0.62 - wolken * 0.3, 0.9, n) * smoothstep(0.0, 0.25, h);
+        vec3 wf = wolkenFarbe * (0.82 + 0.25 * fbm(uv * 2.0 + 3.0)) + sonneFarbe * pow(s, 6.0) * 0.3;
+        c = mix(c, wf, w * 0.92);
+      }
+      gl_FragColor = vec4(c, 1.0);
+      #include <colorspace_fragment>
+    }`,
+  side: THREE.BackSide, depthWrite: false,
+});
+const himmelKugel = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), himmelMat);
+himmelKugel.frustumCulled = false; himmelKugel.renderOrder = -10;
+himmelKugel.onBeforeRender = () => { himmelMat.uniforms.zeit.value = performance.now() / 1000; };
+scene.add(himmelKugel);
+const himmelLicht = scene.children.find(o => o.isHemisphereLight);
+let nebelNah = 1300, nebelFern = 4300;
+kamera.far = 6000; kamera.updateProjectionMatrix();
+
+// ---- Bergkette rund um einen Mittelpunkt: ein einziges Netz mit Farben (Schnee oben) ----
+function bergRing(cx, cz, r, hoehe, farbe, spitze, zacken, seed) {
+  const N = 180, pos = [], col = [], idx = [];
+  const fuss = new THREE.Color(farbe).multiplyScalar(0.72), mitte = new THREE.Color(farbe), oben = spitze ? new THREE.Color(spitze) : new THREE.Color(farbe).multiplyScalar(1.12);
+  for (let i = 0; i <= N; i++) {
+    const a = i / N * Math.PI * 2;
+    let h = 0.55 + 0.22 * Math.sin(a * 3 + seed) + 0.14 * Math.sin(a * 7 + seed * 2.1) + zacken * (0.1 * Math.sin(a * 17 + seed * 3.3) + 0.07 * Math.sin(a * 37 + seed));
+    h = Math.max(0.12, h) * hoehe;
+    const rr = r * (1 + 0.05 * Math.sin(a * 5 + seed)), c = Math.cos(a), sn = Math.sin(a);
+    pos.push(cx + c * (rr - hoehe * 0.9), -4, cz + sn * (rr - hoehe * 0.9));
+    pos.push(cx + c * (rr - hoehe * 0.35), h * 0.55, cz + sn * (rr - hoehe * 0.35));
+    pos.push(cx + c * rr, h, cz + sn * rr);
+    const schnee = spitze && h > hoehe * 0.62;
+    col.push(...fuss.toArray(), ...mitte.toArray(), ...(schnee ? oben : mitte.clone().lerp(oben, 0.5)).toArray());
+  }
+  for (let i = 0; i < N; i++) for (let k = 0; k < 2; k++) {
+    const a = i * 3 + k, b = a + 1, c = a + 3, d = a + 4;
+    idx.push(a, c, b, b, c, d);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true }));
+  return m;
+}
+// ---- Hochhäuser mit Fenstern (viele auf einmal: InstancedMesh) ----
+const fensterBild = (() => {
+  const c = leinwand(64, 128), x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 64, 128);
+  for (let r = 0; r < 14; r++) for (let k = 0; k < 6; k++) {
+    const an = ((r * 7 + k * 13) % 5) < 2;
+    x.fillStyle = an ? '#ffe9a0' : '#6a7890'; x.fillRect(4 + k * 10, 6 + r * 8.6, 6, 5);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+function stadtRing(cx, cz, von, bis, r, anzahl, seed) {
+  const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+  const m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: fensterBild }), anzahl);
+  const farben = ['#8fa3c0', '#c9b8a0', '#a0b8b0', '#b0a0c0', '#d8d0c0', '#7f90a8'], q = new THREE.Object3D();
+  let z = seed * 9301 + 49297;
+  const zz = () => { z = (z * 16807) % 2147483647; return z / 2147483647; };
+  for (let i = 0; i < anzahl; i++) {
+    const a = von + (bis - von) * (i + zz() * 0.8) / anzahl, rr = r + zz() * 350;
+    const h = 120 + zz() * zz() * 520, b = 70 + zz() * 90;
+    q.position.set(cx + Math.cos(a) * rr, 0, cz + Math.sin(a) * rr); q.rotation.set(0, -a, 0); q.scale.set(b, h, 60 + zz() * 80); q.updateMatrix();
+    m.setMatrixAt(i, q.matrix); m.setColorAt(i, new THREE.Color(farben[(zz() * farben.length) | 0]));
+  }
+  return m;
+}
+// ---- Wald: viele Bäume (Krone + Stamm) ----
+function waldRing(cx, cz, rInnen, rAussen, anzahl, seed) {
+  const g = new THREE.Group();
+  const krone = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ flatShading: true }), anzahl);
+  const stamm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.18, 1, 5).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: '#6b4a2e' }), anzahl);
+  const q = new THREE.Object3D(), gruen = ['#2f7f3a', '#3f9b4b', '#4fa850', '#2a6f40'];
+  let z = seed * 7919 + 17;
+  const zz = () => { z = (z * 16807) % 2147483647; return z / 2147483647; };
+  for (let i = 0; i < anzahl; i++) {
+    const a = zz() * Math.PI * 2, rr = rInnen + zz() * (rAussen - rInnen), x = cx + Math.cos(a) * rr * 1.25, y = cz + Math.sin(a) * rr * 0.9, gr = 40 + zz() * 50;
+    if (x > -150 && x < W + 150 && y > -150 && y < H + 150) { q.scale.set(0, 0, 0); q.updateMatrix(); krone.setMatrixAt(i, q.matrix); stamm.setMatrixAt(i, q.matrix); continue; }
+    q.position.set(x, gr * 1.1, y); q.rotation.set(zz(), zz(), 0); q.scale.set(gr, gr * 1.15, gr); q.updateMatrix(); krone.setMatrixAt(i, q.matrix);
+    krone.setColorAt(i, new THREE.Color(gruen[i % 4]));
+    q.position.set(x, 0, y); q.rotation.set(0, 0, 0); q.scale.set(gr, gr * 1.2, gr); q.updateMatrix(); stamm.setMatrixAt(i, q.matrix);
+  }
+  g.add(krone, stamm);
+  return g;
+}
+// ---- Böden draußen ----
+function bodenBild(art) {
+  const c = leinwand(256, 256), x = c.getContext('2d');
+  let z = 99; const zz = () => { z = (z * 16807) % 2147483647; return z / 2147483647; };
+  const flecken = (farben, n, gr) => { for (let i = 0; i < n; i++) { x.fillStyle = farben[i % farben.length]; x.beginPath(); x.arc(zz() * 256, zz() * 256, gr * (0.4 + zz()), 0, 7); x.fill(); } };
+  if (art === 'wasser') { x.fillStyle = '#2f78b8'; x.fillRect(0, 0, 256, 256); x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 3;
+    for (let i = 0; i < 40; i++) { const px = zz() * 256, py = zz() * 256; x.beginPath(); x.arc(px, py, 10 + zz() * 10, Math.PI * 1.15, Math.PI * 1.85); x.stroke(); }
+    flecken(['rgba(80,160,220,0.4)', 'rgba(30,90,160,0.4)'], 30, 18); }
+  else if (art === 'gras' || art === 'wiese') { x.fillStyle = art === 'gras' ? '#4f8a3a' : '#6aa84f'; x.fillRect(0, 0, 256, 256); flecken(['#5f9a45', '#467f33', '#78b85a'], 160, 9);
+    if (art === 'wiese') flecken(['#ffffff', '#ffd166', '#ff8fb1'], 40, 1.6); }
+  else if (art === 'asphalt') { x.fillStyle = '#5a5d66'; x.fillRect(0, 0, 256, 256); flecken(['#4a4d56', '#6a6d76'], 400, 2); }
+  else if (art === 'schnee') { x.fillStyle = '#eef6ff'; x.fillRect(0, 0, 256, 256); flecken(['#dbe9f8', '#ffffff', '#cfe0f2'], 120, 14); }
+  else if (art === 'sand') { x.fillStyle = '#dcb878'; x.fillRect(0, 0, 256, 256); flecken(['#e8c88c', '#c9a564'], 300, 4);
+    x.strokeStyle = '#c9a060'; x.lineWidth = 3; for (let y = 20; y < 256; y += 42) { x.beginPath(); for (let k = 0; k <= 256; k += 16) x.lineTo(k, y + Math.sin(k / 30) * 8); x.stroke(); } }
+  else if (art === 'lava') { x.fillStyle = '#2a1c1a'; x.fillRect(0, 0, 256, 256); flecken(['#3a2a26', '#1e1412'], 200, 8);
+    x.strokeStyle = '#ff5a10'; x.lineWidth = 4; for (let i = 0; i < 14; i++) { let px = zz() * 256, py = zz() * 256; x.beginPath(); x.moveTo(px, py); for (let k = 0; k < 5; k++) { px += (zz() - 0.5) * 70; py += (zz() - 0.5) * 70; x.lineTo(px, py); } x.stroke(); } }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(36, 36);
+  t.anisotropy = 4;
+  return t;
+}
+const bodenBilder = {};
+// ---- Wetter-Teilchen: Schnee, Asche, Blätter, Staub ----
+const TEILCHEN_N = 450;
+const teilchenGeo = new THREE.BufferGeometry();
+teilchenGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(TEILCHEN_N * 3), 3));
+const teilchenPunkt = (() => { const c = leinwand(32, 32), x = c.getContext('2d'); const g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
+const teilchenMat = new THREE.PointsMaterial({ size: 7, map: teilchenPunkt, transparent: true, depthWrite: false, color: '#ffffff' });
+const teilchen = new THREE.Points(teilchenGeo, teilchenMat); teilchen.frustumCulled = false; teilchen.visible = false; scene.add(teilchen);
+let teilchenArt = null;
+const TEILCHEN_ARTEN = { schnee: ['#ffffff', 7, -45, 18], asche: ['#5a4a46', 6, -30, 25], blaetter: ['#5fa84a', 8, -35, 40], staub: ['#e8c88c', 5, -8, 70] };
+function teilchenStarten(art, cx, cz) {
+  teilchenArt = TEILCHEN_ARTEN[art] ? art : null; teilchen.visible = !!teilchenArt;
+  if (!teilchenArt) return;
+  const [farbe, gr] = TEILCHEN_ARTEN[art]; teilchenMat.color.set(farbe); teilchenMat.size = gr;
+  const p = teilchenGeo.attributes.position.array;
+  for (let i = 0; i < TEILCHEN_N; i++) { p[i * 3] = cx + (Math.random() - 0.5) * 2600; p[i * 3 + 1] = Math.random() * 500; p[i * 3 + 2] = cz + (Math.random() - 0.5) * 2000; }
+  teilchenGeo.attributes.position.needsUpdate = true;
+}
+function teilchenUpdate(dt, cx, cz) {
+  if (!teilchenArt) return;
+  const [, , fall, wind] = TEILCHEN_ARTEN[teilchenArt], p = teilchenGeo.attributes.position.array, t = performance.now() / 1000;
+  for (let i = 0; i < TEILCHEN_N; i++) {
+    p[i * 3 + 1] += fall * dt * (0.6 + (i % 7) * 0.1);
+    p[i * 3] += (wind + Math.sin(t + i) * 15) * dt; p[i * 3 + 2] += Math.cos(t * 0.7 + i) * 10 * dt;
+    if (p[i * 3 + 1] < 0) p[i * 3 + 1] += 500; if (p[i * 3 + 1] > 500) p[i * 3 + 1] -= 500;
+    if (p[i * 3] > cx + 1300) p[i * 3] -= 2600; if (p[i * 3] < cx - 1300) p[i * 3] += 2600;
+  }
+  teilchenGeo.attributes.position.needsUpdate = true;
+}
+// ---- Alles für eine Arena bauen ----
+const kulisseGruppen = {};
+function kulisseBauen(id, ziel, cx, cz) {
+  const k = KULISSEN[id]; if (!k) return;
+  const g = new THREE.Group(); ziel.add(g); kulisseGruppen[id] = g;
+  for (const [r, h, f, sp, z, seed] of k.berge || []) g.add(bergRing(cx, cz, r, h, f, sp, z, seed));
+  for (const [von, bis, r, n] of k.stadt || []) g.add(stadtRing(cx, cz, von, bis, r, n, (r | 0) + n));
+  if (k.wald) g.add(waldRing(cx, cz, 1350, 2100, k.wald, 3));
+  g.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
+}
+for (const id of Object.keys(ARENEN)) kulisseBauen(id, kartenGruppe[id], W / 2, H / 2);
+kulisseBauen('lobby', kartenGruppe.lobby, W0 / 2, H0 / 2);
 // Sonder-Zonen sichtbar machen
 const foerderTexturen = [], lavaTexturen = [];
 const lavaBild = (() => {   // ein Bild von brodelnder Lava (wird wiederholt)
@@ -4851,8 +5058,10 @@ function welt3D(dt) {
     sturmVorher = sturm;
     if (sturm) { meldung('🌪️ SANDSTURM! Man sieht fast nichts!'); ton('wind'); } else if (modus === 'match') meldung('☀️ Der Sandsturm ist vorbei.');
   }
-  scene.fog.near += ((sturm ? 30 : 1100) - scene.fog.near) * Math.min(1, dt * 2);
-  scene.fog.far += ((sturm ? 320 : 3400) - scene.fog.far) * Math.min(1, dt * 2);
+  scene.fog.near += ((sturm ? 30 : nebelNah) - scene.fog.near) * Math.min(1, dt * 2);
+  scene.fog.far += ((sturm ? 320 : nebelFern) - scene.fog.far) * Math.min(1, dt * 2);
+  teilchenUpdate(dt, W / 2, H / 2);
+  if (draussen.material.map && karte === 'farbhafen') { draussen.material.map.offset.x += dt * 0.01; draussen.material.map.offset.y += dt * 0.006; }   // Meer bewegt sich
 
   for (const e of kleckse) {
     const g = e.gruppe;
@@ -5503,6 +5712,7 @@ $('aufgeben').onclick = e => {
 const STADT = { x: W / 2, z: -4200 };
 const STADT_GRENZE = { x: 640, y: 460 };
 const stadtGruppe = new THREE.Group(); stadtGruppe.position.set(STADT.x, 0, STADT.z); scene.add(stadtGruppe);
+kulisseBauen('stadt', stadtGruppe, 0, 0);   // Berge, Hochhäuser und Bäume rund um die Stadt
 const stadtHindernisse = [];        // Rechtecke {x, y, w, h} oder Kreise {x, y, kreis}
 const STADT_ZIELE = [];             // Türen: Läden und Arena
 let brunnenWasser = null, brunnenMat = null;
@@ -5700,7 +5910,8 @@ function stadtBetreten() {
   shopVonStadt = false; shopFirma = null;
   stadtSp.vx = stadtSp.vy = stadtSp.vz = stadtSp.z = 0;
   zustand = 'stadt';
-  sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA);
+  sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA, 'stadt');
+  for (const k in kartenGruppe) kartenGruppe[k].visible = false;   // in der Stadt: Arenen weg, die Stadt hat ihren eigenen Hintergrund
   audioStart(); musikModusSetzen('menu', listenSong('menu'));
   mausFangen();
 }
