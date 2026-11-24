@@ -246,10 +246,20 @@ Object.assign(WAFFEN, {
   miniling: { typ: 'ling', name: 'Miniling', emoji: '🐹', info: 'Lädt blitzschnell – schießt aber kürzer und nicht so weit', modell: { ganz: 0.75 },
     ladezeit: 0.4, feuerzeit: 1.0, cd: 0.065, kosten: 1, speed: 560, bremse: 2.4, schaden: 13, klecks: 12, spur: 5, streu: 0.09, anzahl: 1, reichweite: 220 },
 });
+// 🏹 Farb-Bögen: Halten = Sehne spannen, loslassen = 3 Farbpfeile im Fächer. Die Pfeile platzen beim Aufprall!
+// Je weiter gespannt, desto schneller, weiter und stärker fliegen sie.
+Object.assign(WAFFEN, {
+  bogen: { typ: 'bogen', name: 'Farb-Bogen', emoji: '🏹', info: 'Spannen & loslassen: 3 Farbpfeile, die beim Aufprall platzen',
+    ladezeit: 0.7, anzahl: 3, streu: 0.22, speed: 760, bremse: 1.1, schaden: 30, klecks: 14, spur: 7, kosten: 6, platzen: { r: 30, schaden: 16 }, reichweite: 380 },
+  langbogen: { typ: 'bogen', name: 'Langbogen', emoji: '🎋', info: 'Riesiger Bogen: langes Spannen, aber die Pfeile fliegen superweit', modell: { ganz: 1.25 },
+    ladezeit: 1.2, anzahl: 3, streu: 0.12, speed: 980, bremse: 0.8, schaden: 42, klecks: 16, spur: 8, kosten: 9, platzen: { r: 38, schaden: 22 }, reichweite: 520 },
+  flitzbogen: { typ: 'bogen', name: 'Flitzebogen', emoji: '🪃', info: 'Kleiner Bogen: blitzschnell gespannt, breiter Fächer, kurze Reichweite', modell: { ganz: 0.8 },
+    ladezeit: 0.35, anzahl: 3, streu: 0.32, speed: 580, bremse: 1.6, schaden: 22, klecks: 12, spur: 6, kosten: 4, platzen: { r: 24, schaden: 12 }, reichweite: 260 },
+});
 // Welche Firma baut welche Waffe?
 for (const [f, liste] of Object.entries({
-  zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller'],
-  altra:  ['sniper', 'miniliter', 'liter', 'kanone'],
+  zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller', 'bogen', 'flitzbogen'],
+  altra:  ['sniper', 'miniliter', 'liter', 'kanone', 'langbogen'],
   u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling'],
 })) for (const w of liste) WAFFEN[w].firma = f;
 const typVon = id => (WAFFEN[id] && WAFFEN[id].typ) || id;
@@ -297,6 +307,9 @@ const SET_DATEN = [
   ['miniling', 'klecks', 'schild',  350,   'sprinkler', 'kugel',   500],
   ['klecksling', 'sprinkler', 'panzer', 450, 'klebe',    'trifarb', 600],
   ['schwerling', 'wand',  'werfer',  600,   'mine',      'regen',   750],
+  ['bogen',    'klebe',  'kugel',   400,   'mine',      'tornado', 550],
+  ['langbogen', 'wand',  'trifarb', 550,   'klecks',    'laser',   700],
+  ['flitzbogen', 'sprinkler', 'wirbel', 300, 'klebe',    'gigafisch', 450],
 ];
 // Jede Waffe gibt es außerdem von den 3 Firmen – jede Firma mit eigener Bombe und Ulti (wie Watzo)
 const FIRMEN_VARIANTEN = {
@@ -795,6 +808,10 @@ const SOUNDS = {
   strahl:  (t, v) => { osz('sawtooth', 120, 1400, 0.5, 0.12 * v, t, sfxGain, 2500); krach(2000, 0.6, 0.35 * v, t, sfxGain, 'bandpass'); osz('sine', 80, 40, 0.5, 0.3 * v, t); },
   megaton: (t, v) => { [55, 58, 62].forEach((n, i) => osz('sawtooth', NOTE(n - 12), NOTE(n - 12), 5.6, 0.07 * v, t + i * 0.02, sfxGain, 700)); osz('square', 45, 45, 5.6, 0.1 * v, t, sfxGain, 300); krach(400, 5.6, 0.12 * v, t); },
   zisch:   (t, v) => krach(4000, 0.25, 0.08 * v, t, sfxGain, 'highpass'),
+  bogen:   (t, v) => { osz('triangle', 180, 90, 0.18, 0.14 * v, t, sfxGain, 1200); krach(2500, 0.12, 0.1 * v, t, sfxGain, 'bandpass'); },
+  tuten:   (t, v) => { for (const f of [311, 392]) osz('sawtooth', f, f * 0.98, 1.1, 0.06 * v, t, sfxGain, 1400); },
+  bimmel:  (t, v) => { for (let i = 0; i < 4; i++) osz('triangle', 1250, 1250, 0.18, 0.07 * v, t + i * 0.25); },
+  zug:     (t, v) => { krach(220, 2.6, 0.5 * v, t); for (let i = 0; i < 10; i++) krach(900, 0.09, 0.18 * v, t + i * 0.24, sfxGain, 'bandpass'); },
   ramm:    (t, v) => { osz('sawtooth', 160, 50, 0.3, 0.15 * v, t, sfxGain, 900); krach(500, 0.3, 0.3 * v, t); },
   klick:   (t, v) => osz('square', 600, 750, 0.04, 0.05 * v, t, sfxGain, 2500),
   pfiff:   (t, v) => osz('sine', 1200, 1500, 0.6, 0.15 * v, t),
@@ -1636,6 +1653,30 @@ function baueWaffe(art, m, team, watzo = false, variante = null) {
       ud.blitz = kugel(blitzMat, 3.2, 21.5, 0.5, 0); g.add(ud.blitz);
       break;
     }
+    case 'bogen': {
+      // Farb-Bogen: zwei gebogene Arme, Sehne, ein Pfeil liegt auf. Beim Spannen wandert die Sehne nach hinten.
+      const holz = mat('#a8743f', { roughness: 0.6 });
+      const arm = new THREE.Mesh(new THREE.TorusGeometry(15, 1.1, 6, 22, 1.9), holz);
+      arm.rotation.z = -0.95; arm.position.x = -11; g.add(arm);
+      const spitze = 15 * Math.cos(0.95) - 11, hoch = 15 * Math.sin(0.95);
+      for (const sy of [-1, 1]) g.add(kugel(m, 1.6, spitze, sy * hoch, 0), ringX(m, 1.25, 0.5, 15 * Math.cos(0.5) - 11, sy * 15 * Math.sin(0.5), 0));
+      g.add(zylinder(MAT_GUMMI, 1.6, 1.6, 6, 4, 0, 0), ringY(m, 1.7, 0.45, 4, 2.6, 0), ringY(m, 1.7, 0.45, 4, -2.6, 0));   // Griff
+      // kleiner Glastank unter dem Griff (zeigt die Tinte)
+      g.add(zylinderX(glasRohrMat, 1.8, 1.8, 7, 0.5, -5, 0), ringX(MAT_METALL, 1.8, 0.4, -3, -5, 0), ringX(MAT_METALL, 1.8, 0.4, 4, -5, 0));
+      const tank = new THREE.Group(); tank.position.set(-2.8, -5, 0); g.add(tank); ud.tinteFuell = tank;
+      tank.add(zylinderX(tinte, 1.4, 1.4, 6.6, 3.3, 0, 0));
+      // Sehne: zwei Hälften, die zur Kerbe gezogen werden
+      const sehneGeo = new THREE.CylinderGeometry(0.25, 0.25, 1, 4).translate(0, 0.5, 0), sehneMat = mat('#f3e7cf');
+      ud.sehne = { spitze, hoch, teile: [-1, 1].map(sy => { const t = new THREE.Mesh(sehneGeo, sehneMat); t.position.set(spitze, sy * hoch, 0); t.userData.sy = sy; g.add(t); return t; }) };
+      // Der Pfeil, der aufliegt (mit leuchtender Spitze beim Spannen)
+      ud.ladeMat = tintenMaterial(team, 0.2);
+      const pfeil = new THREE.Group(); g.add(pfeil); ud.pfeilAuf = pfeil;
+      pfeil.add(zylinderX(mat('#c99a5b'), 0.55, 0.55, 19, 9.5, 0, 0), zylinderX(ud.ladeMat, 0.1, 1.9, 4.5, 21, 0, 0));
+      for (let i = 0; i < 3; i++) { const f = klotz(m, 4, 2.4, 0.3, 2.5, 0, 0); f.rotation.x = i * Math.PI / 3; pfeil.add(f); }
+      ud.blitz = kugel(blitzMat, 2.4, 24, 0, 0); g.add(ud.blitz);
+      g.rotation.x = 0.12;   // leicht schräg gehalten – wie ein echter Bogenschütze
+      break;
+    }
     case 'roller': {
       // Stiel geht von den Händen schräg nach unten zur Walze
       const ende = { x: 14, y: -10 }, len = Math.hypot(ende.x, ende.y);
@@ -1725,6 +1766,14 @@ function animiereWaffe(ud, e, dt, vf) {
   if (ud.lauf) ud.lauf.position.x = -e.rueck * 1.6;
   if (ud.blitz) { ud.blitz.visible = e.rueck > 0.55; ud.blitz.scale.setScalar(1.6 + e.rueck * 1.4); }
   if (ud.ladeMat) ud.ladeMat.emissiveIntensity = 0.15 + e.ladung * 2.2 * (e.ladung >= 1 ? 0.75 + Math.sin(zeit * 30) * 0.25 : 1);
+  if (ud.sehne) {   // Bogen: Sehne und Pfeil gehen beim Spannen nach hinten
+    const zug = e.laden ? e.ladung : 0, kerbe = ud.sehne.spitze - 0.5 - zug * 9;
+    for (const t of ud.sehne.teile) {
+      const dx = kerbe - ud.sehne.spitze, dy = -t.userData.sy * ud.sehne.hoch;
+      t.scale.y = Math.hypot(dx, dy); t.rotation.z = Math.atan2(-dx, dy);
+    }
+    ud.pfeilAuf.position.x = kerbe; ud.pfeilAuf.visible = e.tinte >= 4 && e.rueck < 0.5;
+  }
   if (ud.spulen) ud.spulen.rotation.x += dt * (0.5 + e.ladung * 25);
   if (ud.trommel) ud.trommel.rotation.x += dt * (e.lingT > 0 || e.rueck > 0.3 ? 40 : e.laden ? 3 + e.ladung * 30 : 0.8);   // Läufe drehen sich
   if (ud.schwing) ud.schwing.rotation.z = e.rueck * 0.8;
@@ -1988,6 +2037,18 @@ const zielRing = new THREE.Mesh(zielRingGeo, new THREE.MeshBasicMaterial({ color
 zielRing.position.y = 1; zielRing.visible = false; scene.add(zielRing);
 
 const geoTropfen = new THREE.SphereGeometry(4, 8, 6);
+// Farbpfeil (liegt entlang +z, damit lookAt ihn in Flugrichtung dreht). Die Formen werden geteilt.
+const geoPfeilSchaft = new THREE.CylinderGeometry(0.7, 0.7, 20, 6).rotateX(Math.PI / 2);
+const geoPfeilSpitze = new THREE.ConeGeometry(2.4, 6, 8).rotateX(Math.PI / 2).translate(0, 0, 12);
+const geoPfeilFeder = new THREE.BoxGeometry(0.3, 3.2, 5).translate(0, 0, -8.5);
+const MAT_PFEIL_HOLZ = new THREE.MeshStandardMaterial({ color: '#c99a5b', roughness: 0.7 });
+function bauePfeil(team) {
+  const m = new THREE.Mesh(geoPfeilSchaft, MAT_PFEIL_HOLZ);
+  m.add(new THREE.Mesh(geoPfeilSpitze, teamMat[team ? 1 : 0]));
+  for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(geoPfeilFeder, teamMat[team ? 1 : 0]); f.rotation.z = i * Math.PI * 2 / 3; m.add(f); }
+  m.userData.pfeil = true;
+  return m;
+}
 const geoBombe = new THREE.SphereGeometry(9, 14, 10);
 
 // ================== EINGABE ==================
@@ -2260,7 +2321,7 @@ function mpSchnappschussSenden() {
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
       (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
       r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0]),
-    s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.gross ? r1(o.w.gross) : 0]),
+    s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.pfeil ? -1 : o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.art === 'tracker' ? 'tracker' : o.ulti ? 'rakete' : o.art)]),
     g: geraete.map(o => [objId(o), GERAET_ARTEN.indexOf(o.art), r0(o.x), r0(o.y), o.team, r2(o.winkel), r1(o.t), o.zuend >= 0 ? 1 : 0, o.treffer > 0 ? 1 : 0]),
     w: wellen.map(o => [objId(o), r0(o.x), r0(o.y), r2(o.winkel), r2(o.t), o.dauer, o.team]),
@@ -2343,7 +2404,7 @@ function mpSchnappschuss(d) {
       e.ziel = { x, y, z, w }; e.pitch = pi; e.vx = vx; e.vy = vy; e.taucht = !!(fl & 2); e.ulti = ulti;
     }
   });
-  schuesse = proxySync(schuesse, d.s, a => ({ mesh: new THREE.Mesh(geoTropfen, teamMat[a[7] ? 1 : 0]), team: a[7], w: { gross: a[8] || 1 } }),
+  schuesse = proxySync(schuesse, d.s, a => a[8] < 0 ? { mesh: bauePfeil(a[7]), team: a[7], w: { pfeil: true } } : ({ mesh: new THREE.Mesh(geoTropfen, teamMat[a[7] ? 1 : 0]), team: a[7], w: { gross: a[8] || 1 } }),
     (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.vx = a[4]; o.vy = a[5]; o.vz = a[6]; });
   bomben = proxySync(bomben, d.b, a => {
     const art = BOMBEN_ARTEN[a[5]] || 'klecks', team = a[4] ? 1 : 0;
@@ -2850,7 +2911,7 @@ function bewege(e, dx, dy, dt) {
   e.boostCd = Math.max(0, (e.boostCd || 0) - dt);
   const feind = tauchenPruefen(e), amBoden = e.z <= 0;
   let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
-  if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : typVon(e.waffe) === 'ling' ? 0.6 : 0.8;
+  if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : typVon(e.waffe) === 'ling' || typVon(e.waffe) === 'bogen' ? 0.6 : 0.8;
   if (e.lingT > 0 && !e.taucht) speed *= 0.75;   // Klecksling feuert: langsamer laufen
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
@@ -2985,6 +3046,19 @@ function schiessen(e, dt) {
     return;
   }
 
+  if (typVon(e.waffe) === 'bogen') {   // Farb-Bogen: Sehne spannen, loslassen = Pfeile
+    if (e.schiesst && !e.taucht && e.tinte >= w.kosten) {
+      if (!e.laden && e.spieler) ton('klick', 0.5);
+      e.laden = true; const vorher = e.ladung; e.ladung = Math.min(1, e.ladung + dt / w.ladezeit);
+      if (e.spieler && vorher < 1 && e.ladung >= 1) ton('ding');
+    } else if (e.laden) {
+      e.laden = false;
+      if (e.ladung > 0.12 && !e.taucht) bogenSchuss(e, w, e.ladung);
+      e.ladung = 0;
+    } else if (e.schiesst && e.tinte < w.kosten && e.spieler) leerHinweis = 1.5;
+    return;
+  }
+
   if (typVon(e.waffe) === 'ling') {   // Klecksling: aufladen, dann Dauerfeuer
     if (e.lingT > 0) {
       e.lingT -= dt; e.laden = false; e.ladung = 0;
@@ -3074,6 +3148,26 @@ function tropfenSchiessen(e, w) {
     s.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(s.mesh);
     schuesse.push(s);
   }
+}
+
+// 🏹 Bogen: 3 Pfeile im Fächer. Wenig gespannt = langsam, kurz und schwach; voll gespannt = schnell, weit und stark
+function bogenSchuss(e, w, ladung) {
+  const l = Math.min(1, ladung);
+  e.tinte -= w.kosten * (0.4 + 0.6 * l) * (1 - e.bonus.tinte); e.rueck = 1.2;
+  const pw = { pfeil: true, bremse: w.bremse * (1.8 - 0.8 * l), klecks: w.klecks, spur: l > 0.5 ? w.spur : 0, schaden: Math.round(w.schaden * (0.45 + 0.55 * l)),
+    platzen: { r: w.platzen.r * (0.6 + 0.4 * l), schaden: Math.round(w.platzen.schaden * (0.5 + 0.5 * l)) } };
+  const sp = w.speed * (0.45 + 0.55 * l), streu = w.streu * (1.25 - 0.25 * l);
+  for (let i = 0; i < w.anzahl; i++) {
+    const a = e.winkel + (i / (w.anzahl - 1) - 0.5) * streu;
+    const p = e.pitch + 0.02 + (i === 1 ? 0.015 : 0);
+    const vh = Math.cos(p) * sp;
+    const s = { x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, h: hAbs(e) + (e.spieler ? 30 : 24),
+      vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp, team: e.team, wer: e, w: pw, spurT: 0.05, leben: 3 };
+    s.mesh = bauePfeil(e.team); scene.add(s.mesh);
+    schuesse.push(s);
+  }
+  if (e.spieler) ton('bogen');
+  else if (spieler) { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 400) ton('bogen', 0.6 * (1 - d / 400)); }
 }
 
 // Megalaser: ein langer Strahl, der malt und trifft (stoppt an Wänden)
@@ -3491,7 +3585,7 @@ function botKlettern(b, dx, dy, dt) {
   b.winkel = drehe(b.winkel, zuWand, dt * 8);
   b.pitch = -0.25 + ((zeit * 0.6 + b.nr * 0.37) % 1) * 1.0;      // mal tief, mal hoch – damit die ganze Wand Farbe abbekommt
   if (WAFFEN[b.waffe].nah) { k.tap = !k.tap; b.schiesst = k.tap; }
-  else if (typVon(b.waffe) === 'ling') b.schiesst = b.tinte > 3 && !(b.laden && b.ladung > 0.8);
+  else if (typVon(b.waffe) === 'ling' || typVon(b.waffe) === 'bogen') b.schiesst = b.tinte > 3 && !(b.laden && b.ladung > 0.8);
   else b.schiesst = b.tinte > 3;
   if (b.tinte < 5) { k.kletterT = 0; return false; }
   const vor = abstand > 65 ? 1 : abstand < 35 ? -1 : 0;           // gut 50 weg von der Wand stehen
@@ -3578,6 +3672,8 @@ function ki(b, dt) {
     else if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
     else if (typVon(b.waffe) === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
+    } else if (typVon(b.waffe) === 'bogen') {
+      b.schiesst = gutGezielt && fd < w.reichweite * 1.1 && !(b.laden && b.ladung >= 0.6 + (b.nr % 2) * 0.4);   // spannen, dann loslassen
     } else if (typVon(b.waffe) === 'ling') {
       b.schiesst = fd < w.reichweite * 1.15 && !(b.laden && b.ladung >= 0.7 + (b.nr % 2) * 0.3);   // aufladen, dann loslassen
     } else if (w.nah) {
@@ -3611,7 +3707,7 @@ function ki(b, dt) {
       b.pitch = botPitch(b, 120, bodenHoehe(b.x, b.y));
       if (typVon(b.waffe) === 'sniper') {
         b.schiesst = !(b.laden && b.ladung > 0.35);
-      } else if (typVon(b.waffe) === 'ling') {
+      } else if (typVon(b.waffe) === 'ling' || typVon(b.waffe) === 'bogen') {
         b.schiesst = !(b.laden && b.ladung > 0.6);
       } else b.schiesst = true;
     }
@@ -4079,7 +4175,7 @@ function welt3D(dt) {
     }
   }
   for (const s of schuesse) {   // Tropfen sind länglich in Flugrichtung
-    s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); const gr = s.w.gross || 1; s.mesh.scale.set(0.8 * gr, 0.8 * gr, 1.7 * gr);
+    s.mesh.position.set(s.x, s.h, s.y); s.mesh.lookAt(s.x + s.vx, s.h + s.vz, s.y + s.vy); const gr = s.w.gross || 1; if (!s.mesh.userData.pfeil) s.mesh.scale.set(0.8 * gr, 0.8 * gr, 1.7 * gr);
   }
   for (const b of bomben) {
     if (b.ulti && b.mesh.userData.flamme) {   // Rakete zeigt in Flugrichtung, Flamme flackert
