@@ -978,7 +978,7 @@ Object.assign(SONGS, {
 const SONG_LISTEN = { menu: ['stadt', 'markt'], lobby: ['lobby', 'wartesaal'], spiel: ['neon', 'funk', 'tinte', 'pop', 'stern', 'gewitter'] };
 function spielSong(karteId) { return Math.random() < 0.5 && SONGS[karteId] ? karteId : SONG_LISTEN.spiel[(Math.random() * SONG_LISTEN.spiel.length) | 0]; }
 function listenSong(art) { const l = SONG_LISTEN[art]; return l[(Math.random() * l.length) | 0]; }
-let musikModus = 'aus', songName = 'stadt', schritt = 0, naechsterSchritt = 0, musikTimer = null, hallBus = null, echoBus = null;
+let musikModus = 'aus', songName = 'stadt', schritt = 0, naechsterSchritt = 0, musikTimer = null, hallBus = null, echoBus = null, rhythmusBus = null, soloBus = null;
 function musikModusSetzen(m, song) {
   if (song && SONGS[song] && song !== songName) { songName = song; schritt = 0; if (musikAn && m !== 'aus' && zustand !== 'menu') meldung(`🎵 ${SONGS[song].name}`); }
   musikModus = m;
@@ -994,6 +994,49 @@ function musikEffekte() {   // Hall (wie in einer großen Halle) und Echo
   echoBus = ac.createDelay(1); echoBus.delayTime.value = 0.27;
   const rueck = ac.createGain(); rueck.gain.value = 0.3; echoBus.connect(rueck); rueck.connect(echoBus);
   const echoLaut = ac.createGain(); echoLaut.gain.value = 0.25; echoBus.connect(echoLaut); echoLaut.connect(musikGain);
+  // 🎸 Gitarren-Verstärker: Verzerrung + Lautsprecher-Box (Filter). Einer für Rhythmus, einer fürs Solo.
+  const kurve = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; kurve[i] = Math.tanh(x * 6) * 0.9; }
+  const verstaerker = (laut, hell) => {
+    const ein = ac.createGain(), ws = ac.createWaveShaper(), box = ac.createBiquadFilter(), tief = ac.createBiquadFilter(), aus = ac.createGain();
+    ws.curve = kurve; ws.oversample = '2x';
+    box.type = 'lowpass'; box.frequency.value = hell; box.Q.value = 0.9;
+    tief.type = 'highpass'; tief.frequency.value = 90;
+    aus.gain.value = laut;
+    ein.connect(ws); ws.connect(box); box.connect(tief); tief.connect(aus); aus.connect(musikGain);
+    const h = ac.createGain(); h.gain.value = 0.25; aus.connect(h); h.connect(hallBus);
+    return ein;
+  };
+  rhythmusBus = verstaerker(0.16, 3200);
+  soloBus = verstaerker(0.13, 4200);
+  const e2 = ac.createGain(); e2.gain.value = 0.5; soloBus.connect(e2); e2.connect(echoBus);
+}
+// 🎸 Eine Gitarren-Saite: zwei leicht verstimmte Sägezähne in den Verstärker
+function gitarre(bus, freq, t, lang, laut, vibrato = 0) {
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut, t + 0.006);
+  g.gain.setTargetAtTime(laut * 0.55, t + 0.02, 0.12); g.gain.setTargetAtTime(0.0001, t + lang, 0.05);
+  for (const d of [-7, 7]) {
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = d;
+    if (vibrato) { const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 5.8; lg.gain.value = vibrato; lfo.connect(lg); lg.connect(o.detune); lfo.start(t); lfo.stop(t + lang + 0.4); }
+    o.connect(g); o.start(t); o.stop(t + lang + 0.4);
+  }
+  g.connect(bus);
+}
+// 🥁 Schlagzeug, das nach echtem Schlagzeug klingt
+function trommel(art, t, laut = 1) {
+  if (art === 'kick') {   // Bassdrum: tiefer Bums + Klick vom Schlägel
+    osz('sine', 160, 42, 0.32, 0.75 * laut, t, musikGain); osz('triangle', 90, 40, 0.2, 0.3 * laut, t, musikGain);
+    krach(3000, 0.015, 0.25 * laut, t, musikGain, 'highpass');
+  } else if (art === 'snare') {   // Snare: Fell + Teppich (Rauschen) mit etwas Hall
+    osz('triangle', 240, 170, 0.1, 0.22 * laut, t, musikGain); osz('sine', 180, 150, 0.08, 0.15 * laut, t, musikGain);
+    krach(2500, 0.2, 0.35 * laut, t, musikGain, 'bandpass'); krach(6000, 0.15, 0.18 * laut, t, musikGain, 'highpass');
+    if (hallBus) krach(2500, 0.2, 0.12 * laut, t, hallBus, 'bandpass');
+  } else if (art === 'hat') krach(9000, 0.04, 0.07 * laut, t, musikGain, 'highpass');
+  else if (art === 'offen') krach(8000, 0.3, 0.06 * laut, t, musikGain, 'highpass');
+  else if (art === 'crash') { krach(5000, 1.4, 0.16 * laut, t, musikGain, 'highpass'); if (hallBus) krach(6000, 1.2, 0.08 * laut, t, hallBus, 'highpass'); }
+  else if (art === 'tom') { osz('sine', 200, 80, 0.35, 0.4 * laut, t, musikGain); krach(1200, 0.08, 0.08 * laut, t, musikGain, 'bandpass'); }
+  else if (art === 'tomTief') { osz('sine', 130, 55, 0.45, 0.45 * laut, t, musikGain); krach(800, 0.08, 0.08 * laut, t, musikGain, 'bandpass'); }
 }
 // Ein Instrumenten-Ton mit Filter, Vibrato, Hall und Echo
 function stimme(typ, freq, t, lang, laut, { filter = 0, attack = 0.01, hall = 0, echo = 0, verstimmt = 0, vibrato = 0 } = {}) {
@@ -1015,6 +1058,10 @@ function stimme(typ, freq, t, lang, laut, { filter = 0, attack = 0.01, hall = 0,
 }
 function instrument(art, midi, t, d, laut = 1) {
   const f = NOTE(midi);
+  if (soloBus) {   // 🎸 Rock-Version: Melodie = Solo-Gitarre, Begleitung = angeschlagene Gitarre
+    if (laut >= 1) { gitarre(soloBus, f, t, d * 2.2, 0.32, 14); return; }
+    gitarre(rhythmusBus, f, t, d * 1.2, 0.12); return;
+  }
   switch (art) {
     case 'saege': stimme('sawtooth', f, t, d * 1.8, 0.035 * laut, { filter: 2800, verstimmt: 8, vibrato: 12, echo: 0.4, hall: 0.3 }); break;
     case 'quadrat': stimme('square', f, t, d * 1.6, 0.03 * laut, { filter: 3000, verstimmt: 6, vibrato: 10, echo: 0.3, hall: 0.2 }); break;
@@ -1043,8 +1090,15 @@ function musikSchritt(song, s, t, d, eile) {
   const toene = [...ak, ...ak.map(n => n + 12), ...ak.map(n => n + 24)];
   const zeichen = (muster, i) => (muster || '')[i] || '.';
   const ist = (muster) => zeichen(muster, st) === 'x';
-  // Klang-Teppich
-  if (st === 0 && song.pad) for (const n of ak) stimme('sawtooth', NOTE(n + 12), t, d * 16, song.pad, { attack: 0.3, filter: 900, hall: 0.5, verstimmt: 5 });
+  // 🎸 Rhythmus-Gitarre: Powerchords (Grundton + Quinte + Oktave). Am Taktanfang klingt der Akkord lang, sonst gedämpft im Achtel-Takt
+  if (rhythmusBus) {
+    let g = ak[0]; while (g > 52) g -= 12; while (g < 40) g += 12;
+    const ruhig = song.bpm < 105, lang = st === 0 || (ruhig && st === 8);
+    if (lang) for (const n of [g, g + 7, g + 12]) gitarre(rhythmusBus, NOTE(n), t, d * (ruhig ? 7 : 3.5), 0.22);
+    else if (!ruhig && st % 2 === 0) for (const n of [g, g + 7]) gitarre(rhythmusBus, NOTE(n), t, d * 0.7, 0.16);
+  }
+  // Klang-Teppich (leise im Hintergrund)
+  if (st === 0 && song.pad && !rhythmusBus) for (const n of ak) stimme('sawtooth', NOTE(n + 12), t, d * 16, song.pad, { attack: 0.3, filter: 900, hall: 0.5, verstimmt: 5 });
   // Bass
   const b = zeichen(song.bass, st);
   if (b !== '.') {
@@ -1058,13 +1112,16 @@ function musikSchritt(song, s, t, d, eile) {
   // Melodie
   const m = zeichen(song.mel[takt], st);
   if (m !== '.') instrument(song.lead, toene[+m] + 12, t, d);
-  // Schlagzeug
-  if (ist(song.kick)) osz('sine', 150, 40, 0.18, 0.55, t, musikGain);
-  if (ist(song.snare)) { krach(1800, 0.14, 0.2, t, musikGain, 'highpass'); osz('triangle', 220, 160, 0.08, 0.08, t, musikGain); }
-  if (ist(song.hat) || (eile && st % 2 === 1)) krach(8000, 0.035, eile ? 0.06 : 0.045, t, musikGain, 'highpass');
-  if (ist(song.offen)) krach(7000, 0.2, 0.04, t, musikGain, 'highpass');
-  if (ist(song.clap)) for (let i = 0; i < 3; i++) krach(1500, 0.05, 0.1, t + i * 0.012, musikGain, 'bandpass');
-  if (ist(song.tom)) osz('sine', 220, 90, 0.25, 0.25, t, musikGain);
+  // 🥁 Schlagzeug: Rock-Beat (Bassdrum, Snare auf 2 und 4, Becken), am Ende jeder 4. Takte ein Trommelwirbel
+  const wirbel = takt % 4 === 3 && st >= 12;
+  if (st === 0 && takt % 4 === 0) trommel('crash', t);
+  if (ist(song.kick) || st === 0 || (!song.kick && st === 8)) trommel('kick', t);
+  if (!wirbel && (ist(song.snare) || st === 4 || st === 12)) trommel('snare', t);
+  if (wirbel) trommel(st < 14 ? 'tom' : 'tomTief', t, 0.9);
+  if ((ist(song.hat) || st % 2 === 0 || (eile && st % 2 === 1)) && !wirbel) trommel('hat', t, st % 4 === 0 ? 1 : 0.7);
+  if (ist(song.offen)) trommel('offen', t);
+  if (ist(song.clap)) trommel('snare', t, 0.6);
+  if (ist(song.tom) && !wirbel) trommel('tom', t, 0.8);
   if (ist(song.schuettel)) krach(9000, 0.05, 0.02, t, musikGain, 'highpass');
 }
 function musikUmschalten() {
