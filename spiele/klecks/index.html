@@ -224,7 +224,7 @@ Object.assign(WAFFEN, {
     nah: { rollBreite: 52, rollSchaden: 9, rollTempo: 120, rollKosten: 3.5, schwingCd: 0.7, schwingDauer: 0.45, abwurf: 0.2, art: 'hoch' },
     schwung: { anzahl: 6, streu: 0.95, speed: 330, bremse: 3, schaden: 28, klecks: 14, spur: 6, kosten: 7 } },
   gigaroller: { typ: 'roller', name: 'Gigaroller', emoji: '🦣', info: 'Riesen-Wurf, aber langsames Rollen', reichweite: 170, modell: { ganz: 1.35, walzeBreite: 1.8 },
-    nah: { rollBreite: 40, rollSchaden: 10, rollTempo: 95, rollKosten: 4, schwingCd: 1.0, schwingDauer: 0.6, abwurf: 0.3, art: 'hoch' },
+    nah: { rollBreite: 40, rollSchaden: 10, rollTempo: 95, rollKosten: 4, schwingCd: 1.45, schwingDauer: 1.0, abwurf: 0.65, art: 'hoch' },   // lange ausholen!
     schwung: { anzahl: 13, streu: 1.3, speed: 560, bremse: 2.2, schaden: 45, klecks: 18, spur: 8, kosten: 14 } },
   miniroller: { typ: 'roller', name: 'Miniroller', emoji: '🐭', info: 'Blitzschnell rollen und werfen – wenig Reichweite', reichweite: 80, modell: { ganz: 0.7 },
     nah: { rollBreite: 15, rollSchaden: 5, rollTempo: 205, rollKosten: 1.8, schwingCd: 0.3, schwingDauer: 0.25, abwurf: 0.1, art: 'hoch' },
@@ -269,7 +269,7 @@ const ULTIS = {
   schild:  { name: 'Blasenschild', emoji: '🛡️', info: '6 Sek. unverwundbar & schneller' },
   wirbel:  { name: 'Farbsturm',    emoji: '🌀', info: 'Hochspringen & riesiger Platscher' },
   welle:   { name: 'Farbwelle',    emoji: '🌊', info: 'Eine riesige Welle rollt nach vorne' },
-  laser:   { name: 'Megalaser',    emoji: '🔆', info: '3 Sek. ein riesiger Farbstrahl' },
+  laser:   { name: 'Hochdruckfärber', emoji: '💦', info: '4 Sek. ein Farbstrahl, der durch Wände geht – und du siehst alle Gegner! Aber du bist langsam.' },
   tornado: { name: 'Farbtornado',  emoji: '🌪️', info: 'Ein Wirbelsturm jagt die Gegner' },
   panzer:  { name: 'Farbpanzer',   emoji: '🚜', info: 'Steig in einen Panzer mit Minigun!' },
   werfer:  { name: 'Raketenwerfer', emoji: '🧨', info: '4 Riesenraketen selbst zielen und abfeuern' },
@@ -828,7 +828,7 @@ const SOUNDS = {
   plopp:   (t, v) => osz('sine', 200, 900, 0.12, 0.12 * v, t),
   kauf:    (t, v) => { osz('square', 988, 988, 0.08, 0.07 * v, t, sfxGain, 3000); osz('square', 1319, 1319, 0.3, 0.07 * v, t + 0.08, sfxGain, 3000); },
   nein:    (t, v) => osz('square', 220, 150, 0.2, 0.06 * v, t, sfxGain, 1500),
-  laser:   (t, v) => { osz('sawtooth', 150, 110, 3, 0.07 * v, t, sfxGain, 900); osz('sine', 900, 1300, 3, 0.03 * v, t); },
+  laser:   (t, v) => { osz('sawtooth', 150, 110, LASER_ZEIT, 0.07 * v, t, sfxGain, 900); osz('sine', 900, 1300, LASER_ZEIT, 0.03 * v, t); krach(2500, LASER_ZEIT, 0.12 * v, t, sfxGain, 'bandpass'); },
   wellenrauschen: (t, v) => krach(500, 1.6, 0.25 * v, t),
   fanfare: (t, v) => { [60, 64, 67, 72].forEach((n, i) => osz('square', NOTE(n), NOTE(n), 0.14, 0.07 * v, t + i * 0.1, sfxGain, 3000)); [72, 76, 79].forEach(n => osz('triangle', NOTE(n), NOTE(n), 0.9, 0.06 * v, t + 0.42)); },
   boing:   (t, v) => { osz('sine', 200, 900, 0.25, 0.12 * v, t); osz('square', 400, 1200, 0.15, 0.03 * v, t, sfxGain, 2000); },
@@ -2083,6 +2083,7 @@ function baueLautsprecher(team) {
   g.userData = { membran, wellen, kegel };
   return g;
 }
+const TRIF_STRAHL = 3;   // so lange (Sekunden) bleibt der TriFarb-Strahl stehen
 function baueTracker(team) {
   const g = new THREE.Group(), licht = mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 });
   g.add(zylinder(MAT_GRAU, 3, 4, 4, 0, 2, 0), ringY(teamMat[team], 3.6, 0.7, 0, 3, 0), zylinder(MAT_METALL, 0.4, 0.4, 12, 0, 10, 0), kugel(licht, 1.4, 0, 16.5, 0));
@@ -2261,7 +2262,7 @@ addEventListener('mousemove', e => {
   const wer = zustand === 'stadt' ? stadtSp : (zustand === 'spiel' || zustand === 'lobby') && spieler && !spieler.tot ? spieler : null;
   if (!wer) return;
   swayX += e.movementX; swayY += e.movementY;
-  const empf = 0.0025 * kamera.fov / 75;                  // im Zielfernrohr bewegt sich die Maus langsamer
+  const empf = 0.0025 * kamera.fov / 75 * (wer.laserT > 0 ? 0.25 : 1);   // im Zielfernrohr (und mit dem Hochdruckfärber) bewegt sich die Maus langsamer
   wer.winkel += e.movementX * empf;
   wer.pitch = Math.max(-1.2, Math.min(1.0, wer.pitch - e.movementY * empf));
 });
@@ -2703,8 +2704,8 @@ function geraetAnim(g) {
     ud.ring.scale.setScalar(0.3 + Math.min(1, g.t) * 0.7); ud.ring.material.opacity = 0.35 + Math.sin(g.t * 20) * 0.25;
     ud.strahl.visible = g.t >= 1.4;
     if (g.t >= 1.4 && !g.strahlTon && istGast()) { g.strahlTon = true; if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 700) ton('strahl'); }
-    if (g.t >= 1.4) {   // Strahl schießt von unten nach oben und wird dann dünner
-      const k = g.t - 1.4, breit = k < 0.3 ? 1 + Math.sin(k * 60) * 0.06 : Math.max(0.02, 1 - (k - 0.3) / 0.25);
+    if (g.t >= 1.4) {   // Strahl schießt von unten nach oben, bleibt 3 Sekunden stehen und wird dann dünner
+      const k = g.t - 1.4, breit = k < TRIF_STRAHL ? 1 + Math.sin(k * 60) * 0.06 : Math.max(0.02, 1 - (k - TRIF_STRAHL) / 0.25);
       ud.strahl.scale.set(breit, Math.min(900, k * 3500), breit);
       ud.aussen.rotation.y += 0.3;
     }
@@ -2730,8 +2731,7 @@ function laserZeigen(e) {
   m.visible = e.laserT > 0 && !e.tot;
   if (!m.visible) return;
   const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
-  let laenge = 700;
-  for (let d = 10; d <= 700; d += 6) if (istWand(e.x + c * d, e.y + s * d) || feindWand(e.x + c * d, e.y + s * d, 22, e.team)) { laenge = d; break; }
+  const laenge = laserLaenge(e, c, s);   // geht durch Wände – nur am Rand der Arena ist Schluss
   m.position.set(e.x + c * 14, hAbs(e) + (e.spieler ? 26 : 22), e.y + s * 14);
   m.rotation.y = -e.winkel;
   m.scale.set(laenge - 14, 1 + Math.sin(zeit * 50) * 0.15, 1 + Math.sin(zeit * 50) * 0.15);
@@ -2825,6 +2825,7 @@ function entsorgen(o) {
 function wegUndEntsorgen(o) { if (!o) return; scene.remove(o); entsorgen(o); }
 function aufraeumen() {
   for (const e of kleckse) for (const o of [e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh]) wegUndEntsorgen(o);
+  for (const e of kleckse) if (e.roentgen) { scene.remove(e.roentgen); e.roentgen.children[0].material.dispose(); }
   for (const g of [...geraete, ...wellen, ...tornados, ...blasen]) wegUndEntsorgen(g.mesh);
   for (const s of schuesse) scene.remove(s.mesh);
   for (const b of bomben) wegUndEntsorgen(b.mesh);
@@ -3134,7 +3135,7 @@ function bewege(e, dx, dy, dt) {
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
-  if (e.laserT > 0) speed *= 0.5;
+  if (e.laserT > 0) speed *= 0.35;   // Hochdruckfärber ist schwer: ganz langsam gehen
   if (e.kugelT > 0) speed = 60;
   if (e.panzerT > 0) speed = 125;
   e.dashT = Math.max(0, (e.dashT || 0) - dt); e.dashCd = Math.max(0, (e.dashCd || 0) - dt); e.rammCd = Math.max(0, (e.rammCd || 0) - dt);
@@ -3388,16 +3389,41 @@ function bogenSchuss(e, w, ladung) {
   else if (spieler) { const d = Math.hypot(e.x - spieler.x, e.y - spieler.y); if (d < 400) ton('bogen', 0.6 * (1 - d / 400)); }
 }
 
-// Megalaser: ein langer Strahl, der malt und trifft (stoppt an Wänden)
+// 💦 Hochdruckfärber: ein langer Strahl, der malt und trifft – sogar DURCH Wände!
+const LASER_ZEIT = 4, LASER_LAENGE = 800;
+function laserLaenge(e, c, s) {
+  let l = LASER_LAENGE;
+  if (c > 0.001) l = Math.min(l, (W - e.x) / c); if (c < -0.001) l = Math.min(l, -e.x / c);
+  if (s > 0.001) l = Math.min(l, (H - e.y) / s); if (s < -0.001) l = Math.min(l, -e.y / s);
+  return Math.max(20, l);
+}
+// Mit dem Hochdruckfärber leuchten alle Gegner durch die Wände hindurch
+const roentgenGeoK = new THREE.CylinderGeometry(7, 6, 22, 10).translate(0, 13, 0), roentgenGeoH = new THREE.SphereGeometry(8, 12, 8).translate(0, 32, 0);
+function roentgenZeigen() {
+  const an = spieler && spieler.laserT > 0 && !spieler.tot && zustand !== 'stadt';
+  for (const e of kleckse) {
+    const zeigen = an && e.team !== spieler.team && !e.tot;
+    if (!e.roentgen) {
+      if (!zeigen) continue;
+      const m = new THREE.MeshBasicMaterial({ color: TEAMS[e.team].hell, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false });
+      e.roentgen = new THREE.Group(); e.roentgen.add(new THREE.Mesh(roentgenGeoK, m), new THREE.Mesh(roentgenGeoH, m));
+      e.roentgen.children.forEach(c => { c.renderOrder = 999; }); scene.add(e.roentgen);
+    }
+    e.roentgen.visible = zeigen;
+    if (zeigen) {
+      e.roentgen.position.set(e.x, hAbs(e), e.y);
+      e.roentgen.children[0].material.opacity = 0.35 + Math.abs(Math.sin(zeit * 5)) * 0.35;
+    }
+  }
+}
 function laserUpdate(e, dt) {
   e.laserT -= dt;
   const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
-  let laenge = 700;
-  for (let d = 10; d <= 700; d += 6) if (istWand(e.x + c * d, e.y + s * d) || feindWand(e.x + c * d, e.y + s * d, 22, e.team)) { laenge = d; break; }
+  const laenge = laserLaenge(e, c, s);   // geht durch Wände – nur am Rand der Arena ist Schluss
   e.laserTick -= dt;
   if (e.laserTick <= 0) {
     e.laserTick = 0.05;
-    for (let d = 25; d < laenge; d += 18) klecks(e.x + c * d, e.y + s * d, 13, e.team, e, false);
+    for (let d = 25; d < laenge; d += 18) if (!istWand(e.x + c * d, e.y + s * d)) klecks(e.x + c * d, e.y + s * d, 13, e.team, e, false);
     for (const f of kleckse) {
       if (f.team === e.team || f.tot) continue;
       const dx = f.x - e.x, dy = f.y - e.y, laengs = dx * c + dy * s, quer = Math.abs(-dx * s + dy * c);
@@ -3532,7 +3558,8 @@ function schwungWerfen(e, w) {
 function schwungKurve(e) {
   const w = WAFFEN[e.waffe];
   if (!w.nah || !(e.schwingT > 0)) return { hoch: 0, seite: 0 };
-  const f = 1 - e.schwingT / w.nah.schwingDauer;
+  const f0 = 1 - e.schwingT / w.nah.schwingDauer, a = w.nah.abwurf / w.nah.schwingDauer;
+  const f = f0 < a ? f0 / a * 0.5 : 0.5 + (f0 - a) / (1 - a) * 0.5;   // Ausholen dauert so lange wie bis zum Abwurf
   if ((e.schwungArt || w.nah.art) === 'hoch') {
     const hoch = f < 0.4 ? Math.sin(f / 0.4 * Math.PI / 2) * 2.4 : f < 0.6 ? 2.4 - (f - 0.4) / 0.2 * 2.8 : -0.4 * (1 - (f - 0.6) / 0.4);
     return { hoch, seite: 0 };
@@ -3685,7 +3712,8 @@ function ultiStarten(e, zx, zy) {
       break;
     }
     case 'laser':
-      e.laserT = 3; e.laserTick = 0;
+      e.laserT = LASER_ZEIT; e.laserTick = 0;
+      if (e.spieler) meldung('💦 Du siehst jetzt alle Gegner – auch hinter Wänden!');
       if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 700) ton('laser', e.spieler ? 1 : 0.5);
       break;
     case 'panzer':   // in den Farbpanzer steigen
@@ -3838,13 +3866,14 @@ function lavaPruefen(e, dt) {
 
 function ki(b, dt) {
   const k = b.ki, w = WAFFEN[b.waffe];
-  const sichtweite = sandsturm() ? 150 : typVon(b.waffe) === 'sniper' ? Math.max(330, w.reichweite + 40) : 330;
+  const roentgen = b.laserT > 0;   // Hochdruckfärber: sieht alle Gegner durch Wände
+  const sichtweite = roentgen ? LASER_LAENGE : sandsturm() ? 150 : typVon(b.waffe) === 'sniper' ? Math.max(330, w.reichweite + 40) : 330;
   let feind = null, fd = 1e9;
   for (const e of kleckse) {
     if (e.team === b.team || e.tot) continue;
     const d = Math.hypot(e.x - b.x, e.y - b.y);
-    if (d > sichtweite || ((e.taucht || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
-    if (!sicht(b.x, b.y, e.x, e.y)) continue;
+    if (d > sichtweite || (!roentgen && (e.taucht || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
+    if (!roentgen && !sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
   }
   if (b.gigaT > 0) {   // Gigafisch: auf den nächsten Gegner zuschwimmen und rammen
@@ -3883,7 +3912,7 @@ function ki(b, dt) {
     // Kämpfen!
     const a = Math.atan2(feind.y - b.y, feind.x - b.x);
     const zielA = a + Math.sin(zeit * 3 + b.nr * 7) * 0.12;   // Nicht ganz perfekt zielen
-    b.winkel = drehe(b.winkel, zielA, dt * 5);
+    b.winkel = drehe(b.winkel, zielA, dt * (roentgen ? 0.9 : 5));   // mit dem Hochdruckfärber dreht man sich nur langsam
     b.pitch = botPitch(b, fd, hAbs(feind) + 22);
     const gutGezielt = Math.abs(winkelDiff(b.winkel, a)) < 0.35;
     if (b.panzerT > 0) b.schiesst = gutGezielt && fd < 330;
@@ -4136,7 +4165,14 @@ function update(dt) {
         for (let k = 0; k < 4; k++) spritzer(g.x, g.y, bodenHoehe(g.x, g.y) + 40 + k * 60, g.team, 12, 260);
         if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 700) ton('strahl');
       }
-      if (g.t >= 1.95) weg = true;
+      if (g.t > 1.5 && g.t < 1.4 + TRIF_STRAHL) {   // solange der Strahl steht: malt und trifft weiter
+        g.strahlTick = (g.strahlTick || 0) - dt;
+        if (g.strahlTick <= 0) {
+          g.strahlTick = 0.25; klecks(g.x, g.y, 80, g.team, g.wer, false); spritzer(g.x, g.y, bodenHoehe(g.x, g.y) + 30, g.team, 6, 200);
+          for (const e of kleckse) if (e.team !== g.team && !e.tot && Math.hypot(e.x - g.x, e.y - g.y) < 90) treffen(e, 25, g.wer);
+        }
+      }
+      if (g.t >= 1.4 + TRIF_STRAHL + 0.3) weg = true;
     } else if (g.art === 'lautsprecher') {   // Megalautsprecher: der Schallstrahl macht alles platt
       geraetAnim(g);
       if (g.t > 0.8 && g.t < 6.6) {
@@ -4324,6 +4360,7 @@ function welt3D(dt) {
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
   zugUpdate(dt);
+  roentgenZeigen();
   if (kartenGruppe[karte]) for (const o of kartenGruppe[karte].children) {
     if (o.userData.boost) o.scale.setScalar(1 + Math.sin(zeit * 6) * 0.15);
     if (o.userData.sand) o.rotation.y += dt * 0.6;
