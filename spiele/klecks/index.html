@@ -104,7 +104,7 @@
       <span class="taste">Leertaste</span><span>Springen</span>
       <span class="taste">E</span><span>Farbbombe (halten = zielen)</span>
       <span class="taste">Q</span><span>Ulti, wenn sie voll ist ⚡</span>
-      <span class="taste">F halten</span><span>Schirm aufmachen, ohne zu schießen ☂️</span>
+      <span class="taste">F halten</span><span>Schirm aufmachen ☂️</span>
       <span class="taste">V</span><span>Ich-Sicht / Sicht von hinten</span>
       <span class="taste">M</span><span>Musik an/aus 🎵</span>
       <span class="taste">E (Stadt)</span><span>Laden / Arena betreten</span>
@@ -261,7 +261,7 @@ Object.assign(WAFFEN, {
 });
 // ☂️ Farbschirm: Halten = Schirm auf (blockt Schüsse von vorne) + Schrot-Ladungen. 🗡️ Farbtana: Schwert – Klicken = schneller Schnitt, Halten = Mega-Schnitt
 Object.assign(WAFFEN, {
-  schirm: { typ: 'schirm', name: 'Farbschirm', emoji: '☂️', info: 'Halten = Schirm auf + Schrot-Ladungen. F halten = nur Schirm auf, ohne zu schießen',
+  schirm: { typ: 'schirm', name: 'Farbschirm', emoji: '☂️', info: 'Klicken = Schrot-Ladungen, F halten = Schirm auf (blockt Schüsse von vorne)',
     cd: 0.7, anzahl: 8, streu: 0.6, speed: 540, bremse: 2.6, schaden: 18, klecks: 13, spur: 5, kosten: 6, reichweite: 190, schirmHP: 260 },
   tana: { typ: 'tana', name: 'Farbtana', emoji: '🗡️', info: 'Klicken = schneller Schnitt, Halten = aufladen für einen Mega-Schnitt mit Sprung nach vorne!',
     reichweite: 150, ladezeit: 0.6,
@@ -3540,7 +3540,8 @@ function schiessen(e, dt) {
       if (e.schirmWiederT <= 0) { e.schirmHP = w.schirmHP; if (e.spieler) { meldung('☂️ Dein Schirm ist wieder ganz!'); ton('auf'); } }
     }
     if (e.abkoppelWunsch) { e.abkoppelWunsch = false; if (w.abkoppeln && e.schirmHP > 0 && !e.taucht) schirmAbkoppeln(e, w); }
-    e.schirmAuf = (e.schiesst || e.schirmHalten) && !e.taucht && e.schirmHP > 0;
+    const botSchirm = !e.spieler && !e.mensch && e.schiesst;   // Bots haben keine F-Taste: die öffnen ihn beim Kämpfen
+    e.schirmAuf = (e.schirmHalten || botSchirm) && !e.taucht && e.schirmHP > 0;   // nur F öffnet den Schirm – Schießen allein nicht
     if (!e.schiesst || e.taucht || e.schussCd > 0) return;
     if (e.tinte < w.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
     e.schussCd = w.cd; e.tinte -= w.kosten * (1 - e.bonus.tinte); e.rueck = 1;
