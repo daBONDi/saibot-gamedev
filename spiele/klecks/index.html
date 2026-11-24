@@ -72,14 +72,16 @@
   <div class="box">
     <h1>KLECKS-KRIEG 3D</h1>
     <div id="kontoListeBox"><h2>👤 Wer spielt?</h2><div class="wahl" id="kontoListe"></div></div>
-    <h2>✨ Neues Konto erstellen</h2>
-    <p>Dein Spielername – nimm einen <b>Spitznamen</b>, nicht deinen echten Namen!</p>
+    <h2 id="kontoTitel">✨ Neues Konto erstellen</h2>
+    <p id="kontoNameInfo">Dein Spielername – nimm einen <b>Spitznamen</b>, nicht deinen echten Namen!</p>
     <input id="kontoName" maxlength="14" placeholder="z. B. FarbBlitz" autocomplete="off">
+    <h2>Junge oder Mädchen?</h2><div class="wahl" id="wahlFigur"></div>
     <h2>Hautfarbe</h2><div class="farben" id="wahlHaut"></div>
     <h2>Haarfarbe</h2><div class="farben" id="wahlHaar"></div>
     <h2>Frisur</h2><div class="wahl" id="wahlFrisur"></div>
     <p id="kontoFehler" class="fehler"></p>
     <button class="gross" id="kontoErstellen">✨ Konto erstellen</button>
+    <button class="klein hidden" id="kontoAbbrechen">↩️ Zurück, nichts ändern</button>
     <p class="kleinText">💾 Dein Konto wird nur hier im Browser auf diesem Computer gespeichert.</p>
   </div>
 </div>
@@ -88,7 +90,7 @@
   <div class="box">
     <h1>KLECKS-KRIEG 3D</h1>
     <div class="kontoZeile"><span>👤 <b id="menuName"></b></span><span>🪙 <b id="menuMuenzen"></b></span>
-      <button class="klein" id="kontoWechseln">🔄 Konto wechseln</button></div>
+      <button class="klein" id="kontoWechseln">🔄 Konto wechseln</button> <button class="klein" id="aussehenAendern">✏️ Aussehen ändern</button></div>
     <p>Team <b style="color:#ff8a1f">Orange</b> gegen Team <b style="color:#a347ff">Lila</b>! Mal in 3 Minuten mehr Boden an als die Gegner.</p>
     <h2>🎒 Deine Ausrüstung</h2><div class="ausr" id="menuAusruestung"></div>
     <button class="gross" id="start">🏙️ In die Stadt!</button>
@@ -398,7 +400,14 @@ const KOEPFE = {
   stirnband:  { name: 'Ninja-Stirnband', emoji: '🎌', preis: 160, info: '⚡ Ulti +7%', bonus: { ulti: 0.07 }, farbe: '#e63946' },
   astronaut:  { name: 'Astronautenhelm', emoji: '👨‍🚀', preis: 900, info: '🛡️ 8% weniger Schaden, ⚡ Ulti +10%', bonus: { schutz: 0.08, ulti: 0.1 } },
 };
-const FRISUREN = { kurz: { name: 'Kurz', emoji: '💇' }, stachel: { name: 'Stacheln', emoji: '🦔' }, locken: { name: 'Locken', emoji: '🌀' } };
+const FRISUREN = { kurz: { name: 'Kurz', emoji: '💇' }, stachel: { name: 'Stacheln', emoji: '🦔' }, locken: { name: 'Locken', emoji: '🌀' },
+  zopf: { name: 'Pferdeschwanz', emoji: '🎀' }, zoepfe: { name: 'Zöpfe', emoji: '👧' }, lang: { name: 'Lange Haare', emoji: '💁' } };
+const FIGUREN = { junge: { name: 'Junge', emoji: '👦' }, maedchen: { name: 'Mädchen', emoji: '👧' } };
+const JUNGEN_FRISUREN = ['kurz', 'stachel', 'locken'], MAEDCHEN_FRISUREN = ['zopf', 'zoepfe', 'lang', 'locken'];
+function zufallsAussehen() {   // für Bots und Kinder in der Stadt: Jungen und Mädchen
+  const figur = Math.random() < 0.5 ? 'maedchen' : 'junge';
+  return { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), figur, frisur: zufallAus(figur === 'maedchen' ? MAEDCHEN_FRISUREN : JUNGEN_FRISUREN) };
+}
 const HAUTFARBEN = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
 const HAARFARBEN = ['#5a3825', '#2b1d14', '#e8c15a', '#b5522b', '#1b1f3a'];
 const SLOT_LISTE = { waffe: SETS, hemd: HEMDEN, schuhe: SCHUHE, kopf: KOEPFE };
@@ -425,8 +434,8 @@ function firmenSet(an) {   // welche Firma trägst du mindestens 3-mal? (Waffe, 
 function bombeKosten(e) { return BOMBEN[e.bombe].kosten * (1 - e.bonus.bombe); }
 
 // ================== KONTEN (im Browser gespeichert) ==================
-function neuesKonto(name, haut, haar, frisur) {
-  return { name, muenzen: 150, haut, haar, frisur,
+function neuesKonto(name, haut, haar, frisur, figur = 'junge') {
+  return { name, muenzen: 150, haut, haar, frisur, figur,
     besitz: { waffe: ['spritzer'], hemd: ['tshirt'], schuhe: ['turnschuhe'], kopf: ['keine'] },
     an: { waffe: 'spritzer', hemd: 'tshirt', schuhe: 'turnschuhe', kopf: 'keine' },
     rekord: 0, runden: 0, siege: 0 };
@@ -434,7 +443,7 @@ function neuesKonto(name, haut, haar, frisur) {
 // Falls gespeicherte Daten kaputt oder alt sind: alles Wichtige wieder richtig machen
 function kontoReparieren(k) {
   const v = neuesKonto(String(k.name).slice(0, 14),
-    HAUTFARBEN.includes(k.haut) ? k.haut : HAUTFARBEN[1], HAARFARBEN.includes(k.haar) ? k.haar : HAARFARBEN[0], hat(FRISUREN, k.frisur) ? k.frisur : 'kurz');
+    HAUTFARBEN.includes(k.haut) ? k.haut : HAUTFARBEN[1], HAARFARBEN.includes(k.haar) ? k.haar : HAARFARBEN[0], hat(FRISUREN, k.frisur) ? k.frisur : 'kurz', hat(FIGUREN, k.figur) ? k.figur : 'junge');
   v.muenzen = Math.max(0, Math.floor(Number(k.muenzen) || 0));
   for (const f of ['rekord', 'runden', 'siege']) v[f] = Math.max(0, Math.floor(Number(k[f]) || 0));
   for (const slot of Object.keys(SLOT_LISTE)) {
@@ -458,7 +467,7 @@ function speichern() {
     if (konto) localStorage.setItem('klecks3d-aktiv', konto.name);
   } catch (e) {}
 }
-function kontoAussehen() { return { haut: konto.haut, haar: konto.haar, frisur: konto.frisur }; }
+function kontoAussehen() { return { haut: konto.haut, haar: konto.haar, frisur: konto.frisur, figur: konto.figur }; }
 
 // ================== WÄNDE ==================
 const waende = [];
@@ -1492,6 +1501,21 @@ function haareBauen(kopf, frisur, haar) {
       kopf.add(kugel(haar, 2.6, -1.5 + Math.cos(a) * 5.8, 4.5 + (i % 2) * 1.2, Math.sin(a) * 5.8));
     }
     kopf.add(kugel(haar, 3, -1, 7.5, 0), kugel(haar, 2.6, 2.5, 6.2, 2), kugel(haar, 2.6, 2.5, 6.2, -2));
+  } else if (frisur === 'lang') {   // lange Haare bis über die Schultern
+    kopf.add(klotz(haar, 2, 1.6, 10, 5.4, 5.4, 0));
+    kopf.add(kugel(haar, 6.6, -4.5, -4, 0, 0.75, 1.55, 1.15));
+    for (const z of [-1, 1]) kopf.add(kugel(haar, 2.6, -0.5, -2.5, z * 6.9, 0.9, 2.1, 0.6));
+  } else if (frisur === 'zopf') {   // Pferdeschwanz mit Haargummi
+    kopf.add(klotz(haar, 2, 1.6, 10, 5.4, 5.4, 0));
+    kopf.add(ringX(mat('#ff5fa2'), 1.9, 0.7, -8.6, 3.5, 0), kugel(haar, 2.3, -9.4, 3.5, 0));
+    const zopf = zylinder(haar, 2.3, 1, 12, -11.5, -1.5, 0); zopf.rotation.z = -0.35; kopf.add(zopf);
+    kopf.add(kugel(haar, 1.2, -13.5, -7.2, 0));
+  } else if (frisur === 'zoepfe') {   // zwei geflochtene Zöpfe an der Seite
+    kopf.add(klotz(haar, 2, 1.6, 10, 5.4, 5.4, 0));
+    for (const z of [-1, 1]) {
+      for (let i = 0; i < 6; i++) kopf.add(kugel(haar, 1.9 - i * 0.12, -2.5 + (i % 2) * 0.5, -2 - i * 2.2, z * (7.4 + i * 0.25)));
+      kopf.add(kugel(mat('#ff5fa2'), 1.2, -2.5, -14.8, z * 8.9), kugel(haar, 1.3, -2.5, -16.4, z * 8.9, 1, 1.4, 1));
+    }
   } else {
     kopf.add(klotz(haar, 2, 1.4, 9, 5.5, 5.6, 0));      // kleiner Pony
   }
@@ -1696,6 +1720,11 @@ function baueJunge(m, team, aussehen, an) {
   kopf.add(kugel(haut, 7.5, 0, 0, 0), kugel(haut, 1.8, 0, 0, -7.3, 0.6, 1, 0.6), kugel(haut, 1.8, 0, 0, 7.3, 0.6, 1, 0.6), kugel(haut, 1.1, 7.6, -0.4, 0));
   const augen = new THREE.Group(); augen.position.set(6.1, 1.3, 0); kopf.add(augen);
   auge(augen, 0, 0, -2.8, 2.1); auge(augen, 0, 0, 2.8, 2.1);
+  if (aussehen.figur === 'maedchen') {   // Wimpern und rote Bäckchen
+    for (const z of [-1, 1]) for (let i = 0; i < 3; i++) { const w = klotz(MAT_SCHWARZ, 0.4, 1.3, 0.35, 0.9, 2.2, z * (2.8 + (i - 1) * 0.9 + z * 0.5)); w.rotation.x = z * (i - 0.5) * 0.35; augen.add(w); }
+    const rosa = mat('#ff8fa3', { transparent: true, opacity: 0.55 });
+    for (const z of [-1, 1]) kopf.add(kugel(rosa, 1.3, 6.5, -1.6, z * 4.3, 0.4, 0.7, 1));
+  }
   kopf.add(klotz(haar, 0.8, 0.8, 2.6, 6.6, 4.1, -2.8), klotz(haar, 0.8, 0.8, 2.6, 6.6, 4.1, 2.8));
   const mund = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.4, 6, 10, Math.PI), MAT_SCHWARZ);
   mund.rotation.set(Math.PI, Math.PI / 2, 0); mund.position.set(7.1, -2.4, 0); kopf.add(mund);   // Lächeln
@@ -2341,7 +2370,7 @@ function mpVerbindungWeg(text) {
 
 // ----- Was man von sich verrät: nur Spielername, Aussehen und Ausrüstung -----
 function zufallsLook() {
-  return { aussehen: { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) },
+  return { aussehen: zufallsAussehen(),
            an: { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) } };
 }
 function mpMeineDaten() {
@@ -2351,7 +2380,7 @@ function mpMeineDaten() {
 function lookPruefen(a = {}, an = {}) {   // Nur erlaubte Werte annehmen
   return {
     aussehen: { haut: HAUTFARBEN.includes(a.haut) ? a.haut : HAUTFARBEN[1], haar: HAARFARBEN.includes(a.haar) ? a.haar : HAARFARBEN[0],
-                frisur: hat(FRISUREN, a.frisur) ? a.frisur : 'kurz' },
+                frisur: hat(FRISUREN, a.frisur) ? a.frisur : 'kurz', figur: hat(FIGUREN, a.figur) ? a.figur : 'junge' },
     an: { hemd: hat(HEMDEN, an.hemd) ? an.hemd : 'tshirt', schuhe: hat(SCHUHE, an.schuhe) ? an.schuhe : 'turnschuhe', kopf: hat(KOEPFE, an.kopf) ? an.kopf : 'keine' },
   };
 }
@@ -2789,7 +2818,7 @@ function neuerKlecks(team, nr, extra = {}) {
   // 3D-Modell
   e.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   e.gruppe = new THREE.Group();
-  const aussehen = extra.aussehen || (sp ? kontoAussehen() : { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) });
+  const aussehen = extra.aussehen || (sp ? kontoAussehen() : zufallsAussehen());
   const an = extra.an || (sp ? konto.an : { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) });
   e.bonus = bonusVon(an);
   e.ultiArt = SETS[e.set].ulti;                           // jede Waffen-Variante hat feste Bombe und Ulti
@@ -4841,7 +4870,7 @@ const VORSCHAU = { x: W / 2, z: -1500 };
 const podest = zylinder(mat('#3d4266'), 24, 27, 6, VORSCHAU.x, 0, VORSCHAU.z);
 const podestRing = ringY(mat(TEAMS[0].col, { emissive: TEAMS[0].col, emissiveIntensity: 0.5 }), 25.5, 1.2, VORSCHAU.x, 3, VORSCHAU.z);
 scene.add(podest, podestRing);
-let vorschau = null, anprobe = null, neuAussehen = { haut: HAUTFARBEN[1], haar: HAARFARBEN[0], frisur: 'kurz' };
+let vorschau = null, anprobe = null, neuAussehen = { haut: HAUTFARBEN[1], haar: HAARFARBEN[0], frisur: 'kurz', figur: 'junge' }, kontoBearbeiten = false;
 function vorschauBauen() {
   const dreh = vorschau ? vorschau.gruppe.rotation.y : 0.6;
   if (vorschau) scene.remove(vorschau.gruppe);
@@ -4890,6 +4919,20 @@ function kontoZeigen() {
       konten.delete(k.name); if (konto === k) konto = null; speichern(); kontoZeigen();
     }));
   }
+  // Neues Konto – oder beim eigenen Konto nur das Aussehen ändern?
+  for (const id of ['kontoListeBox', 'kontoName', 'kontoNameInfo']) if (kontoBearbeiten) $(id).classList.add('hidden'); else if (id !== 'kontoListeBox') $(id).classList.remove('hidden');
+  $('kontoTitel').textContent = kontoBearbeiten ? `✏️ Aussehen von ${konto.name} ändern` : '✨ Neues Konto erstellen';
+  $('kontoErstellen').textContent = kontoBearbeiten ? '✅ Speichern' : '✨ Konto erstellen';
+  $('kontoAbbrechen').classList.toggle('hidden', !kontoBearbeiten);
+  const fg = $('wahlFigur'); fg.innerHTML = '';
+  for (const [id, f] of Object.entries(FIGUREN)) {
+    fg.append(knopf([['b', f.emoji], f.name], () => {
+      neuAussehen.figur = id; ton('klick');
+      const passt = id === 'maedchen' ? MAEDCHEN_FRISUREN : JUNGEN_FRISUREN;
+      if (!passt.includes(neuAussehen.frisur)) neuAussehen.frisur = passt[0];   // passende Frisur vorschlagen
+      kontoZeigen();
+    }, neuAussehen.figur === id ? 'an' : ''));
+  }
   farbKnoepfe('wahlHaut', HAUTFARBEN, 'haut');
   farbKnoepfe('wahlHaar', HAARFARBEN, 'haar');
   const fr = $('wahlFrisur'); fr.innerHTML = '';
@@ -4900,10 +4943,14 @@ function kontoZeigen() {
   vorschauBauen();
 }
 $('kontoErstellen').onclick = () => {
+  if (kontoBearbeiten && konto) {   // nur das Aussehen ändern – Münzen und Sachen bleiben!
+    Object.assign(konto, { haut: neuAussehen.haut, haar: neuAussehen.haar, frisur: neuAussehen.frisur, figur: neuAussehen.figur });
+    kontoBearbeiten = false; speichern(); ton('kauf'); menuZeigen(); return;
+  }
   const name = $('kontoName').value.trim().replace(/\s+/g, ' ');
   if (!NAME_OK.test(name)) { $('kontoFehler').textContent = 'Der Name braucht 2–14 Zeichen (nur Buchstaben, Zahlen, Leerzeichen, - und _).'; ton('nein'); return; }
   if (konten.has(name)) { $('kontoFehler').textContent = 'Diesen Namen gibt es schon – klick oben drauf oder nimm einen anderen.'; ton('nein'); return; }
-  konto = neuesKonto(name, neuAussehen.haut, neuAussehen.haar, neuAussehen.frisur);
+  konto = neuesKonto(name, neuAussehen.haut, neuAussehen.haar, neuAussehen.frisur, neuAussehen.figur);
   konten.set(name, konto); speichern();
   $('kontoName').value = '';
   ton('kauf'); menuZeigen();
@@ -4927,7 +4974,9 @@ function menuZeigen() {
   }
   vorschauBauen();
 }
-$('kontoWechseln').onclick = () => { ton('klick'); kontoZeigen(); };
+$('kontoWechseln').onclick = () => { ton('klick'); kontoBearbeiten = false; kontoZeigen(); };
+$('aussehenAendern').onclick = () => { ton('klick'); kontoBearbeiten = true; neuAussehen = kontoAussehen(); kontoZeigen(); };
+$('kontoAbbrechen').onclick = () => { ton('klick'); kontoBearbeiten = false; menuZeigen(); };
 
 // ---------- Die 4 Shops ----------
 const SHOPS = {
@@ -5177,7 +5226,7 @@ for (let i = 0; i < 7; i++) {
   do { n.x = (Math.random() - 0.5) * 1100; n.y = (Math.random() - 0.5) * 700; } while (stadtKollidiert(n.x, n.y, 16));
   n.waffe = zufall(WAFFEN);
   n.mat = mat(TEAMS[team].col, { roughness: 0.35 });
-  n.koerper = baueJunge(n.mat, team, { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), frisur: zufall(FRISUREN) },
+  n.koerper = baueJunge(n.mat, team, zufallsAussehen(),
     { hemd: zufall(HEMDEN), schuhe: zufall(SCHUHE), kopf: zufall(KOEPFE) });
   n.waffenModell = null; n.ohneWaffe = true;   // in der Stadt trägt keiner eine Waffe
   n.gruppe = new THREE.Group(); n.gruppe.add(n.koerper); stadtGruppe.add(n.gruppe);
