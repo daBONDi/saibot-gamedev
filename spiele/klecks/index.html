@@ -272,7 +272,7 @@ Object.assign(WAFFEN, {
 Object.assign(WAFFEN, {
   campingschirm: { typ: 'schirm', name: 'Campingschirm', emoji: '⛺', info: 'Riesig breiter Schirm aus Zeltstoff – schützt auch deine Mitspieler hinter dir! Aber du bist langsam', modell: { ganz: 1.2 },
     cd: 0.9, anzahl: 10, streu: 0.7, speed: 480, bremse: 2.6, schaden: 17, klecks: 14, spur: 5, kosten: 8, reichweite: 180,
-    schirmHP: 650, blockBreite: 96, laufen: 0.55 },
+    schirmHP: 750, blockBreite: 146, laufen: 0.5 },
   abkoppler: { typ: 'schirm', name: 'Abkoppler', emoji: '🚀', info: 'Rechte Maustaste: Der Schirm fährt nach vorne los, malt eine Spur und schubst Gegner!',
     cd: 0.65, anzahl: 7, streu: 0.55, speed: 520, bremse: 2.6, schaden: 17, klecks: 13, spur: 5, kosten: 6, reichweite: 185, schirmHP: 240, abkoppeln: true },
   oneschirm: { typ: 'schirm', name: 'Oneschirm', emoji: '☝️', info: 'Schießt nur eine dicke Kugel – dafür weit und stark', modell: { ganz: 0.85 }, gross: 2,
@@ -1889,7 +1889,7 @@ function abzugBauen(g, x) {
   g.add(buegel, klotz(MAT_METALL, 0.8, 2.6, 1, x, -2.6, 0));
 }
 // ⛺ Campingschirm: ein riesiger Schirm aus Zeltstoff – höher als breit, 6 Bahnen (Teamfarbe / Olivgrün), Saum mit Schlaufen, Reißverschluss
-const CAMPING_DACH = { bahnen: 6, th: 1.15, flach: 0.68, farbe2: '#6f7d4c', hoch: 1.05, breit: 2.1, saum: '#4d5735', zeltstoff: true };   // ganz breit: deckt auch die Mitspieler
+const CAMPING_DACH = { bahnen: 6, th: 1.15, flach: 0.68, farbe2: '#6f7d4c', hoch: 1.05, breit: 3.2, saum: '#4d5735', zeltstoff: true };   // ganz breit: deckt auch die Mitspieler
 function baueSchirmDach(R, team, o = {}) {
   const aussen = new THREE.Group(), dach = new THREE.Group(); aussen.add(dach);
   dach.scale.set(1, o.hoch || 1, o.breit || 1);   // Campingschirm: höher als breit
