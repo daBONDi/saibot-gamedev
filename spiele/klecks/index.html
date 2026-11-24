@@ -1888,6 +1888,36 @@ function abzugBauen(g, x) {
   buegel.rotation.z = Math.PI; buegel.position.set(x, -2.2, 0);
   g.add(buegel, klotz(MAT_METALL, 0.8, 2.6, 1, x, -2.6, 0));
 }
+// ☂️ Ein echtes Regenschirm-Dach: 8 gewölbte Stoffbahnen (Teamfarbe / Weiß), Speichen außen, Streben innen, Spitze oben.
+// Die Wölbung zeigt nach +x, der Rand liegt bei x = 0.
+function baueSchirmDach(R, team) {
+  const dach = new THREE.Group(), th = 1.0, Rs = R / Math.sin(th), flach = 0.55, off = Rs * Math.cos(th) * flach;
+  const dachMat = mat(TEAMS[team].col, { side: THREE.DoubleSide, roughness: 0.55 }), weiss = mat('#f4f4f4', { side: THREE.DoubleSide, roughness: 0.55 });
+  const speiche = mat('#2b2f4a', { metalness: 0.6, roughness: 0.35 });
+  const punkt = (theta, phi, aussen = 1) => {   // Punkt auf dem Dach (schon nach +x gedreht)
+    const x = Rs * Math.sin(theta) * Math.cos(phi) * aussen, y = (Rs * Math.cos(theta) * flach - off) * aussen, z = Rs * Math.sin(theta) * Math.sin(phi) * aussen;
+    return new THREE.Vector3(y, -x, z);
+  };
+  for (let i = 0; i < 8; i++) {
+    const geo = new THREE.SphereGeometry(Rs, 6, 7, i * Math.PI / 4, Math.PI / 4, 0, th);
+    geo.scale(1, flach, 1); geo.translate(0, -off, 0); geo.rotateZ(-Math.PI / 2);
+    dach.add(new THREE.Mesh(geo, i % 2 ? weiss : dachMat));
+    // Speiche entlang der Naht + Kappe am Ende
+    const phi = i * Math.PI / 4, pts = [];
+    for (let k = 0; k <= 8; k++) pts.push(punkt(th * k / 8, phi, 1.012));
+    dach.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, R * 0.022, 4), speiche));
+    const ende = punkt(th, phi, 1.02); dach.add(kugel(speiche, R * 0.045, ende.x, ende.y, ende.z));
+    // Strebe innen: von der Stange zur Mitte der Speiche
+    const von = new THREE.Vector3(-R * 0.3, 0, 0), bis = punkt(th * 0.62, phi, 0.99), mitte = von.clone().add(bis).multiplyScalar(0.5);
+    const strebe = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.015, R * 0.015, von.distanceTo(bis), 4), speiche);
+    strebe.position.copy(mitte); strebe.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bis.clone().sub(von).normalize()); dach.add(strebe);
+  }
+  const oben = Rs * (1 - Math.cos(th)) * flach;
+  dach.add(zylinderX(speiche, R * 0.05, R * 0.05, R * 0.12, -R * 0.3, 0, 0));                               // Schieber an der Stange
+  const spitze = new THREE.Mesh(new THREE.ConeGeometry(R * 0.04, R * 0.22, 8), MAT_METALL); spitze.rotation.z = -Math.PI / 2; spitze.position.x = oben + R * 0.11; dach.add(spitze);
+  dach.add(kugel(dachMat, R * 0.07, oben, 0, 0));
+  return { dach, dachMat };
+}
 function baueWaffe(art, m, team, watzo = false, variante = null) {
   const g = new THREE.Group(), ud = g.userData;
   const typ = typVon(art);
@@ -1977,23 +2007,19 @@ function baueWaffe(art, m, team, watzo = false, variante = null) {
       break;
     }
     case 'schirm': {
-      // ☂️ Farbschirm: Griff mit Abzug, Stange mit Tank, vorne das Schirmdach (klappt auf)
-      const griff = klotz(MAT_GUMMI, 3.5, 7, 3.6, 0.5, -4.5, 0); griff.rotation.z = 0.25; g.add(griff);
-      const haken = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.9, 6, 12, Math.PI), mat('#8a5a2e')); haken.position.set(-0.2, -8.2, 0); haken.rotation.z = Math.PI; g.add(haken);
-      abzugBauen(g, 3.5);
-      g.add(klotz(m, 9, 4, 4, 4, 0.5, 0), zylinderX(MAT_METALL, 0.8, 0.8, 22, 15, 0.5, 0));
-      g.add(zylinderX(glasRohrMat, 2.1, 2.1, 7, 3.5, 4, 0), ringX(MAT_METALL, 2.1, 0.4, 0, 4, 0), ringX(MAT_METALL, 2.1, 0.4, 7, 4, 0));
-      const tank = new THREE.Group(); tank.position.set(0.2, 4, 0); g.add(tank); ud.tinteFuell = tank;
-      tank.add(zylinderX(tinte, 1.7, 1.7, 6.6, 3.3, 0, 0));
-      const dach = new THREE.Group(); dach.position.set(22, 0.5, 0); g.add(dach); ud.dach = dach;
-      const dachMat = mat(TEAMS[team].col, { side: THREE.DoubleSide, roughness: 0.6 });
-      const tuch = new THREE.Mesh(new THREE.ConeGeometry(15, 7, 8, 1, true), dachMat); tuch.rotation.z = -Math.PI / 2; dach.add(tuch);
-      const streifen = new THREE.Mesh(new THREE.ConeGeometry(15.05, 7, 8, 1, true, 0, Math.PI / 4), mat('#ffffff', { side: THREE.DoubleSide, roughness: 0.6 }));
-      for (let i = 0; i < 4; i++) { const st = streifen.clone(); st.rotation.set(i * Math.PI / 2, 0, -Math.PI / 2); dach.add(st); }
-      dach.add(ringX(MAT_WEISS, 15, 0.45, -3.5, 0, 0), kugel(MAT_METALL, 1.3, 4, 0, 0));
-      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; dach.add(kugel(MAT_METALL, 0.6, -3.6, Math.cos(a) * 15, Math.sin(a) * 15)); }   // Speichen-Enden
-      ud.dachMat = dachMat;
-      ud.blitz = kugel(blitzMat, 2.4, 27, 0.5, 0); g.add(ud.blitz);
+      // ☂️ Farbschirm: ein echter Regenschirm – Holzgriff mit Haken, Stange mit Tintentank, gewölbtes Dach aus 8 Stoffbahnen
+      const holz = mat('#8a5a2e', { roughness: 0.55 });
+      g.add(zylinderX(holz, 1.3, 1.4, 7, -3, 0, 0));
+      const haken = new THREE.Mesh(new THREE.TorusGeometry(2.6, 1.15, 8, 16, Math.PI), holz); haken.position.set(-6.5, -2.6, 0); haken.rotation.z = Math.PI / 2; g.add(haken);
+      g.add(kugel(holz, 1.2, -6.5, -5.2, 0), ringX(MAT_METALL, 1.45, 0.3, 0.5, 0, 0));
+      abzugBauen(g, 1.5);
+      g.add(zylinderX(MAT_METALL, 0.6, 0.6, 24, 12, 0, 0));                                   // Stange
+      g.add(zylinderX(glasRohrMat, 1.7, 1.7, 6, 5, 0, 0), ringX(MAT_METALL, 1.7, 0.35, 2, 0, 0), ringX(MAT_METALL, 1.7, 0.35, 8, 0, 0));
+      const tank = new THREE.Group(); tank.position.set(2.2, 0, 0); g.add(tank); ud.tinteFuell = tank;
+      tank.add(zylinderX(tinte, 1.4, 1.4, 5.6, 2.8, 0, 0));
+      const d = baueSchirmDach(15, team); d.dach.position.set(18, 0, 0); g.add(d.dach);
+      ud.dach = d.dach; ud.dachMat = d.dachMat;
+      ud.blitz = kugel(blitzMat, 2.4, 27, 0, 0); g.add(ud.blitz);
       break;
     }
     case 'tana': {
@@ -2371,7 +2397,7 @@ const VM_POS = { doppel: [0, -6, -9, 0.45], kanone: [5, -7, -10, 0.5], spritzer:
 const VM_EXTRA_POS = {}, VM_EXTRA_HAENDE = {};
 Object.assign(VM_POS, { ling: [4, -6.5, -9, 0.45], bogen: [5.5, -3, -14, 0.3], schirm: [4, -6.5, -12, 0.4], tana: [5, -5.5, -12, 0.45] });   // nach Waffen-Typ (gilt für alle Lings und Bögen)
 const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0], [13, -4, 0]], spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
-Object.assign(VM_HAENDE, { schirm: [[0.5, -4, 0]], tana: [[1.5, 0, 0], [-3.5, 0, 0]], ling: [[0.5, -5, 0], [10, -2, -3.5]], bogen: [[4.3, -3, 0], [-1.8, 0, 0]] });
+Object.assign(VM_HAENDE, { schirm: [[-2.5, 0, 0]], tana: [[1.5, 0, 0], [-3.5, 0, 0]], ling: [[0.5, -5, 0], [10, -2, -3.5]], bogen: [[4.3, -3, 0], [-1.8, 0, 0]] });
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
   const tm = spieler ? spieler.team : 0;
@@ -3844,15 +3870,13 @@ function schirmAbkoppeln(e, w) {
 // Der fahrende Schirm: großes Schirmdach auf Rädern, die offene Seite zeigt nach hinten
 function baueSchirmFlug(team) {
   const g = new THREE.Group(), ud = g.userData;
-  const dachMat = mat(TEAMS[team].col, { side: THREE.DoubleSide, roughness: 0.6 });
-  const dach = new THREE.Group(); dach.position.set(0, 24, 0); g.add(dach);
-  const tuch = new THREE.Mesh(new THREE.ConeGeometry(24, 11, 8, 1, true), dachMat); tuch.rotation.z = -Math.PI / 2; dach.add(tuch);
-  const streifen = new THREE.Mesh(new THREE.ConeGeometry(24.1, 11, 8, 1, true, 0, Math.PI / 4), mat('#ffffff', { side: THREE.DoubleSide, roughness: 0.6 }));
-  for (let i = 0; i < 4; i++) { const st = streifen.clone(); st.rotation.set(i * Math.PI / 2, 0, -Math.PI / 2); dach.add(st); }
-  dach.add(ringX(MAT_WEISS, 24, 0.7, -5.5, 0, 0), kugel(MAT_METALL, 2, 6, 0, 0), zylinderX(MAT_METALL, 0.8, 0.8, 20, -12, 0, 0));
-  g.add(klotz(MAT_GRAU, 8, 3, 18, -10, 4, 0));
-  for (const z of [-8, 8]) g.add(zylinderZ(MAT_GUMMI, 4, 4, 3, -10, 4, z));
-  ud.dachMat = dachMat; ud.dach = dach;
+  const d = baueSchirmDach(24, team); d.dach.position.set(2, 24, 0); g.add(d.dach);
+  g.add(zylinderX(MAT_METALL, 0.9, 0.9, 22, -8, 24, 0));                                 // Stange nach hinten
+  const holz = mat('#8a5a2e', { roughness: 0.55 });
+  const haken = new THREE.Mesh(new THREE.TorusGeometry(3.4, 1.4, 8, 16, Math.PI), holz); haken.position.set(-19, 20.6, 0); haken.rotation.z = Math.PI / 2; g.add(haken);
+  g.add(klotz(MAT_GRAU, 8, 3, 18, -8, 4, 0), zylinder(MAT_GRAU, 0.8, 0.8, 20, -8, 14, 0));   // kleiner Wagen darunter
+  for (const z of [-8, 8]) g.add(zylinderZ(MAT_GUMMI, 4, 4, 3, -8, 4, z));
+  ud.dachMat = d.dachMat; ud.dach = d.dach;
   return g;
 }
 // ☂️ Hält der offene Schirm diesen Tropfen ab? (nur von vorne)
