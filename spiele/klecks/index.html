@@ -1570,6 +1570,8 @@ function stadtRing(cx, cz, von, bis, r, anzahl, seed) {
   }
   return m;
 }
+// Rund um die Siegerbühne (und vor ihr, wo die Kamera steht) bleibt alles frei
+function imBuehnenPlatz(x, y) { return Math.abs(x - (W / 2 + 700)) < 520 && y > H + 250 && y < H + 1350; }
 // ---- Wald: viele Bäume (Krone + Stamm) ----
 function waldRing(cx, cz, rInnen, rAussen, anzahl, seed) {
   const g = new THREE.Group();
@@ -1580,7 +1582,7 @@ function waldRing(cx, cz, rInnen, rAussen, anzahl, seed) {
   const zz = () => { z = (z * 16807) % 2147483647; return z / 2147483647; };
   for (let i = 0; i < anzahl; i++) {
     const a = zz() * Math.PI * 2, rr = rInnen + zz() * (rAussen - rInnen), x = cx + Math.cos(a) * rr * 1.25, y = cz + Math.sin(a) * rr * 0.9, gr = 40 + zz() * 50;
-    if (x > -150 && x < W + 150 && y > -150 && y < H + 150) { q.scale.set(0, 0, 0); q.updateMatrix(); krone.setMatrixAt(i, q.matrix); stamm.setMatrixAt(i, q.matrix); continue; }
+    if ((x > -150 && x < W + 150 && y > -150 && y < H + 150) || imBuehnenPlatz(x, y)) { q.scale.set(0, 0, 0); q.updateMatrix(); krone.setMatrixAt(i, q.matrix); stamm.setMatrixAt(i, q.matrix); continue; }
     q.position.set(x, gr * 1.1, y); q.rotation.set(zz(), zz(), 0); q.scale.set(gr, gr * 1.15, gr); q.updateMatrix(); krone.setMatrixAt(i, q.matrix);
     krone.setColorAt(i, new THREE.Color(gruen[i % 4]));
     q.position.set(x, 0, y); q.rotation.set(0, 0, 0); q.scale.set(gr, gr * 1.2, gr); q.updateMatrix(); stamm.setMatrixAt(i, q.matrix);
@@ -5669,7 +5671,7 @@ function posieren(e, dt) {
   return { hoch: P.hoch, dreh: P.dreh };
 }
 
-const BUEHNE = { x: W / 2, y: H + 650, h: 22 };
+const BUEHNE = { x: W / 2 + 700, y: H + 650, h: 22 };   // hier ist draußen Platz frei (siehe imBuehnenPlatz)
 const buehne = new THREE.Group(); buehne.visible = false; scene.add(buehne);
 const buehneFahnen = [];
 (function buehneBauen() {
