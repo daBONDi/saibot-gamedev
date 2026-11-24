@@ -353,6 +353,9 @@ const HEMDEN = {
   altra_jacke:   { name: 'Altra Hightech-Jacke', emoji: '🔬', preis: 560, info: '⚡ Ulti +12%, 🎨 Tinte -5%', bonus: { ulti: 0.12, tinte: 0.05 }, farbe: '#c9cfe6', jacke: true, aermel: 'lang', firma: 'altra' },
   u24_hoodie:    { name: 'U24 Hoodie', emoji: '💚', preis: 400, info: '❤️ Heilt 25% schneller', bonus: { heilen: 0.25 }, farbe: '#1f9d55', kapuze: true, tasche: '#ffd21f', aermel: 'lang', firma: 'u24' },
   u24_arbeit:    { name: 'U24 Arbeitsjacke', emoji: '🦺', preis: 580, info: '🛡️ 12% weniger Schaden', bonus: { schutz: 0.12 }, farbe: '#ffd21f', streifen: '#1f9d55', jacke: true, aermel: 'lang', firma: 'u24' },
+  ruestung: { name: 'Ritterrüstung', emoji: '🛡️', preis: 650, info: '🛡️ 15% weniger Schaden, aber 🏃 -4% Laufen (schwer!)', bonus: { schutz: 0.15, tempo: -0.04 }, farbe: '#aeb6c8', ruestung: true, aermel: 'lang' },
+  wappenrock: { name: 'Wappenrock', emoji: '🦁', preis: 380, info: '⚡ Ulti +10%, 🛡️ +4%', bonus: { ulti: 0.1, schutz: 0.04 }, farbe: '#b31f2e', wappen: true, aermel: 'lang' },
+  ninja:    { name: 'Ninja-Anzug',   emoji: '🥷', preis: 480, info: '🏃 +6% Laufen, 🌊 +8% Abtauchen – mit Schwert auf dem Rücken!', bonus: { tempo: 0.06, tauchen: 0.08 }, farbe: '#1e1e26', ninja: true, aermel: 'lang' },
   held:     { name: 'Heldenkostüm',  emoji: '🦸', preis: 800, info: '🏃 +8% Laufen, ⬆️ +20% Springen – mit Umhang!', bonus: { tempo: 0.08, sprung: 0.2 }, farbe: '#3b6fd8', umhang: '#e63946', logo: true, aermel: 'lang' },
 };
 const SCHUHE = {
@@ -369,6 +372,8 @@ const SCHUHE = {
   zwecko_renner: { name: 'Zwecko Renner', emoji: '🔥', preis: 420, info: '🏃 Laufen +12%', bonus: { tempo: 0.12 }, farbe: '#ff5f1f', akzent: '#1b1b22', sohle: '#ffffff', firma: 'zwecko' },
   altra_gleiter: { name: 'Altra Gleiter', emoji: '🛸', preis: 400, info: '🌊 Abtauchen +15%', bonus: { tauchen: 0.15 }, farbe: '#c9cfe6', akzent: '#3b6fd8', sohle: '#6fe3ff', leucht: true, firma: 'altra' },
   u24_boots:     { name: 'U24 Boots', emoji: '🥾', preis: 380, info: '🟣 Gegnerfarbe stört 40% weniger, 🛡️ +4%', bonus: { feindfarbe: 0.4, schutz: 0.04 }, farbe: '#1f9d55', modell: 'stiefel', firma: 'u24' },
+  eisen:      { name: 'Eisenstiefel', emoji: '🦿', preis: 420, info: '🛡️ 6% weniger Schaden, 🟣 Gegnerfarbe stört 30% weniger', bonus: { schutz: 0.06, feindfarbe: 0.3 }, farbe: '#aeb6c8' },
+  tabi:       { name: 'Ninja-Tabi', emoji: '🥷', preis: 320, info: '🏃 Laufen +7%, 🌊 Abtauchen +6% – ganz leise!', bonus: { tempo: 0.07, tauchen: 0.06 }, farbe: '#1e1e26' },
   raketen:    { name: 'Raketenschuhe', emoji: '🚀', preis: 700, info: '⬆️ 50% höher springen', bonus: { sprung: 0.5 }, farbe: '#c9cfe6', akzent: '#e63946', sohle: '#4a4f73' },
 };
 const KOEPFE = {
@@ -388,6 +393,9 @@ const KOEPFE = {
   zwecko_cap:  { name: 'Zwecko Cap', emoji: '🧢', preis: 260, info: '🏃 Laufen +4%, ⚡ Ulti +5%', bonus: { tempo: 0.04, ulti: 0.05 }, farbe: '#ff5f1f', modell: 'cap', firma: 'zwecko' },
   altra_headset: { name: 'Altra Headset', emoji: '🎧', preis: 320, info: '💣 Bomben 18% billiger', bonus: { bombe: 0.18 }, farbe: '#3b6fd8', modell: 'kopfhoerer', firma: 'altra' },
   u24_muetze:  { name: 'U24 Mütze', emoji: '🧶', preis: 240, info: '❤️ Heilt 15% schneller, 🛡️ +3%', bonus: { heilen: 0.15, schutz: 0.03 }, farbe: '#1f9d55', modell: 'muetze', firma: 'u24' },
+  ritterhelm: { name: 'Ritterhelm',  emoji: '🪖', preis: 550,  info: '🛡️ 12% weniger Schaden – mit rotem Federbusch!', bonus: { schutz: 0.12 }, farbe: '#e63946' },
+  ninjamaske: { name: 'Ninja-Maske',  emoji: '🥷', preis: 350,  info: '🏃 Laufen +4%, 🌊 Abtauchen +6%', bonus: { tempo: 0.04, tauchen: 0.06 }, farbe: '#1e1e26' },
+  stirnband:  { name: 'Ninja-Stirnband', emoji: '🎌', preis: 160, info: '⚡ Ulti +7%', bonus: { ulti: 0.07 }, farbe: '#e63946' },
   astronaut:  { name: 'Astronautenhelm', emoji: '👨‍🚀', preis: 900, info: '🛡️ 8% weniger Schaden, ⚡ Ulti +10%', bonus: { schutz: 0.08, ulti: 0.1 } },
 };
 const FRISUREN = { kurz: { name: 'Kurz', emoji: '💇' }, stachel: { name: 'Stacheln', emoji: '🦔' }, locken: { name: 'Locken', emoji: '🌀' } };
@@ -1342,6 +1350,20 @@ function schuhBauen(g, id, haut) {
     for (const z of [-1.2, 1.2]) { const o = new THREE.Mesh(new THREE.ConeGeometry(0.9, 4.5, 6), w); o.position.set(3.4, -2.7, z); o.rotation.z = -0.3; g.add(o); }
     return;
   }
+  if (id === 'eisen') {   // Ritter-Eisenstiefel mit Kniekachel und spitzer Kappe
+    const me = mat(s.farbe, { metalness: 0.75, roughness: 0.3 });
+    g.add(zylinder(me, 3.2, 3.3, 7, 0, -3.3, 0), klotz(me, 7, 3, 5, 1.3, -5.7, 0), kugel(me, 2.5, 4.7, -5.8, 0, 1.2, 0.6, 1));
+    g.add(klotz(MAT_GUMMI, 7.8, 0.9, 5.2, 1.3, -7, 0), ringY(MAT_GOLD, 3.35, 0.45, 0, -1, 0), ringY(me, 3.4, 0.4, 0, -4, 0));
+    g.add(kugel(me, 2.4, 1.6, 0.6, 0, 0.8, 1, 1.1), kugel(MAT_GOLD, 0.6, 3.4, 0.6, 0));   // Kniekachel mit Niete
+    return;
+  }
+  if (id === 'tabi') {   // Ninja-Tabi: weich, mit geteiltem Zeh und Bändern
+    const sm = mat(s.farbe, { roughness: 0.9 }), band = mat('#e63946');
+    g.add(zylinder(sm, 2.8, 2.7, 4, 0, -3.8, 0), klotz(sm, 6.4, 2.4, 4.2, 1.2, -6.2, 0));
+    g.add(kugel(sm, 1.3, 4.6, -6.3, -1.5, 1.2, 0.9, 1), kugel(sm, 1.9, 4.4, -6.3, 0.9, 1.1, 0.8, 1.1), klotz(mat('#3a3a44'), 7, 0.6, 4.4, 1.3, -7.5, 0));
+    for (const y of [-2.4, -3.6, -4.8]) g.add(ringY(band, 2.85, 0.3, 0, y, 0));
+    return;
+  }
   const sm = mat(s.farbe, { roughness: 0.6 });
   if (s.modell === 'stiefel') { g.add(zylinder(sm, 3.1, 3.1, 6, 0, -3.4, 0), klotz(sm, 7, 3, 4.8, 1.3, -5.7, 0), kugel(sm, 2.4, 4.6, -5.7, 0, 1, 0.6, 1), klotz(MAT_GUMMI, 7.8, 0.9, 5, 1.3, -7, 0), ringY(mat(FIRMEN.u24.farbe2), 3.1, 0.5, 0, -0.6, 0)); return; }
   if (id === 'stiefel' || id === 'cowboy') {
@@ -1447,6 +1469,24 @@ function hutBauen(kopf, id) {
     const kuppel = new THREE.Mesh(new THREE.SphereGeometry(8.3, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), metall); kuppel.position.y = 1.5; kopf.add(kuppel);
     kopf.add(ringY(mat('#8a5a2e'), 8.2, 1, 0, 2, 0), klotz(metall, 1, 6, 1.6, 8, 0, 0));
     for (const z of [-1, 1]) { const horn = new THREE.Mesh(new THREE.ConeGeometry(1.8, 9, 10), MAT_CREME); horn.position.set(0, 7, z * 8.5); horn.rotation.x = z * 0.9; kopf.add(horn); }
+  } else if (id === 'ritterhelm') {   // geschlossener Ritterhelm mit Sehschlitz und Federbusch
+    const me = mat('#b8c0d4', { metalness: 0.8, roughness: 0.25 }), feder = mat(h.farbe, { roughness: 0.9 });
+    kopf.add(kugel(me, 9, 0, 0.8, 0), zylinder(me, 8.4, 7.6, 4, 0, -6.5, 0));
+    kopf.add(klotz(MAT_SCHWARZ, 1.2, 1.1, 10, 8.4, 1.6, 0), klotz(me, 1.6, 0.8, 11, 8.6, 2.6, 0));      // Sehschlitz + Kante
+    for (const z of [-2.4, -1.2, 0, 1.2, 2.4]) for (const y of [-2.5, -4]) kopf.add(kugel(MAT_SCHWARZ, 0.35, 8.5, y, z));   // Luftlöcher
+    kopf.add(klotz(me, 16, 1.4, 0.9, -0.5, 9.2, 0), ringY(MAT_GOLD, 9, 0.5, 0, -0.5, 0));                // Kamm + Goldrand
+    for (let i = 0; i < 6; i++) kopf.add(kugel(feder, 2.4 - i * 0.12, 3 - i * 2.2, 11.4 - i * 0.55, 0, 1, 1.3, 0.8));   // roter Federbusch
+  } else if (id === 'ninjamaske') {   // Tuch über Kopf und Mund, nur die Augen schauen raus
+    const m = mat(h.farbe, { roughness: 0.95 });
+    const oben = new THREE.Mesh(new THREE.SphereGeometry(8.2, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), m); oben.position.y = 0.8; kopf.add(oben);
+    const unten = new THREE.Mesh(new THREE.SphereGeometry(8.1, 20, 10, 0, Math.PI * 2, Math.PI * 0.52, Math.PI * 0.48), m); unten.position.y = 0.2; kopf.add(unten);
+    kopf.add(kugel(m, 1.6, 8.2, -0.6, 0, 0.8, 1, 1.2));                                     // Nase unter dem Tuch
+    for (const z of [-1.3, 1.3]) { const t = klotz(m, 1, 6, 2.2, -8.8, -0.5, z); t.rotation.x = z * 0.25; t.rotation.z = -0.3; kopf.add(t); }   // Knoten-Enden hinten
+    kopf.add(kugel(m, 1.8, -8, 2.5, 0));
+  } else if (id === 'stirnband') {   // rotes Stirnband mit Metallplatte und langen Bändern
+    const m = mat(h.farbe), me = mat('#c9cfe6', { metalness: 0.8, roughness: 0.25 });
+    kopf.add(ringY(m, 7.7, 1.2, 0, 4, 0), klotz(me, 1, 2.6, 5, 7.9, 4, 0), kugel(MAT_SCHWARZ, 0.5, 8.5, 4, 0));
+    for (const z of [-1.2, 1.2]) { const t = klotz(m, 1, 9, 1.8, -9.6, 0.5, z); t.rotation.x = z * 0.35; t.rotation.z = -0.5; kopf.add(t); }
   } else if (id === 'astronaut') {
     kopf.add(new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), glasRohrMat), ringY(MAT_WEISS, 8, 2, 0, -8, 0));
     kopf.add(zylinder(MAT_GRAU, 0.5, 0.5, 5, -3, 12, 3), kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 1, -3, 14.8, 3));
@@ -1517,6 +1557,28 @@ function baueJunge(m, team, aussehen, an) {
   if (hemd.logo) {
     const logo = zylinderX(mat('#ffd166'), 3, 3, 0.6, 6.7, 9.5, 0); ober.add(logo);
     const blitz = klotz(mat('#e63946'), 0.4, 4, 1, 7.05, 9.5, 0); blitz.rotation.x = 0.5; ober.add(blitz);
+  }
+  if (hemd.ruestung) {   // Ritterrüstung: Brustpanzer, Schulterplatten, Gürtel, Wappen in Teamfarbe
+    const me = mat('#c3cadb', { metalness: 0.8, roughness: 0.25 });
+    ober.add(kugel(me, 6.9, 0.6, 9.6, 0, 0.55, 1, 1), ringY(me, 6.5, 0.7, 0, 4.5, 0), ringY(me, 6.6, 0.7, 0, 3, 0));
+    for (const z of [-7.4, 7.4]) ober.add(kugel(me, 4.2, 0, 14.6, z, 1.1, 0.75, 1), ringY(MAT_GOLD, 3.9, 0.35, 0, 13.6, z));
+    ober.add(ringY(mat('#5a3825'), 6.5, 0.9, 0, 1.8, 0), klotz(MAT_GOLD, 1, 1.8, 2.4, 6.6, 1.8, 0));
+    ober.add(klotz(m, 0.6, 6.5, 1.6, 7.1, 9.6, 0), klotz(m, 0.6, 1.6, 5.5, 7.1, 10.8, 0));                    // Kreuz in Teamfarbe
+  }
+  if (hemd.wappen) {   // Wappenrock mit Löwen-Schild
+    ober.add(ringY(mat('#3a2a1a'), 6.45, 0.9, 0, 3.5, 0), klotz(MAT_GOLD, 0.8, 1.6, 2, 6.6, 3.5, 0));
+    ober.add(klotz(MAT_GOLD, 0.6, 6, 5, 6.8, 9.6, 0));
+    const spitze = new THREE.Mesh(new THREE.ConeGeometry(2.5, 2.4, 4), MAT_GOLD); spitze.rotation.set(0, Math.PI / 4, Math.PI); spitze.scale.z = 0.25; spitze.position.set(6.8, 5.6, 0); ober.add(spitze);
+    ober.add(kugel(mat('#e63946'), 1.4, 7.2, 10.4, 0), klotz(mat('#e63946'), 0.4, 3.2, 1.2, 7.2, 8.5, 0), kugel(mat('#e63946'), 0.7, 7.2, 11.8, -0.9), kugel(mat('#e63946'), 0.7, 7.2, 11.8, 0.9));   // kleiner Löwe
+    for (const y of [5.5, 8.5, 11.5]) ober.add(kugel(MAT_GOLD, 0.45, 6.6, y, -4), kugel(MAT_GOLD, 0.45, 6.6, y, 4));
+  }
+  if (hemd.ninja) {   // Ninja-Anzug: roter Gürtel, Brustband und ein Schwert auf dem Rücken
+    const rot = mat('#e63946', { roughness: 0.8 });
+    ober.add(ringY(rot, 6.4, 1.1, 0, 2.6, 0), kugel(rot, 1.5, 6.4, 2.6, 2.5), klotz(rot, 0.8, 4, 1.4, 6.7, 0.2, 3));
+    const band = klotz(mat('#3a3a44'), 1.2, 1.6, 15, 6.7, 8.5, 0); band.rotation.x = 0.75; ober.add(band);   // Schräges Brustband
+    const schwert = new THREE.Group(); schwert.position.set(-11.5, 12, 5.5); schwert.rotation.x = -0.75; ober.add(schwert);
+    schwert.add(zylinder(mat('#1b1b22'), 0.9, 1.1, 18, 0, -3, 0), ringY(MAT_GOLD, 1.3, 0.35, 0, -11.6, 0));   // Scheide
+    schwert.add(zylinder(MAT_GOLD, 2.2, 2.2, 0.6, 0, 6.3, 0), zylinder(rot, 0.8, 0.8, 6, 0, 9.6, 0), kugel(MAT_GOLD, 0.9, 0, 12.8, 0));   // Stichblatt + Griff
   }
   // Tinten-Rucksack in Teamfarbe (mit Sichtfenster: zeigt, wie viel Tinte du hast)
   ober.add(klotz(m, 5, 10, 9, -8.8, 8.8, 0), kugel(m, 4.5, -8.8, 13.8, 0, 0.55, 0.4, 1), klotz(dunkel, 1.2, 4, 6, -11.5, 5.8, 0));
