@@ -104,6 +104,7 @@
       <span class="taste">Leertaste</span><span>Springen</span>
       <span class="taste">E</span><span>Farbbombe (halten = zielen)</span>
       <span class="taste">Q</span><span>Ulti, wenn sie voll ist ⚡</span>
+      <span class="taste">F halten</span><span>Schirm aufmachen, ohne zu schießen ☂️</span>
       <span class="taste">V</span><span>Ich-Sicht / Sicht von hinten</span>
       <span class="taste">M</span><span>Musik an/aus 🎵</span>
       <span class="taste">E (Stadt)</span><span>Laden / Arena betreten</span>
@@ -260,7 +261,7 @@ Object.assign(WAFFEN, {
 });
 // ☂️ Farbschirm: Halten = Schirm auf (blockt Schüsse von vorne) + Schrot-Ladungen. 🗡️ Farbtana: Schwert – Klicken = schneller Schnitt, Halten = Mega-Schnitt
 Object.assign(WAFFEN, {
-  schirm: { typ: 'schirm', name: 'Farbschirm', emoji: '☂️', info: 'Halten = Schirm auf: blockt Schüsse von vorne und schießt Schrot-Ladungen',
+  schirm: { typ: 'schirm', name: 'Farbschirm', emoji: '☂️', info: 'Halten = Schirm auf + Schrot-Ladungen. F halten = nur Schirm auf, ohne zu schießen',
     cd: 0.7, anzahl: 8, streu: 0.6, speed: 540, bremse: 2.6, schaden: 18, klecks: 13, spur: 5, kosten: 6, reichweite: 190, schirmHP: 260 },
   tana: { typ: 'tana', name: 'Farbtana', emoji: '🗡️', info: 'Klicken = schneller Schnitt, Halten = aufladen für einen Mega-Schnitt mit Sprung nach vorne!',
     reichweite: 150, ladezeit: 0.6,
@@ -2709,7 +2710,7 @@ function mpVomGast(g, d) {
   const e = kleckse.find(k => k.mensch === g.id);
   if (d.t === 'e') {
     g.e = { x: zahl(d.x, 0, W, null), y: zahl(d.y, 0, H, null), z: zahl(d.z, 0, 300, 0), w: zahl(d.w, -1e4, 1e4, 0), p: zahl(d.p, -1.3, 1.1, 0),
-            vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, n: d.n | 0 };
+            vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, sf: !!d.sf, n: d.n | 0 };
     if (!e || e.tot || !mpLaeuft()) return;
     if (d.tk && e.trifT > 0) e.trifWunsch = true;
     if (d.ak) e.abkoppelWunsch = true;
@@ -2727,7 +2728,7 @@ function mpMenschAnwenden(e, dt) {
   const g = mp.gaeste.get(e.mensch), d = g && g.e;
   if (d && d.x !== null && d.y !== null && d.n === (e.lebenNr || 0)) {
     e.x = d.x; e.y = d.y; e.z = d.z; e.winkel = d.w; e.pitch = d.p; e.vx = d.vx; e.vy = d.vy;
-    e.schiesst = d.s; e.willTauchen = d.u;
+    e.schiesst = d.s; e.willTauchen = d.u; e.schirmHalten = d.sf;
   } else e.schiesst = false;
   const feind = tauchenPruefen(e);
   werte(e, dt, feind);
@@ -2888,7 +2889,7 @@ function gastUpdate(dt) {
   }
   const p = spieler;
   if (!p.tot && darf) steuerung(p, dt);
-  else { p.schiesst = false; if (!p.tot) bewege(p, 0, 0, dt); }
+  else { p.schiesst = false; p.schirmHalten = false; if (!p.tot) bewege(p, 0, 0, dt); }
   const w = WAFFEN[p.waffe];
   mp.schussT -= dt;
   if (p.schiesst && !p.taucht && w.speed && !w.typ && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
@@ -2946,7 +2947,7 @@ function mpTick(dt) {
       mp.eingabeT = 1 / MP_EINGABE_RATE;
       const p = spieler;
       mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
-        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak });
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak });
       mp.bitte = {};
     }
   }
@@ -3539,7 +3540,7 @@ function schiessen(e, dt) {
       if (e.schirmWiederT <= 0) { e.schirmHP = w.schirmHP; if (e.spieler) { meldung('☂️ Dein Schirm ist wieder ganz!'); ton('auf'); } }
     }
     if (e.abkoppelWunsch) { e.abkoppelWunsch = false; if (w.abkoppeln && e.schirmHP > 0 && !e.taucht) schirmAbkoppeln(e, w); }
-    e.schirmAuf = e.schiesst && !e.taucht && e.schirmHP > 0;
+    e.schirmAuf = (e.schiesst || e.schirmHalten) && !e.taucht && e.schirmHP > 0;
     if (!e.schiesst || e.taucht || e.schussCd > 0) return;
     if (e.tinte < w.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
     e.schussCd = w.cd; e.tinte -= w.kosten * (1 - e.bonus.tinte); e.rueck = 1;
@@ -4374,7 +4375,7 @@ function ki(b, dt) {
 
 // ================== SPIELER ==================
 function steuerung(p, dt) {
-  if (zustand === 'pause') { p.schiesst = false; p.willTauchen = false; bewege(p, 0, 0, dt); return; }   // (online läuft das Spiel weiter)
+  if (zustand === 'pause') { p.schiesst = false; p.willTauchen = false; p.schirmHalten = false; bewege(p, 0, 0, dt); return; }   // (online läuft das Spiel weiter)
   const vor = (tasten.KeyW || tasten.ArrowUp ? 1 : 0) - (tasten.KeyS || tasten.ArrowDown ? 1 : 0);
   const seit = (tasten.KeyD || tasten.ArrowRight ? 1 : 0) - (tasten.KeyA || tasten.ArrowLeft ? 1 : 0);
   const c = Math.cos(p.winkel), s = Math.sin(p.winkel);
@@ -4385,6 +4386,7 @@ function steuerung(p, dt) {
   if (abkoppler && maus.rechts && !p.rechtsVorher) { if (istGast()) mp.bitte.ak = 1; else p.abkoppelWunsch = true; }
   p.rechtsVorher = maus.rechts;
   p.schiesst = maus.links;
+  p.schirmHalten = !!tasten.KeyF;   // ☂️ F halten = Schirm auf, ohne zu schießen
   const neueKlicks = mausKlicks - (p.klickStand || 0); p.klickStand = mausKlicks;
   if (p.gigaT > 0 && neueKlicks > 0 && !(p.dashCd > 0)) { p.dashT = 0.3; p.dashCd = 0.9; ton('wusch'); }   // Gigafisch-Rammen (läuft bei Freunden auf dem eigenen Computer)
   if (p.trifT > 0 && neueKlicks > 0) { if (istGast()) mp.bitte.tk = 1; else p.trifWunsch = true; }   // Klick merken, bis man wieder werfen darf
