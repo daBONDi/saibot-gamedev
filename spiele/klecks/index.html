@@ -268,11 +268,21 @@ Object.assign(WAFFEN, {
     schwung: { anzahl: 7, streu: 1.2, speed: 430, bremse: 3, schaden: 26, klecks: 13, spur: 6, kosten: 4 },
     stark: { anzahl: 8, streu: 0.12, speed: 720, bremse: 1.5, schaden: 50, klecks: 16, spur: 9, kosten: 11 } },
 });
+// Die 3 Schirm-Arten
+Object.assign(WAFFEN, {
+  campingschirm: { typ: 'schirm', name: 'Campingschirm', emoji: '⛺', info: 'Riesiges Schild – hält viel aus, aber du bist langsam', modell: { ganz: 1.4 },
+    cd: 0.9, anzahl: 10, streu: 0.7, speed: 480, bremse: 2.6, schaden: 17, klecks: 14, spur: 5, kosten: 8, reichweite: 180,
+    schirmHP: 480, blockR: 50, blockW: 1.45, laufen: 0.55 },
+  abkoppler: { typ: 'schirm', name: 'Abkoppler', emoji: '🚀', info: 'Rechte Maustaste: Der Schirm fährt nach vorne los, malt eine Spur und schubst Gegner!',
+    cd: 0.65, anzahl: 7, streu: 0.55, speed: 520, bremse: 2.6, schaden: 17, klecks: 13, spur: 5, kosten: 6, reichweite: 185, schirmHP: 240, abkoppeln: true },
+  oneschirm: { typ: 'schirm', name: 'Oneschirm', emoji: '☝️', info: 'Schießt nur eine dicke Kugel – dafür weit und stark', modell: { ganz: 0.85 }, gross: 2,
+    cd: 0.5, anzahl: 1, streu: 0.03, speed: 720, bremse: 1.4, schaden: 42, klecks: 20, spur: 8, kosten: 5, reichweite: 300, schirmHP: 200 },
+});
 // Welche Firma baut welche Waffe?
 for (const [f, liste] of Object.entries({
   zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller', 'bogen', 'flitzbogen', 'tana'],
   altra:  ['sniper', 'miniliter', 'liter', 'kanone', 'langbogen'],
-  u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling', 'schirm'],
+  u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling', 'schirm', 'campingschirm', 'abkoppler', 'oneschirm'],
 })) for (const w of liste) WAFFEN[w].firma = f;
 const typVon = id => (WAFFEN[id] && WAFFEN[id].typ) || id;
 const ULTIS = {
@@ -324,6 +334,9 @@ const SET_DATEN = [
   ['flitzbogen', 'sprinkler', 'wirbel', 300, 'klebe',    'gigafisch', 450],
   ['schirm',   'sprinkler', 'schild', 400,  'klebe',     'lautsprecher', 550],
   ['tana',     'klecks', 'gigafisch', 450,  'mine',      'tornado', 600],
+  ['campingschirm', 'wand', 'panzer', 500,  'sprinkler', 'schild',  650],
+  ['abkoppler', 'mine',  'werfer',  500,   'klecks',    'kugel',   650],
+  ['oneschirm', 'klebe', 'laser',   400,   'wand',      'trifarb', 550],
 ];
 // Jede Waffe gibt es außerdem von den 3 Firmen – jede Firma mit eigener Bombe und Ulti (wie Watzo)
 const FIRMEN_VARIANTEN = {
@@ -2496,7 +2509,7 @@ glCv.addEventListener('click', () => {
 const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const MP_VORSILBE = 'klecks-krieg-';   // Damit unsere Raum-Codes nicht mit anderen Spielen zusammenstoßen
 const MP_SENDE_RATE = 15, MP_EINGABE_RATE = 20, MP_MAX = 8;
-const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete', 'tracker'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand', 'tracker', 'lautsprecher'];
+const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete', 'tracker'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand', 'tracker', 'lautsprecher', 'schirm'];
 const r0 = v => Math.round(v), r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const zahl = (v, lo, hi, nichts) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : nichts;
 const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), meineId: 'host',
@@ -2659,6 +2672,7 @@ function mpVomGast(g, d) {
             vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, n: d.n | 0 };
     if (!e || e.tot || !mpLaeuft()) return;
     if (d.tk && e.trifT > 0) e.trifWunsch = true;
+    if (d.ak) e.abkoppelWunsch = true;
     if (d.kk > 0 && e.kugelT > 0) e.kugelKraft = Math.min(25, (e.kugelKraft || 0) + Math.min(10, d.kk | 0));
     if (Array.isArray(d.b)) { e.winkel = g.e.w; bombeWerfen(e, zahl(d.b[0], 0, W, e.x), zahl(d.b[1], 0, H, e.y)); }
     if (Array.isArray(d.uz)) { e.winkel = g.e.w; ultiStarten(e, zahl(d.uz[0], 0, W, e.x), zahl(d.uz[1], 0, H, e.y)); }
@@ -2777,10 +2791,10 @@ function mpSchnappschuss(d) {
   }, (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; });
   geraete = proxySync(geraete, d.g, a => {
     const art = GERAET_ARTEN[a[1]] || 'klebe', team = a[4] ? 1 : 0;
-    const mesh = art === 'lautsprecher' ? baueLautsprecher(team) : art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
+    const mesh = art === 'schirm' ? baueSchirmFlug(team) : art === 'lautsprecher' ? baueLautsprecher(team) : art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
     mesh.position.set(a[2], bodenHoehe(a[2], a[3]) + (art === 'klebe' ? 6 : 0), a[3]); mesh.rotation.y = -a[5];
     return { mesh, art, team, x: a[2], y: a[3], winkel: a[5], treffer: 0 };
-  }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; });
+  }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; if (o.art === 'schirm') { o.x = a[2]; o.y = a[3]; } });
   wellen = proxySync(wellen, d.w, a => ({ mesh: baueWelle(a[6] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.winkel = a[3]; o.t = a[4]; o.dauer = a[5]; });
   tornados = proxySync(tornados, d.to, a => ({ mesh: baueTornado(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
   blasen = proxySync(blasen, d.bl, a => ({ mesh: baueTuffBlase(a[5] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.rAkt = o.r = a[4]; o.phase = a[6] ? 'flug' : 'wachsen'; });
@@ -2892,7 +2906,7 @@ function mpTick(dt) {
       mp.eingabeT = 1 / MP_EINGABE_RATE;
       const p = spieler;
       mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
-        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk });
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak });
       mp.bitte = {};
     }
   }
@@ -2930,6 +2944,11 @@ function geraetAnim(g) {
     ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
     ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
     g.mesh.scale.y = Math.min(1, g.t * 6);
+  } else if (g.art === 'schirm') {
+    g.mesh.position.set(g.x, bodenHoehe(g.x, g.y), g.y);
+    g.mesh.scale.setScalar(Math.min(1, 0.3 + g.t * 4) * (g.t > SCHIRM_FAHRT + 1.1 ? Math.max(0.05, 1 - (g.t - SCHIRM_FAHRT - 1.1) / 0.4) : 1));
+    if (ud.dachMat) ud.dachMat.emissive.setHex(g.treffer > 0 ? 0x666666 : 0x000000);
+    if (ud.dach) ud.dach.rotation.x = Math.sin(g.t * 10) * 0.05;
   }
 }
 function laserZeigen(e) {
@@ -3343,7 +3362,7 @@ function bewege(e, dx, dy, dt) {
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
   if (e.laserT > 0) speed *= 0.35;
-  if (e.schirmAuf) speed *= 0.7;   // mit offenem Schirm läuft man langsamer   // Hochdruckfärber ist schwer: ganz langsam gehen
+  if (e.schirmAuf) speed *= WAFFEN[e.waffe].laufen || 0.7;   // mit offenem Schirm läuft man langsamer   // Hochdruckfärber ist schwer: ganz langsam gehen
   if (e.kugelT > 0) speed = 60;
   if (e.panzerT > 0) speed = 125;
   e.dashT = Math.max(0, (e.dashT || 0) - dt); e.dashCd = Math.max(0, (e.dashCd || 0) - dt); e.rammCd = Math.max(0, (e.rammCd || 0) - dt);
@@ -3479,6 +3498,7 @@ function schiessen(e, dt) {
       e.schirmWiederT -= dt;
       if (e.schirmWiederT <= 0) { e.schirmHP = w.schirmHP; if (e.spieler) { meldung('☂️ Dein Schirm ist wieder ganz!'); ton('auf'); } }
     }
+    if (e.abkoppelWunsch) { e.abkoppelWunsch = false; if (w.abkoppeln && e.schirmHP > 0 && !e.taucht) schirmAbkoppeln(e, w); }
     e.schirmAuf = e.schiesst && !e.taucht && e.schirmHP > 0;
     if (!e.schiesst || e.taucht || e.schussCd > 0) return;
     if (e.tinte < w.kosten) { if (e.spieler) leerHinweis = 1.5; return; }
@@ -3809,12 +3829,39 @@ function tanaSchnitt(e, w, stark) {
   const d = spieler ? Math.hypot(e.x - spieler.x, e.y - spieler.y) : 0;
   if (d < 400) ton(stark ? 'ramm' : 'wusch', e.spieler ? 0.8 : 0.5 * (1 - d / 400));
 }
+// 🚀 Abkoppler: der Schirm fährt alleine nach vorne los
+const SCHIRM_FAHRT = 4, SCHIRM_TEMPO = 170;
+function schirmAbkoppeln(e, w) {
+  const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
+  const mesh = baueSchirmFlug(e.team);
+  geraetSetzen('schirm', e.x + c * 26, e.y + s * 26, e.team, e, e.winkel, mesh);
+  const g = geraete[geraete.length - 1];
+  g.hp = e.schirmHP + 120; g.malT = 0; g.getroffen = new Set();
+  e.schirmHP = 0; e.schirmAuf = false; e.schirmWiederT = 8;
+  if (e.spieler) { meldung('🚀 Schirm abgekoppelt! In 8 Sekunden hast du einen neuen.'); }
+  if (!spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('wusch');
+}
+// Der fahrende Schirm: großes Schirmdach auf Rädern, die offene Seite zeigt nach hinten
+function baueSchirmFlug(team) {
+  const g = new THREE.Group(), ud = g.userData;
+  const dachMat = mat(TEAMS[team].col, { side: THREE.DoubleSide, roughness: 0.6 });
+  const dach = new THREE.Group(); dach.position.set(0, 24, 0); g.add(dach);
+  const tuch = new THREE.Mesh(new THREE.ConeGeometry(24, 11, 8, 1, true), dachMat); tuch.rotation.z = -Math.PI / 2; dach.add(tuch);
+  const streifen = new THREE.Mesh(new THREE.ConeGeometry(24.1, 11, 8, 1, true, 0, Math.PI / 4), mat('#ffffff', { side: THREE.DoubleSide, roughness: 0.6 }));
+  for (let i = 0; i < 4; i++) { const st = streifen.clone(); st.rotation.set(i * Math.PI / 2, 0, -Math.PI / 2); dach.add(st); }
+  dach.add(ringX(MAT_WEISS, 24, 0.7, -5.5, 0, 0), kugel(MAT_METALL, 2, 6, 0, 0), zylinderX(MAT_METALL, 0.8, 0.8, 20, -12, 0, 0));
+  g.add(klotz(MAT_GRAU, 8, 3, 18, -10, 4, 0));
+  for (const z of [-8, 8]) g.add(zylinderZ(MAT_GUMMI, 4, 4, 3, -10, 4, z));
+  ud.dachMat = dachMat; ud.dach = dach;
+  return g;
+}
 // ☂️ Hält der offene Schirm diesen Tropfen ab? (nur von vorne)
 function schirmBlockt(e, x, y, h, schaden) {
   if (!e.schirmAuf || e.tot) return false;
   const dx = x - e.x, dy = y - e.y;
-  if (Math.hypot(dx, dy) > 36 || Math.abs(h - hAbs(e) - 20) > 32) return false;
-  if (Math.abs(winkelDiff(e.winkel, Math.atan2(dy, dx))) > 1.05) return false;
+  const sw = WAFFEN[e.waffe] || {}, r = sw.blockR || 36;
+  if (Math.hypot(dx, dy) > r || Math.abs(h - hAbs(e) - 20) > r * 0.9) return false;
+  if (Math.abs(winkelDiff(e.winkel, Math.atan2(dy, dx))) > (sw.blockW || 1.05)) return false;
   e.schirmHP -= schaden; e.schirmTreffer = 0.12;
   spritzer(x, y, h, 1 - e.team, 3, 90);
   if (e.schirmHP <= 0) {
@@ -3930,6 +3977,7 @@ function seiteTreffen(px, py, x, y, h, r, team) {
 }
 // Steht hier eine Farbwand vom anderen Team im Weg?
 function feindWand(x, y, h, team) {
+  for (const g of geraete) if (g.art === 'schirm' && g.team !== team && h - bodenHoehe(g.x, g.y) < 48 && Math.hypot(x - g.x, y - g.y) < 30) return g;   // fahrender Schirm
   if (h > 48) return null;
   for (const g of geraete) {
     if (g.art !== 'wand' || g.team === team) continue;
@@ -4229,6 +4277,7 @@ function ki(b, dt) {
     const quer = w.nah ? 0.3 : 0.8;
     dx = Math.cos(a) * vor + Math.cos(a + Math.PI / 2) * k.strafe * quer;
     dy = Math.sin(a) * vor + Math.sin(a + Math.PI / 2) * k.strafe * quer;
+    if (w.abkoppeln && b.schirmHP > 0 && fd > 80 && fd < 320 && gutGezielt && Math.random() < dt * 0.5) b.abkoppelWunsch = true;   // Schirm losschicken
     if (b.bombeCd <= 0 && b.tinte > 60 && fd > 110 && fd < 230 && Math.random() < dt * 0.6) {
       if (bombeWerfen(b, feind.x, feind.y)) b.bombeCd = 7;
     }
@@ -4288,7 +4337,10 @@ function steuerung(p, dt) {
   const c = Math.cos(p.winkel), s = Math.sin(p.winkel);
   let dx = c * vor - s * seit, dy = s * vor + c * seit;
   const l = Math.hypot(dx, dy); if (l) { dx /= l; dy /= l; }
-  p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || maus.rechts;
+  const abkoppler = !!(WAFFEN[p.waffe] && WAFFEN[p.waffe].abkoppeln);   // Abkoppler: rechte Maustaste = Schirm losschicken (abtauchen dann nur mit Shift)
+  p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || (maus.rechts && !abkoppler);
+  if (abkoppler && maus.rechts && !p.rechtsVorher) { if (istGast()) mp.bitte.ak = 1; else p.abkoppelWunsch = true; }
+  p.rechtsVorher = maus.rechts;
   p.schiesst = maus.links;
   const neueKlicks = mausKlicks - (p.klickStand || 0); p.klickStand = mausKlicks;
   if (p.gigaT > 0 && neueKlicks > 0 && !(p.dashCd > 0)) { p.dashT = 0.3; p.dashCd = 0.9; ton('wusch'); }   // Gigafisch-Rammen (läuft bei Freunden auf dem eigenen Computer)
@@ -4390,7 +4442,7 @@ function update(dt) {
         spritzer(s.x, s.y, s.h, s.team, 4); weg = true; break;
       }
       const fw = feindWand(s.x, s.y, s.h, s.team);
-      if (fw) { fw.treffer = 0.12; spritzer(s.x, s.y, s.h, s.team, 4); weg = true; break; }   // Farbwand hält den Tropfen ab
+      if (fw) { fw.treffer = 0.12; if (fw.art === 'schirm') fw.hp -= w.schaden; spritzer(s.x, s.y, s.h, s.team, 4); weg = true; break; }   // Farbwand hält den Tropfen ab
       for (const e of kleckse) {
         if (e.team === s.team || e.tot) continue;
         if (schirmBlockt(e, s.x, s.y, s.h, w.schaden)) { weg = true; break; }   // ☂️ vom Schirm abgehalten
@@ -4499,6 +4551,23 @@ function update(dt) {
       ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
       g.mesh.scale.y = Math.min(1, g.t * 6);
       if (g.t > 5) weg = true;
+    } else if (g.art === 'schirm') {   // 🚀 fahrender Schirm: fährt geradeaus, malt, schubst Gegner, hält Schüsse ab
+      const c = Math.cos(g.winkel), s = Math.sin(g.winkel);
+      if (g.t < SCHIRM_FAHRT && !g.steht) {
+        const nx = g.x + c * SCHIRM_TEMPO * dt, ny = g.y + s * SCHIRM_TEMPO * dt;
+        if (nx < 15 || ny < 15 || nx > W - 15 || ny > H - 15 || kollidiert(nx, ny, 16, bodenHoehe(g.x, g.y) + 4)) g.steht = true;
+        else { g.x = nx; g.y = ny; }
+        g.malT -= dt;
+        if (g.malT <= 0) { g.malT = 0.07; if (!istWand(g.x, g.y)) klecks(g.x, g.y, 26, g.team, g.wer, false); }
+        for (const f of kleckse) {
+          if (f.team === g.team || f.tot || g.getroffen.has(f) || Math.hypot(f.x - g.x, f.y - g.y) > 34) continue;
+          g.getroffen.add(f); treffen(f, 35, g.wer);
+          if (!f.mensch && !f.spieler) { f.vx += c * 380; f.vy += s * 380; }
+          spritzer(f.x, f.y, 20, g.team, 10, 200);
+        }
+      }
+      geraetAnim(g);
+      if (g.hp <= 0 || g.t > SCHIRM_FAHRT + 1.5) { spritzer(g.x, g.y, 24, g.team, 18, 220); weg = true; }
     }
     if (weg) { wegUndEntsorgen(g.mesh); geraete.splice(i, 1); }
   }
