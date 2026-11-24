@@ -513,6 +513,10 @@ const ARENEN = {
             { art: 'lava', x: 700, y: 250, w: 200, h: 50 }, { art: 'lava', x: 700, y: 700, w: 200, h: 50 }],
     waende: spiegel([[730, 430, 140, 140, false], [300, 180, 60, 60], [300, 760, 60, 60], [600, 420, 40, 160], [620, 80, 60, 60], [620, 860, 60, 60]]),
     thema: { boden: '#4a3b38', linie: '#3a2d2b', wand: '#2b2224', himmel: '#5a2a2a', draussen: '#3a2420', muster: 'stein' } },
+  bahnhof: { name: 'Bahnhof', emoji: '🚉', wandH: 70, spezial: '🚂 Achtung! Ab und zu rast ein Zug durch die Mitte – runter von den Gleisen!',
+    zonen: [{ art: 'gleis', x: 740, y: 0, w: 120, h: 1000 }],
+    waende: spiegel([[640, 230, 50, 50], [700, 330, 18, 18], [700, 652, 18, 18], [640, 720, 50, 50], [400, 140, 60, 160], [400, 700, 60, 160], [470, 460, 40, 80]]),
+    thema: { boden: '#cfc8bb', linie: '#b9b1a2', wand: '#7a4b3a', himmel: '#bfe3ff', draussen: '#8b8f9a', muster: 'bahnhof' } },
 };
 // Lava-Stellen jeder Arena (dort kann man nicht malen – und es tut weh!)
 for (const a of Object.values(ARENEN)) a.lava = (a.zonen || []).filter(z => z.art === 'lava');
@@ -520,6 +524,10 @@ const KEINE_LAVA = [];
 function lavaListe() { return (ARENEN[karte] && ARENEN[karte].lava) || KEINE_LAVA; }
 function inLava(x, y) { for (const z of lavaListe()) if (x > z.x && x < z.x + z.w && y > z.y && y < z.y + z.h) return true; return false; }
 const VULKAN_TAKT = 45;   // alle 45 Sekunden bricht der Vulkan aus
+// 🚉 Bahnhof: das Gleis in der Mitte. Alle 30 Sekunden kommt ein Zug!
+const ZUG_TAKT = 30, ZUG_WARNUNG = 22, ZUG_START = 26, ZUG_LAENGE = 590, ZUG_TEMPO = 900;
+function gleisZone() { return karte === 'bahnhof' && modus === 'match' ? ARENEN.bahnhof.zonen[0] : null; }
+function imGleis(x, y, rand = 0) { const g = gleisZone(); return !!g && x > g.x - rand && x < g.x + g.w + rand && y > g.y - rand && y < g.y + g.h + rand; }
 
 // ================== HÖHEN: Podeste, Rampen und Kletterwände ==================
 // [x, y, breite, tiefe, höhe, rampe, spiegeln]  rampe = welche Seite oben ist: 'n' (oben auf der Karte), 's', 'w' (links), 'o' (rechts)
@@ -533,6 +541,7 @@ const STUFEN_DATEN = {
   eispalast: [[450, 60, 200, 110, 70], [650, 85, 90, 60, 70, 'w'], [450, 830, 200, 110, 70], [650, 855, 90, 60, 70, 'w']],
   wueste:    [[700, 330, 200, 70, 70, null, false], [770, 230, 60, 100, 70, 's', false], [700, 600, 200, 70, 70, null, false], [770, 670, 60, 100, 70, 'n', false]],
   vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
+  bahnhof:   [[600, 120, 140, 300, 28], [640, 420, 70, 70, 28, 'n'], [600, 580, 140, 300, 28], [640, 510, 70, 70, 28, 's']],   // Bahnsteige mit Rampen zum Übergang
 };
 // Kletterblöcke: diese Wände werden zu Blöcken, die man anmalen und hochschwimmen kann  [x, y, b, t, höhe, spiegeln]
 const KLETTER_BLOECKE = {
@@ -542,6 +551,7 @@ const KLETTER_BLOECKE = {
   eispalast: [[550, 420, 40, 160, 70], [700, 480, 200, 40, 60, false]],
   wueste:    [[700, 400, 200, 200, 100, false], [520, 470, 60, 60, 60]],
   vulkan:    [[300, 180, 60, 60, 60], [300, 760, 60, 60, 60], [600, 420, 40, 160, 70]],
+  bahnhof:   [[400, 140, 60, 160, 60], [400, 700, 60, 160, 60]],   // Kofferstapel zum Hochklettern
 };
 const RAMPE_SPIEGEL = { w: 'o', o: 'w', n: 'n', s: 's' };
 const gleich = (r, x, y, w, h) => Math.abs(r.x - x) < 0.5 && Math.abs(r.y - y) < 0.5 && Math.abs(r.w - w) < 0.5 && Math.abs(r.h - h) < 0.5;
@@ -681,6 +691,17 @@ function bodenMalen(th = STANDARD_THEMA) {
     b.strokeStyle = '#ffffff'; b.lineWidth = 2;
     for (let i = 0; i < 40; i++) { let x = zz() * W, y = zz() * H; b.beginPath(); b.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (zz() - 0.5) * 120; y += (zz() - 0.5) * 120; b.lineTo(x, y); } b.stroke(); }
     for (let i = 0; i < 400; i++) { b.fillStyle = '#ffffff'; b.fillRect(zz() * W, zz() * H, 2, 2); }
+  } else if (th.muster === 'bahnhof') {   // Bahnhofsfliesen, Schotter im Gleis, gelbe Sicherheitslinie
+    const g = 70;
+    for (let x = 0; x <= W; x += g) { b.beginPath(); b.moveTo(x, 0); b.lineTo(x, H); b.stroke(); }
+    for (let y = 0; y <= H; y += g) { b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke(); }
+    const gl = ARENEN.bahnhof.zonen[0];
+    b.fillStyle = '#8f877c'; b.fillRect(gl.x, gl.y, gl.w, gl.h);
+    for (let i = 0; i < 2500; i++) { b.fillStyle = zz() < 0.5 ? '#6f675d' : '#aaa196'; b.fillRect(gl.x + zz() * gl.w, zz() * H, 4, 3); }
+    b.fillStyle = '#b07a45'; b.fillRect(gl.x, 470 * KS, gl.w, 60 * KS);                         // Holzplanken am Übergang
+    b.fillStyle = '#8a5a2e'; for (let y = 470 * KS; y < 530 * KS; y += 12) b.fillRect(gl.x, y, gl.w, 2);
+    b.fillStyle = '#ffd21f';
+    for (const x of [gl.x - 14, gl.x + gl.w + 6]) for (const [y0, y1] of [[120, 420], [580, 880]]) b.fillRect(x, y0 * KS, 8, (y1 - y0) * KS);
   } else if (th.muster === 'stein') {   // dunkler Vulkanstein mit glühenden Rissen
     for (let i = 0; i < 2500; i++) { b.fillStyle = zz() < 0.5 ? '#3a2d2b' : '#5a4844'; b.fillRect(zz() * W, zz() * H, 3, 3); }
     b.lineWidth = 2;
@@ -695,6 +716,8 @@ function wandKarteMalen() {                                 // nur für die Mini
   const w = wandCv.getContext('2d'); w.clearRect(0, 0, W, H);
   for (const r of waende) { w.fillStyle = '#3d4266'; w.fillRect(r.x, r.y, r.w, r.h); }
   for (const z of lavaListe()) { w.fillStyle = '#ff6a00'; w.fillRect(z.x, z.y, z.w, z.h); }
+  const gl = gleisZone();
+  if (gl) { w.fillStyle = 'rgba(90,80,70,0.7)'; w.fillRect(gl.x, gl.y, gl.w, gl.h); w.fillStyle = '#c9cfe6'; w.fillRect(gl.x + gl.w * 0.28, 0, 6, H); w.fillRect(gl.x + gl.w * 0.72 - 6, 0, 6, H); }
   for (const s of stufenListe()) {   // Podeste: weißer Rand, Rampen gestrichelt
     w.strokeStyle = 'rgba(255,255,255,0.85)'; w.lineWidth = 6; w.setLineDash(s.rampe ? [14, 10] : []);
     w.strokeRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
@@ -888,6 +911,11 @@ const SONGS = {
     mel: ['4...4.5.6...5.4.', '3...........2...', '4...4.5.6...7.6.', '5...........4...', '6.6.5.4.5...4...', '3...2...3.......', '4.3.2.1.2...3...', '2...............'],
     kick: 'x...x.x.x...x.x.', snare: '....x.......x...', tom: '..............xx', hat: '..x...x...x...x.', clap: '............x...' },
 };
+SONGS.bahnhof = { name: 'Gleis-Boogie', bpm: 150, swing: 0.15, lead: 'quadrat', arpArt: 'zupf', pad: 0.02,
+  akkorde: ['C', 'C', 'F', 'C', 'G', 'F', 'C', 'G7'],
+  bass: '0.2.4.5.6.5.4.2.', arp: '',
+  mel: ['4.4.5.4...3.2...', '4...........2.3.', '5.5.6.5...4.3...', '4...........3.2.', '5.5.5.6.5...4...', '4.4.4.5.4...3...', '2.3.4.5.4.3.2...', '3...4...5...6...'],
+  kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.xxx.xxx.xxx.xx', clap: '............x..x' };
 let musikModus = 'aus', songName = 'stadt', schritt = 0, naechsterSchritt = 0, musikTimer = null, hallBus = null, echoBus = null;
 function musikModusSetzen(m, song) {
   if (song && SONGS[song] && song !== songName) { songName = song; schritt = 0; }
@@ -1122,6 +1150,8 @@ const MAT_WEISS = mat('#ffffff'), MAT_SCHWARZ = mat('#1b1f3a'), MAT_GRAU = mat('
 const MAT_CREME = mat('#f3e7cf'), MAT_GLOW = mat('#6fe3ff', { emissive: '#6fe3ff' });
 const VULKAN_GLUT = mat('#ff6a00', { emissive: '#ff4500', emissiveIntensity: 1 });   // glühende Lava (leuchtet stärker beim Ausbruch)
 const teamMat = TEAMS.map(t => mat(t.col, { roughness: 0.35 }));
+let zugWarnFlaeche = null, zugMesh = null;   // 🚉 Bahnhof: rote Warnfläche auf dem Gleis und der Zug
+const SIGNAL_MATS = [0, 1].map(() => mat('#5a1010', { emissive: '#ff2020', emissiveIntensity: 0 }));
 // Farben fürs nächste Match setzen
 function farbenSetzen(nr) {
   farbNr = nr;
@@ -1188,6 +1218,61 @@ function arenaDeko() {
     const f = kugel(i % 3 ? fels : fels2, gr, x, gr * 0.3, z, 1, 0.7, 1); d('vulkan', f);
   }
   for (const r of ARENEN.vulkan.waende) if (r.w < 100) d('vulkan', kugel(VULKAN_GLUT, 6, r.x + r.w / 2, 90, r.y + r.h / 2));   // glühende Spitzen auf den Felsen
+  bahnhofDeko(d);
+}
+// 🚉 Bahnhof: Glasdächer über den Bahnsteigen, Signale, Bahnhofsgebäude mit Uhr – und der Zug
+function bahnhofDeko(d) {
+  const gl = ARENEN.bahnhof.zonen[0], stahl = mat('#3d4a5c', { metalness: 0.6, roughness: 0.35 });
+  const glas = new THREE.MeshStandardMaterial({ color: '#cfeaff', transparent: true, opacity: 0.3, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+  for (const [x0, x1] of [[600, 740], [860, 1000]]) for (const [y0, y1] of [[120, 420], [580, 880]]) {   // Glasdach auf Säulen
+    const cx = (x0 + x1) / 2 * KS, cy = (y0 + y1) / 2 * KS, bw = (x1 - x0) * KS, bt = (y1 - y0) * KS;
+    const dach = klotz(glas, bw + 20, 2, bt, cx, 120, cy); dach.castShadow = false; d('bahnhof', dach);
+    d('bahnhof', klotz(stahl, 6, 6, bt, cx, 121, cy), klotz(stahl, bw + 20, 3, 6, cx, 121, y0 * KS), klotz(stahl, bw + 20, 3, 6, cx, 121, y1 * KS));
+  }
+  for (const r of ARENEN.bahnhof.waende) if (r.w < 30) d('bahnhof', zylinder(stahl, 5, 6, 120, r.x + r.w / 2, 60, r.y + r.h / 2));   // Säulen bis zum Dach
+  for (const r of ARENEN.bahnhof.waende) if (r.w > 60 && r.w < 80 && r.h < 80) {   // Kiosk: Dach und Schild
+    d('bahnhof', klotz(mat('#e63946'), r.w + 14, 5, r.h + 14, r.x + r.w / 2, 72, r.y + r.h / 2), klotz(mat('#ffd166'), r.w + 2, 10, 2, r.x + r.w / 2, 62, r.y - 1));
+  }
+  // Signale am Übergang (blinken rot, wenn ein Zug kommt)
+  for (const [x, y] of [[gl.x - 18, 445 * KS], [gl.x + gl.w + 18, 555 * KS], [gl.x - 18, 40], [gl.x + gl.w + 18, H - 40]]) {
+    d('bahnhof', zylinder(MAT_GRAU, 2, 2.5, 60, x, 30, y), klotz(MAT_SCHWARZ, 6, 22, 30, x, 64, y), klotz(MAT_WEISS, 2, 6, 34, x, 50, y));
+    for (const [nr, dz] of [[0, -7], [1, 7]]) d('bahnhof', kugel(SIGNAL_MATS[nr], 4.5, x + (x < gl.x ? 3.5 : -3.5), 66, y + dz));
+  }
+  // Bahnhofsgebäude oben (außerhalb) mit großer Uhr und Schild
+  const ziegel = mat('#a0533c', { roughness: 0.85 });
+  d('bahnhof', klotz(ziegel, 900, 160, 120, W / 2, 80, -150), klotz(mat('#5a3a2e'), 940, 20, 140, W / 2, 170, -150));
+  d('bahnhof', klotz(ziegel, 200, 260, 120, W / 2, 130, -160), new THREE.Mesh(new THREE.ConeGeometry(150, 90, 4), mat('#3d4a5c')).translateX(W / 2).translateY(305).translateZ(-160).rotateY(Math.PI / 4));
+  const schild = leinwand(256, 64), sx = schild.getContext('2d');
+  sx.fillStyle = '#1b3a6b'; sx.fillRect(0, 0, 256, 64); sx.fillStyle = '#fff'; sx.font = 'bold 34px system-ui'; sx.textAlign = 'center'; sx.fillText('Klecks Hbf', 128, 44);
+  const st = new THREE.CanvasTexture(schild); st.colorSpace = THREE.SRGBColorSpace;
+  d('bahnhof', new THREE.Mesh(new THREE.PlaneGeometry(240, 60), new THREE.MeshBasicMaterial({ map: st })).translateX(W / 2).translateY(130).translateZ(-89));
+  const uhr = leinwand(128, 128), ux = uhr.getContext('2d');
+  ux.fillStyle = '#fff'; ux.beginPath(); ux.arc(64, 64, 60, 0, 7); ux.fill(); ux.strokeStyle = '#1b1f3a'; ux.lineWidth = 6; ux.stroke();
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; ux.fillStyle = '#1b1f3a'; ux.fillRect(64 + Math.cos(a) * 48 - 3, 64 + Math.sin(a) * 48 - 3, 6, 6); }
+  ux.lineWidth = 5; ux.beginPath(); ux.moveTo(64, 64); ux.lineTo(64, 24); ux.moveTo(64, 64); ux.lineTo(92, 64); ux.stroke();
+  ux.fillStyle = '#e63946'; ux.beginPath(); ux.arc(64, 64, 6, 0, 7); ux.fill();
+  const ut = new THREE.CanvasTexture(uhr); ut.colorSpace = THREE.SRGBColorSpace;
+  d('bahnhof', new THREE.Mesh(new THREE.CircleGeometry(45, 32), new THREE.MeshBasicMaterial({ map: ut })).translateX(W / 2).translateY(210).translateZ(-99));
+  // Abgestellte Waggons auf Nebengleisen draußen
+  for (const [x, z, f] of [[-160, 300, '#2a9d8f'], [-160, 1000, '#3b6fd8'], [W + 160, 420, '#ff9f1c'], [W + 160, 1050, '#2a9d8f']]) {
+    d('bahnhof', klotz(mat(f), 110, 60, 300, x, 45, z), klotz(MAT_GRAU, 100, 8, 290, x, 79, z), klotz(MAT_GUMMI, 100, 14, 280, x, 8, z));
+  }
+  // Der Zug: Lok + 2 Waggons. Vorne ist z = 0, der Zug zeigt nach +z
+  const zug = new THREE.Group(), rot = mat('#d62839', { roughness: 0.4 }), weiss = mat('#f4f4f4', { roughness: 0.4 }), dunkel = mat('#2b2f4a');
+  const fenster = mat('#1d3557', { roughness: 0.1, metalness: 0.5 }), licht = mat('#fff4c2', { emissive: '#ffe066', emissiveIntensity: 1.5 });
+  zug.add(klotz(dunkel, 112, 14, 190, 0, 14, -97), klotz(rot, 110, 60, 130, 0, 50, -128));
+  zug.add(kugel(rot, 55, 0, 47, -62, 1, 0.78, 1.1), kugel(fenster, 47, 0, 60, -70, 1, 0.5, 0.95), klotz(mat('#ffd21f'), 113, 10, 130, 0, 30, -128));
+  zug.add(kugel(licht, 7, -34, 30, -4), kugel(licht, 7, 34, 30, -4), klotz(MAT_GRAU, 100, 8, 120, 0, 82, -128));
+  zug.add(klotz(dunkel, 70, 8, 6, 0, 14, -2));   // Schienenräumer
+  for (let i = 0; i < 2; i++) {
+    const z0 = -205 - i * 195;
+    zug.add(klotz(weiss, 110, 62, 185, 0, 49, z0 - 92), klotz(MAT_GRAU, 104, 8, 180, 0, 84, z0 - 92), klotz(fenster, 112, 16, 165, 0, 60, z0 - 92));
+    for (let k = 0; k < 6; k++) zug.add(klotz(weiss, 113, 16, 4, 0, 60, z0 - 12 - k * 32));
+    zug.add(klotz(rot, 112, 6, 185, 0, 36, z0 - 92), klotz(dunkel, 24, 10, 20, 0, 22, z0 + 6));
+  }
+  for (const z of [-30, -165, -230, -360, -425, -555]) zug.add(zylinderX(MAT_GUMMI, 9, 9, 114, 0, 9, z));   // Räder (Achsen)
+  zug.children.forEach(c => { c.castShadow = false; });
+  zug.visible = false; zugMesh = zug; d('bahnhof', zug);
 }
 arenaDeko();
 // Sonder-Zonen sichtbar machen
@@ -1238,6 +1323,13 @@ const lavaBild = (() => {   // ein Bild von brodelnder Lava (wird wiederholt)
       const geo = new THREE.CircleGeometry(z.r * 1.15, 32); geo.rotateX(-Math.PI / 2);
       const sand = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: t, transparent: true }));
       sand.position.set(z.x, 1.3, z.y); sand.userData.sand = true; g.add(sand);
+    } else if (z.art === 'gleis') {   // Schienen und Schwellen
+      const holz = mat('#6b4a2e', { roughness: 0.9 }), schiene = mat('#b9bfcc', { metalness: 0.85, roughness: 0.25 });
+      for (let y = 20; y < z.h; y += 46) { const sw = klotz(holz, z.w * 0.82, 2, 12, z.x + z.w / 2, 1, z.y + y); sw.castShadow = false; g.add(sw); }
+      for (const f of [0.28, 0.72]) { const r = klotz(schiene, 5, 4, z.h, z.x + z.w * f, 3, z.y + z.h / 2); r.castShadow = false; g.add(r); }
+      const warnGeo = new THREE.PlaneGeometry(z.w, z.h); warnGeo.rotateX(-Math.PI / 2);
+      zugWarnFlaeche = new THREE.Mesh(warnGeo, new THREE.MeshBasicMaterial({ color: '#ff2a2a', transparent: true, opacity: 0, depthWrite: false }));
+      zugWarnFlaeche.position.set(z.x + z.w / 2, 6, z.y + z.h / 2); zugWarnFlaeche.visible = false; g.add(zugWarnFlaeche);
     } else if (z.art === 'lava') {
       const t = new THREE.CanvasTexture(lavaBild); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.repeat.set(z.w / 64, z.h / 64); lavaTexturen.push(t);
@@ -2653,7 +2745,8 @@ function baueWolke(team) {
 }
 // Kill-Meldung aus Sicht von diesem Computer
 function koMeldung(e, wer) {
-  if (e.spieler) { meldung(!wer && inLava(e.x, e.y) ? '🌋 Autsch! Die Lava hat dich erwischt!' : `💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
+  if (e.spieler) { meldung(!wer && inLava(e.x, e.y) ? '🌋 Autsch! Die Lava hat dich erwischt!' : !wer && imGleis(e.x, e.y, 30) ? '🚂 Tuuut! Der Zug hat dich umgerammt!' : `💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
+  else if (!wer && imGleis(e.x, e.y, 30)) meldung(`🚂 ${e.name} wurde vom Zug umgerammt!`);
   else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
   else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
 }
@@ -2793,10 +2886,70 @@ function vulkanUpdate(dt) {
   wackeln = Math.max(0, wackeln - dt);
 }
 
+// ================== 🚂 DER ZUG IM BAHNHOF ==================
+// Alle 30 Sekunden: erst bimmelt es und die Signale blinken (4 s), dann hupt der Zug – und rast durch die Mitte.
+// Wer dann auf dem Gleis steht, wird umgerammt! Die Zeit kommt von der Rundenuhr, so sehen alle Freunde denselben Zug.
+let zugUhr = 0, zugPhaseVorher = 0;
+function zugPhase() {
+  if (karte !== 'bahnhof' || modus !== 'match' || zustand === 'intro' || startCountdown > 0) return -1;
+  return zugUhr % ZUG_TAKT;
+}
+function zugGefahr() { const ph = zugPhase(); return ph >= ZUG_WARNUNG && ph < ZUG_START + 3; }
+function zugPosition(ph) {   // wo ist die Zugspitze? (und in welche Richtung fährt er?)
+  const t = ph - ZUG_START, richtung = Math.floor(zugUhr / ZUG_TAKT) % 2 ? -1 : 1;
+  if (t < 0) return null;
+  const weg = -120 + t * ZUG_TEMPO;
+  if (weg > H + ZUG_LAENGE + 240) return null;
+  return { richtung, vorne: richtung > 0 ? weg : H - weg };
+}
+function zugUpdate(dt) {
+  if (karte !== 'bahnhof' || modus !== 'match') { if (zugMesh) zugMesh.visible = false; if (zugWarnFlaeche) zugWarnFlaeche.visible = false; return; }
+  // Uhr: läuft mit, und folgt bei Freunden sanft der Uhr vom Gastgeber
+  const ziel = RUNDE - rest;
+  if (zustand === 'spiel') zugUhr += dt;
+  if (Math.abs(ziel - zugUhr) > 0.3) zugUhr = ziel; else zugUhr += (ziel - zugUhr) * Math.min(1, dt * 2);
+  const ph = zugPhase(), gl = ARENEN.bahnhof.zonen[0];
+  if (ph < 0) { zugMesh.visible = false; zugWarnFlaeche.visible = false; for (const m of SIGNAL_MATS) m.emissiveIntensity = 0; zugPhaseVorher = 0; return; }
+  // Warnungen
+  const warnt = ph >= ZUG_WARNUNG && ph < ZUG_START + 2.6;
+  if (zugPhaseVorher < ZUG_WARNUNG && ph >= ZUG_WARNUNG) meldung('🚂 Achtung! Ein Zug kommt – runter von den Gleisen!');
+  if (warnt && Math.floor(zugPhaseVorher) !== Math.floor(ph) && ph < ZUG_START + 1) ton('bimmel', 0.8);
+  if (zugPhaseVorher < ZUG_START - 1.5 && ph >= ZUG_START - 1.5) ton('tuten', 0.8);
+  if (zugPhaseVorher < ZUG_START && ph >= ZUG_START) { ton('tuten', 1.2); ton('zug'); }
+  const blink = Math.floor(zeit * 4) % 2;
+  SIGNAL_MATS[0].emissiveIntensity = warnt && blink ? 2 : 0; SIGNAL_MATS[1].emissiveIntensity = warnt && !blink ? 2 : 0;
+  zugWarnFlaeche.visible = warnt; zugWarnFlaeche.material.opacity = 0.12 + Math.abs(Math.sin(zeit * 6)) * 0.22;
+  zugPhaseVorher = ph;
+  // Der Zug fährt
+  const p = zugPosition(ph);
+  zugMesh.visible = !!p;
+  if (!p) return;
+  zugMesh.position.set(gl.x + gl.w / 2, 0, p.vorne); zugMesh.rotation.y = p.richtung > 0 ? 0 : Math.PI;
+  const hinten = p.vorne - p.richtung * ZUG_LAENGE, y0 = Math.min(p.vorne, hinten), y1 = Math.max(p.vorne, hinten);
+  if (spieler) {   // Boden wackelt, wenn der Zug nah vorbeirast
+    const d = Math.abs(spieler.x - (gl.x + gl.w / 2)) + Math.max(0, y0 - spieler.y, spieler.y - y1);
+    if (d < 500) wackeln = Math.max(wackeln, 0.5 * (1 - d / 500));
+  }
+  if (istGast() || zustand !== 'spiel') return;   // Rammen rechnet nur der Gastgeber
+  for (const e of kleckse) {
+    if (e.tot || hAbs(e) > 85 || e.x < gl.x - e.r || e.x > gl.x + gl.w + e.r || e.y < y0 - e.r || e.y > y1 + 10) continue;
+    const seite = e.x < gl.x + gl.w / 2 ? -1 : 1;
+    spritzer(e.x, e.y, 20, e.team, 16, 300);
+    if (e.schild > 0 || e.gigaT > 0 || e.kugelT > 0) {   // Unverwundbare fliegen nur zur Seite
+      e.x = seite < 0 ? gl.x - e.r - 6 : gl.x + gl.w + e.r + 6; e.vx = seite * 320; e.vz = 260; e.z = Math.max(e.z, 0.01);
+      if (e.spieler) ton('ramm');
+      continue;
+    }
+    if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('ramm');
+    erwischt(e, null);
+  }
+  for (const g of geraete) if (!g.kaputt && g.x > gl.x && g.x < gl.x + gl.w && g.y > y0 && g.y < y1) g.kaputt = true;   // Bomben auf dem Gleis werden plattgefahren
+}
+
 function weltLeeren(meldungenBehalten = false) {
   aufraeumen();
   for (const b of lavaBrocken) { scene.remove(b.mesh); scene.remove(b.ring); }
-  lavaBrocken = []; vulkanAusbrueche = 0; vulkanPhaseVorher = 0; wackeln = 0;
+  lavaBrocken = []; vulkanAusbrueche = 0; vulkanPhaseVorher = 0; wackeln = 0; zugUhr = 0; zugPhaseVorher = 0;
   kleckse = []; schuesse = []; bomben = []; wolken = []; strahlen = []; partikel = [];
   if (!meldungenBehalten) meldungen = [];
   geraete = []; wellen = []; tornados = []; blasen = [];
@@ -3792,6 +3945,11 @@ function ki(b, dt) {
     if (lavaNah(b.x + dx * 26, b.y + dy * 26, b.r)) { k.umwegA += Math.PI; dx = -dx; dy = -dy; }   // nicht in die Lava laufen
   }
   else if (dx || dy) [dx, dy] = ausweichen(b, dx, dy);
+  if (zugGefahr()) {   // 🚂 Zug kommt: runter vom Gleis und nicht drauflaufen!
+    const gl = gleisZone();
+    if (imGleis(b.x, b.y, b.r + 8)) { dx = b.x < gl.x + gl.w / 2 ? -1 : 1; dy = 0; b.willTauchen = false; }
+    else if (imGleis(b.x + dx * 45, b.y + dy * 45, b.r)) { dx = 0; if (!dy) dy = b.y < H / 2 ? 1 : -1; }
+  }
   bewege(b, dx, dy, dt);
 }
 
@@ -4162,6 +4320,7 @@ function welt3D(dt) {
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
+  zugUpdate(dt);
   if (kartenGruppe[karte]) for (const o of kartenGruppe[karte].children) {
     if (o.userData.boost) o.scale.setScalar(1 + Math.sin(zeit * 6) * 0.15);
     if (o.userData.sand) o.rotation.y += dt * 0.6;
