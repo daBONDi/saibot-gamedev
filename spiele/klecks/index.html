@@ -4555,7 +4555,7 @@ function update(dt) {
       const c = Math.cos(g.winkel), s = Math.sin(g.winkel);
       if (g.t < SCHIRM_FAHRT && !g.steht) {
         const nx = g.x + c * SCHIRM_TEMPO * dt, ny = g.y + s * SCHIRM_TEMPO * dt;
-        if (nx < 15 || ny < 15 || nx > W - 15 || ny > H - 15 || kollidiert(nx, ny, 16, bodenHoehe(g.x, g.y) + 4)) g.steht = true;
+        if (nx < 15 || ny < 15 || nx > W - 15 || ny > H - 15 || kollidiert(nx + c * 14, ny + s * 14, 4, bodenHoehe(g.x, g.y) + 4)) g.steht = true;   // nur vorne schauen (hinten darf eine Stufe sein)
         else { g.x = nx; g.y = ny; }
         g.malT -= dt;
         if (g.malT <= 0) { g.malT = 0.07; if (!istWand(g.x, g.y)) klecks(g.x, g.y, 26, g.team, g.wer, false); }
