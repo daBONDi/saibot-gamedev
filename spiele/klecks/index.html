@@ -5685,7 +5685,7 @@ function posieren(e, dt) {
     case 'sieg_schwert': {
       const p = t % 2.2;
       if (p < 0.6) { P.dreh = p / 0.6 * Math.PI * 2; P.arme = [[1.6, 0], [1.6, 0]]; P.wrz = 0; if (mal(0.05)) spritzer(e.x, e.y, hAbs(e) + 25, e.team, 3, 200); }
-      else { P.arme = [[0.35, 1.5], [3.0, 0.1]]; P.wrz = 1.6; P.hoch = Math.abs(Math.sin(t * 3)) * 4; P.kopf = 0.35; P.einhand = true;   // links: Hand in die Hüfte if (mal(0.25)) spritzer(e.x, e.y, hAbs(e) + 80, e.team, 3, 120); }
+      else { P.arme = [[0.35, 1.5], [3.0, 0.1]]; P.wrz = 1.6; P.hoch = Math.abs(Math.sin(t * 3)) * 4; P.kopf = 0.35; P.einhand = true; if (mal(0.25)) spritzer(e.x, e.y, hAbs(e) + 80, e.team, 3, 120); }
       break;
     }
     case 'winken':   // fürs Intro: Hallo!
