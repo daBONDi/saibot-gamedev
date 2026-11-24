@@ -3677,7 +3677,7 @@ function introUpdate(dt) {
 }
 function introEnde() {
   kameraOverride = null; introSkip = false;
-  for (const e of kleckse) { e.emote = null; e.koerper.rotation.z = 0; }
+  for (const e of kleckse) { e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0; }
   zustand = 'spiel'; startCountdown = 3; letzteSek = 99; ton('piep');
 }
 
@@ -5255,7 +5255,7 @@ function welt3D(dt) {
     if (zustand === 'feier') g.visible = !!e.emote;   // bei der Siegerehrung nur die auf der Bühne
     if (g.visible && e.koerper.visible) {
       if (e.emote) { const r = posieren(e, dt); g.position.y += r.hoch; g.rotation.y += r.dreh; }
-      else { e.koerper.rotation.z = 0; animiereFigur(e, v, dt); }
+      else { e.koerper.rotation.z = 0; e.koerper.position.x = 0; animiereFigur(e, v, dt); }
     }
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
@@ -5643,22 +5643,22 @@ function handPos(a, b) { return [(6 * Math.sin(a) + 6 * Math.sin(a + b)) * 0.88,
 function posieren(e, dt) {
   const em = e.emote, ud = e.koerper.userData, w = e.waffenModell, t = zeit - em.t0 + (em.versatz || 0);
   const P = { huefte: [0, 0], knie: [0, 0], arme: [[0.15, 0.2], [0.15, 0.2]], oberY: 0, ober: 0, kopf: 0, kopfY: 0, hoch: 0, dreh: 0, salto: 0,
-    waffe: null, wrz: 0, wrx: 0 };
+    waffe: null, wrz: 0, wrx: 0, einhand: false };   // einhand: Waffe nur in der rechten Hand (neben dem Kopf statt mittendrin)
   const sprung = (tempo, h) => { const j = Math.abs(Math.sin(t * tempo)); P.hoch = j * h; P.huefte = [0.6 * j, 0.6 * j]; P.knie = [-1.1 * j, -1.1 * j]; return j; };
   const knien = () => { P.knie = [-1.5, -1.5]; P.oberY = -7; };
   const sitzen = () => { P.huefte = [1.5, 1.5]; P.knie = [-1.4, -1.4]; P.oberY = -7; };
-  const hocken = () => { P.huefte = [1.2, 1.2]; P.knie = [-2.1, -2.1]; P.oberY = -6; };
+  const hocken = () => { P.huefte = [1.2, 1.2]; P.knie = [-2.1, -2.1]; P.oberY = -7; };
   const fallen = (y) => { P.waffe = [12, y]; P.wrz = -1.45; };   // Waffe liegt am Boden
   const mal = (k) => { e.malT = (e.malT || 0) - dt; if (e.malT <= 0) { e.malT = k; return true; } return false; };
   e.schirmAuf = false;
   switch (em.art) {
     // ---------- Sieger ----------
     case 'sieg_schuss':
-      sprung(5, 16); P.arme = [[2.7, 0.1], [2.7, 0.1]]; P.wrz = 1.5; P.kopf = 0.35;
+      sprung(5, 16); P.arme = [[2.3 + Math.sin(t * 10) * 0.35, 0.7], [2.7, 0.1]]; P.wrz = 1.5; P.kopf = 0.35; P.einhand = true;   // links: Faust recken
       if (mal(0.18)) spritzer(e.x, e.y, hAbs(e) + 55 + P.hoch, e.team, 5, 260);
       break;
     case 'sieg_roller':
-      P.dreh = t * 7; P.hoch = Math.abs(Math.sin(t * 7)) * 7; P.arme = [[2.9, 0.1], [2.9, 0.1]]; P.wrz = 1.6; P.kopf = 0.3;
+      P.dreh = t * 7; P.hoch = Math.abs(Math.sin(t * 7)) * 7; P.arme = [[1.7, 0.1], [2.9, 0.1]]; P.wrz = 1.6; P.kopf = 0.3; P.einhand = true;
       if (mal(0.12)) spritzer(e.x + Math.cos(t * 7) * 25, e.y + Math.sin(t * 7) * 25, hAbs(e) + 45, e.team, 3, 160);
       break;
     case 'sieg_pinsel': {
@@ -5669,27 +5669,27 @@ function posieren(e, dt) {
     case 'sieg_ziel': {
       const p = t % 2.4;
       if (p < 0.75) { const f = p / 0.75; P.salto = -f * Math.PI * 2; P.hoch = Math.sin(f * Math.PI) * 40; P.huefte = [1.3, 1.3]; P.knie = [-1.8, -1.8]; P.arme = [[1.2, 1.2], [1.2, 1.2]]; P.wrz = 0.5; }
-      else { P.arme = [[2.3, 0.1], [2.3, 0.1]]; P.wrz = 0.9; P.kopf = 0.5 + Math.sin(t * 6) * 0.05; P.ober = 0.15; if (p > 1.5 && p < 1.6 && mal(0.3)) spritzer(e.x, e.y, hAbs(e) + 70, e.team, 10, 300); }
+      else { P.arme = [[0.35, 1.5], [2.4, 0.1]]; P.wrz = 0.9; P.kopf = 0.5 + Math.sin(t * 6) * 0.05; P.ober = 0.15; P.einhand = true; if (p > 1.5 && p < 1.6 && mal(0.3)) spritzer(e.x, e.y, hAbs(e) + 70, e.team, 10, 300); }
       break;
     }
     case 'sieg_eimer': {
       const p = t % 2.6;
-      if (p < 1.3) { const f = Math.min(1, p / 0.8); P.arme = [[0.6 + f * 2.4, 0.1], [0.6 + f * 2.4, 0.1]]; P.wrz = f * 2.6; P.kopf = 0.3;
+      if (p < 1.3) { const f = Math.min(1, p / 0.8); P.arme = [[0.4 + f * 1.4, 0.6], [0.6 + f * 2.4, 0.1]]; P.wrz = f * 2.6; P.kopf = 0.3; P.einhand = true;
         if (p > 0.85 && mal(0.06)) spritzer(e.x, e.y, hAbs(e) + 40, e.team, 4, 90); }   // Farbe über den Kopf schütten
-      else { sprung(6, 12); P.arme = [[2.5, 0.3], [2.5, 0.3]]; P.wrz = 1.2; }
+      else { sprung(6, 12); P.arme = [[2.5, 0.4], [2.5, 0.3]]; P.wrz = 1.2; P.einhand = true; }
       break;
     }
     case 'sieg_schirm':
-      e.schirmAuf = true; P.arme = [[2.4 + Math.sin(t * 8) * 0.4, 0.3], [2.9, 0]]; P.wrz = 1.57; P.wrx = t * 5; P.hoch = Math.abs(Math.sin(t * 4)) * 7; P.dreh = Math.sin(t * 2) * 0.5;
+      e.schirmAuf = true; P.arme = [[2.4 + Math.sin(t * 8) * 0.4, 0.3], [2.9, 0]]; P.wrz = 1.57; P.wrx = t * 5; P.einhand = true; P.hoch = Math.abs(Math.sin(t * 4)) * 7; P.dreh = Math.sin(t * 2) * 0.5;
       break;
     case 'sieg_schwert': {
       const p = t % 2.2;
       if (p < 0.6) { P.dreh = p / 0.6 * Math.PI * 2; P.arme = [[1.6, 0], [1.6, 0]]; P.wrz = 0; if (mal(0.05)) spritzer(e.x, e.y, hAbs(e) + 25, e.team, 3, 200); }
-      else { P.arme = [[3.0, 0.1], [3.0, 0.1]]; P.wrz = 1.6; P.hoch = Math.abs(Math.sin(t * 3)) * 4; P.kopf = 0.35; if (mal(0.25)) spritzer(e.x, e.y, hAbs(e) + 80, e.team, 3, 120); }
+      else { P.arme = [[0.35, 1.5], [3.0, 0.1]]; P.wrz = 1.6; P.hoch = Math.abs(Math.sin(t * 3)) * 4; P.kopf = 0.35; P.einhand = true;   // links: Hand in die Hüfte if (mal(0.25)) spritzer(e.x, e.y, hAbs(e) + 80, e.team, 3, 120); }
       break;
     }
     case 'winken':   // fürs Intro: Hallo!
-      P.arme = [[2.8, 0.3 + Math.sin(t * 10) * 0.45], [1.1, 0.45]]; P.wrz = 0.3; P.hoch = Math.abs(Math.sin(t * 4)) * 3; P.kopf = 0.15;
+      P.arme = [[2.8, 0.3 + Math.sin(t * 10) * 0.45], [1.1, 0.45]]; P.wrz = 0.3; P.hoch = Math.abs(Math.sin(t * 4)) * 3; P.kopf = 0.15; P.einhand = true;
       break;
     // ---------- Verlierer ----------
     case 'nieder_schuss':
@@ -5702,16 +5702,16 @@ function posieren(e, dt) {
       P.arme = [[0.5 + Math.sin(t * 1.5) * 0.3, 0.3], [0.5 + Math.sin(t * 1.5) * 0.3, 0.3]]; P.wrz = -0.3; P.kopf = -0.6; P.ober = -0.3; P.dreh = Math.sin(t * 0.7) * 0.25;
       break;
     case 'nieder_ziel':
-      sitzen(); P.arme = [[2.0, 1.6], [2.0, 1.6]]; P.kopf = -0.45; P.kopfY = Math.sin(t * 4) * 0.3; fallen(-6);
+      sitzen(); P.arme = [[1.9, 1.45], [1.9, 1.45]]; P.kopf = -0.45; P.kopfY = Math.sin(t * 4) * 0.3; fallen(-6);
       break;
     case 'nieder_eimer':
       P.waffe = [0, 31]; P.wrz = Math.PI; P.wrx = Math.sin(t * 3) * 0.2; P.arme = [[1.3 + Math.sin(t * 2) * 0.3, 0.2], [1.3 - Math.sin(t * 2) * 0.3, 0.2]]; P.dreh = Math.sin(t * 1.3) * 0.5;
       break;
     case 'nieder_schirm':
-      hocken(); e.schirmAuf = true; P.arme = [[2.4, 0.6], [2.4, 0.6]]; P.wrz = 1.57; P.ober = Math.sin(t * 30) * 0.03; P.kopf = -0.3;
+      hocken(); e.schirmAuf = true; P.arme = [[1.2, 1.4], [2.4, 0.6]]; P.wrz = 1.57; P.ober = Math.sin(t * 30) * 0.03; P.kopf = -0.3; P.einhand = true;   // links: Knie umklammern
       break;
     case 'nieder_schwert':
-      P.huefte = [1.4, 0]; P.knie = [-1.5, -1.5]; P.oberY = -6; P.waffe = [12, -4]; P.wrz = -1.57; P.arme = [[1.1, 0.2], [1.1, 0.2]]; P.kopf = -0.7;
+      P.huefte = [1.4, 0]; P.knie = [-1.5, -1.5]; P.oberY = -7; P.waffe = [12, -5]; P.wrz = -1.57; P.arme = [[1.1, 0.2], [1.1, 0.2]]; P.kopf = -0.7;
       break;
   }
   ud.beine.forEach((bn, i) => { bn.huefte.rotation.z = P.huefte[i]; bn.knie.rotation.z = P.knie[i]; });
@@ -5721,11 +5721,14 @@ function posieren(e, dt) {
   ud.augen.scale.y = ((zeit + e.nr * 0.77) % 3.3) < 0.12 ? 0.1 : 1;
   if (ud.umhang) ud.umhang.rotation.z = -0.4 + Math.sin(zeit * 8 + e.nr) * 0.1;
   const [hx, hy] = P.waffe || handPos(P.arme[1][0], P.arme[1][1]);
-  w.visible = true; w.position.set(hx, hy, 0); w.rotation.set(P.wrx, 0, P.wrz);
+  // Hält nur die rechte Hand die Waffe? Dann sitzt sie an der Seite der Hand (Schulter z = 7.8, Arm leicht nach innen gedreht)
+  const hz = P.einhand && !P.waffe ? 7.8 - 0.479 * hx / 0.878 : 0;
+  w.visible = true; w.position.set(hx, hy, hz); w.rotation.set(P.wrx, P.einhand ? -0.2 : 0, P.wrz);
   if (e.werferModell) e.werferModell.visible = false;
   animiereWaffe(w.userData, e, dt, 0);
-  e.koerper.rotation.z = P.salto;
-  e.koerper.position.y += P.oberY;   // Knien/Sitzen/Hocken: die ganze Figur geht runter
+  e.koerper.rotation.z = P.salto;   // Salto: um die Bauchmitte (20 über dem Boden) drehen, nicht um die Füße
+  e.koerper.position.x = 20 * Math.sin(P.salto);
+  e.koerper.position.y += P.oberY + 20 - 20 * Math.cos(P.salto);   // Knien/Sitzen/Hocken: die ganze Figur geht runter
   return { hoch: P.hoch, dreh: P.dreh };
 }
 
