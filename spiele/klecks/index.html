@@ -847,6 +847,7 @@ const SOUNDS = {
   ausbruch:(t, v) => { krach(250, 1.5, 0.6 * v, t); osz('sine', 90, 30, 1.2, 0.35 * v, t); krach(1500, 0.6, 0.15 * v, t + 0.1, sfxGain, 'bandpass'); },
   strahl:  (t, v) => { osz('sawtooth', 120, 1400, 0.5, 0.12 * v, t, sfxGain, 2500); krach(2000, 0.6, 0.35 * v, t, sfxGain, 'bandpass'); osz('sine', 80, 40, 0.5, 0.3 * v, t); },
   megaton: (t, v) => { [55, 58, 62].forEach((n, i) => osz('sawtooth', NOTE(n - 12), NOTE(n - 12), 5.6, 0.07 * v, t + i * 0.02, sfxGain, 700)); osz('square', 45, 45, 5.6, 0.1 * v, t, sfxGain, 300); krach(400, 5.6, 0.12 * v, t); },
+  alarm:   (t, v) => { for (let i = 0; i < 3; i++) { osz('square', 880, 880, 0.12, 0.09 * v, t + i * 0.3, sfxGain, 3000); osz('square', 660, 660, 0.12, 0.09 * v, t + i * 0.3 + 0.15, sfxGain, 3000); } },
   zisch:   (t, v) => krach(4000, 0.25, 0.08 * v, t, sfxGain, 'highpass'),
   bogen:   (t, v) => { osz('triangle', 180, 90, 0.18, 0.14 * v, t, sfxGain, 1200); krach(2500, 0.12, 0.1 * v, t, sfxGain, 'bandpass'); },
   tuten:   (t, v) => { for (const f of [311, 392]) osz('sawtooth', f, f * 0.98, 1.1, 0.06 * v, t, sfxGain, 1400); },
@@ -925,9 +926,61 @@ SONGS.bahnhof = { name: 'Gleis-Boogie', bpm: 150, swing: 0.15, lead: 'quadrat', 
   bass: '0.2.4.5.6.5.4.2.', arp: '',
   mel: ['4.4.5.4...3.2...', '4...........2.3.', '5.5.6.5...4.3...', '4...........3.2.', '5.5.5.6.5...4...', '4.4.4.5.4...3...', '2.3.4.5.4.3.2...', '3...4...5...6...'],
   kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.xxx.xxx.xxx.xx', clap: '............x..x' };
+// 🎵 Mehr Songs! Jedes Match spielt das Arena-Lied oder einen dieser Songs. Alles selbst ausgedacht.
+Object.assign(SONGS, {
+  neon: { name: 'Neon-Sprint', bpm: 136, lead: 'saege', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['Am', 'F', 'G', 'Em', 'Am', 'F', 'G', 'G'],
+    bass: '0.0.0.0.0.0.0.2.', arp: '0.1.2.3.4.3.2.1.',
+    mel: ['4...4.5.6...5...', '4.3.2...........', '4...4.5.6...7...', '6.5.4...........', '7...6...5...4...', '5...4...3...2...', '3.4.5.4.3.4.5.6.', '5...............'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', offen: '..............x.' },
+  funk: { name: 'Klecks-Funk', bpm: 104, swing: 0.1, lead: 'quadrat', arpArt: '', pad: 0.02, skank: '..x..x....x..x..',
+    akkorde: ['Dm7', 'G7', 'Dm7', 'G7', 'Em7', 'A7', 'Dm7', 'G7'],
+    bass: '0..0..2.0.0..o..', arp: '',
+    mel: ['....4.3.4...2...', '3...............', '....4.3.4...5.6.', '5...4...........', '....5.4.5...3...', '4...2...........', '4.5.6.5.4.3.2...', '3...............'],
+    kick: 'x..x..x...x.....', snare: '....x.......x...', hat: 'x.xxx.xxx.xxx.xx', clap: '....x.......x...' },
+  tinte: { name: 'Tintenfieber', bpm: 152, lead: 'saege', arpArt: '', pad: 0.015,
+    akkorde: ['Em', 'Em', 'C', 'D', 'Em', 'Em', 'C', 'B'],
+    bass: '0.0.0.0.0.0.0.0.', arp: '',
+    mel: ['3.3.4.5.4.3.....', '3.3.4.5.6.5.....', '4.4.5.6.5.4.....', '3...4...5...4...', '6.6.5.4.5.6.....', '6.6.7.8.7.6.....', '5.5.4.3.4.5.....', '5...4...3...2...'],
+    kick: 'x...x.x.x...x.x.', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', tom: '............xxxx' },
+  pop: { name: 'Blubber-Pop', bpm: 118, lead: 'glocke', arpArt: 'marimba', pad: 0.03,
+    akkorde: ['C', 'Am', 'F', 'G', 'C', 'Am', 'F', 'G'],
+    bass: '0...0.0.2...0...', arp: '0.2.4.2.0.2.4.2.',
+    mel: ['4.4.5.4.3...2...', '3.3.4.3.2.......', '2.2.3.2.1...0...', '1...2...3.......', '4.4.5.4.3...4...', '5.5.6.5.4.......', '5.4.3.4.5...6...', '7...............'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', clap: '............x...' },
+  stern: { name: 'Sternenschleim', bpm: 96, lead: 'weich', arpArt: 'glocke', pad: 0.04,
+    akkorde: ['Fmaj7', 'Em7', 'Dm7', 'Cmaj7', 'Fmaj7', 'Em7', 'Dm7', 'Em7'],
+    bass: '0.......0...2...', arp: '0...2...4...2...',
+    mel: ['6.....5.4.......', '5.....4.3.......', '4.....3.2.......', '3...............', '6.....7.8.......', '7.....6.5.......', '4...5...6...5...', '4...............'],
+    kick: 'x.......x.......', snare: '....x.......x...', hat: '..x...x...x...x.', schuettel: '.x.x.x.x.x.x.x.x' },
+  gewitter: { name: 'Farbgewitter', bpm: 164, lead: 'quadrat', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['Cm', 'Cm', 'Ab', 'Bb', 'Cm', 'Cm', 'Ab', 'G'],
+    bass: '0.0.0.0o0.0.0.0o', arp: '0.1.2.1.0.1.2.1.',
+    mel: ['4.5.6.5.4...3...', '4.5.6.7.6.......', '3.4.5.4.3...2...', '4.5.6.........5.', '6.6.6.5.4.5.6...', '7.6.5.4.5.......', '3.4.5.6.5.4.3...', '2.......4.......'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '....x.......x...', offen: '..............x.' },
+  markt: { name: 'Sonntagsmarkt', bpm: 100, swing: 0.12, lead: 'marimba', arpArt: 'zupf', pad: 0.025,
+    akkorde: ['G', 'Em', 'C', 'D', 'G', 'Em', 'Am', 'D7'],
+    bass: '0...2...0...2...', arp: '0.1.2.1.0.1.2.1.',
+    mel: ['4...3.4.5...4...', '3...2...........', '4...3.4.5...6...', '5...............', '6...5.4.5...3...', '4...3...2.......', '3.4.5.4.3...2...', '4...............'],
+    kick: 'x.......x.x.....', snare: '....x.......x...', hat: '..x...x...x...x.' },
+  wartesaal: { name: 'Wartesaal-Swing', bpm: 120, swing: 0.18, lead: 'weich', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['C', 'A7', 'Dm', 'G7', 'C', 'A7', 'Dm7', 'G7'],
+    bass: '0.2.4.2.0.2.4.2.', arp: '',
+    mel: ['4...5.4.3...2...', '4...............', '5...6.5.4...3...', '5...............', '4...5.4.3...4...', '5...6...7.......', '6.5.4.3.2...1...', '2...............'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x..xx..xx..xx..x' },
+  // ⏰ Spielt, wenn nur noch 1 Minute übrig ist!
+  finale: { name: 'Noch 1 Minute!!', bpm: 150, lead: 'saege', arpArt: 'zupf', pad: 0.025,
+    akkorde: ['Am', 'Am', 'F', 'G', 'Am', 'Am', 'F', 'E'],
+    bass: '0.0o0.0o0.0o0.0o', arp: '0123210101232101',
+    mel: ['6...6...6...5.6.', '7...6...5.......', '6...6...6...5.6.', '7...8...7.......', '6.6.6.6.7.6.5...', '4.4.4.4.5.4.3...', '4.5.6.7.8.7.6.5.', '6...5...4...3...'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'xxxxxxxxxxxxxxxx', clap: '....x.......x..x', tom: '............xxxx' },
+});
+const SONG_LISTEN = { menu: ['stadt', 'markt'], lobby: ['lobby', 'wartesaal'], spiel: ['neon', 'funk', 'tinte', 'pop', 'stern', 'gewitter'] };
+function spielSong(karteId) { return Math.random() < 0.5 && SONGS[karteId] ? karteId : SONG_LISTEN.spiel[(Math.random() * SONG_LISTEN.spiel.length) | 0]; }
+function listenSong(art) { const l = SONG_LISTEN[art]; return l[(Math.random() * l.length) | 0]; }
 let musikModus = 'aus', songName = 'stadt', schritt = 0, naechsterSchritt = 0, musikTimer = null, hallBus = null, echoBus = null;
 function musikModusSetzen(m, song) {
-  if (song && SONGS[song] && song !== songName) { songName = song; schritt = 0; }
+  if (song && SONGS[song] && song !== songName) { songName = song; schritt = 0; if (musikAn && m !== 'aus' && zustand !== 'menu') meldung(`🎵 ${SONGS[song].name}`); }
   musikModus = m;
   if (!ac || musikTimer) return;
   musikTimer = setInterval(musikPlanen, 25);
@@ -1022,7 +1075,12 @@ function musikUmschalten() {
   meldung(musikAn ? '🎵 Musik an' : '🔇 Musik aus');
 }
 // Browser erlauben Sound erst nach dem ersten Klick
-addEventListener('pointerdown', () => { if (audioStart() && musikModus === 'aus' && zustand === 'menu') musikModusSetzen('menu', 'stadt'); });
+function musikWecken() {   // beim ersten Klick/Tastendruck: Sound einschalten und die Musik-Uhr sicher starten
+  if (!audioStart()) return;
+  if (!musikTimer || (musikModus === 'aus' && zustand === 'menu')) musikModusSetzen(musikModus === 'aus' ? 'menu' : musikModus, musikModus === 'aus' ? listenSong('menu') : undefined);
+}
+addEventListener('pointerdown', musikWecken);
+addEventListener('keydown', musikWecken);
 
 // ================== 3D-WELT (Three.js) ==================
 const glCv = document.getElementById('welt');
@@ -2425,7 +2483,7 @@ function lobbyAufbauen(auf) {
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
   startCountdown = 0;
   if (zustand === 'pause') pauseVon = 'lobby'; else zustand = 'lobby';
-  if (!warLobby) { nurZeigen(null); audioStart(); musikModusSetzen('menu', 'lobby'); }
+  if (!warLobby) { nurZeigen(null); audioStart(); musikModusSetzen('menu', listenSong('lobby')); }
 }
 function mpLobbyNeu() {   // Gastgeber: Lobby neu aufbauen und allen schicken
   const auf = lobbyAufstellung();
@@ -2653,7 +2711,8 @@ function gastUpdate(dt) {
     darf = false;
   } else if (modus === 'match') {
     rest = Math.max(0, rest - dt);
-    if (rest <= 30 && musikModus === 'spiel') { musikModusSetzen('eile'); meldung('🔥 Letzte 30 Sekunden!'); }
+    if (rest <= 60 && musikModus === 'spiel') { musikModusSetzen('finale', 'finale'); meldung('⏰ NOCH 1 MINUTE!!'); ton('alarm'); }
+    if (rest <= 30 && musikModus === 'finale') { musikModusSetzen('eile'); meldung('🔥 Letzte 30 Sekunden!'); }
     if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung('⏰ Noch 10 Sekunden!'); }
     if (rest <= 3 && rest > 0 && Math.ceil(rest) !== letzteSek) { letzteSek = Math.ceil(rest); ton('piep'); }
   }
@@ -3008,7 +3067,7 @@ function neueRunde(auf, karteId, farben) {
   // Erst das Intro, dann 3-2-1-LOS
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;
-  audioStart(); musikModusSetzen('spiel', karteId); ton('fanfare');
+  audioStart(); musikModusSetzen('spiel', spielSong(karteId)); ton('fanfare');
   zielRing.material.color.set(TEAMS[spieler.team].col);
   if (istHost()) { mp.farbe = []; mp.ev = []; mpAnAlle({ t: 'start', auf, karte: karteId, farben }); }
 }
@@ -4066,7 +4125,8 @@ function update(dt) {
   }
   else {
   zeit += dt; rest -= dt; klatschCd -= dt;
-  if (rest <= 30 && musikModus === 'spiel') { musikModusSetzen('eile'); meldung('🔥 Letzte 30 Sekunden!'); }
+  if (rest <= 60 && musikModus === 'spiel') { musikModusSetzen('finale', 'finale'); meldung('⏰ NOCH 1 MINUTE!!'); ton('alarm'); }
+  if (rest <= 30 && musikModus === 'finale') { musikModusSetzen('eile'); meldung('🔥 Letzte 30 Sekunden!'); }
   if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung('⏰ Noch 10 Sekunden!'); }
   if (rest <= 3 && Math.ceil(rest) !== letzteSek) { letzteSek = Math.ceil(rest); ton('piep'); }
   if (rest <= 0) { rest = 0; rundenEnde(); return; }
@@ -4679,7 +4739,7 @@ function hud() {
     ctx.strokeText(z, cw / 2, ch / 2 + 40); ctx.fillText(z, cw / 2, ch / 2 + 40);
   }
   ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffffffaa';
-  ctx.fillText(musikAn ? '🎵 M = Musik aus' : '🔇 M = Musik an', cw - 16, 22);
+  ctx.fillText(musikAn ? '🎵 Musik an (Taste M)' : '🔇 MUSIK IST AUS – drück M!', cw - 16, 22);
   if ((zustand === 'spiel' || zustand === 'lobby') && document.pointerLockElement !== glCv) {
     ctx.textAlign = 'center'; textMitRand('🖱️ Klick ins Bild, um zu steuern', cw / 2, ch / 2 + 80, 26, '#ffd166');
   }
@@ -4827,7 +4887,7 @@ function rundenEnde(daten) {
   const meinTeam = spieler.team;
   const gewonnen = meinTeam === 0 ? pO > pL : pL > pO;
   ton(gewonnen ? 'sieg' : 'niederlage');
-  setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu'); }, 3000);
+  setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu', listenSong('menu')); }, 3000);
   document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : (pO > pL ? `${TEAMS[0].emoji} ${TEAMS[0].name} gewinnt!` : `${TEAMS[1].emoji} ${TEAMS[1].name} gewinnt!`) + (gewonnen ? ' 🏆' : ' 😵');
   const summe = pO + pL || 1;
   const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
@@ -5260,7 +5320,7 @@ function stadtBetreten() {
   stadtSp.vx = stadtSp.vy = stadtSp.vz = stadtSp.z = 0;
   zustand = 'stadt';
   sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA);
-  audioStart(); musikModusSetzen('menu', 'stadt');
+  audioStart(); musikModusSetzen('menu', listenSong('menu'));
   mausFangen();
 }
 function stadtBetretenTaste() {
