@@ -1646,7 +1646,84 @@ function kulisseBauen(id, ziel, cx, cz) {
   if (k.wald) g.add(waldRing(cx, cz, 1350, 2100, k.wald, 3));
   g.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
 }
-for (const id of Object.keys(ARENEN)) kulisseBauen(id, kartenGruppe[id], W / 2, H / 2);
+// ---- Besondere Details für einzelne Arenen ----
+const schwimmer = [], vogelSchwaerme = [];
+function vogelSchwarm(g, cx, cz, n, hoehe, r) {   // Vögel, die am Himmel kreisen
+  const schwarm = new THREE.Group(); schwarm.position.set(cx, hoehe, cz); g.add(schwarm);
+  const m = mat('#2b2f4a');
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Group(), a = i / n * Math.PI * 2;
+    v.position.set(Math.cos(a) * r * (0.8 + (i % 3) * 0.15), (i % 4) * 25, Math.sin(a) * r);
+    const l = klotz(m, 4, 0.8, 16, 0, 0, -7), rr = klotz(m, 4, 0.8, 16, 0, 0, 7); l.rotation.x = 0.35; rr.rotation.x = -0.35;
+    v.add(l, rr, klotz(m, 7, 2.5, 3, 0, 0, 0)); v.rotation.y = -a; v.userData.fluegel = [l, rr]; schwarm.add(v);
+  }
+  vogelSchwaerme.push({ schwarm, tempo: 0.08 + Math.random() * 0.05 });
+}
+function kulisseExtras(id, g, cx, cz) {
+  const d = (...t) => g.add(...t);
+  if (id === 'farbhafen') {
+    // Schiffe auf dem Meer (schaukeln leicht)
+    for (const [x, z, dreh, f] of [[-900, 400, 0.3, '#c0392b'], [W + 1000, 900, -0.5, '#2a6f97'], [W / 2 + 300, -1300, 1.4, '#e67e22'], [-700, H + 1100, 2.2, '#27ae60']]) {
+      const schiff = new THREE.Group(); schiff.position.set(x, 0, z); schiff.rotation.y = dreh; d(schiff);
+      schiff.add(klotz(mat(f), 420, 40, 90, 0, 12, 0), klotz(mat('#1b1f3a'), 425, 10, 92, 0, -6, 0), klotz(MAT_WEISS, 90, 60, 70, -130, 62, 0), klotz(mat('#26324a'), 92, 10, 72, -130, 70, 0));
+      schiff.add(zylinder(mat('#ffd166'), 10, 12, 50, -150, 110, 0));
+      for (let k = 0; k < 6; k++) schiff.add(klotz(mat(['#e63946', '#3b6fd8', '#2a9d8f', '#ffd166'][k % 4]), 55, 28, 70, -40 + k * 40, 46 + (k % 2) * 28, 0));
+      schwimmer.push({ o: schiff, phase: x * 0.01 });
+    }
+    // Hafenkräne an der Kante
+    for (const [x, z, dreh] of [[-170, 250, 0], [-170, H - 250, 0], [W + 170, H / 2, Math.PI]]) {
+      const kran = new THREE.Group(); kran.position.set(x, 0, z); kran.rotation.y = dreh; d(kran);
+      const gelb = mat('#ffb703');
+      for (const [lx, lz] of [[-40, -40], [-40, 40], [40, -40], [40, 40]]) kran.add(klotz(gelb, 8, 230, 8, lx, 115, lz));
+      kran.add(klotz(gelb, 100, 14, 100, 0, 230, 0), klotz(gelb, 420, 16, 14, -150, 250, 0), klotz(mat('#1b1f3a'), 30, 30, 30, 40, 268, 0));
+      kran.add(zylinder(mat('#444'), 0.8, 0.8, 120, -260, 190, 0), klotz(mat('#e63946'), 50, 26, 30, -260, 120, 0));
+    }
+    vogelSchwarm(g, cx - 600, cz - 400, 7, 380, 260);
+  } else if (id === 'bahnhof') {
+    // Die Gleise gehen bis zum Horizont – und Oberleitungs-Masten daneben
+    const gl = ARENEN.bahnhof.zonen[0], mitte = gl.x + gl.w / 2, holz = new THREE.MeshLambertMaterial({ color: '#6b4a2e' }), stahl = new THREE.MeshLambertMaterial({ color: '#b9bfcc' });
+    for (const [von, bis] of [[-3200, -10], [H + 10, H + 3200]]) {
+      const len = bis - von, z0 = (von + bis) / 2;
+      d(klotz(mat('#8f877c'), gl.w, 1, len, mitte, 0.5, z0));
+      for (const f of [0.28, 0.72]) d(klotz(stahl, 5, 4, len, gl.x + gl.w * f, 3, z0));
+      const n = Math.floor(len / 46), sw = new THREE.InstancedMesh(new THREE.BoxGeometry(gl.w * 0.82, 2, 12), holz, n), q = new THREE.Object3D();
+      for (let i = 0; i < n; i++) { q.position.set(mitte, 1, von + 23 + i * 46); q.updateMatrix(); sw.setMatrixAt(i, q.matrix); }
+      d(sw);
+      for (let z = von + 100; z < bis; z += 260) for (const sx of [-1, 1]) {
+        d(klotz(mat('#5a6070'), 6, 120, 6, mitte + sx * (gl.w / 2 + 30), 60, z), klotz(mat('#5a6070'), 50, 4, 4, mitte + sx * (gl.w / 2 + 8), 115, z));
+      }
+      d(klotz(mat('#2b2f4a'), 1.2, 1.2, len, mitte, 108, z0));   // Fahrdraht
+    }
+    vogelSchwarm(g, cx + 500, cz + 300, 6, 420, 300);
+  } else if (id === 'wueste') {
+    // Oasen mit Wasser und Palmen
+    for (const [x, z] of [[-650, 300], [W + 700, H - 200]]) {
+      const teich = new THREE.Mesh(new THREE.CircleGeometry(120, 24).rotateX(-Math.PI / 2), mat('#3aa0c8', { roughness: 0.2 })); teich.position.set(x, 1, z); d(teich);
+      for (let i = 0; i < 4; i++) {
+        const a = i * 1.7, px = x + Math.cos(a) * 150, pz = z + Math.sin(a) * 140, hh = 130 + i * 20;
+        const stamm = zylinder(mat('#9a6a3a'), 6, 9, hh, px, hh / 2, pz); stamm.rotation.z = 0.12 * (i % 2 ? 1 : -1); d(stamm);
+        for (let k = 0; k < 6; k++) { const b = klotz(mat('#3f9b4b'), 90, 3, 20, px + Math.cos(k * 1.05) * 38, hh + 2, pz + Math.sin(k * 1.05) * 38); b.rotation.y = -k * 1.05; b.rotation.z = -0.45; d(b); }
+      }
+    }
+  } else if (id === 'eispalast') {
+    for (const [x, z, r] of [[-500, -300, 70], [W + 450, H + 200, 90], [W / 2, H + 700, 60], [-600, H - 100, 55]]) {   // Iglus
+      d(new THREE.Mesh(new THREE.SphereGeometry(r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), MAT_WEISS).translateX(x).translateZ(z));
+      d(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.35, r * 0.35, r * 0.6, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), MAT_WEISS).translateX(x + r * 0.85).translateY(r * 0.2).translateZ(z));
+    }
+  } else if (id === 'skatepark') {
+    for (const [x, z, dreh, text, f] of [[-350, H / 2, Math.PI / 2, 'SKATE!', '#ff5fa2'], [W + 350, H / 2, -Math.PI / 2, 'KLECKS', '#5be37d'], [W / 2, -400, 0, 'FARBE!', '#ffd166']]) {
+      const c = leinwand(256, 96), x2 = c.getContext('2d');
+      x2.fillStyle = '#1b1f3a'; x2.fillRect(0, 0, 256, 96); x2.fillStyle = f; x2.font = 'bold 64px system-ui'; x2.textAlign = 'center'; x2.fillText(text, 128, 70);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      const tafel = new THREE.Group(); tafel.position.set(x, 0, z); tafel.rotation.y = dreh; d(tafel);
+      tafel.add(klotz(MAT_GRAU, 10, 180, 10, -120, 90, 0), klotz(MAT_GRAU, 10, 180, 10, 120, 90, 0));
+      const bild = new THREE.Mesh(new THREE.PlaneGeometry(320, 120), new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide })); bild.position.y = 230; tafel.add(bild);
+    }
+  } else if (id === 'dschungel') {
+    vogelSchwarm(g, cx, cz, 9, 450, 500);
+  }
+}
+for (const id of Object.keys(ARENEN)) { kulisseBauen(id, kartenGruppe[id], W / 2, H / 2); kulisseExtras(id, kartenGruppe[id], W / 2, H / 2); }
 kulisseBauen('lobby', kartenGruppe.lobby, W0 / 2, H0 / 2);
 // Sonder-Zonen sichtbar machen
 const foerderTexturen = [], lavaTexturen = [];
@@ -5061,6 +5138,12 @@ function welt3D(dt) {
   scene.fog.near += ((sturm ? 30 : nebelNah) - scene.fog.near) * Math.min(1, dt * 2);
   scene.fog.far += ((sturm ? 320 : nebelFern) - scene.fog.far) * Math.min(1, dt * 2);
   teilchenUpdate(dt, W / 2, H / 2);
+  const tz = performance.now() / 1000;
+  for (const s of schwimmer) { s.o.position.y = Math.sin(tz * 1.2 + s.phase) * 4; s.o.rotation.z = Math.sin(tz * 0.9 + s.phase) * 0.03; }   // Schiffe schaukeln
+  for (const v of vogelSchwaerme) if (v.schwarm.parent && v.schwarm.parent.visible) {
+    v.schwarm.rotation.y += dt * v.tempo;
+    for (const vogel of v.schwarm.children) { const f = Math.sin(tz * 9 + vogel.position.x) * 0.5; vogel.userData.fluegel[0].rotation.x = 0.35 + f; vogel.userData.fluegel[1].rotation.x = -0.35 - f; }
+  }
   if (draussen.material.map && karte === 'farbhafen') { draussen.material.map.offset.x += dt * 0.01; draussen.material.map.offset.y += dt * 0.006; }   // Meer bewegt sich
 
   for (const e of kleckse) {
