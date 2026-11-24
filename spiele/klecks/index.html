@@ -105,6 +105,7 @@
       <span class="taste">E</span><span>Farbbombe (halten = zielen)</span>
       <span class="taste">Q</span><span>Ulti, wenn sie voll ist ⚡</span>
       <span class="taste">F halten</span><span>Schirm aufmachen ☂️</span>
+      <span class="taste">Rechtsklick</span><span>Mit Schwertern: Dash 💨 (abtauchen dann mit Shift)</span>
       <span class="taste">V</span><span>Ich-Sicht / Sicht von hinten</span>
       <span class="taste">M</span><span>Musik an/aus 🎵</span>
       <span class="taste">E (Stadt)</span><span>Laden / Arena betreten</span>
@@ -269,6 +270,19 @@ Object.assign(WAFFEN, {
     schwung: { anzahl: 7, streu: 1.2, speed: 430, bremse: 3, schaden: 26, klecks: 13, spur: 6, kosten: 4 },
     stark: { anzahl: 8, streu: 0.12, speed: 720, bremse: 1.5, schaden: 50, klecks: 16, spur: 9, kosten: 11 } },
 });
+// Neue Farbtanas: Großtana (Mega-Schnitt = riesige Farbwelle) und Wirbeltana (aufgeladen = im Kreis drehen)
+Object.assign(WAFFEN, {
+  grosstana: { typ: 'tana', name: 'Großtana', emoji: '⚔️', info: 'Riesiges Schwert: langsam, aber der Mega-Schnitt schickt eine riesige Farbwelle los!', modell: { ganz: 1.5 },
+    reichweite: 170, ladezeit: 1.0,
+    nah: { schwingCd: 0.5, schwingDauer: 0.38, abwurf: 0.14, art: 'seite', rollBreite: 0, rollTempo: 0 },
+    schwung: { anzahl: 9, streu: 1.3, speed: 470, bremse: 2.8, schaden: 36, klecks: 16, spur: 7, kosten: 6 },
+    stark: { welle: true, kosten: 18, schaden: 75 } },
+  wirbeltana: { typ: 'tana', name: 'Wirbeltana', emoji: '🌀', info: 'Aufgeladen drehst du dich im Kreis und spritzt Farbe rundherum!',
+    reichweite: 140, ladezeit: 0.8,
+    nah: { schwingCd: 0.3, schwingDauer: 0.26, abwurf: 0.08, art: 'seite', rollBreite: 0, rollTempo: 0 },
+    schwung: { anzahl: 7, streu: 1.2, speed: 430, bremse: 3, schaden: 24, klecks: 13, spur: 6, kosten: 4 },
+    stark: { wirbel: true, anzahl: 12, speed: 420, bremse: 3, schaden: 18, klecks: 14, spur: 5, kosten: 14 } },
+});
 // Die 3 Schirm-Arten
 Object.assign(WAFFEN, {
   campingschirm: { typ: 'schirm', name: 'Campingschirm', emoji: '⛺', info: 'Riesig breiter Schirm aus Zeltstoff – schützt auch deine Mitspieler hinter dir! Aber du bist langsam', modell: { ganz: 1.2 },
@@ -281,7 +295,7 @@ Object.assign(WAFFEN, {
 });
 // Welche Firma baut welche Waffe?
 for (const [f, liste] of Object.entries({
-  zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller', 'bogen', 'flitzbogen', 'tana'],
+  zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller', 'bogen', 'flitzbogen', 'tana', 'wirbeltana', 'grosstana'],
   altra:  ['sniper', 'miniliter', 'liter', 'kanone', 'langbogen'],
   u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling', 'schirm', 'campingschirm', 'abkoppler', 'oneschirm'],
 })) for (const w of liste) WAFFEN[w].firma = f;
@@ -336,6 +350,8 @@ const SET_DATEN = [
   ['schirm',   'sprinkler', 'schild', 400,  'klebe',     'lautsprecher', 550],
   ['tana',     'klecks', 'gigafisch', 450,  'mine',      'tornado', 600],
   ['campingschirm', 'wand', 'panzer', 500,  'sprinkler', 'schild',  650],
+  ['grosstana', 'klebe', 'welle',   550,   'wand',      'panzer',  700],
+  ['wirbeltana', 'sprinkler', 'wirbel', 500, 'mine',     'gigafisch', 650],
   ['abkoppler', 'mine',  'werfer',  500,   'klecks',    'kugel',   650],
   ['oneschirm', 'klebe', 'laser',   400,   'wand',      'trifarb', 550],
 ];
@@ -2714,6 +2730,7 @@ function mpVomGast(g, d) {
     if (!e || e.tot || !mpLaeuft()) return;
     if (d.tk && e.trifT > 0) e.trifWunsch = true;
     if (d.ak) e.abkoppelWunsch = true;
+    if (d.da) { e.tanaDashBis = zeit + 0.2; e.dashGetroffen = new Set(); e.dashMalT = 0; e.tinte = Math.max(0, e.tinte - 6); }
     if (d.kk > 0 && e.kugelT > 0) e.kugelKraft = Math.min(25, (e.kugelKraft || 0) + Math.min(10, d.kk | 0));
     if (Array.isArray(d.b)) { e.winkel = g.e.w; bombeWerfen(e, zahl(d.b[0], 0, W, e.x), zahl(d.b[1], 0, H, e.y)); }
     if (Array.isArray(d.uz)) { e.winkel = g.e.w; ultiStarten(e, zahl(d.uz[0], 0, W, e.x), zahl(d.uz[1], 0, H, e.y)); }
@@ -2737,7 +2754,7 @@ function mpSchnappschussSenden() {
   const s = {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
       r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0]),
     s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.pfeil ? -1 : o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.art === 'tracker' ? 'tracker' : o.ulti ? 'rakete' : o.art)]),
@@ -2808,7 +2825,7 @@ function mpSchnappschuss(d) {
     const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte, panzer, werferT, kugelT, werferSchuss, kugelKraft, trifRest] = a;
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
-    Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schirmAuf: !!(fl & 1024), schwingT, schwingSeite,
+    Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schirmAuf: !!(fl & 1024), wirbelBis: fl & 2048 ? zeit + 0.15 : 0, schwingT, schwingSeite,
       letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0,
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
@@ -2947,7 +2964,7 @@ function mpTick(dt) {
       mp.eingabeT = 1 / MP_EINGABE_RATE;
       const p = spieler;
       mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
-        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak });
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak, da: mp.bitte.da });
       mp.bitte = {};
     }
   }
@@ -3407,6 +3424,7 @@ function bewege(e, dx, dy, dt) {
   if (e.kugelT > 0) speed = 60;
   if (e.panzerT > 0) speed = 125;
   e.dashT = Math.max(0, (e.dashT || 0) - dt); e.dashCd = Math.max(0, (e.dashCd || 0) - dt); e.rammCd = Math.max(0, (e.rammCd || 0) - dt);
+  if (e.tanaDashBis > zeit) { speed = 640; dx = Math.cos(e.winkel); dy = Math.sin(e.winkel); }   // 💨 Schwert-Dash
   if (e.gigaT > 0) { speed = e.dashT > 0 ? 560 : 230; if (e.dashT > 0) { dx = Math.cos(e.winkel); dy = Math.sin(e.winkel); } }   // Gigafisch: schnell, Klick = Rammen
   const glatt = ARENEN[karte] && ARENEN[karte].glatt && modus === 'match' && !e.taucht && Math.hypot(e.x - BASIS[e.team].x, e.y - BASIS[e.team].y) > 120;
   const k = Math.min(1, dt * (amBoden ? (glatt ? 1.6 : 12) : 3));     // auf Glatteis rutscht man
@@ -3552,6 +3570,27 @@ function schiessen(e, dt) {
   }
 
   if (typVon(e.waffe) === 'tana') {   // 🗡️ Farbtana: Klicken = Schnitt, Halten = Mega-Schnitt
+    if (e.tanaDashBis > zeit) {   // 💨 Dash: malt eine Spur und rempelt Gegner an
+      e.dashMalT = (e.dashMalT || 0) - dt;
+      if (e.dashMalT <= 0) { e.dashMalT = 0.04; if (!istWand(e.x, e.y)) klecks(e.x, e.y, 17, e.team, e); }
+      for (const f of kleckse) if (f.team !== e.team && !f.tot && !e.dashGetroffen.has(f) && Math.hypot(f.x - e.x, f.y - e.y) < 30) { e.dashGetroffen.add(f); treffen(f, 25, e); spritzer(f.x, f.y, 20, e.team, 8, 180); }
+    }
+    if (e.wirbelBis > zeit) {   // 🌀 Wirbeltana: im Kreis drehen und rundherum Farbe spritzen
+      e.wirbelTick = (e.wirbelTick || 0) - dt;
+      if (e.wirbelTick <= 0) {
+        e.wirbelTick = 0.12;
+        const sw = w.stark, a0 = zeit * 25;
+        for (let k = 0; k < sw.anzahl; k++) {
+          const a = a0 + k * Math.PI * 2 / sw.anzahl, sp = sw.speed * (0.8 + Math.random() * 0.3), p = 0.15, vh = Math.cos(p) * sp;
+          const sh = { x: e.x + Math.cos(a) * 18, y: e.y + Math.sin(a) * 18, h: hAbs(e) + 18, vx: Math.cos(a) * vh, vy: Math.sin(a) * vh, vz: Math.sin(p) * sp, team: e.team, wer: e, w: sw, spurT: 0.03, leben: 3 };
+          sh.mesh = new THREE.Mesh(geoTropfen, teamMat[e.team]); scene.add(sh.mesh); schuesse.push(sh);
+        }
+        for (const f of kleckse) if (f.team !== e.team && !f.tot && Math.abs(hAbs(f) - hAbs(e)) < 30 && Math.hypot(f.x - e.x, f.y - e.y) < 70) treffen(f, 20, e);
+        if (!istWand(e.x, e.y)) klecks(e.x, e.y, 34, e.team, e);
+        if (spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 400) ton('wusch', e.spieler ? 0.6 : 0.3);
+      }
+      return;
+    }
     if (e.schwingT > 0) {
       const vorher = e.schwingT, ab = w.nah.schwingDauer - w.nah.abwurf;
       e.schwingT -= dt;
@@ -3847,6 +3886,14 @@ function blasenUpdate(dt) {   // fliegen, landen, aufblähen, PLATSCH
 function tanaSchnitt(e, w, stark) {
   const sw = stark ? w.stark : w.schwung;
   e.tinte = Math.max(0, e.tinte - sw.kosten * (1 - e.bonus.tinte)); e.rueck = 1;
+  if (stark && sw.wirbel) { e.wirbelBis = zeit + 0.75; e.wirbelTick = 0; ton('ulti', e.spieler ? 0.5 : 0.2); return; }   // 🌀 los geht's mit Drehen
+  if (stark && sw.welle) {   // ⚔️ Großtana: eine riesige Farbwelle rollt los
+    const mesh = baueWelle(e.team); scene.add(mesh);
+    wellen.push({ x: e.x + Math.cos(e.winkel) * 25, y: e.y + Math.sin(e.winkel) * 25, winkel: e.winkel, t: 0, dauer: 0.95, team: e.team, wer: e, malT: 0, getroffen: new Set(), mesh });
+    for (const f of kleckse) if (f.team !== e.team && !f.tot && Math.hypot(f.x - e.x, f.y - e.y) < 80 && Math.abs(winkelDiff(e.winkel, Math.atan2(f.y - e.y, f.x - e.x))) < 1.1) treffen(f, sw.schaden, e);
+    if (!spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('wellenrauschen', 0.7);
+    return;
+  }
   for (let i = 0; i < sw.anzahl; i++) {
     const f = i / (sw.anzahl - 1) - 0.5;
     const a = e.winkel + f * sw.streu * (stark ? 1 : e.schwingSeite) + (Math.random() - 0.5) * 0.05;
@@ -3894,6 +3941,15 @@ function baueSchirmFlug(team) {
   for (const z of [-8, 8]) g.add(zylinderZ(MAT_GUMMI, 4, 4, 3, -8, 4, z));
   ud.dachMat = d.dachMat; ud.dach = d.dach;
   return g;
+}
+// 💨 Dash mit dem Schwert (rechte Maustaste): ein kurzer, schneller Sprint nach vorne
+function tanaDash(e) {
+  if (e.tot || e.taucht || e.tanaDashCdBis > zeit || e.tinte < 6 || e.schwingT > 0 || e.wirbelBis > zeit) return false;
+  e.tanaDashBis = zeit + 0.2; e.tanaDashCdBis = zeit + 1.0; e.dashGetroffen = new Set(); e.dashMalT = 0;
+  e.tinte -= 6;
+  if (e.spieler && istGast()) mp.bitte.da = 1;   // der Gastgeber malt die Spur
+  if (!spieler || e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 400) ton('wusch', e.spieler ? 1 : 0.5);
+  return true;
 }
 // ☂️ Hält der offene Schirm diesen Tropfen ab? (nur von vorne)
 function schirmBlockt(e, x, y, h, schaden) {
@@ -4305,8 +4361,9 @@ function ki(b, dt) {
     else if (b.werferT > 0) { b.schiesst = gutGezielt && fd < 550; k.zielPunkt = { x: feind.x, y: feind.y }; }
     else if (typVon(b.waffe) === 'sniper') {
       b.schiesst = gutGezielt && !(b.laden && b.ladung >= 0.75 + (b.nr % 2) * 0.2);
-    } else if (typVon(b.waffe) === 'tana') {   // ranlaufen, kurz oder voll aufladen, dann zuschlagen
+    } else if (typVon(b.waffe) === 'tana') {   // ranlaufen (manchmal mit Dash), kurz oder voll aufladen, dann zuschlagen
       b.schiesst = fd < w.reichweite + 30 && !(b.laden && b.ladung >= (b.nr % 2 ? 1 : 0.15));
+      if (fd > 90 && fd < 240 && gutGezielt && Math.random() < dt * 0.8) tanaDash(b);
     } else if (typVon(b.waffe) === 'bogen') {
       b.schiesst = gutGezielt && fd < w.reichweite * 1.1 && !(b.laden && b.ladung >= 0.6 + (b.nr % 2) * 0.4);   // spannen, dann loslassen
     } else if (typVon(b.waffe) === 'ling') {
@@ -4383,7 +4440,9 @@ function steuerung(p, dt) {
   let dx = c * vor - s * seit, dy = s * vor + c * seit;
   const l = Math.hypot(dx, dy); if (l) { dx /= l; dy /= l; }
   const abkoppler = !!(WAFFEN[p.waffe] && WAFFEN[p.waffe].abkoppeln);   // Abkoppler: rechte Maustaste = Schirm losschicken (abtauchen dann nur mit Shift)
-  p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || (maus.rechts && !abkoppler);
+  const schwert = typVon(p.waffe) === 'tana';   // Schwerter: rechte Maustaste = Dash
+  p.willTauchen = tasten.ShiftLeft || tasten.ShiftRight || (maus.rechts && !abkoppler && !schwert);
+  if (schwert && maus.rechts && !p.rechtsVorher) tanaDash(p);
   if (abkoppler && maus.rechts && !p.rechtsVorher) { if (istGast()) mp.bitte.ak = 1; else p.abkoppelWunsch = true; }
   p.rechtsVorher = maus.rechts;
   p.schiesst = maus.links;
@@ -4817,6 +4876,7 @@ function welt3D(dt) {
       gx = gy = Math.min(1, f * 1.4) + Math.sin(f * Math.PI) * 0.18;
     }
     if (e.landT > 0) { const q = Math.sin(e.landT / 0.25 * Math.PI); gy *= 1 - q * 0.16; gx *= 1 + q * 0.1; }   // Landen: zusammenstauchen
+    if (e.wirbelBis > zeit) dreh += zeit * 25;   // 🌀 Wirbeltana: dreht sich im Kreis
     g.position.set(e.x, hAbs(e) + hoch, e.y);
     g.rotation.y = -e.winkel + dreh;
     g.scale.set(gx, gy, gx);
