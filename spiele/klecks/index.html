@@ -1244,16 +1244,72 @@ const wandMat = new THREE.MeshStandardMaterial({ color: '#5a6091', roughness: 0.
 const randMat = new THREE.MeshStandardMaterial({ color: '#3d4266', roughness: 0.7 });
 const kartenGruppe = {};
 for (const name in KARTEN) { kartenGruppe[name] = new THREE.Group(); kartenGruppe[name].visible = false; scene.add(kartenGruppe[name]); }
-function wandKlotz(x, y, w, h, hoehe, m, ziel = scene) {
-  const k = new THREE.Mesh(new THREE.BoxGeometry(w, hoehe, h), m);
+function wandKlotz(x, y, w, h, hoehe, m, ziel = scene, kante = null) {
+  const geo = new THREE.BoxGeometry(w, hoehe, h);
+  if (m.map) {   // Muster nicht strecken: jede Seite bekommt so viele Kacheln, wie sie groß ist
+    const uv = geo.attributes.uv, groessen = [[h, hoehe], [h, hoehe], [w, h], [w, h], [w, hoehe], [w, hoehe]];
+    for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * groessen[f][0] / 64, uv.getY(i) * groessen[f][1] / 64); }
+  }
+  const k = new THREE.Mesh(geo, m);
   k.position.set(x + w / 2, hoehe / 2, y + h / 2); k.castShadow = true; k.receiveShadow = true; ziel.add(k);
+  if (kante) {   // Abschluss oben (etwas breiter) und unten eine dunkle Sockelleiste
+    const oben = new THREE.Mesh(new THREE.BoxGeometry(w + 4, 4, h + 4), kante); oben.position.set(x + w / 2, hoehe + 2, y + h / 2); oben.castShadow = false; ziel.add(oben);
+    const unten = new THREE.Mesh(new THREE.BoxGeometry(w + 2, 5, h + 2), kante); unten.position.set(x + w / 2, 2.5, y + h / 2); unten.castShadow = false; ziel.add(unten);
+  }
+}
+// Muster für die Wände jeder Arena (gemalt, damit nichts heruntergeladen werden muss)
+function wandMuster(muster, farbe) {
+  const c = leinwand(128, 128), x = c.getContext('2d'), basis = new THREE.Color(farbe);
+  const ton = (f) => '#' + basis.clone().multiplyScalar(f).getHexString();
+  let z = 5; const zz = () => { z = (z * 16807) % 2147483647; return z / 2147483647; };
+  x.fillStyle = farbe; x.fillRect(0, 0, 128, 128);
+  let glut = null;
+  if (muster === 'fliesen') {           // Hafen: gerippte Container-Wände mit Nieten
+    for (let i = 0; i < 128; i += 16) { x.fillStyle = ton(0.82); x.fillRect(i, 0, 7, 128); x.fillStyle = ton(1.15); x.fillRect(i + 7, 0, 2, 128); }
+    x.fillStyle = ton(0.6); x.fillRect(0, 0, 128, 6); x.fillRect(0, 122, 128, 6);
+    x.fillStyle = '#c9cfe6'; for (let i = 4; i < 128; i += 16) { x.fillRect(i, 2, 3, 3); x.fillRect(i, 123, 3, 3); }
+    x.fillStyle = 'rgba(160,90,40,0.35)'; for (let i = 0; i < 10; i++) x.fillRect(zz() * 128, zz() * 128, 3 + zz() * 6, 8 + zz() * 20);   // Rost
+  } else if (muster === 'beton') {      // Skatepark: Beton mit bunten Graffiti
+    for (let i = 0; i < 600; i++) { x.fillStyle = zz() < 0.5 ? ton(0.9) : ton(1.1); x.fillRect(zz() * 128, zz() * 128, 2, 2); }
+    x.lineWidth = 5; x.lineCap = 'round';
+    for (let i = 0; i < 3; i++) { x.strokeStyle = ['#ffd166', '#5be37d', '#6fe3ff', '#ff5fa2'][i]; x.beginPath(); let px = zz() * 128, py = 30 + zz() * 70; x.moveTo(px, py); for (let k = 0; k < 4; k++) { px += (zz() - 0.3) * 40; py += (zz() - 0.5) * 30; x.quadraticCurveTo(px - 10, py - 20, px, py); } x.stroke(); }
+    x.fillStyle = ton(0.7); x.fillRect(0, 62, 128, 3);
+  } else if (muster === 'gras') {       // Dschungel: Holzbalken mit Moos
+    for (let i = 0; i < 128; i += 21) { x.fillStyle = ton(0.85 + zz() * 0.3); x.fillRect(0, i, 128, 19); x.fillStyle = ton(0.55); x.fillRect(0, i + 19, 128, 2); }
+    x.strokeStyle = ton(0.7); x.lineWidth = 1; for (let i = 0; i < 30; i++) { const py = zz() * 128; x.beginPath(); x.moveTo(zz() * 128, py); x.lineTo(zz() * 128, py + (zz() - 0.5) * 4); x.stroke(); }
+    x.fillStyle = 'rgba(70,150,60,0.75)'; for (let i = 0; i < 14; i++) { x.beginPath(); x.arc(zz() * 128, 128 - zz() * 30, 4 + zz() * 7, 0, 7); x.fill(); }
+  } else if (muster === 'eis') {        // Eispalast: Frost und Risse
+    x.strokeStyle = 'rgba(255,255,255,0.9)'; x.lineWidth = 1.5;
+    for (let i = 0; i < 9; i++) { let px = zz() * 128, py = zz() * 128; x.beginPath(); x.moveTo(px, py); for (let k = 0; k < 4; k++) { px += (zz() - 0.5) * 50; py += (zz() - 0.5) * 50; x.lineTo(px, py); } x.stroke(); }
+    const g = x.createLinearGradient(0, 128, 0, 80); g.addColorStop(0, 'rgba(255,255,255,0.7)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 80, 128, 48);
+  } else if (muster === 'sand') {       // Wüste: Sandstein-Blöcke mit Zeichen
+    for (let r = 0; r < 4; r++) for (let k = -1; k < 3; k++) {
+      const bx = k * 64 + (r % 2) * 32, by = r * 32; x.fillStyle = ton(0.92 + zz() * 0.16); x.fillRect(bx + 2, by + 2, 60, 28);
+      if (zz() < 0.35) { x.strokeStyle = ton(0.6); x.lineWidth = 2; x.beginPath(); x.arc(bx + 32, by + 16, 6, 0, 7); x.moveTo(bx + 32, by + 22); x.lineTo(bx + 32, by + 28); x.stroke(); }
+    }
+    x.fillStyle = ton(0.7); for (let r = 0; r <= 4; r++) x.fillRect(0, r * 32, 128, 2);
+  } else if (muster === 'stein') {      // Vulkan: Basalt mit glühenden Rissen
+    for (let i = 0; i < 500; i++) { x.fillStyle = zz() < 0.5 ? ton(0.8) : ton(1.3); x.fillRect(zz() * 128, zz() * 128, 3, 3); }
+    const gl = leinwand(128, 128), gx = gl.getContext('2d'); gx.fillStyle = '#000'; gx.fillRect(0, 0, 128, 128);
+    for (const ctx2 of [x, gx]) { ctx2.strokeStyle = '#ff6a10'; ctx2.lineWidth = 2; }
+    for (let i = 0; i < 6; i++) { let px = zz() * 128, py = zz() * 128; const pfad = [[px, py]]; for (let k = 0; k < 4; k++) { px += (zz() - 0.5) * 50; py += (zz() - 0.5) * 50; pfad.push([px, py]); }
+      for (const ctx2 of [x, gx]) { ctx2.beginPath(); pfad.forEach(([a, b], k) => k ? ctx2.lineTo(a, b) : ctx2.moveTo(a, b)); ctx2.stroke(); } }
+    glut = new THREE.CanvasTexture(gl); glut.wrapS = glut.wrapT = THREE.RepeatWrapping;
+  } else if (muster === 'bahnhof') {    // Bahnhof: rote Backsteine
+    for (let r = 0; r < 8; r++) for (let k = -1; k < 5; k++) { x.fillStyle = ton(0.85 + zz() * 0.3); x.fillRect(k * 32 + (r % 2) * 16 + 1, r * 16 + 1, 30, 14); }
+    x.fillStyle = '#d8d0c0'; for (let r = 0; r <= 8; r++) x.fillRect(0, r * 16 - 1, 128, 2);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return { t, glut };
 }
 for (const r of KARTEN.lobby) wandKlotz(r.x, r.y, r.w, r.h, 80, wandMat, kartenGruppe.lobby);
 for (const [id, a] of Object.entries(ARENEN)) {
-  const th = a.thema;
-  const m = th.glas ? new THREE.MeshStandardMaterial({ color: th.wand, transparent: true, opacity: 0.8, roughness: 0.05, metalness: 0.3 })
-                    : new THREE.MeshStandardMaterial({ color: th.wand, roughness: 0.7 });
-  for (const r of a.waende) wandKlotz(r.x, r.y, r.w, r.h, a.wandH, m, kartenGruppe[id]);
+  const th = a.thema, { t, glut } = wandMuster(th.muster, th.wand);
+  const m = th.glas ? new THREE.MeshStandardMaterial({ map: t, transparent: true, opacity: 0.8, roughness: 0.05, metalness: 0.3 })
+                    : new THREE.MeshStandardMaterial({ map: t, roughness: th.muster === 'fliesen' ? 0.45 : 0.8, metalness: th.muster === 'fliesen' ? 0.3 : 0,
+                        emissiveMap: glut, emissive: glut ? '#ff5a10' : '#000000', emissiveIntensity: glut ? 1.2 : 0 });
+  const kante = new THREE.MeshStandardMaterial({ color: new THREE.Color(th.wand).multiplyScalar(th.muster === 'stein' ? 1.6 : 0.65), roughness: 0.6, transparent: !!th.glas, opacity: th.glas ? 0.9 : 1 });
+  for (const r of a.waende) wandKlotz(r.x, r.y, r.w, r.h, a.wandH, m, kartenGruppe[id], kante);
 }
 wandKlotz(-24, -24, W + 48, 24, 50, randMat); wandKlotz(-24, H, W + 48, 24, 50, randMat);
 wandKlotz(-24, 0, 24, H, 50, randMat); wandKlotz(W, 0, 24, H, 50, randMat);
@@ -3524,6 +3580,8 @@ function zugUpdate(dt) {
 }
 
 function weltLeeren(meldungenBehalten = false) {
+  if (feier) { feier = null; kameraOverride = null; }   // eine laufende Siegerehrung abbrechen
+  buehne.visible = false; kroneMvp.visible = false;
   aufraeumen();
   for (const b of lavaBrocken) { scene.remove(b.mesh); scene.remove(b.ring); }
   lavaBrocken = []; vulkanAusbrueche = 0; vulkanPhaseVorher = 0; wackeln = 0; zugUhr = 0; zugPhaseVorher = 0;
@@ -5754,8 +5812,8 @@ function feierUpdate(dt) {
   if (name === 'auswertung' && f.t > 3.4 && !f.verkuendet) { f.verkuendet = true; ton('fanfare'); }
   // Kamera
   if (name === 'auswertung') { const k = weich(f.t / dauer); kameraOverride = { pos: [W / 2 + Math.sin(f.t * 0.2) * 200, 1500 + k * 300, H / 2 + 900 - k * 300], ziel: [W / 2, 0, H / 2] }; }
-  else if (name === 'mvp') { const k = weich(f.t / 1.5); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.5) * 60, 90 - k * 30, BUEHNE.y + 320 - k * 160], ziel: [BUEHNE.x, BUEHNE.h + 30, BUEHNE.y - 40] }; }
-  else { const k = weich(f.t / 1.2); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.4) * 90, 110 - k * 40, BUEHNE.y + 420 - k * 130], ziel: [BUEHNE.x, BUEHNE.h + 28, BUEHNE.y] }; }
+  else if (name === 'mvp') { const k = weich(f.t / 1.5); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.5) * 30, 80 - k * 25, BUEHNE.y + 260 - k * 190], ziel: [BUEHNE.x, BUEHNE.h + 34, BUEHNE.y - 40] }; }
+  else { const k = weich(f.t / 1.2); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.4) * 60, 95 - k * 35, BUEHNE.y + 380 - k * 175], ziel: [BUEHNE.x, BUEHNE.h + 26, BUEHNE.y + 20] }; }
   if (f.mvp && kroneMvp.visible) { const m = f.mvp; kroneMvp.position.set(m.x, hAbs(m) + 46 + Math.sin(zeit * 3) * 2, m.y); kroneMvp.rotation.y += dt * 2; }
   if (f.t >= dauer || f.weiter) {
     f.weiter = false;
