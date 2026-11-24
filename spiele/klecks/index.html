@@ -889,6 +889,7 @@ const SOUNDS = {
   ausbruch:(t, v) => { krach(250, 1.5, 0.6 * v, t); osz('sine', 90, 30, 1.2, 0.35 * v, t); krach(1500, 0.6, 0.15 * v, t + 0.1, sfxGain, 'bandpass'); },
   strahl:  (t, v) => { osz('sawtooth', 120, 1400, 0.5, 0.12 * v, t, sfxGain, 2500); krach(2000, 0.6, 0.35 * v, t, sfxGain, 'bandpass'); osz('sine', 80, 40, 0.5, 0.3 * v, t); },
   megaton: (t, v) => { [55, 58, 62].forEach((n, i) => osz('sawtooth', NOTE(n - 12), NOTE(n - 12), 5.6, 0.07 * v, t + i * 0.02, sfxGain, 700)); osz('square', 45, 45, 5.6, 0.1 * v, t, sfxGain, 300); krach(400, 5.6, 0.12 * v, t); },
+  wirbel:  (t, v) => { for (let i = 0; i < 40; i++) krach(2500, 0.06, (0.05 + i * 0.004) * v, t + i * 0.08, sfxGain, 'bandpass'); osz('sine', 60, 50, 3.4, 0.15 * v, t + 3.1); },
   alarm:   (t, v) => { for (let i = 0; i < 3; i++) { osz('square', 880, 880, 0.12, 0.09 * v, t + i * 0.3, sfxGain, 3000); osz('square', 660, 660, 0.12, 0.09 * v, t + i * 0.3 + 0.15, sfxGain, 3000); } },
   zisch:   (t, v) => krach(4000, 0.25, 0.08 * v, t, sfxGain, 'highpass'),
   bogen:   (t, v) => { osz('triangle', 180, 90, 0.18, 0.14 * v, t, sfxGain, 1200); krach(2500, 0.12, 0.1 * v, t, sfxGain, 'bandpass'); },
@@ -2775,7 +2776,7 @@ let ichSicht = true;
 addEventListener('keydown', e => {
   if (e.repeat) return;
   tasten[e.code] = true;
-  if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; }
+  if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; if (zustand === 'feier' && feier) feier.weiter = true; }
   // 🤫 Geheimer Cheatcode: KLECKSI tippen (in der Stadt, im Menü oder im Laden)
   let cheatTippen = false;
   if (konto && ['stadt', 'menu', 'wahl'].includes(zustand) && e.key && e.key.length === 1) {
@@ -2841,6 +2842,7 @@ document.addEventListener('pointerlockchange', () => {
 glCv.addEventListener('click', () => {
   if (['spiel', 'lobby', 'stadt'].includes(zustand) && document.pointerLockElement !== glCv) mausFangen();
   if (zustand === 'intro') introSkip = true;
+  if (zustand === 'feier' && feier) feier.weiter = true;
 });
 
 // ================== ONLINE MIT FREUNDEN (PeerJS) ==================
@@ -3092,6 +3094,7 @@ function proxySync(liste, daten, erzeugen, setzen) {   // Dinge vom Gastgeber na
   return neu;
 }
 function mpSchnappschuss(d) {
+  if (zustand === 'feier' || zustand === 'ende') return;   // Siegerehrung läuft bei jedem selbst
   if (!spieler) return;
   const k = Array.isArray(d.k) ? d.k : [];
   for (let i = 0; i + 3 < k.length; i += 4) {   // Farbe vom Gastgeber malen
@@ -3405,7 +3408,7 @@ function aufraeumen() {
 // Alle 45 Sekunden: erst grollt der Vulkan (3 s), dann spuckt er Farbbrocken in beiden Teamfarben über die ganze Insel.
 let lavaBrocken = [], vulkanAusbrueche = 0, vulkanPhaseVorher = 0, wackeln = 0;
 function vulkanPhase() {   // Sekunden seit dem letzten Ausbruch-Takt (0 … 45)
-  if (karte !== 'vulkan' || modus !== 'match' || zustand === 'intro' || startCountdown > 0) return -1;
+  if (karte !== 'vulkan' || modus !== 'match' || zustand === 'intro' || zustand === 'feier' || startCountdown > 0) return -1;
   return (RUNDE - rest) % VULKAN_TAKT;
 }
 function lavaBrockenStarten(zx, zy, team, dauer) {
@@ -3463,7 +3466,7 @@ function vulkanUpdate(dt) {
 // Wer dann auf dem Gleis steht, wird umgerammt! Die Zeit kommt von der Rundenuhr, so sehen alle Freunde denselben Zug.
 let zugUhr = 0, zugPhaseVorher = 0;
 function zugPhase() {
-  if (karte !== 'bahnhof' || modus !== 'match' || zustand === 'intro' || startCountdown > 0) return -1;
+  if (karte !== 'bahnhof' || modus !== 'match' || zustand === 'intro' || zustand === 'feier' || startCountdown > 0) return -1;
   return zugUhr % ZUG_TAKT;
 }
 function zugGefahr() { const ph = zugPhase(); return ph >= ZUG_WARNUNG && ph < ZUG_START + 3; }
@@ -3580,30 +3583,41 @@ function lobbyUpdate(dt) {
 
 // ================== INTRO (eigenes Kino-Intro vor jedem Match) ==================
 let introT = 0, introSkip = false, kameraOverride = null;
-const INTRO_DAUER = 7.5;
+const INTRO_DAUER = 10;
+// Das Intro: 1. Anflug vom Himmel  2. Team 1 winkt  3. Team 2 winkt  4. VS  5. Kamera fliegt in deinen Kopf
+const INTRO_TEIL = [2.8, 5.2, 7.6, 8.8];
 function weich(f) { f = Math.max(0, Math.min(1, f)); return f * f * (3 - 2 * f); }
 function mischen(a, b, f) { return a.map((v, i) => v + (b[i] - v) * f); }
+function introTeamWinken(team) {
+  for (const e of kleckse) e.emote = e.team === team ? { art: 'winken', t0: zeit, versatz: e.nr * 0.6 } : null;
+}
 function introUpdate(dt) {
   const vorher = introT;
   introT += dt; zeit += dt;
-  const t = introT, p = spieler;
-  if (vorher < 3 && t >= 3) ton('wusch');
-  if (vorher < 5.5 && t >= 5.5) ton('wusch');
-  if (t < 3) {            // 1. Flug über die Arena
-    const a = -2.5 + t * 0.4;
-    kameraOverride = { pos: [W / 2 + Math.cos(a) * 1000 * KS, 620 - t * 70, H / 2 + Math.sin(a) * 750 * KS], ziel: [W / 2, 0, H / 2] };
-  } else if (t < 5.5) {   // 2. Beide Teams von der Seite
-    const f = weich((t - 3) / 2.5);
-    kameraOverride = { pos: [W / 2, 380 - f * 60, H / 2 + 1080 * KS - f * 100], ziel: [W / 2, 20, H / 2] };
-  } else {                // 3. Kamera fliegt in deinen Kopf
-    const f = weich((t - 5.5) / 1.6);
+  const t = introT, p = spieler, [t1, t2, t3, t4] = INTRO_TEIL;
+  for (const tt of INTRO_TEIL) if (vorher < tt && t >= tt) ton('wusch');
+  if (vorher < t1 && t >= t1) { introTeamWinken(0); ton('plopp'); }
+  if (vorher < t2 && t >= t2) { introTeamWinken(1); ton('plopp'); }
+  if (vorher < t3 && t >= t3) { introTeamWinken(-1); ton('ramm', 0.6); }
+  if (t < t1) {            // 1. Anflug: vom Himmel über die Landschaft runter zur Arena
+    const f = weich(t / t1);
+    kameraOverride = { pos: mischen([W / 2 - 400, 1500, H / 2 + 3300], [W / 2 + 500, 430, H / 2 + 1150], f), ziel: mischen([W / 2, 250, H / 2 - 1500], [W / 2, 0, H / 2], f) };
+  } else if (t < t3) {     // 2./3. Kamera fährt an einem Team vorbei – alle winken
+    const team = t < t2 ? 0 : 1, f = weich((t - (team ? t2 : t1)) / (t2 - t1)), b = BASIS[team], vor = team ? -1 : 1;
+    kameraOverride = { pos: [b.x + vor * (230 - f * 40), 95 - f * 20, b.y + 250 - f * 500], ziel: [b.x + vor * 20, 55, b.y] };
+  } else if (t < t4) {     // 4. Beide Teams von oben
+    const f = weich((t - t3) / (t4 - t3));
+    kameraOverride = { pos: [W / 2, 520 - f * 80, H / 2 + 1050 - f * 80], ziel: [W / 2, 20, H / 2] };
+  } else {                 // 5. Kamera fliegt in deinen Kopf
+    const f = weich((t - t4) / (INTRO_DAUER - t4 - 0.1));
     const auge = [p.x, AUGE, p.y], blick = [p.x + Math.cos(p.winkel) * 100, AUGE, p.y + Math.sin(p.winkel) * 100];
-    kameraOverride = { pos: mischen([W / 2, 300, H / 2 + 980 * KS], auge, f), ziel: mischen([W / 2, 20, H / 2], blick, f) };
+    kameraOverride = { pos: mischen([W / 2, 440, H / 2 + 970], auge, f), ziel: mischen([W / 2, 20, H / 2], blick, f) };
   }
   if (t >= INTRO_DAUER || introSkip) introEnde();
 }
 function introEnde() {
   kameraOverride = null; introSkip = false;
+  for (const e of kleckse) { e.emote = null; e.koerper.rotation.z = 0; }
   zustand = 'spiel'; startCountdown = 3; letzteSek = 99; ton('piep');
 }
 
@@ -5178,7 +5192,11 @@ function welt3D(dt) {
     e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6;
     if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
     if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
-    if (g.visible && e.koerper.visible) animiereFigur(e, v, dt);
+    if (zustand === 'feier') g.visible = !!e.emote;   // bei der Siegerehrung nur die auf der Bühne
+    if (g.visible && e.koerper.visible) {
+      if (e.emote) { const r = posieren(e, dt); g.position.y += r.hoch; g.rotation.y += r.dreh; }
+      else { e.koerper.rotation.z = 0; animiereFigur(e, v, dt); }
+    }
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
     e.welle.visible = !e.tot && e.taucht && e.team !== spieler.team && v > 60 && Math.sin(zeit * 16 + e.nr) > 0.4;
@@ -5294,6 +5312,7 @@ function hud() {
   if (zustand === 'stadt') { stadtHud(cw, ch); return; }
   if (!spieler || zustand === 'menu') return;
   if (zustand === 'intro') { introHud(cw, ch); return; }
+  if (zustand === 'feier') { feierHud(cw, ch); return; }
   if (sandsturm()) {   // Sand vor den Augen
     ctx.fillStyle = 'rgba(201,150,90,0.35)'; ctx.fillRect(0, 0, cw, ch);
     ctx.fillStyle = 'rgba(255,230,180,0.5)'; for (let i = 0; i < 120; i++) ctx.fillRect((i * 97 + zeit * 900 * (1 + i % 3)) % cw, (i * 53 + Math.sin(zeit + i) * 20) % ch, 3, 1);
@@ -5503,43 +5522,288 @@ function lobbyHud(cw, ch) {
   ctx.fillText(`🗺️ ${karteText()}  ·  🎨 ${farbText()}   [K] Karte  [F] Farben`, cw / 2, ch - 46);
 }
 function introHud(cw, ch) {
-  const t = introT;
+  const t = introT, [t1, t2, t3, t4] = INTRO_TEIL;
   // Kino-Balken oben und unten
   const balken = ch * 0.1 * weich(Math.min(t, INTRO_DAUER - t) * 3);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, balken); ctx.fillRect(0, ch - balken, cw, balken);
   ctx.textAlign = 'center';
-  if (t < 3) {
-    const rein = weich(t * 2), raus = 1 - weich((t - 2.5) * 2);
-    ctx.globalAlpha = Math.min(rein, raus);
-    textMitRand('⚔️ FARBSCHLACHT ⚔️', cw / 2 - (1 - rein) * cw, ch * 0.4, Math.min(80, cw / 10), '#ffd166');
-    textMitRand(`Arena: ${ARENEN[karte].emoji} ${ARENEN[karte].name}`, cw / 2 + (1 - rein) * cw, ch * 0.4 + 60, Math.min(40, cw / 18));
-    ctx.font = 'bold 22px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(ARENEN[karte].spezial || 'Mal in 3 Minuten mehr Boden an als die Gegner!', cw / 2, ch * 0.4 + 100);
-  } else if (t < 5.5) {
-    const f = weich((t - 3) * 3), raus = 1 - weich((t - 5.1) * 3);
-    ctx.globalAlpha = raus;
-    const breite = Math.min(320, cw * 0.36);
-    for (let team = 0; team < 2; team++) {
-      const x = team === 0 ? -breite + f * (breite + 20) : cw - f * (breite + 20);
-      const g = ctx.createLinearGradient(x, 0, x + breite, 0);
-      g.addColorStop(0, TEAMS[team].dunkel); g.addColorStop(1, TEAMS[team].col);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x, ch * 0.25, breite, ch * 0.5, 18); ctx.fill();
+  const teamKarte = (team, x, breite, alpha) => {
+    ctx.globalAlpha = alpha;
+    const g = ctx.createLinearGradient(x, 0, x + breite, 0); g.addColorStop(0, TEAMS[team].dunkel); g.addColorStop(1, TEAMS[team].col);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x, ch * 0.22, breite, ch * 0.56, 18); ctx.fill();
+    ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 3; ctx.stroke();
+    textMitRand(`${TEAMS[team].emoji} Team ${TEAMS[team].name}`, x + breite / 2, ch * 0.22 + 46, Math.min(30, breite / 9));
+    kleckse.filter(e => e.team === team).forEach((e, i) => {
+      const y = ch * 0.22 + 95 + i * 44;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.roundRect(x + 14, y - 26, breite - 28, 38, 10); ctx.fill();
+      ctx.font = 'bold 19px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+      ctx.fillText(`${WAFFEN[e.waffe].emoji} ${e.spieler ? '⭐ ' + konto.name + ' (Du)' : e.name}`, x + 26, y);
+      ctx.font = '13px system-ui'; ctx.fillStyle = '#ffffffcc'; ctx.textAlign = 'right';
+      ctx.fillText(`${WAFFEN[e.waffe].name} · ${ULTIS[e.ultiArt] ? ULTIS[e.ultiArt].emoji : ''}`, x + breite - 26, y);
       ctx.textAlign = 'center';
-      textMitRand('Team ' + TEAMS[team].name, x + breite / 2, ch * 0.25 + 44, 30);
-      kleckse.filter(e => e.team === team).forEach((e, i) => {
-        ctx.font = 'bold 20px system-ui'; ctx.fillStyle = '#fff';
-        const name = e.spieler ? `⭐ ${konto.name} (Du)` : e.name;
-        ctx.fillText(`${WAFFEN[e.waffe].emoji} ${name}`, x + breite / 2, ch * 0.25 + 95 + i * 36);
-      });
-    }
-    const puls = 1 + Math.sin(t * 12) * 0.08;
-    textMitRand('VS', cw / 2, ch / 2 + 30, Math.max(1, Math.min(110, cw / 8) * puls * f), '#ffffff');
+    });
+    ctx.globalAlpha = 1;
+  };
+  const breite = Math.min(340, cw * 0.38);
+  if (t < t1) {
+    const rein = weich(t * 1.5), raus = 1 - weich((t - t1 + 0.4) * 2.5);
+    ctx.globalAlpha = Math.min(rein, raus);
+    textMitRand('KLECKS-KRIEG', cw / 2, ch * 0.34, Math.min(90, cw / 9) * (0.8 + 0.2 * rein), '#ffd166');
+    textMitRand(`${ARENEN[karte].emoji} ${ARENEN[karte].name}`, cw / 2 + (1 - rein) * cw, ch * 0.34 + 66, Math.min(44, cw / 17));
+    ctx.font = 'bold 20px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(ARENEN[karte].spezial || 'Mal in 3 Minuten mehr Boden an als die Gegner!', cw / 2, ch * 0.34 + 108);
+    ctx.globalAlpha = 1;
+  } else if (t < t3) {
+    const team = t < t2 ? 0 : 1, t0 = team ? t2 : t1, rein = weich((t - t0) * 3), raus = 1 - weich((t - t0 - 2.1) * 4);
+    const x = team === 0 ? 30 - (1 - rein) * (breite + 40) : cw - breite - 30 + (1 - rein) * (breite + 40);
+    teamKarte(team, x, breite, Math.min(rein, raus));
+  } else if (t < t4) {
+    const f = weich((t - t3) * 3);
+    teamKarte(0, -breite + f * (breite + 20), breite, 1); teamKarte(1, cw - f * (breite + 20), breite, 1);
+    textMitRand('VS', cw / 2, ch / 2 + 30, Math.max(1, Math.min(120, cw / 7) * (1 + Math.sin(t * 12) * 0.08) * f), '#ffffff');
   } else {
-    ctx.globalAlpha = weich((t - 5.6) * 3);
+    ctx.globalAlpha = weich((t - t4) * 3);
     textMitRand('BEREIT?', cw / 2, ch / 2, Math.min(90, cw / 9), '#ffd166');
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
   ctx.font = '14px system-ui'; ctx.fillStyle = '#ffffffaa'; ctx.textAlign = 'right';
   ctx.fillText('Leertaste / Klick = Überspringen', cw - 16, ch - 14);
+}
+
+// ================== 🏆 SIEGEREHRUNG: Auswertung → Sieger-Tanz → Verlierer-Tanz → Bester Spieler ==================
+// Jede Waffe hat ihren eigenen Sieger- und Verlierer-Tanz!
+const EMOTE_ART = { spritzer: 'schuss', doppel: 'schuss', kanone: 'schuss', ling: 'schuss', eimer: 'eimer', roller: 'roller', pinsel: 'pinsel',
+  sniper: 'ziel', bogen: 'ziel', schirm: 'schirm', tana: 'schwert' };
+const EMOTE_NAMEN = {
+  sieg: { schuss: 'Freudensprünge & Farbfontäne', roller: 'Walzen-Wirbel', pinsel: 'Luftmalerei', ziel: 'Salto & Siegerpose', eimer: 'Farbdusche', schirm: 'Schirm-Tanz', schwert: 'Schwert-Salut' },
+  niederlage: { schuss: 'Auf die Knie', roller: 'Auf die Walze gestützt', pinsel: 'Traurig wischen', ziel: 'Kopf in den Händen', eimer: 'Eimer auf dem Kopf', schirm: 'Unterm Schirm zittern', schwert: 'Schwert in den Boden' },
+};
+function emoteArt(e) { return EMOTE_ART[typVon(e.waffe)] || 'schuss'; }
+function handPos(a, b) { return [(6 * Math.sin(a) + 6 * Math.sin(a + b)) * 0.88, 14 - 6 * Math.cos(a) - 6 * Math.cos(a + b)]; }
+// Setzt die Körperteile für einen Tanz. Gibt zurück, wie hoch / gedreht die ganze Figur ist.
+function posieren(e, dt) {
+  const em = e.emote, ud = e.koerper.userData, w = e.waffenModell, t = zeit - em.t0 + (em.versatz || 0);
+  const P = { huefte: [0, 0], knie: [0, 0], arme: [[0.15, 0.2], [0.15, 0.2]], oberY: 0, ober: 0, kopf: 0, kopfY: 0, hoch: 0, dreh: 0, salto: 0,
+    waffe: null, wrz: 0, wrx: 0 };
+  const sprung = (tempo, h) => { const j = Math.abs(Math.sin(t * tempo)); P.hoch = j * h; P.huefte = [0.6 * j, 0.6 * j]; P.knie = [-1.1 * j, -1.1 * j]; return j; };
+  const knien = () => { P.knie = [-1.5, -1.5]; P.oberY = -7; };
+  const sitzen = () => { P.huefte = [1.5, 1.5]; P.knie = [-1.4, -1.4]; P.oberY = -7; };
+  const hocken = () => { P.huefte = [1.2, 1.2]; P.knie = [-2.1, -2.1]; P.oberY = -6; };
+  const fallen = (y) => { P.waffe = [12, y]; P.wrz = -1.45; };   // Waffe liegt am Boden
+  const mal = (k) => { e.malT = (e.malT || 0) - dt; if (e.malT <= 0) { e.malT = k; return true; } return false; };
+  e.schirmAuf = false;
+  switch (em.art) {
+    // ---------- Sieger ----------
+    case 'sieg_schuss':
+      sprung(5, 16); P.arme = [[2.7, 0.1], [2.7, 0.1]]; P.wrz = 1.5; P.kopf = 0.35;
+      if (mal(0.18)) spritzer(e.x, e.y, hAbs(e) + 55 + P.hoch, e.team, 5, 260);
+      break;
+    case 'sieg_roller':
+      P.dreh = t * 7; P.hoch = Math.abs(Math.sin(t * 7)) * 7; P.arme = [[2.9, 0.1], [2.9, 0.1]]; P.wrz = 1.6; P.kopf = 0.3;
+      if (mal(0.12)) spritzer(e.x + Math.cos(t * 7) * 25, e.y + Math.sin(t * 7) * 25, hAbs(e) + 45, e.team, 3, 160);
+      break;
+    case 'sieg_pinsel': {
+      const s1 = Math.sin(t * 7); P.arme = [[1.5 + s1 * 0.9, 0.3], [1.5 + s1 * 0.9, 0.3]]; P.wrz = s1 * 1.1; P.dreh = Math.sin(t * 3.5) * 0.7; P.hoch = Math.abs(Math.cos(t * 3.5)) * 5;
+      if (mal(0.1)) spritzer(e.x, e.y, hAbs(e) + 40 + s1 * 15, e.team, 2, 120);
+      break;
+    }
+    case 'sieg_ziel': {
+      const p = t % 2.4;
+      if (p < 0.75) { const f = p / 0.75; P.salto = -f * Math.PI * 2; P.hoch = Math.sin(f * Math.PI) * 40; P.huefte = [1.3, 1.3]; P.knie = [-1.8, -1.8]; P.arme = [[1.2, 1.2], [1.2, 1.2]]; P.wrz = 0.5; }
+      else { P.arme = [[2.3, 0.1], [2.3, 0.1]]; P.wrz = 0.9; P.kopf = 0.5 + Math.sin(t * 6) * 0.05; P.ober = 0.15; if (p > 1.5 && p < 1.6 && mal(0.3)) spritzer(e.x, e.y, hAbs(e) + 70, e.team, 10, 300); }
+      break;
+    }
+    case 'sieg_eimer': {
+      const p = t % 2.6;
+      if (p < 1.3) { const f = Math.min(1, p / 0.8); P.arme = [[0.6 + f * 2.4, 0.1], [0.6 + f * 2.4, 0.1]]; P.wrz = f * 2.6; P.kopf = 0.3;
+        if (p > 0.85 && mal(0.06)) spritzer(e.x, e.y, hAbs(e) + 40, e.team, 4, 90); }   // Farbe über den Kopf schütten
+      else { sprung(6, 12); P.arme = [[2.5, 0.3], [2.5, 0.3]]; P.wrz = 1.2; }
+      break;
+    }
+    case 'sieg_schirm':
+      e.schirmAuf = true; P.arme = [[2.4 + Math.sin(t * 8) * 0.4, 0.3], [2.9, 0]]; P.wrz = 1.57; P.wrx = t * 5; P.hoch = Math.abs(Math.sin(t * 4)) * 7; P.dreh = Math.sin(t * 2) * 0.5;
+      break;
+    case 'sieg_schwert': {
+      const p = t % 2.2;
+      if (p < 0.6) { P.dreh = p / 0.6 * Math.PI * 2; P.arme = [[1.6, 0], [1.6, 0]]; P.wrz = 0; if (mal(0.05)) spritzer(e.x, e.y, hAbs(e) + 25, e.team, 3, 200); }
+      else { P.arme = [[3.0, 0.1], [3.0, 0.1]]; P.wrz = 1.6; P.hoch = Math.abs(Math.sin(t * 3)) * 4; P.kopf = 0.35; if (mal(0.25)) spritzer(e.x, e.y, hAbs(e) + 80, e.team, 3, 120); }
+      break;
+    }
+    case 'winken':   // fürs Intro: Hallo!
+      P.arme = [[2.8, 0.3 + Math.sin(t * 10) * 0.45], [1.1, 0.45]]; P.wrz = 0.3; P.hoch = Math.abs(Math.sin(t * 4)) * 3; P.kopf = 0.15;
+      break;
+    // ---------- Verlierer ----------
+    case 'nieder_schuss':
+      knien(); P.ober = -0.35 + Math.sin(t * 18) * 0.04; P.kopf = -0.6; P.arme = [[0.1, 0.4], [0.1, 0.4]]; fallen(-6);
+      break;
+    case 'nieder_roller':
+      P.arme = [[0.9, 0.2], [0.9, 0.2]]; P.wrz = -0.6; P.kopf = -0.55; P.ober = -0.25; P.oberY = Math.sin(t * 1.5) * 1.2;
+      break;
+    case 'nieder_pinsel':
+      P.arme = [[0.5 + Math.sin(t * 1.5) * 0.3, 0.3], [0.5 + Math.sin(t * 1.5) * 0.3, 0.3]]; P.wrz = -0.3; P.kopf = -0.6; P.ober = -0.3; P.dreh = Math.sin(t * 0.7) * 0.25;
+      break;
+    case 'nieder_ziel':
+      sitzen(); P.arme = [[2.0, 1.6], [2.0, 1.6]]; P.kopf = -0.45; P.kopfY = Math.sin(t * 4) * 0.3; fallen(-6);
+      break;
+    case 'nieder_eimer':
+      P.waffe = [0, 31]; P.wrz = Math.PI; P.wrx = Math.sin(t * 3) * 0.2; P.arme = [[1.3 + Math.sin(t * 2) * 0.3, 0.2], [1.3 - Math.sin(t * 2) * 0.3, 0.2]]; P.dreh = Math.sin(t * 1.3) * 0.5;
+      break;
+    case 'nieder_schirm':
+      hocken(); e.schirmAuf = true; P.arme = [[2.4, 0.6], [2.4, 0.6]]; P.wrz = 1.57; P.ober = Math.sin(t * 30) * 0.03; P.kopf = -0.3;
+      break;
+    case 'nieder_schwert':
+      P.huefte = [1.4, 0]; P.knie = [-1.5, -1.5]; P.oberY = -6; P.waffe = [12, -4]; P.wrz = -1.57; P.arme = [[1.1, 0.2], [1.1, 0.2]]; P.kopf = -0.7;
+      break;
+  }
+  ud.beine.forEach((bn, i) => { bn.huefte.rotation.z = P.huefte[i]; bn.knie.rotation.z = P.knie[i]; });
+  ud.arme.forEach((arm, i) => { arm.schulter.rotation.z = P.arme[i][0]; arm.ellbogen.rotation.z = P.arme[i][1]; });
+  ud.ober.position.y = 14; ud.ober.rotation.set(0, 0, P.ober);
+  ud.kopf.rotation.z = P.kopf; ud.kopf.rotation.y = P.kopfY;
+  ud.augen.scale.y = ((zeit + e.nr * 0.77) % 3.3) < 0.12 ? 0.1 : 1;
+  if (ud.umhang) ud.umhang.rotation.z = -0.4 + Math.sin(zeit * 8 + e.nr) * 0.1;
+  const [hx, hy] = P.waffe || handPos(P.arme[1][0], P.arme[1][1]);
+  w.visible = true; w.position.set(hx, hy, 0); w.rotation.set(P.wrx, 0, P.wrz);
+  if (e.werferModell) e.werferModell.visible = false;
+  animiereWaffe(w.userData, e, dt, 0);
+  e.koerper.rotation.z = P.salto;
+  e.koerper.position.y += P.oberY;   // Knien/Sitzen/Hocken: die ganze Figur geht runter
+  return { hoch: P.hoch, dreh: P.dreh };
+}
+
+const BUEHNE = { x: W / 2, y: H + 650, h: 22 };
+const buehne = new THREE.Group(); buehne.visible = false; scene.add(buehne);
+const buehneFahnen = [];
+(function buehneBauen() {
+  const holz = mat('#7a4b2e', { roughness: 0.8 }), dunkel = mat('#2b2f4a'), gold = MAT_GOLD;
+  buehne.add(zylinder(holz, 200, 210, BUEHNE.h, BUEHNE.x, BUEHNE.h / 2, BUEHNE.y), ringY(gold, 205, 2.5, BUEHNE.x, BUEHNE.h, BUEHNE.y));
+  buehne.add(zylinder(dunkel, 70, 72, 10, BUEHNE.x, BUEHNE.h + 5, BUEHNE.y - 40), ringY(gold, 71, 1.5, BUEHNE.x, BUEHNE.h + 10, BUEHNE.y - 40));   // Podest für den Besten
+  for (let i = 0; i < 4; i++) buehne.add(klotz(holz, 420 - i * 40, 6, 30, BUEHNE.x, BUEHNE.h - 6 - i * 5, BUEHNE.y + 205 + i * 22));   // Treppe
+  // Rückwand mit großen Fahnen in Teamfarbe
+  buehne.add(klotz(dunkel, 520, 200, 12, BUEHNE.x, 100, BUEHNE.y - 190));
+  for (let i = 0; i < 6; i++) {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(60, 150), mat('#ffffff', { side: THREE.DoubleSide }));
+    f.position.set(BUEHNE.x - 225 + i * 90, 115, BUEHNE.y - 182); buehne.add(f); buehneFahnen.push(f);
+  }
+  // Scheinwerfer
+  for (const sx of [-1, 1]) {
+    buehne.add(zylinder(dunkel, 4, 5, 260, BUEHNE.x + sx * 270, 130, BUEHNE.y - 150), zylinder(mat('#fff4c2', { emissive: '#fff4c2', emissiveIntensity: 1.5 }), 16, 12, 14, BUEHNE.x + sx * 255, 260, BUEHNE.y - 140));
+    const kegel = new THREE.Mesh(new THREE.ConeGeometry(110, 280, 24, 1, true), new THREE.MeshBasicMaterial({ color: '#fff4c2', transparent: true, opacity: 0.09, depthWrite: false, side: THREE.DoubleSide }));
+    kegel.position.set(BUEHNE.x + sx * 125, 130, BUEHNE.y - 60); kegel.rotation.z = sx * 0.5; buehne.add(kegel);
+  }
+})();
+const kroneMvp = new THREE.Group(); kroneMvp.visible = false; scene.add(kroneMvp);
+(function () {
+  kroneMvp.add(zylinder(MAT_GOLD, 7, 7.5, 4, 0, 0, 0));
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, z = new THREE.Mesh(new THREE.ConeGeometry(1.6, 5, 6), MAT_GOLD); z.position.set(Math.cos(a) * 6.5, 4, Math.sin(a) * 6.5); kroneMvp.add(z); }
+  kroneMvp.add(kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 0.6 }), 1.4, 7.4, 0, 0));
+})();
+
+let feier = null;
+const FEIER_PHASEN = [['auswertung', 5.2], ['sieger', 5.5], ['verlierer', 5], ['mvp', 5.5]];
+function feierStarten(pO, pL) {
+  const sieger = pO === pL ? -1 : pO > pL ? 0 : 1;
+  // Bester Spieler: Färben zählt doppelt!
+  let mvp = null, best = -1;
+  for (const e of kleckse) { const w = (e.punkte || 0) * 2 + (e.ko || 0) * 100; e.mvpWert = w; if (w > best) { best = w; mvp = e; } }
+  feier = { pO, pL, sieger, mvp, phase: 0, t: 0, weiter: false };
+  for (const e of kleckse) {
+    Object.assign(e, { tot: false, todT: 0, spawnT: 0, taucht: false, tauchAnim: 0, schild: 0, gigaT: 0, panzerT: 0, kugelT: 0, laserT: 0, werferT: 0, trifT: 0, wirbelBis: 0, tanaDashBis: 0, schwingT: 0, laden: false, ladung: 0, rueck: 0 });
+    e.emote = null; e.koerper.rotation.z = 0;
+  }
+  for (const b of bomben) wegUndEntsorgen(b.mesh); bomben = [];
+  for (const sh of schuesse) scene.remove(sh.mesh); schuesse = [];
+  zustand = 'feier';
+  buehne.visible = true;
+  feierPhaseStarten();
+}
+function feierAufstellen(liste, art) {
+  for (const e of kleckse) { e.emote = null; }
+  liste.forEach((e, i) => {
+    e.x = BUEHNE.x + (i - (liste.length - 1) / 2) * 62; e.y = BUEHNE.y + 20; e.z = BUEHNE.h; e.winkel = Math.PI / 2; e.vx = e.vy = 0;
+    e.emote = { art: art + '_' + emoteArt(e), t0: zeit, versatz: i * 0.37 };
+  });
+}
+function feierPhaseStarten() {
+  const f = feier, [name] = FEIER_PHASEN[f.phase];
+  f.t = 0;
+  kroneMvp.visible = false;
+  const fahnenTeam = f.phase === 2 ? 1 - Math.max(0, f.sieger) : Math.max(0, f.sieger);
+  buehneFahnen.forEach((fa, i) => fa.material.color.set(f.sieger < 0 ? TEAMS[i % 2].col : i % 2 ? TEAMS[fahnenTeam].col : TEAMS[fahnenTeam].hell));
+  if (name === 'auswertung') { for (const e of kleckse) e.emote = null; ton('wirbel'); }
+  else if (name === 'sieger') { feierAufstellen(kleckse.filter(e => e.team === (f.sieger < 0 ? 0 : f.sieger)), f.sieger < 0 ? 'sieg' : 'sieg'); ton('sieg'); }
+  else if (name === 'verlierer') { feierAufstellen(kleckse.filter(e => e.team === (f.sieger < 0 ? 1 : 1 - f.sieger)), f.sieger < 0 ? 'sieg' : 'nieder'); ton(f.sieger < 0 ? 'sieg' : 'niederlage'); }
+  else if (name === 'mvp') {
+    for (const e of kleckse) e.emote = null;
+    const m = f.mvp; m.x = BUEHNE.x; m.y = BUEHNE.y - 40; m.z = BUEHNE.h + 10; m.winkel = Math.PI / 2;
+    m.emote = { art: 'sieg_' + emoteArt(m), t0: zeit, versatz: 0 };
+    kroneMvp.visible = true; ton('fanfare');
+  }
+}
+function feierUpdate(dt) {
+  const f = feier; if (!f) return;
+  f.t += dt; zeit += dt;
+  const [name, dauer] = FEIER_PHASEN[f.phase];
+  // Spritzer-Teilchen weiterfliegen lassen (sonst passiert das nur im Spiel)
+  for (let i = partikel.length - 1; i >= 0; i--) {
+    const q = partikel[i]; q.vh -= 600 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.h += q.vh * dt; q.vx *= 0.95; q.vy *= 0.95; q.leben -= dt;
+    if (q.leben <= 0 || q.h < 0) partikel.splice(i, 1);
+  }
+  // Konfetti bei den Siegern und beim Besten
+  if ((name === 'sieger' || name === 'mvp') && Math.random() < dt * 14) spritzer(BUEHNE.x + (Math.random() - 0.5) * 380, BUEHNE.y + (Math.random() - 0.5) * 100, 230, Math.random() < 0.5 ? 0 : 1, 3, 90);
+  if (name === 'auswertung' && f.t > 3.4 && !f.verkuendet) { f.verkuendet = true; ton('fanfare'); }
+  // Kamera
+  if (name === 'auswertung') { const k = weich(f.t / dauer); kameraOverride = { pos: [W / 2 + Math.sin(f.t * 0.2) * 200, 1500 + k * 300, H / 2 + 900 - k * 300], ziel: [W / 2, 0, H / 2] }; }
+  else if (name === 'mvp') { const k = weich(f.t / 1.5); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.5) * 60, 90 - k * 30, BUEHNE.y + 320 - k * 160], ziel: [BUEHNE.x, BUEHNE.h + 30, BUEHNE.y - 40] }; }
+  else { const k = weich(f.t / 1.2); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.4) * 90, 110 - k * 40, BUEHNE.y + 420 - k * 130], ziel: [BUEHNE.x, BUEHNE.h + 28, BUEHNE.y] }; }
+  if (f.mvp && kroneMvp.visible) { const m = f.mvp; kroneMvp.position.set(m.x, hAbs(m) + 46 + Math.sin(zeit * 3) * 2, m.y); kroneMvp.rotation.y += dt * 2; }
+  if (f.t >= dauer || f.weiter) {
+    f.weiter = false;
+    if (f.phase + 1 >= FEIER_PHASEN.length) { feierEnde(); return; }
+    f.phase++; feierPhaseStarten();
+  }
+}
+function feierEnde() {
+  if (!feier) return;
+  for (const e of kleckse) { e.emote = null; e.koerper.rotation.z = 0; }
+  buehne.visible = false; kroneMvp.visible = false; kameraOverride = null;
+  feier = null; zustand = 'ende';
+  rundenEndeAnzeigen();
+}
+function feierHud(cw, ch) {
+  const f = feier; if (!f) return;
+  const [name] = FEIER_PHASEN[f.phase], t = f.t;
+  ctx.textAlign = 'center';
+  const balkenH = ch * 0.08; ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, cw, balkenH); ctx.fillRect(0, ch - balkenH, cw, balkenH);
+  if (name === 'auswertung') {
+    textMitRand('📊 AUSWERTUNG', cw / 2, ch * 0.2, Math.min(64, cw / 12), '#ffd166');
+    const g = weich((t - 1) / 2.3), bw = Math.min(560, cw * 0.7), x0 = cw / 2 - bw / 2, y0 = ch * 0.42;
+    for (let k = 0; k < 2; k++) {
+      const wert = (k ? f.pL : f.pO) * g, y = y0 + k * 70;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(x0, y, bw, 50, 12); ctx.fill();
+      ctx.fillStyle = TEAMS[k].col; ctx.beginPath(); ctx.roundRect(x0, y, Math.max(12, bw * wert / 100 * 1.6), 50, 12); ctx.fill();
+      ctx.textAlign = 'left'; textMitRand(`${TEAMS[k].emoji} ${TEAMS[k].name}`, x0 + 14, y + 36, 24);
+      ctx.textAlign = 'right'; textMitRand(`${wert.toFixed(1)}%`, x0 + bw - 14, y + 36, 28, t > 3.3 ? '#ffd166' : '#ffffff');
+    }
+    ctx.textAlign = 'center';
+    if (t > 3.4) {
+      const k = weich((t - 3.4) * 3), gr = Math.min(70, cw / 11) * (0.6 + 0.4 * k);
+      const text = f.sieger < 0 ? '🤝 UNENTSCHIEDEN!' : `🏆 ${TEAMS[f.sieger].name.toUpperCase()} GEWINNT!`;
+      textMitRand(text, cw / 2, ch * 0.78, gr, f.sieger < 0 ? '#ffffff' : TEAMS[f.sieger].hell);
+    }
+  } else if (name === 'sieger' || name === 'verlierer') {
+    const team = name === 'sieger' ? Math.max(0, f.sieger) : (f.sieger < 0 ? 1 : 1 - f.sieger), gewinnt = name === 'sieger' || f.sieger < 0;
+    textMitRand(gewinnt ? `🏆 ${TEAMS[team].name}: Sieger-Tanz!` : `😵 ${TEAMS[team].name}: Verlierer-Tanz …`, cw / 2, ch * 0.16, Math.min(46, cw / 16), TEAMS[team].hell);
+    const leute = kleckse.filter(e => e.team === team);
+    ctx.font = 'bold 15px system-ui'; ctx.fillStyle = '#fff';
+    ctx.fillText(leute.map(e => `${e.spieler ? '⭐' + konto.name : e.name}: ${EMOTE_NAMEN[gewinnt ? 'sieg' : 'niederlage'][emoteArt(e)]}`).join('   ·   '), cw / 2, ch - balkenH / 2 + 5);
+  } else if (name === 'mvp') {
+    const m = f.mvp, k = weich(t * 2);
+    textMitRand('⭐ BESTER SPIELER ⭐', cw / 2, ch * 0.16, Math.min(54, cw / 14) * (0.7 + 0.3 * k), '#ffd166');
+    textMitRand(`${WAFFEN[m.waffe].emoji} ${m.spieler ? konto.name + ' (Du!)' : m.name}`, cw / 2, ch * 0.25, Math.min(40, cw / 18), TEAMS[m.team].hell);
+    ctx.font = 'bold 17px system-ui'; ctx.fillStyle = '#fff';
+    ctx.fillText(`🎨 ${m.punkte || 0} Kästchen gefärbt (zählt doppelt!)  +  🎯 ${m.ko || 0} erwischt  =  ${m.mvpWert} Punkte`, cw / 2, ch - balkenH / 2 + 6);
+  }
+  ctx.font = '13px system-ui'; ctx.fillStyle = '#ffffffaa'; ctx.textAlign = 'right';
+  ctx.fillText('Leertaste / Klick = weiter', cw - 14, balkenH - 10);
 }
 
 // ================== RUNDEN-ENDE ==================
@@ -5549,6 +5813,7 @@ function rundenEnde(daten) {
   zielRing.visible = false;
   if (document.pointerLockElement) document.exitPointerLock();
   musikModusSetzen('aus');
+  setTimeout(() => { if (zustand === 'feier') musikModusSetzen('menu', 'pop'); }, 2500);   // fröhliche Musik zur Siegerehrung
   const pO = daten ? zahl(daten.pO, 0, 100, 0) : zaehler[1] / flaeche * 100, pL = daten ? zahl(daten.pL, 0, 100, 0) : zaehler[2] / flaeche * 100;
   if (daten && Array.isArray(daten.st)) {   // eigene Punkte vom Gastgeber
     const st = daten.st[kleckse.indexOf(spieler)];
@@ -5557,10 +5822,10 @@ function rundenEnde(daten) {
   if (istHost()) mpAnAlle({ t: 'ende', pO: r1(pO), pL: r1(pL), st: kleckse.map(e => [e.punkte, e.ko, e.tode]) });
   $('nochmal').disabled = istGast();
   $('nochmal').textContent = istGast() ? '⏳ Warte auf den Gastgeber …' : istHost() ? '🔁 Nochmal mit Freunden (Lobby)' : '🔁 Nochmal (Lobby)';
+  if (daten && Array.isArray(daten.st)) kleckse.forEach((e, i) => { const st = daten.st[i]; if (Array.isArray(st)) { e.punkte = zahl(st[0], 0, 1e6, 0); e.ko = zahl(st[1], 0, 999, 0); } });   // für „Bester Spieler“
   const meinTeam = spieler.team;
   const gewonnen = meinTeam === 0 ? pO > pL : pL > pO;
-  ton(gewonnen ? 'sieg' : 'niederlage');
-  setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu', listenSong('menu')); }, 3000);
+  setTimeout(() => { if (zustand !== 'spiel') musikModusSetzen('menu', listenSong('menu')); }, 22000);
   document.getElementById('sieger').textContent = pO === pL ? '🤝 Unentschieden!' : (pO > pL ? `${TEAMS[0].emoji} ${TEAMS[0].name} gewinnt!` : `${TEAMS[1].emoji} ${TEAMS[1].name} gewinnt!`) + (gewonnen ? ' 🏆' : ' 😵');
   const summe = pO + pL || 1;
   const bO = document.getElementById('balkenO'), bL = document.getElementById('balkenL');
@@ -5576,9 +5841,15 @@ function rundenEnde(daten) {
     `🎨 Du hast <b>${spieler.punkte}</b> Farbkästchen gemalt ${neu ? '– <b>NEUER REKORD!</b> 🌟' : `(Rekord: ${konto.rekord})`}<br>` +
     `🎯 Erwischt: <b>${spieler.ko}</b> &nbsp; 💦 Selbst erwischt worden: <b>${spieler.tode}</b><br>` +
     `<span style="font-size:1.4rem;color:#ffd166">🪙 +${verdient} Münzen</span> (jetzt: ${konto.muenzen})`;
-  setTimeout(() => ton('kauf'), 900);
+  endeDaten = { bO, bL, wO: pO / summe * 100, wL: pL / summe * 100 };
+  feierStarten(pO, pL);   // erst die Siegerehrung, dann das Ergebnis-Fenster
+}
+let endeDaten = null;
+function rundenEndeAnzeigen() {
+  musikModusSetzen('menu', listenSong('menu'));
+  setTimeout(() => ton('kauf'), 500);
   document.getElementById('ende').classList.remove('hidden');
-  setTimeout(() => { bO.style.width = (pO / summe * 100) + '%'; bL.style.width = (pL / summe * 100) + '%'; }, 100);
+  const d = endeDaten; if (d) setTimeout(() => { d.bO.style.width = d.wO + '%'; d.bL.style.width = d.wL + '%'; }, 100);
 }
 
 // ================== MENÜ, KONTO & SHOPS ==================
@@ -6102,11 +6373,12 @@ function schleife(t) {
   const onlinePause = zustand === 'pause' && mp.aktiv;     // online läuft das Spiel auch in der Pause weiter
   if (zustand === 'spiel' || zustand === 'lobby' || onlinePause) { if (istGast()) gastUpdate(dt); else update(dt); }
   if (zustand === 'intro') introUpdate(dt);
+  if (zustand === 'feier') feierUpdate(dt);
   if (zustand === 'stadt') stadtUpdate(dt);
   mpTick(dt);
   if (zustand === 'menu') vorschauZeigen(dt);           // Menü & Shops: dein Junge dreht sich auf dem Podest
   else if (zustand === 'stadt' || zustand === 'wahl') stadtZeigen(zustand === 'stadt' ? dt : 0);
-  else if (spieler) { vmHalter.visible = true; welt3D(['spiel', 'lobby', 'intro'].includes(zustand) || onlinePause ? dt : 0); }
+  else if (spieler) { vmHalter.visible = true; welt3D(['spiel', 'lobby', 'intro', 'feier'].includes(zustand) || onlinePause ? dt : 0); }
   hud();
   requestAnimationFrame(schleife);
 }
