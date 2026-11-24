@@ -1222,7 +1222,7 @@ function arenaDeko() {
 }
 // 🚉 Bahnhof: Glasdächer über den Bahnsteigen, Signale, Bahnhofsgebäude mit Uhr – und der Zug
 function bahnhofDeko(d) {
-  const gl = ARENEN.bahnhof.zonen[0], stahl = mat('#3d4a5c', { metalness: 0.6, roughness: 0.35 });
+  const gummi = mat('#23263d', { roughness: 0.9 }), gl = ARENEN.bahnhof.zonen[0], stahl = mat('#3d4a5c', { metalness: 0.6, roughness: 0.35 });
   const glas = new THREE.MeshStandardMaterial({ color: '#cfeaff', transparent: true, opacity: 0.3, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
   for (const [x0, x1] of [[600, 740], [860, 1000]]) for (const [y0, y1] of [[120, 420], [580, 880]]) {   // Glasdach auf Säulen
     const cx = (x0 + x1) / 2 * KS, cy = (y0 + y1) / 2 * KS, bw = (x1 - x0) * KS, bt = (y1 - y0) * KS;
@@ -1255,7 +1255,7 @@ function bahnhofDeko(d) {
   d('bahnhof', new THREE.Mesh(new THREE.CircleGeometry(45, 32), new THREE.MeshBasicMaterial({ map: ut })).translateX(W / 2).translateY(210).translateZ(-99));
   // Abgestellte Waggons auf Nebengleisen draußen
   for (const [x, z, f] of [[-160, 300, '#2a9d8f'], [-160, 1000, '#3b6fd8'], [W + 160, 420, '#ff9f1c'], [W + 160, 1050, '#2a9d8f']]) {
-    d('bahnhof', klotz(mat(f), 110, 60, 300, x, 45, z), klotz(MAT_GRAU, 100, 8, 290, x, 79, z), klotz(MAT_GUMMI, 100, 14, 280, x, 8, z));
+    d('bahnhof', klotz(mat(f), 110, 60, 300, x, 45, z), klotz(MAT_GRAU, 100, 8, 290, x, 79, z), klotz(gummi, 100, 14, 280, x, 8, z));
   }
   // Der Zug: Lok + 2 Waggons. Vorne ist z = 0, der Zug zeigt nach +z
   const zug = new THREE.Group(), rot = mat('#d62839', { roughness: 0.4 }), weiss = mat('#f4f4f4', { roughness: 0.4 }), dunkel = mat('#2b2f4a');
@@ -1270,7 +1270,7 @@ function bahnhofDeko(d) {
     for (let k = 0; k < 6; k++) zug.add(klotz(weiss, 113, 16, 4, 0, 60, z0 - 12 - k * 32));
     zug.add(klotz(rot, 112, 6, 185, 0, 36, z0 - 92), klotz(dunkel, 24, 10, 20, 0, 22, z0 + 6));
   }
-  for (const z of [-30, -165, -230, -360, -425, -555]) zug.add(zylinderX(MAT_GUMMI, 9, 9, 114, 0, 9, z));   // Räder (Achsen)
+  for (const z of [-30, -165, -230, -360, -425, -555]) zug.add(zylinderX(gummi, 9, 9, 114, 0, 9, z));   // Räder (Achsen)
   zug.children.forEach(c => { c.castShadow = false; });
   zug.visible = false; zugMesh = zug; d('bahnhof', zug);
 }
@@ -2152,7 +2152,7 @@ const schildGeo = new THREE.SphereGeometry(32, 20, 14);
 let haendeWaffe = null, haendeWerfer = null, haendeMinigun = null, swayX = 0, swayY = 0;
 const vmHalter = new THREE.Group(); kamera.add(vmHalter);
 const VM_POS = { doppel: [0, -6, -9, 0.45], kanone: [5, -7, -10, 0.5], spritzer: [5, -6, -9, 0.5], sniper: [5, -5.5, -7, 0.45], eimer: [6, -2.5, -11, 0.5], roller: [2.5, -3.5, -5, 0.55], pinsel: [2.5, -3.5, -5, 0.55] };
-const VM_EXTRA_POS = {}, VM_EXTRA_HAENDE = {};
+const VM_EXTRA_POS = { ling: [4, -6.5, -9, 0.45], bogen: [6, -4, -8, 0.5] }, VM_EXTRA_HAENDE = { ling: [[0.5, -5, 0], [10, -2, -3.5]], bogen: [[4, 0, 0], [-3, 0, 0]] };
 const VM_HAENDE = { doppel: [[1.5, -5, -6], [1.5, -5, 6]], kanone: [[1, -5.5, 0], [13, -4, 0]], spritzer: [[1.5, -5, 0], [15, -1, 0]], sniper: [[2.5, -4, 0], [17, -2, 0]], eimer: [[0, 0, 0]], roller: [[0, 0, 0], [5.5, -4, 0]], pinsel: [[0, 0, 0], [5.5, -3.3, 0]] };
 function baueHaendeWaffe(art, aussehen, an) {
   if (haendeWaffe) vmHalter.remove(haendeWaffe);
