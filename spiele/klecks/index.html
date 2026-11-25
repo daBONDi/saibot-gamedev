@@ -3559,6 +3559,12 @@ function aufnahmeFrame(s) {
 }
 function clipStarten(emoji, titel, text, wer) {
   if (replay || modus !== 'match') return;
+  const nr = Math.max(0, kleckse.indexOf(wer));
+  const laeuft = aufnahme.clips.find(k => !k.fertig && k.stern === nr);
+  if (laeuft) {   // gleicher Moment, gleicher Star: den Clip verlängern und den besseren Titel nehmen
+    if ((CLIP_WICHTIG[emoji] ?? 9) <= (CLIP_WICHTIG[laeuft.emoji] ?? 9)) Object.assign(laeuft, { emoji, titel, text });
+    laeuft.moment = zeit; return;
+  }
   const c = { emoji, titel, text, stern: Math.max(0, kleckse.indexOf(wer)), moment: zeit, uhr: uhrText(), frames: aufnahme.puffer.filter(f => zeit - f.t <= CLIP_VOR), fertig: false };
   // zu viele? den unwichtigsten fertigen Clip wegwerfen
   aufnahme.clips.push(c);
@@ -3601,7 +3607,10 @@ function replayUpdate(dt) {
   for (const e of kleckse) { e.landT = Math.max(0, (e.landT || 0) - sdt); }
   // Kamera: schräg hinter dem Star des Clips, weich hinterher
   const st = kleckse[c.stern] || spieler, sh = hAbs(st);
-  const zielPos = [st.x - Math.cos(st.winkel) * 110 + Math.sin(st.winkel) * 40, sh + 75, st.y - Math.sin(st.winkel) * 110 - Math.cos(st.winkel) * 40];
+  let abst = 120;   // nicht in Wänden stehen: näher ran, wenn eine Wand im Weg ist
+  for (let d = 15; d <= 120; d += 7) { const a = st.winkel + 0.35; if (istWand(st.x - Math.cos(a) * d, st.y - Math.sin(a) * d)) { abst = Math.max(25, d - 15); break; } }
+  const a = st.winkel + 0.35;
+  const zielPos = [st.x - Math.cos(a) * abst, sh + 60 + Math.max(0, 120 - abst) * 0.9 + (WAND_H > 60 ? 20 : 0), st.y - Math.sin(a) * abst];
   if (!replay.kam) replay.kam = [...zielPos];
   const k = Math.min(1, dt * 3);
   for (let i = 0; i < 3; i++) replay.kam[i] += (zielPos[i] - replay.kam[i]) * k;
