@@ -21,7 +21,8 @@
   .sprechblase::before { content: ''; position: absolute; left: -14px; top: 22px; border: 8px solid transparent; border-right: 14px solid #fff; }
   #papageiExtra h3 { color: #ffd166; margin: 0.6rem 0 0.3rem; }
   .fischZeile { display: flex; gap: 0.8rem; align-items: center; text-align: left; background: #ffffff12; border-radius: 0.8rem; padding: 0.3rem 0.6rem; margin: 0.3rem 0; font-size: 0.95rem; }
-  .fischZeile canvas { flex: none; }
+  .fischZeile canvas, #papageiBild { flex: none; position: static; inset: auto; width: 120px; height: 70px; }
+  #papageiBild { width: 120px; height: 135px; }
   #papageiKnoepfe { margin-top: 0.8rem; }
   #highlights h3 { margin: 0.8rem 0 0.3rem; color: #ffd166; }
   #highlights .highlight { background: #ffffff14; border-radius: 0.6rem; padding: 0.3rem 0.7rem; margin: 0.25rem auto; max-width: 34rem; font-size: 0.95rem; }
@@ -7702,7 +7703,6 @@ let drPapagei3D = null;
   for (const s of [-1, 1]) { const d = klotz(dach, 92, 4, 112, s * 40, 108, 0); d.rotation.z = s * -0.55; g.add(d); }   // Satteldach
   g.add(klotz(weiss, 4, 34, 104, 0, 120, 0));
   g.add(klotz(mat('#2b1d14'), 40, 60, 3, 0, 30, 51.5), kugel(MAT_GOLD, 1.6, 14, 30, 53));        // Tür
-  g.add(ringX(MAT_GOLD, 8, 1.2, 0, 72, 51.5), klotz(mat('#9fd8ff', { roughness: 0.1 }), 2, 12, 12, 0, 72, 51));   // Bullauge
   for (const s of [-1, 1]) g.add(klotz(mat('#9fd8ff', { roughness: 0.1, metalness: 0.3 }), 30, 26, 2, s * 52, 50, 51), klotz(weiss, 34, 3, 3, s * 52, 36, 51.5));   // Fenster
   // Rettungsring, Anker und Fischernetz
   g.add(ringX(mat('#ff5a3a'), 9, 2.6, -58, 72, 52)); g.add(ringX(MAT_WEISS, 9, 2.7, -58, 72, 52.2).rotateX(0)); 
@@ -7712,12 +7712,12 @@ let drPapagei3D = null;
   netz.position.set(-81, 50, 10); netz.rotation.y = -Math.PI / 2; g.add(netz);
   // Großer Holzfisch auf dem Dach
   const fisch = baueFisch('kabeljau'); fisch.scale.setScalar(2.2); fisch.position.set(0, 128, 0); fisch.rotation.y = Math.PI / 2; g.add(fisch);
-  const sch = schild('🦜 Dr. Papageis Fischerei', 'Kabeljau Run – Jobs zu vergeben!', '#2fb84a', 190, 46); sch.position.set(0, 96, 51.6); g.add(sch);
+  const sch = schild('🦜 Fischerei', 'Dr. Papagei · Kabeljau Run', '#2fb84a', 130, 32); sch.position.set(0, 76, 51.6); g.add(sch);
   stadtHindernisse.push({ x: hx - 82, y: hz - 52, w: 164, h: 104 });
   // Dr. Papagei sitzt neben der Tür auf seiner Stange
-  drPapagei3D = baueDrPapagei(); drPapagei3D.position.set(hx - 48, 0, hz - 66); drPapagei3D.rotation.y = Math.PI / 2; drPapagei3D.scale.setScalar(1.4);
+  drPapagei3D = baueDrPapagei(); drPapagei3D.position.set(hx + 50, 0, hz - 68); drPapagei3D.rotation.y = Math.PI / 2; drPapagei3D.scale.setScalar(1.4);
   stadtGruppe.add(drPapagei3D);
-  stadtHindernisse.push({ x: hx - 48, y: hz - 66, kreis: 14 });
+  stadtHindernisse.push({ x: hx + 50, y: hz - 68, kreis: 14 });
   STADT_ZIELE.push({ papagei: true, x: hx, y: hz - 85, r: 55, text: '🦜 Zu Dr. Papagei (Kabeljau Run)' });
 })();
 function papageiAnimieren() {   // wippt, schaut sich um, schlägt manchmal mit den Flügeln
