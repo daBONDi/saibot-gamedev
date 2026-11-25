@@ -147,6 +147,7 @@
       <div><h1 style="font-size:1.8rem;margin:0">🦜 Dr. Papagei</h1><p class="sprechblase" id="papageiText"></p></div></div>
     <div id="papageiExtra"></div>
     <div id="papageiKnoepfe"></div>
+    <p class="kleinText" style="margin:0.6rem 0 0">▶ Klicken oder <b>Leertaste</b> / <b>Enter</b> / <b>E</b> = weiter</p>
   </div>
 </div>
 <div id="arenaWahl" class="overlay links hidden">
@@ -918,6 +919,7 @@ function posaune(t, f, lang, laut, vibrato = 0) {
   o.connect(fl); fl.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + lang + 0.05);
 }
 const SOUNDS = {
+  papageiPlapper: (t, v) => lachSilbe(t, 260 + Math.random() * 180, 0.07 * v),   // 🦜 Dr. Papagei redet
   // 📢 Rufe: kleine Stimmen-Töne (Vokal-Silben)
   ruf_zumir:    (t, v) => { lachSilbe(t, 330, 0.12 * v); lachSilbe(t + 0.13, 400, 0.12 * v); lachSilbe(t + 0.26, 480, 0.14 * v); },
   ruf_tuff:     (t, v) => { krach(1800, 0.05, 0.12 * v, t, sfxGain, 'highpass'); osz('square', 220, 110, 0.18, 0.09 * v, t + 0.02, sfxGain, 900); osz('sine', 120, 50, 0.2, 0.25 * v, t); },
@@ -2996,6 +2998,7 @@ let ichSicht = true;
 addEventListener('keydown', e => {
   if (e.repeat) return;
   tasten[e.code] = true;
+  if (zustand === 'wahl' && !$('papagei').classList.contains('hidden') && ['Space', 'Enter', 'KeyE', 'NumpadEnter'].includes(e.code) && !e.repeat) { e.preventDefault(); papageiTaste(); return; }   // 🦜 weiterreden
   if (e.code === 'Space' && zustand === 'replay' && replay) replay.weiter = true;
   if (e.code === 'Escape' && zustand === 'replay') replayEnde();
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; if (zustand === 'feier' && feier) feier.weiter = true; }
@@ -7779,14 +7782,14 @@ function papageiZeigen() {
   extra.replaceChildren(); knoepfe.replaceChildren();
   const k = (txt, f, kl) => { const b = knopf([txt], () => { ton('klick'); f(); }, kl); knoepfe.append(b); };
   if (papageiSeite === -1) {   // Wiederkommer
-    box.textContent = `Krah! Da bist du ja wieder, ${konto.name}! 🦜 Bereit für eine neue Schicht? ${konto.kabeljauRekord ? `(Dein Rekord: ${konto.kabeljauRekord}/3 Wellen)` : ''}`;
+    papageiSagt(`Krah! Da bist du ja wieder, ${konto.name}! 🦜 Bereit für eine neue Schicht? ${konto.kabeljauRekord ? `(Dein Rekord: ${konto.kabeljauRekord}/3 Wellen)` : ''}`);
     k('🐟 Los, Kabeljau Run starten!', () => kabeljauStarten(), 'gross');
     k('📖 Tutorial nochmal ansehen', () => { papageiSeite = 3; papageiZeigen(); }, 'klein');
     k('⬅ Zurück in die Stadt', papageiZu, 'klein');
     return;
   }
   const S = PAPAGEI_SEITEN[papageiSeite];
-  box.textContent = S.text(konto.name);
+  papageiSagt(S.text(konto.name));
   if (S.titel) { const h = document.createElement('h3'); h.textContent = S.titel; extra.append(h); }
   if (S.fische) for (const art of S.fische) {
     const A = FISCH_ARTEN[art], z = document.createElement('div'); z.className = 'fischZeile';
@@ -7798,7 +7801,7 @@ function papageiZeigen() {
   if (S.wellen) { const z = document.createElement('div'); z.className = 'fischZeile'; z.textContent = WELLEN.map((w, i) => `🌊 Welle ${i + 1}: ${w.quote} Kugeln in ${w.zeit} s`).join('  ·  '); extra.append(z); }
   if (S.job) {
     k('✅ Ja, ich mach den Job!', () => { konto.papageiJob = true; speichern(); papageiSeite++; papageiZeigen(); }, 'gross');
-    k('❌ Nein danke', () => { $('papageiText').textContent = 'Krah … schade! Komm wieder, wenn du es dir anders überlegst! 🦜'; knoepfe.replaceChildren(); knoepfe.append(knopf(['⬅ Zurück in die Stadt'], papageiZu, 'klein')); }, 'klein');
+    k('❌ Nein danke', () => { papageiSagt('Krah … schade! Komm wieder, wenn du es dir anders überlegst! 🦜'); knoepfe.replaceChildren(); knoepfe.append(knopf(['⬅ Zurück in die Stadt'], papageiZu, 'klein')); }, 'klein');
   } else if (S.los) {
     k('🐟 Los geht\'s!', () => kabeljauStarten(), 'gross');
     k('⬅ Doch nicht – zurück in die Stadt', papageiZu, 'klein');
@@ -7806,9 +7809,31 @@ function papageiZeigen() {
     k('Weiter ▶', () => { papageiSeite++; papageiZeigen(); }, 'gross');
     if (papageiSeite >= 3) k('⏩ Tutorial überspringen', () => { papageiSeite = PAPAGEI_SEITEN.length - 1; papageiZeigen(); }, 'klein');
   }
-  ton('ruf_los', 0.5);
 }
-function papageiZu() { papageiRedet = false; shopVonStadt = true; stadtBetreten(); }
+// 🗣️ Dr. Papagei spricht: der Text kommt Buchstabe für Buchstabe, dazu plappert er
+let papageiTipp = null;
+function papageiSagt(text) {
+  const box = $('papageiText'), zeichen = [...text];
+  if (papageiTipp) clearInterval(papageiTipp.uhr);
+  box.textContent = ''; papageiRedet = true;
+  const t = { zeichen, i: 0 };
+  t.uhr = setInterval(() => {
+    if (t.i >= zeichen.length) { papageiFertig(); return; }
+    box.textContent += zeichen[t.i];
+    if (t.i % 3 === 0 && /[a-zäöüß]/i.test(zeichen[t.i])) ton('papageiPlapper', 0.7);
+    t.i++;
+  }, 22);
+  papageiTipp = t;
+}
+function papageiFertig() {   // Text sofort ganz zeigen
+  if (!papageiTipp) return;
+  clearInterval(papageiTipp.uhr); $('papageiText').textContent = papageiTipp.zeichen.join(''); papageiTipp = null; papageiRedet = false;
+}
+function papageiTaste() {   // Leertaste / Enter / E: erst fertig sprechen lassen, dann weiter
+  if (papageiTipp) { papageiFertig(); return; }
+  const b = document.querySelector('#papageiKnoepfe button'); if (b) b.click();
+}
+function papageiZu() { papageiFertig(); papageiRedet = false; shopVonStadt = true; stadtBetreten(); }
 // Dr. Papagei als Bild (für das Gesprächsfenster)
 function papageiPortraet() {
   const c = $('papageiBild'), x = c.getContext('2d'); x.clearRect(0, 0, 160, 180);
