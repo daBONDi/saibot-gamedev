@@ -100,7 +100,7 @@
       <span class="taste">W A S D</span><span>Laufen</span>
       <span class="taste">Maus</span><span>Umschauen</span>
       <span class="taste">Linksklick</span><span>Spritzen (Sniper: halten &amp; loslassen)</span>
-      <span class="taste">Shift / Rechts</span><span>In eigene Farbe abtauchen 🌊</span>
+      <span class="taste">Shift / Rechts</span><span>Tintenform 🌊 (überall – in eigener Farbe schnell &amp; unsichtbar)</span>
       <span class="taste">Leertaste</span><span>Springen</span>
       <span class="taste">E</span><span>Farbbombe (halten = zielen)</span>
       <span class="taste">Q</span><span>Ulti, wenn sie voll ist ⚡</span>
@@ -2242,6 +2242,19 @@ function baueSchnorchel(team) {
   g.visible = false;
   return g;
 }
+// Tintenform auf trockenem Boden: ein glänzender Klecks mit Kulleraugen (vorne = +x)
+function baueKlecksForm(team) {
+  const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.15, metalness: 0.1 });
+  const rumpf = kugel(m, 10, 0, 5, 0); rumpf.scale.set(1.15, 0.6, 1); g.add(rumpf);
+  const beule = kugel(m, 5, -3, 9.5, 0); beule.scale.set(1, 0.8, 1); g.add(beule);
+  g.add(kugel(m, 3, -9, 2, 6), kugel(m, 2.5, -8, 2, -7), kugel(m, 2, 9, 1.5, -7));   // kleine Spritzer am Rand
+  const weiss = mat('#ffffff', { roughness: 0.3 }), schwarz = mat('#111111', { roughness: 0.2 });
+  for (const s of [-1, 1]) g.add(kugel(weiss, 2.6, 7, 9, s * 3.6), kugel(schwarz, 1.3, 9.2, 9.3, s * 3.6));
+  const pg = new THREE.CircleGeometry(12, 18); pg.rotateX(-Math.PI / 2);
+  const pfuetze = new THREE.Mesh(pg, mat(TEAMS[team].dunkel)); pfuetze.position.y = 0.6; g.add(pfuetze);
+  g.visible = false;
+  return g;
+}
 
 function abzugBauen(g, x) {
   const buegel = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.45, 6, 12, Math.PI), MAT_GRAU);
@@ -3427,6 +3440,7 @@ function neuerKlecks(team, nr, extra = {}) {
   e.schildName = sp ? null : namensSchild(e.name, TEAMS[team].hell);
   if (e.schildName) e.gruppe.add(e.schildName);
   e.schnorchel = baueSchnorchel(team); e.gruppe.add(e.schnorchel);
+  e.klecksForm = baueKlecksForm(team); e.gruppe.add(e.klecksForm);
   e.welle = new THREE.Mesh(welleGeo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.7 }));
   e.blase = new THREE.Mesh(schildGeo, new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.35, emissive: TEAMS[team].col, emissiveIntensity: 0.4 }));
   e.laserMesh = baueLaser(team); e.laserT = 0; e.laserTick = 0;
@@ -3771,7 +3785,7 @@ function bewege(e, dx, dy, dt) {
   const zone = zoneBei(e.x, e.y);
   e.boostCd = Math.max(0, (e.boostCd || 0) - dt);
   const feind = tauchenPruefen(e), amBoden = e.z <= 0;
-  let speed = e.taucht ? 290 * (1 + e.bonus.tauchen) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
+  let speed = e.taucht ? (e.inEigen ? 290 * (1 + e.bonus.tauchen) : feind ? 55 : 130 * (1 + e.bonus.tempo)) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
   if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : typVon(e.waffe) === 'ling' || typVon(e.waffe) === 'bogen' ? 0.6 : 0.8;
   if (e.lingT > 0 && !e.taucht) speed *= 0.75;   // Klecksling feuert: langsamer laufen
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
@@ -3841,14 +3855,17 @@ function kletternPruefen(e, dx, dy, dt, bh) {
     if (e.spieler) ton('auf');
   }
 }
-// Steht man in eigener Farbe und taucht ab? Gibt zurück, ob man in Gegnerfarbe steht.
+// Abgetaucht in der eigenen Farbe = unsichtbar. Außerhalb der eigenen Farbe ist man ein sichtbarer Tintenklecks.
+function tauchtVersteckt(e) { return e.taucht && (e.amKlettern || besitzer(e.x, e.y) === e.team + 1); }
+// Tintenform (überall möglich, aber nur in eigener Farbe schnell + versteckt). Gibt zurück, ob man in Gegnerfarbe steht.
 function tauchenPruefen(e) {
   const amBoden = e.z <= 0;
   const unter = amBoden ? besitzer(e.x, e.y) : 0;
   const eigen = unter === e.team + 1, feind = unter === 2 - e.team;
   const vorher = e.taucht;
   const zone = zoneBei(e.x, e.y);
-  e.taucht = (e.amKlettern && e.willTauchen) || e.willTauchen && eigen && amBoden && !(zone && (zone.art === 'sand' || zone.art === 'lava')) && !(e.kugelT > 0) && !(e.panzerT > 0) && !(e.gigaT > 0);   // im Treibsand kann man nicht abtauchen
+  e.inEigen = eigen || !!e.amKlettern;
+  e.taucht = (e.amKlettern && e.willTauchen) || e.willTauchen && amBoden && !(zone && (zone.art === 'sand' || zone.art === 'lava')) && !(e.kugelT > 0) && !(e.panzerT > 0) && !(e.gigaT > 0);   // im Treibsand kann man nicht abtauchen
   if (vorher !== e.taucht) {
     spritzer(e.x, e.y, 2, e.team, e.taucht ? 10 : 14, 110);   // Platsch beim Ein- und Auftauchen
     if (e.spieler) ton(e.taucht ? 'blubb' : 'auf');
@@ -3859,8 +3876,8 @@ function tauchenPruefen(e) {
 function werte(e, dt, feind) {
   if (e.panzerT > 0) { e.panzerT -= dt; if (e.panzerT <= 0) e.panzer = 0; }
   if (e.werferT > 0) e.werferT -= dt;
-  if (e.taucht) e.tinte = Math.min(100, e.tinte + 45 * dt);
-  else if (!e.schiesst && !e.laden) e.tinte = Math.min(100, e.tinte + 5 * dt);
+  if (e.taucht && e.inEigen) e.tinte = Math.min(100, e.tinte + 45 * dt);
+  else if (e.taucht || (!e.schiesst && !e.laden)) e.tinte = Math.min(100, e.tinte + 5 * dt);
   // Leben
   e.letzterTreffer += dt;
   if (feind && e.schild <= 0) { if (e.hp > 30) e.hp -= 12 * (1 - e.bonus.feindfarbe) * dt; }
@@ -4672,7 +4689,7 @@ function ki(b, dt) {
   for (const e of kleckse) {
     if (e.team === b.team || e.tot) continue;
     const d = Math.hypot(e.x - b.x, e.y - b.y);
-    if (d > sichtweite || (!roentgen && (e.taucht || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
+    if (d > sichtweite || (!roentgen && (tauchtVersteckt(e) || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
     if (!roentgen && !sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
   }
@@ -4748,7 +4765,7 @@ function ki(b, dt) {
     dx = Math.cos(a); dy = Math.sin(a);
     const hier = besitzer(b.x, b.y), vorne = besitzer(b.x + dx * 50, b.y + dy * 50);
     if (k.tanken) {
-      b.willTauchen = true;
+      b.willTauchen = hier === b.team + 1;
       if (hier === b.team + 1) { dx *= 0.2; dy *= 0.2; }
     } else if (hier === b.team + 1 && vorne === b.team + 1 && Math.hypot(k.ziel.x - b.x, k.ziel.y - b.y) > 80) {
       b.willTauchen = true;                    // Durch eigene Farbe schnell schwimmen
@@ -5231,7 +5248,8 @@ function welt3D(dt) {
     e.tauchAnim += ((e.taucht ? 1 : 0) - e.tauchAnim) * Math.min(1, dt * 14);
     if (e.tot) e.tauchAnim = 0;
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
-    const versteckt = e.team !== spieler.team && !feindNah && ((e.taucht && e.tauchAnim > 0.9) || imGebuesch(e));
+    const inEigen = !e.taucht || tauchtVersteckt(e);
+    const versteckt = e.team !== spieler.team && !feindNah && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
     g.visible = !((e.tot && e.todT <= 0) || istIch || versteckt);
     let gx = 1, gy = 1, hoch = 0, dreh = 0;
     if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
@@ -5249,9 +5267,14 @@ function welt3D(dt) {
     // Abtauchen: der Körper versinkt in der Farbe, dann kommt der Schnorchel
     e.koerper.visible = e.tauchAnim < 0.97;
     e.koerper.position.y = -e.tauchAnim * 50;
-    e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6;
+    e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6 && inEigen;
+    e.klecksForm.visible = e.taucht && e.tauchAnim > 0.6 && !inEigen && !istIch;   // Tintenklecks auf trockenem Boden
     if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
     if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
+    if (e.klecksForm.visible) {   // wabbelt beim Rutschen
+      const w = Math.sin(zeit * (v > 10 ? 14 : 5) + e.nr) * (v > 10 ? 0.12 : 0.05);
+      e.klecksForm.scale.set(1 + w, 1 - w, 1 + w);
+    }
     if (zustand === 'feier') g.visible = !!e.emote;   // bei der Siegerehrung nur die auf der Bühne
     if (g.visible && e.koerper.visible) {
       if (e.emote) { const r = posieren(e, dt); g.position.y += r.hoch; g.rotation.y += r.dreh; }
