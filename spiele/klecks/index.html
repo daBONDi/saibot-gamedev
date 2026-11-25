@@ -321,7 +321,7 @@ const ULTIS = {
   gigafisch: { name: 'Gigafisch',  emoji: '🦑', info: 'Werde zu einem riesigen Tintenfisch und ramme deine Gegner weg!' },
   trifarb: { name: 'TriFarb-Artillerie', emoji: '📡', info: 'Wirf 3 Peilsender – dann schießen Farbstrahlen vom Boden in den Himmel!' },
   lautsprecher: { name: 'Megalautsprecher', emoji: '📢', info: 'Stell ihn hin – sein Schallstrahl macht alles vor ihm platt!' },
-  sauger:  { name: 'Farbsauger',   emoji: '🌪️', info: 'Saug Gegner-Tinte und Bomben ein – Klick schießt alles als Pyramiden-Explosion zurück!' },
+  sauger:  { name: 'Farbsauger',   emoji: '🌪️', info: 'Saug Gegner-Tinte und Bomben ein – der Kreis füllt sich. Klick = Pyramide werfen, die riesig explodiert!' },
   kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Hochfliegen, Klicken klicken klicken, werfen – sie bläht sich riesig auf!' },
 };
 // Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
@@ -2796,6 +2796,13 @@ function baueTuffBlase(team) {
 }
 function blaseZeigen(b) {
   const r = b.rAkt || b.r;
+  if (b.form === 'pyramide') {   // 🔺 Pyramide: dreht sich im Flug, steht dann fest und pulsiert beim Wachsen
+    const am = b.phase !== 'flug', puls = am ? 1 + Math.sin(zeit * (8 + (b.t || 0) * 10)) * 0.05 : 1;
+    b.mesh.position.set(b.x, am ? bodenHoehe(b.x, b.y) : b.h, b.y);
+    b.mesh.scale.set(r / 30 * puls, r / 30 * puls * (am ? 1.2 : 1), r / 30 * puls);
+    b.mesh.rotation.y = am ? -(b.winkel || 0) : b.mesh.rotation.y + 0.15;
+    return;
+  }
   b.mesh.position.set(b.x, b.phase === 'flug' ? b.h : r * 0.6, b.y);
   const wabbel = 1 + Math.sin(zeit * 9) * 0.04;
   b.mesh.scale.set(r / 30 * wabbel, r / 30 / wabbel, r / 30 * wabbel);
@@ -3188,7 +3195,7 @@ function mpSchnappschussSenden() {
     w: wellen.map(o => [objId(o), r0(o.x), r0(o.y), r2(o.winkel), r2(o.t), o.dauer, o.team]),
     to: tornados.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
     wo: wolken.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
-    bl: blasen.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), r1(o.rAkt || o.r), o.team, o.phase === 'flug' ? 1 : 0]),
+    bl: blasen.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), r1(o.rAkt || o.r), o.team, o.phase === 'flug' ? 1 : 0, o.form === 'pyramide' ? r2(o.winkel) : null]),
     k: mp.farbe, ev: mp.ev,
   };
   mpAnAlle(s);
@@ -3282,7 +3289,8 @@ function mpSchnappschuss(d) {
   }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; if (o.art === 'schirm') { o.x = a[2]; o.y = a[3]; } });
   wellen = proxySync(wellen, d.w, a => ({ mesh: baueWelle(a[6] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.winkel = a[3]; o.t = a[4]; o.dauer = a[5]; });
   tornados = proxySync(tornados, d.to, a => ({ mesh: baueTornado(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
-  blasen = proxySync(blasen, d.bl, a => ({ mesh: baueTuffBlase(a[5] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.rAkt = o.r = a[4]; o.phase = a[6] ? 'flug' : 'wachsen'; });
+  blasen = proxySync(blasen, d.bl, a => typeof a[7] === 'number' ? { mesh: baueSaugPyramide(a[5] ? 1 : 0), form: 'pyramide' } : { mesh: baueTuffBlase(a[5] ? 1 : 0) },
+    (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.rAkt = o.r = a[4]; o.phase = a[6] ? 'flug' : 'wachsen'; if (typeof a[7] === 'number') o.winkel = a[7]; });
   wolken = proxySync(wolken, d.wo, a => ({ mesh: baueWolke(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
 }
 function mpEreignisAusfuehren(ev) {
@@ -4330,9 +4338,15 @@ function blasenUpdate(dt) {   // fliegen, landen, aufblähen, PLATSCH
       b.malT -= dt;
       if (b.malT <= 0) {
         b.malT = 0.3;
-        klecks(b.x, b.y, b.rAkt * 0.9, b.team, b.wer, false);
-        for (const e of kleckse) if (e.team !== b.team && !e.tot && Math.hypot(e.x - b.x, e.y - b.y) < b.rAkt) treffen(e, 12, b.wer);
+        if (b.form === 'pyramide') {   // 🔺 malt ein Quadrat
+          pyramideMalen(b, b.rAkt);
+          for (const e of kleckse) if (e.team !== b.team && !e.tot && inPyramidenFlaeche(b, e.x, e.y, b.rAkt)) treffen(e, 12, b.wer);
+        } else {
+          klecks(b.x, b.y, b.rAkt * 0.9, b.team, b.wer, false);
+          for (const e of kleckse) if (e.team !== b.team && !e.tot && Math.hypot(e.x - b.x, e.y - b.y) < b.rAkt) treffen(e, 12, b.wer);
+        }
       }
+      if (f >= 1 && b.form === 'pyramide') { pyramideExplodieren(b); scene.remove(b.mesh); blasen.splice(i, 1); continue; }
       if (f >= 1) {
         explodieren(b.x, b.y, b.R, 140, b.team, b.wer, false);
         spritzer(b.x, b.y, 40, b.team, 80, 500);
@@ -4715,7 +4729,7 @@ function saugerZeigen(e) {
   m.position.set(e.x, hAbs(e) + (ich ? 14 : 20), e.y); m.rotation.y = -e.winkel;
   ud.geraet.visible = !ich;
   ud.wirbel.rotation.x += 0.5;
-  ud.fuell.scale.x = Math.max(0.05, Math.min(1, (e.saugMenge || 0) / 40));
+  ud.fuell.scale.x = Math.max(0.05, Math.min(1, (e.saugMenge || 0) / SAUG_VOLL));
   ud.ringe.forEach((r, i) => {
     const k = (zeit * 1.8 + i / ud.ringe.length) % 1, d = 24 + (SAUG_R - 24) * (1 - k);
     r.position.x = d; r.scale.setScalar(6 + d * Math.tan(SAUG_W) * 0.55); r.material.opacity = 0.45 * k;
@@ -4749,35 +4763,66 @@ function saugerUpdate(e, dt) {
   const warte = e.spieler || e.mensch ? 0.4 : 2;
   if ((e.schiesst && SAUGER_ZEIT - e.saugerT > warte) || e.saugerT <= 0) pyramideFeuer(e);
 }
-// 🔺 Alles Eingesaugte als Pyramiden-Explosion zurückschießen: je mehr gesaugt, desto größer und stärker
+// 🔺 Alles Eingesaugte wird zu einer Farb-Pyramide – die wirft man wie eine Tuffkugel.
+// Sie landet, wächst und explodiert dann PYRAMIDEN-förmig (quadratisch, nicht rund). Je voller der Sauger, desto größer!
+const SAUG_VOLL = 30;   // so viel muss man einsaugen, bis der Kreis voll ist
 function pyramideFeuer(e) {
-  const menge = Math.min(40, e.saugMenge || 0), L = 200 + menge * 7, schaden = 55 + menge * 2.4;
+  const menge = Math.min(SAUG_VOLL, e.saugMenge || 0), voll = menge / SAUG_VOLL;
+  let d;
+  if (!e.spieler && !e.mensch) {   // Bots werfen auf den nächsten Gegner
+    let best = 260; for (const f of kleckse) if (f.team !== e.team && !f.tot) best = Math.min(best, Math.hypot(f.x - e.x, f.y - e.y));
+    d = best;
+  } else d = 200 + Math.max(0, e.pitch + 0.4) * 300;
+  d = Math.max(120, Math.min(450, d));
+  const zx = Math.max(20, Math.min(W - 20, e.x + Math.cos(e.winkel) * d)), zy = Math.max(20, Math.min(H - 20, e.y + Math.sin(e.winkel) * d));
+  const mesh = baueSaugPyramide(e.team); scene.add(mesh);
+  const b = { form: 'pyramide', winkel: e.winkel, sx: e.x, sy: e.y, sh: hAbs(e) + 30, zx, zy, x: e.x, y: e.y, h: hAbs(e) + 30, t: 0, flug: 0.9, phase: 'flug',
+    r: 14 + voll * 16, R: 70 + voll * 120, schaden: 80 + voll * 80, rAkt: 0, team: e.team, wer: e, malT: 0, mesh };
+  blasen.push(b); blaseZeigen(b);
   e.saugerT = 0; e.saugMenge = 0; e.rueck = 2;
-  const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
-  for (let d = 20; d < L; d += 22) {
-    const hw = d * 0.45;
-    for (let q = -hw; q <= hw + 1; q += 26) {
-      const px = e.x + c * d - s * q, py = e.y + s * d + c * q;
-      if (px > 0 && py > 0 && px < W && py < H && !istWand(px, py)) klecks(px, py, 15 + d * 0.03, e.team, e, false);
-    }
-  }
-  const inPyramide = (x, y) => { const dx = x - e.x, dy = y - e.y, l = dx * c + dy * s, q = Math.abs(-dx * s + dy * c); return l > 0 && l < L && q < l * 0.45 + 12; };
-  for (const f of kleckse) if (f.team !== e.team && !f.tot && inPyramide(f.x, f.y)) treffen(f, schaden, e);
-  for (const g of geraete) if (g.team !== e.team && inPyramide(g.x, g.y)) { if (g.art === 'springturm') { g.hp -= schaden; g.treffer = 0.12; } else g.kaputt = true; }
-  const h = hAbs(e) + 22;
-  pyramideZeigen(e.x, e.y, h, e.winkel, L, e.team);
-  mpEreignis({ k: 'pyr', a: [r0(e.x), r0(e.y), r0(h), r2(e.winkel), r0(L)], team: e.team });
-  if (e.spieler) meldung(`🔺 Pyramiden-Explosion! (${menge} eingesaugt)`);
+  if (e.spieler) meldung(`🔺 Pyramide geworfen! (${Math.round(voll * 100)}% voll)`);
+  if (e.spieler || (spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600)) ton('wurf');
 }
-function pyramideZeigen(x, y, h, winkel, L, team) {
-  const geo = new THREE.ConeGeometry(1, 1, 4, 1, true);
-  geo.rotateY(Math.PI / 4); geo.rotateZ(Math.PI / 2); geo.translate(0.5, 0, 0);   // Spitze bei dir, Grundfläche vorne
+function baueSaugPyramide(team) {
+  const g = new THREE.Group();
+  const geo = new THREE.ConeGeometry(30 / 0.707, 42, 4); geo.rotateY(Math.PI / 4); geo.translate(0, 21, 0);   // Grundfläche 60 x 60, Spitze oben
+  g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: TEAMS[team].col, transparent: true, opacity: 0.75, roughness: 0.1, emissive: TEAMS[team].col, emissiveIntensity: 0.35, flatShading: true })));
+  const kanten = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: TEAMS[team].hell }));
+  g.add(kanten);
+  g.add(kugel(mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.6 }), 3, 0, 43, 0));   // leuchtende Spitze
+  return g;
+}
+// Liegt der Punkt im Quadrat unter der Pyramide?
+function inPyramidenFlaeche(b, x, y, r) {
+  const c = Math.cos(b.winkel || 0), s = Math.sin(b.winkel || 0), dx = x - b.x, dy = y - b.y;
+  return Math.abs(dx * c + dy * s) < r && Math.abs(-dx * s + dy * c) < r;
+}
+function pyramideMalen(b, r) {   // Quadrat anmalen
+  const c = Math.cos(b.winkel || 0), s = Math.sin(b.winkel || 0), schritt = Math.max(16, r / 5);
+  for (let l = -r + schritt / 2; l < r; l += schritt) for (let q = -r + schritt / 2; q < r; q += schritt) {
+    const px = b.x + c * l - s * q, py = b.y + s * l + c * q;
+    if (px > 0 && py > 0 && px < W && py < H && !istWand(px, py)) klecks(px, py, schritt * 0.85, b.team, b.wer, false);
+  }
+}
+function pyramideExplodieren(b) {
+  mpEreignis({ k: 'boom', x: r0(b.x), y: r0(b.y), r: r0(b.R), team: b.team });
+  pyramideMalen(b, b.R);
+  for (const f of kleckse) if (f.team !== b.team && !f.tot && inPyramidenFlaeche(b, f.x, f.y, b.R + 10)) treffen(f, b.schaden, b.wer);
+  for (const g of geraete) if (g.team !== b.team && inPyramidenFlaeche(b, g.x, g.y, b.R)) { if (g.art === 'springturm') { g.hp -= b.schaden; g.treffer = 0.12; } else g.kaputt = true; }
+  const h = bodenHoehe(b.x, b.y);
+  pyramideZeigen(b.x, b.y, h, b.winkel, b.R, b.team);
+  mpEreignis({ k: 'pyr', a: [r0(b.x), r0(b.y), r0(h), r2(b.winkel), r0(b.R)], team: b.team });
+}
+// Große leuchtende Pyramide schießt aus dem Boden (Explosion)
+function pyramideZeigen(x, y, h, winkel, R, team) {
+  const geo = new THREE.ConeGeometry(1, 1, 4, 1, true); geo.rotateY(Math.PI / 4); geo.translate(0, 0.5, 0);
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
-  mesh.position.set(x, h, y); mesh.rotation.y = -winkel; mesh.scale.set(L, L * 0.25 / 0.707, L * 0.45 / 0.707);
-  scene.add(mesh); strahlen.push({ mesh, t: 0.45 });
+  mesh.position.set(x, h, y); mesh.rotation.y = -winkel; mesh.scale.set(R / 0.707, R * 1.6, R / 0.707);
+  scene.add(mesh); strahlen.push({ mesh, t: 0.55 });
   const c = Math.cos(winkel), s = Math.sin(winkel);
-  for (let d = 60; d < L; d += 70) spritzer(x + c * d, y + s * d, h, team, 8, 220);
-  if (Math.hypot(x - spieler.x, y - spieler.y) < 800) { ton('platsch'); ton('wusch'); }
+  for (const [l, q] of [[-1, -1], [-1, 1], [1, -1], [1, 1], [0, 0]]) spritzer(x + (c * l - s * q) * R * 0.8, y + (s * l + c * q) * R * 0.8, h + 5, team, 14, 320);
+  spritzer(x, y, h + R * 1.2, team, 30, 400);   // Spritzer aus der Spitze
+  if (spieler && Math.hypot(x - spieler.x, y - spieler.y) < 800) { ton('platsch'); ton('ausbruch'); }
 }
 
 // ================== ULTIS ==================
@@ -5759,10 +5804,18 @@ function hud() {
     ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(bx, by, bw * kraft / 25, 18);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui'; ctx.fillText(`Kraft ${Math.round(kraft)} / 25 · Wurf in ${spieler.kugelT.toFixed(1)} s`, cw / 2, by + 14);
   }
-  if (spieler.saugerT > 0) {   // 🌪️ Farbsauger
-    const puls = 1 + Math.sin(zeit * 14) * 0.05;
-    ctx.textAlign = 'center'; textMitRand(`🌪️ FARBSAUGER: ${Math.round(spieler.saugMenge || 0)} eingesaugt`, cw / 2, ch * 0.72, 28 * puls, '#ffd166');
-    textMitRand(`Klick = 🔺 Pyramiden-Explosion! (${Math.ceil(spieler.saugerT)} s)`, cw / 2, ch * 0.72 + 30, 20, '#ffffff');
+  if (spieler.saugerT > 0) {   // 🌪️ Farbsauger: der Kreis füllt sich mit eingesaugter Tinte
+    const voll = Math.min(1, (spieler.saugMenge || 0) / SAUG_VOLL), kx = cw / 2, ky = ch * 0.72, kr = 42;
+    ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.arc(kx, ky, kr + 6, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(kx, ky, kr, 0, Math.PI * 2); ctx.clip();   // Tinte steigt von unten im Kreis hoch
+    const welle = Math.sin(zeit * 6) * 3, oben = ky + kr - voll * kr * 2;
+    ctx.fillStyle = TEAMS[spieler.team].col; ctx.beginPath(); ctx.moveTo(kx - kr, ky + kr);
+    for (let x = -kr; x <= kr; x += 6) ctx.lineTo(kx + x, oben + Math.sin(x * 0.15 + zeit * 8) * 3 + welle * 0.3);
+    ctx.lineTo(kx + kr, ky + kr); ctx.closePath(); ctx.fill(); ctx.restore();
+    ctx.strokeStyle = voll >= 1 ? `hsl(${zeit * 300 % 360},90%,65%)` : '#ffffff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(kx, ky, kr, 0, Math.PI * 2); ctx.stroke();
+    ctx.textAlign = 'center'; textMitRand(voll >= 1 ? 'VOLL!' : `${Math.round(voll * 100)}%`, kx, ky + 8, 22, '#ffffff');
+    textMitRand('🌪️ Saug Gegner-Tinte & Bomben ein!', kx, ky - kr - 16, 22, '#ffd166');
+    textMitRand(`Klick = 🔺 Pyramide werfen (${Math.ceil(spieler.saugerT)} s)`, kx, ky + kr + 30, 20, '#ffffff');
   }
   if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand('🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
   if (sprungMenu && !spieler.tot) {   // 🗼 wohin springen?
