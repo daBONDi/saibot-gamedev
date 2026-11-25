@@ -2281,6 +2281,19 @@ function baueKlecksForm(team) {
   return g;
 }
 
+// 🚀 Supersprung: fliegender Farbklecks (Tropfen mit Schweif, vorne = +x)
+function baueFlugKlecks(team) {
+  const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.08, metalness: 0.15, emissive: TEAMS[team].col, emissiveIntensity: 0.15 });
+  g.add(kugel(m, 11, 0, 0, 0, 1.15, 0.9, 0.95));                                   // Körper
+  const schweif = new THREE.Mesh(new THREE.ConeGeometry(8, 26, 14), m); schweif.rotation.z = Math.PI / 2; schweif.position.x = -20; g.add(schweif);
+  g.add(kugel(m, 3, -34, 2, 3), kugel(m, 2.2, -40, -1, -2), kugel(m, 1.5, -45, 1, 1));   // Tropfen fliegen hinterher
+  g.add(kugel(mat('#ffffff', { transparent: true, opacity: 0.6, roughness: 0 }), 3, 4, 6, -4, 1.4, 0.6, 1));   // Glanz
+  const weiss = mat('#ffffff', { roughness: 0.25 }), schwarz = mat('#111111', { roughness: 0.15 });
+  for (const s of [-1, 1]) g.add(kugel(weiss, 3.4, 9.5, 3.5, s * 4.2), kugel(schwarz, 1.7, 12.3, 4, s * 4.2), kugel(weiss, 0.6, 13.6, 4.9, s * 3.6));
+  g.visible = false;
+  return g;
+}
+
 function abzugBauen(g, x) {
   const buegel = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.45, 6, 12, Math.PI), MAT_GRAU);
   buegel.rotation.z = Math.PI; buegel.position.set(x, -2.2, 0);
@@ -3159,7 +3172,7 @@ function mpVomGast(g, d) {
   const e = kleckse.find(k => k.mensch === g.id);
   if (d.t === 'e') {
     g.e = { x: zahl(d.x, 0, W, null), y: zahl(d.y, 0, H, null), z: zahl(d.z, 0, 700, 0), w: zahl(d.w, -1e4, 1e4, 0), p: zahl(d.p, -1.3, 1.1, 0),
-            vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, sf: !!d.sf, n: d.n | 0 };
+            vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, sf: !!d.sf, sb: !!d.sb, n: d.n | 0 };
     if (!e || e.tot || !mpLaeuft()) return;
     if (d.tk && e.trifT > 0) e.trifWunsch = true;
     if (d.ak) e.abkoppelWunsch = true;
@@ -3178,7 +3191,7 @@ function mpMenschAnwenden(e, dt) {
   const g = mp.gaeste.get(e.mensch), d = g && g.e;
   if (d && d.x !== null && d.y !== null && d.n === (e.lebenNr || 0)) {
     e.x = d.x; e.y = d.y; e.z = d.z; e.winkel = d.w; e.pitch = d.p; e.vx = d.vx; e.vy = d.vy;
-    e.schiesst = d.s; e.willTauchen = d.u; e.schirmHalten = d.sf;
+    e.schiesst = d.s; e.willTauchen = d.u; e.schirmHalten = d.sf; e.sprungBlob = d.sb;
   } else e.schiesst = false;
   const feind = tauchenPruefen(e);
   werte(e, dt, feind);
@@ -3187,7 +3200,7 @@ function mpSchnappschussSenden() {
   const s = {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0) | (e.markiertBis > zeit ? 4096 : 0) | (e.saugerT > 0 ? 8192 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0) | (e.markiertBis > zeit ? 4096 : 0) | (e.saugerT > 0 ? 8192 : 0) | (e.sprungBlob ? 16384 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
       r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0, r0(e.saugMenge || 0)]),
     s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.pfeil ? -1 : o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.art === 'tracker' ? 'tracker' : o.ulti ? 'rakete' : o.art)]),
@@ -3260,7 +3273,7 @@ function mpSchnappschuss(d) {
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schirmAuf: !!(fl & 1024), wirbelBis: fl & 2048 ? zeit + 0.15 : 0, schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0,
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0, ...(e === spieler ? {} : { sprungBlob: !!(fl & 16384) }),
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
@@ -3403,7 +3416,7 @@ function mpTick(dt) {
       mp.eingabeT = 1 / MP_EINGABE_RATE;
       const p = spieler;
       mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
-        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak, da: mp.bitte.da });
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, sb: p.sprungBlob ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak, da: mp.bitte.da });
       mp.bitte = {};
     }
   }
@@ -3532,6 +3545,7 @@ function neuerKlecks(team, nr, extra = {}) {
   if (e.schildName) e.gruppe.add(e.schildName);
   e.schnorchel = baueSchnorchel(team); e.gruppe.add(e.schnorchel);
   e.klecksForm = baueKlecksForm(team); e.gruppe.add(e.klecksForm);
+  e.flugKlecks = baueFlugKlecks(team); e.gruppe.add(e.flugKlecks);
   e.welle = new THREE.Mesh(welleGeo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.7 }));
   e.blase = new THREE.Mesh(schildGeo, new THREE.MeshStandardMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.35, emissive: TEAMS[team].col, emissiveIntensity: 0.4 }));
   e.laserMesh = baueLaser(team); e.laserT = 0; e.laserTick = 0;
@@ -4595,6 +4609,7 @@ function bombenZiel(e) {
 
 // ================== 🧲 MARKER, 🗼 SPRINGTURM, 🌪️ FARBSAUGER ==================
 const MARKER_R = 120, MARKER_ZEIT = 8, TURM_HP = 160, SPRUNG_HOEHE = 380;
+const SPRUNG_SCHMELZEN = 0.4, SPRUNG_MENSCH = 0.86;   // so lange schmilzt man zur Pfütze / ab hier (Anteil vom Flug) wieder Mensch
 const SAUGER_ZEIT = 7, SAUG_R = 190, SAUG_W = 0.75;
 // Marker: kleiner Magnet, der ein schimmerndes Magnetfeld aufspannt
 function baueMarker(team) {
@@ -4674,7 +4689,8 @@ function sprungStarten(e, z) {
   const zx = z.wer ? z.wer.x : z.x, zy = z.wer ? z.wer.y : z.y;
   const f = freieStelle(zx + (z.wer ? 0 : 18), zy, e.r || 12, bodenHoehe(zx, zy));
   const d = Math.hypot(f.x - e.x, f.y - e.y);
-  e.superSprung = { sx: e.x, sy: e.y, h0: hAbs(e), zx: f.x, zy: f.y, h1: bodenHoehe(f.x, f.y), t: 0, dauer: 1.1 + d / 2200 };
+  e.superSprung = { sx: e.x, sy: e.y, h0: hAbs(e), zx: f.x, zy: f.y, h1: bodenHoehe(f.x, f.y), t: 0, dauer: 1.1 + d / 2200, vorT: SPRUNG_SCHMELZEN };
+  e.sprungBlob = true;   // erst zur Pfütze schmelzen …
   e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.schirmAuf = false;
   spritzer(e.x, e.y, hAbs(e) + 2, e.team, 14, 200);
   // Landeplatz-Ring (sieht man, wo jemand gleich landet)
@@ -4686,13 +4702,21 @@ function sprungStarten(e, z) {
 }
 function sprungFliegen(e, dt) {
   const s = e.superSprung;
+  if (s.vorT > 0) {   // … als Pfütze am Boden zusammenziehen …
+    s.vorT -= dt; e.z = 0; e.vx = e.vy = e.vz = 0; e.sprungBlob = true;
+    if (s.vorT <= 0) { spritzer(e.x, e.y, hAbs(e) + 2, e.team, 16, 260); if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('blubb'); }   // … und als Klecks LOS!
+    return;
+  }
   s.t += dt;
   const f = Math.min(1, s.t / s.dauer), k = f * f * (3 - 2 * f);
+  const warBlob = e.sprungBlob;
+  e.sprungBlob = f < SPRUNG_MENSCH;   // kurz vor dem Aufprall wieder ein Mensch
+  if (warBlob && !e.sprungBlob) { spritzer(e.x, e.y, hAbs(e), e.team, 18, 220); if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('plopp'); }
   e.x = s.sx + (s.zx - s.sx) * k; e.y = s.sy + (s.zy - s.sy) * k;
   const hoch = s.h0 + (s.h1 - s.h0) * f + Math.sin(f * Math.PI) * SPRUNG_HOEHE;
   e.z = Math.max(0.01, hoch - bodenHoehe(e.x, e.y)); e.vx = e.vy = e.vz = 0;
   if (f >= 1) {   // gelandet!
-    e.superSprung = null; e.z = 0; e.landT = 0.25;
+    e.superSprung = null; e.sprungBlob = false; e.z = 0; e.landT = 0.25;
     if (!istGast()) klecks(e.x, e.y, 45, e.team, e, false);
     spritzer(e.x, e.y, hAbs(e) + 2, e.team, 24, 260);
     if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('platsch');
@@ -4933,7 +4957,7 @@ function treffen(e, schaden, wer) {
 }
 
 function erwischt(e, wer) {
-  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0; e.panzerT = 0; e.gigaT = 0; e.trifT = 0; e.dashT = 0; e.saugerT = 0; e.saugMenge = 0; e.superSprung = null; e.markiertBis = 0;
+  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0; e.panzerT = 0; e.gigaT = 0; e.trifT = 0; e.dashT = 0; e.saugerT = 0; e.saugMenge = 0; e.superSprung = null; e.sprungBlob = false; e.markiertBis = 0;
   const farbe = wer ? wer.team : 1 - e.team;
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
@@ -5232,7 +5256,7 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, z: 260, vz: -60, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0, gigaT: 0, trifT: 0, dashT: 0, saugerT: 0, saugMenge: 0, superSprung: null, markiertBis: 0 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, z: 260, vz: -60, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0, gigaT: 0, trifT: 0, dashT: 0, saugerT: 0, saugMenge: 0, superSprung: null, sprungBlob: false, markiertBis: 0 });
         if (e.spieler) ton('plopp');
       }
       continue;
@@ -5640,10 +5664,20 @@ function welt3D(dt) {
     g.rotation.y = -e.winkel + dreh;
     g.scale.set(gx, gy, gx);
     // Abtauchen: der Körper versinkt in der Farbe, dann kommt der Schnorchel
-    e.koerper.visible = e.tauchAnim < 0.97;
+    const blob = !!e.sprungBlob && !e.tot, blobBoden = blob && e.z < 3;   // 🚀 Supersprung: erst Pfütze, dann fliegender Klecks
+    e.koerper.visible = e.tauchAnim < 0.97 && !blob;
     e.koerper.position.y = -e.tauchAnim * 50;
-    e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6 && inEigen;
-    e.klecksForm.visible = e.taucht && e.tauchAnim > 0.6 && !inEigen && !istIch;   // Pfütze mit Augen auf trockenem Boden
+    e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6 && inEigen && !blob;
+    e.klecksForm.visible = ((e.taucht && e.tauchAnim > 0.6 && !inEigen) || blobBoden) && !istIch;   // Pfütze mit Augen auf trockenem Boden
+    e.flugKlecks.visible = blob && !blobBoden && !istIch;
+    if (e.flugKlecks.visible) {   // zeigt in Flugrichtung, Nase hoch beim Steigen, runter beim Fallen
+      const dx = e.x - (e.blobPx ?? e.x), dy = e.y - (e.blobPy ?? e.y), dz = hAbs(e) - (e.blobPz ?? hAbs(e)), weit = Math.hypot(dx, dy);
+      if (weit > 0.3) { e.blobWinkel = Math.atan2(dy, dx); e.blobNeig = Math.atan2(dz, weit); }
+      e.flugKlecks.rotation.set(0, -((e.blobWinkel ?? e.winkel) - e.winkel), e.blobNeig || 0);
+      const w = 1 + Math.sin(zeit * 18 + e.nr) * 0.07;
+      e.flugKlecks.scale.set(w, 1 / w, 1 / w); e.flugKlecks.position.y = 10;
+    }
+    e.blobPx = e.x; e.blobPy = e.y; e.blobPz = hAbs(e);
     if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
     saugerZeigen(e);
     if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
@@ -5793,7 +5827,7 @@ function hud() {
     ctx.fillStyle = `rgba(255,${80 + Math.sin(zeit * 20) * 40 | 0},0,0.35)`; ctx.fillRect(0, 0, cw, ch);
     ctx.font = 'bold 34px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('🔥 HEISS! Raus aus der Lava! 🔥', cw / 2, ch * 0.3);
   }
-  if (spieler.taucht) { ctx.globalAlpha = 0.18; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1; }
+  if (spieler.taucht || spieler.sprungBlob) { ctx.globalAlpha = 0.18; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1; }
   if (rotBlitz > 0) { ctx.fillStyle = `rgba(255,40,40,${rotBlitz})`; ctx.fillRect(0, 0, cw, ch); }
   if (spieler.kugelT > 0) {   // Tuffkugel: Klick-Anzeige
     const kraft = Math.min(25, spieler.kugelKraft || 0), puls = 1 + Math.sin(zeit * 20) * 0.06;
@@ -6203,7 +6237,7 @@ function feierStarten(pO, pL) {
   for (const e of kleckse) { const w = (e.punkte || 0) * 2 + (e.ko || 0) * 100; e.mvpWert = w; if (w > best) { best = w; mvp = e; } }
   feier = { pO, pL, sieger, mvp, phase: 0, t: 0, weiter: false };
   for (const e of kleckse) {
-    Object.assign(e, { saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null, tot: false, todT: 0, spawnT: 0, taucht: false, tauchAnim: 0, schild: 0, gigaT: 0, panzerT: 0, kugelT: 0, laserT: 0, werferT: 0, trifT: 0, wirbelBis: 0, tanaDashBis: 0, schwingT: 0, laden: false, ladung: 0, rueck: 0 });
+    Object.assign(e, { saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null, sprungBlob: false, tot: false, todT: 0, spawnT: 0, taucht: false, tauchAnim: 0, schild: 0, gigaT: 0, panzerT: 0, kugelT: 0, laserT: 0, werferT: 0, trifT: 0, wirbelBis: 0, tanaDashBis: 0, schwingT: 0, laden: false, ladung: 0, rueck: 0 });
     e.emote = null; e.koerper.rotation.z = 0;
   }
   for (const b of bomben) wegUndEntsorgen(b.mesh); bomben = [];
