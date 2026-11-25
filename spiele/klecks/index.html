@@ -1439,8 +1439,9 @@ for (const [id, a] of Object.entries(ARENEN)) {
   const kante = new THREE.MeshStandardMaterial({ color: new THREE.Color(th.wand).multiplyScalar(th.muster === 'stein' ? 1.6 : 0.65), roughness: 0.6, transparent: !!th.glas, opacity: th.glas ? 0.9 : 1 });
   for (const r of a.waende) wandKlotz(r.x, r.y, r.w, r.h, a.wandH, m, kartenGruppe[id], kante);
 }
-wandKlotz(-24, -24, W + 48, 24, 50, randMat); wandKlotz(-24, H, W + 48, 24, 50, randMat);
-wandKlotz(-24, 0, 24, H, 50, randMat); wandKlotz(W, 0, 24, H, 50, randMat);
+const randGruppe = new THREE.Group(); scene.add(randGruppe);   // Mauer rund um die Arena (auf der Insel unsichtbar – da ist Meer!)
+wandKlotz(-24, -24, W + 48, 24, 50, randMat, randGruppe); wandKlotz(-24, H, W + 48, 24, 50, randMat, randGruppe);
+wandKlotz(-24, 0, 24, H, 50, randMat, randGruppe); wandKlotz(W, 0, 24, H, 50, randMat, randGruppe);
 // Basis-Ringe (in allen Arenen)
 const basisRingMat = TEAMS.map(t => new THREE.MeshBasicMaterial({ color: t.dunkel }));
 for (const id in ARENEN) for (let t = 0; t < 2; t++) {
@@ -1473,6 +1474,7 @@ function karteLaden(name) {
   zaehler[0] = flaeche; zaehler[1] = zaehler[2] = 0;
   fctx.clearRect(0, 0, W, H); farbeGeaendert = true;
   for (const k in kartenGruppe) kartenGruppe[k].visible = k === name;
+  randGruppe.visible = !(ARENEN[name] && ARENEN[name].nurKabeljau);
   const th = ARENEN[name] ? ARENEN[name].thema : STANDARD_THEMA;
   WAND_H = ARENEN[name] ? ARENEN[name].wandH : 80;
   bodenMalen(th); himmelSetzen(th, name);
