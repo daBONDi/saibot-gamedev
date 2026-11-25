@@ -293,11 +293,18 @@ Object.assign(WAFFEN, {
   oneschirm: { typ: 'schirm', name: 'Oneschirm', emoji: '☝️', info: 'Schießt nur eine dicke Kugel – dafür weit und stark', modell: { ganz: 0.85 }, gross: 2,
     cd: 0.5, anzahl: 1, streu: 0.03, speed: 720, bremse: 1.4, schaden: 42, klecks: 20, spur: 8, kosten: 5, reichweite: 300, schirmHP: 200 },
 });
+// 💢 Farb-lon: langsam, aber 2 Treffer reichen! 🧽 Farbrush: ganz nah, ganz viele kleine Kugeln, malt super
+Object.assign(WAFFEN, {
+  farblon: { typ: 'spritzer', name: 'Farb-lon', emoji: '💢', info: 'Schießt langsam und du gehst beim Schießen langsam – aber schon 2 Treffer erwischen jeden!', modell: { form: 'farblon' }, gross: 1.6,
+    cd: 0.62, kosten: 6, speed: 760, bremse: 1.3, schaden: 52, klecks: 19, spur: 7, streu: 0.02, anzahl: 1, reichweite: 320, schussLaufen: 0.4 },
+  farbrush: { typ: 'spritzer', name: 'Farbrush', emoji: '🧽', info: 'Ganz kurze Reichweite, aber viele Kugeln auf einmal – malt richtig viel! Ein Treffer macht wenig Schaden.', modell: { form: 'farbrush' },
+    cd: 0.09, kosten: 1.7, speed: 430, bremse: 3.3, schaden: 6, klecks: 19, spur: 9, streu: 0.55, anzahl: 4, reichweite: 130 },
+});
 // Welche Firma baut welche Waffe?
 for (const [f, liste] of Object.entries({
   zwecko: ['roller', 'pinsel', 'breitroller', 'gigaroller', 'miniroller', 'bogen', 'flitzbogen', 'tana', 'wirbeltana', 'grosstana'],
-  altra:  ['sniper', 'miniliter', 'liter', 'kanone', 'langbogen'],
-  u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling', 'schirm', 'campingschirm', 'abkoppler', 'oneschirm'],
+  altra:  ['sniper', 'miniliter', 'liter', 'kanone', 'langbogen', 'farblon'],
+  u24:    ['spritzer', 'doppel', 'eimer', 'blubber', 'klecksling', 'schwerling', 'miniling', 'schirm', 'campingschirm', 'abkoppler', 'oneschirm', 'farbrush'],
 })) for (const w of liste) WAFFEN[w].firma = f;
 const typVon = id => (WAFFEN[id] && WAFFEN[id].typ) || id;
 const ULTIS = {
@@ -313,6 +320,7 @@ const ULTIS = {
   gigafisch: { name: 'Gigafisch',  emoji: '🦑', info: 'Werde zu einem riesigen Tintenfisch und ramme deine Gegner weg!' },
   trifarb: { name: 'TriFarb-Artillerie', emoji: '📡', info: 'Wirf 3 Peilsender – dann schießen Farbstrahlen vom Boden in den Himmel!' },
   lautsprecher: { name: 'Megalautsprecher', emoji: '📢', info: 'Stell ihn hin – sein Schallstrahl macht alles vor ihm platt!' },
+  sauger:  { name: 'Farbsauger',   emoji: '🌪️', info: 'Saug Gegner-Tinte und Bomben ein – Klick schießt alles als Pyramiden-Explosion zurück!' },
   kugel:   { name: 'Tuffkugel',    emoji: '🔮', info: 'Hochfliegen, Klicken klicken klicken, werfen – sie bläht sich riesig auf!' },
 };
 // Bomben (im Menü frei wählbar). wurf = wird geworfen, sonst direkt hingestellt
@@ -322,6 +330,8 @@ const BOMBEN = {
   sprinkler: { name: 'Sprinkler',  emoji: '⛲', info: 'Sprüht 8 Sek. lang Farbe im Kreis', kosten: 55, wurf: true },
   mine:      { name: 'Farbmine',   emoji: '⚠️', info: 'Unsichtbare Falle vor deinen Füßen', kosten: 40, wurf: false },
   wand:      { name: 'Farbwand',   emoji: '🧱', info: 'Hält 5 Sek. lang Gegner-Farbe ab', kosten: 60, wurf: false },
+  marker:    { name: 'Marker',     emoji: '🧲', info: 'Wirft ein Magnetfeld: Gegner darin werden markiert – dein ganzes Team sieht sie!', kosten: 45, wurf: true },
+  springturm: { name: 'Springturm', emoji: '🗼', info: 'Stell ihn auf – mit M springst du zu ihm (oder zu Mitspielern). Gegner können ihn kaputt machen!', kosten: 70, wurf: false },
 };
 
 // ================== SHOP-SACHEN ==================
@@ -354,6 +364,8 @@ const SET_DATEN = [
   ['wirbeltana', 'sprinkler', 'wirbel', 500, 'mine',     'gigafisch', 650],
   ['abkoppler', 'mine',  'werfer',  500,   'klecks',    'kugel',   650],
   ['oneschirm', 'klebe', 'laser',   400,   'wand',      'trifarb', 550],
+  ['farblon',  'marker', 'sauger',  450,   'springturm', 'raketen', 600],
+  ['farbrush', 'springturm', 'welle', 300, 'marker',    'sauger',  450],
 ];
 // Jede Waffe gibt es außerdem von den 3 Firmen – jede Firma mit eigener Bombe und Ulti (wie Watzo)
 const FIRMEN_VARIANTEN = {
@@ -2245,11 +2257,11 @@ function baueSchnorchel(team) {
 // Tintenform auf trockenem Boden: eine flache, glänzende Pfütze, aus der zwei Augen herausgucken (vorne = +x)
 function baueKlecksForm(team) {
   const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.08, metalness: 0.15 });
-  const flach = (r, x, z, y, mt = m) => { const k = kugel(mt, r, x, y, z); k.scale.set(1, 0.09, 1); g.add(k); return k; };
+  const flach = (r, x, z, y, mt = m) => { const k = kugel(mt, r, x, y, z, 1, 0.09, 1); g.add(k); return k; };
   flach(11, 0, 0, 0.6); flach(7, -7, 5, 0.5); flach(6, -6, -6, 0.5); flach(5, 7, -6, 0.5); flach(4, 9, 6, 0.5);   // unregelmäßige Pfütze
   g.add(kugel(m, 1.6, -15, 0.4, 3, 1, 0.3, 1), kugel(m, 1.1, 13, 0.4, -10, 1, 0.3, 1), kugel(m, 1.3, -4, 0.4, 13, 1, 0.3, 1));   // Spritzer
   const glanz = flach(3.2, -2, -3, 1.4, mat('#ffffff', { transparent: true, opacity: 0.55, roughness: 0 }));   // Glanzfleck
-  glanz.scale.set(1.6, 0.05, 0.7);
+  glanz.scale.set(3.2 * 1.6, 3.2 * 0.05, 3.2 * 0.7);
   // Augen: halb in der Pfütze versunken, mit Lidern zum Blinzeln
   const augen = new THREE.Group(); g.add(augen);
   const weiss = mat('#ffffff', { roughness: 0.25 }), schwarz = mat('#111111', { roughness: 0.15 });
@@ -2257,7 +2269,7 @@ function baueKlecksForm(team) {
   for (const s of [-1, 1]) {
     const auge = new THREE.Group(); auge.position.set(4, 1, s * 3.4); augen.add(auge);
     auge.add(kugel(weiss, 2.7, 0, 0, 0), kugel(schwarz, 1.35, 2.1, 0.7, 0), kugel(weiss, 0.45, 3.1, 1.3, -0.5));
-    const lid = kugel(m, 2.85, 0, 0.2, 0, 1, 1, 1); lid.scale.set(1.05, 0.05, 1.05); lid.position.y = 2.4; auge.add(lid); lider.push(lid);
+    const lid = kugel(m, 2.95, 0, 2.4, 0, 1, 0.05, 1); auge.add(lid); lider.push(lid);
   }
   g.userData = { augen, lider, glanz };
   // Wellenringe beim Rutschen
@@ -2502,7 +2514,40 @@ function baueWaffe(art, m, team, watzo = false, variante = null) {
       ud.blitz = kugel(blitzMat, 2.5, 5, -9, 0); kopf.add(ud.blitz);
       break;
     }
-    default: { // Spritzer
+    default: {
+     const form = WAFFEN[art] && WAFFEN[art].modell && WAFFEN[art].modell.form;
+     if (form === 'farblon') {   // 💢 Farb-lon: dicker kurzer Blaster mit runder Druckkugel und Trichter-Lauf
+      g.add(klotz(m, 13, 7.5, 6, 5, 0.8, 0), klotz(MAT_GRAU, 13.4, 1.4, 6.4, 5, -2.8, 0), klotz(MAT_SCHWARZ, 2, 7.8, 6.6, 0, 0.8, 0));
+      const griff = klotz(MAT_GUMMI, 3.8, 8.5, 4.2, 1, -6, 0); griff.rotation.z = 0.25; g.add(griff);
+      abzugBauen(g, 5.5);
+      g.add(kugel(glasRohrMat, 5, 3, 8.5, 0), ringY(MAT_METALL, 5, 0.6, 3, 7, 0));             // Druckkugel aus Glas
+      ud.tinteKugel = kugel(tinte, 1, 3, 8.5, 0); g.add(ud.tinteKugel);                    // Tinte darin (wird kleiner)
+      g.add(klotz(mat('#ffd166'), 1, 1, 6.6, 10, 2.8, 0), klotz(mat('#ffd166'), 1, 1, 6.6, 7.5, 2.8, 0));
+      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
+      lauf.add(zylinderX(MAT_METALL, 2.6, 2.6, 8, 15, 1, 0), ringX(MAT_GRAU, 2.9, 0.7, 13, 1, 0), ringX(MAT_GRAU, 2.9, 0.7, 17, 1, 0));
+      lauf.add(zylinderX(m, 4.6, 2.6, 5, 21.5, 1, 0), ringX(MAT_SCHWARZ, 4.6, 0.6, 24, 1, 0));   // Trichter vorne
+      for (let i = 0; i < 4; i++) { const r = klotz(MAT_GRAU, 6, 0.8, 0.8, 15, 1 + Math.cos(i * Math.PI / 2) * 3, Math.sin(i * Math.PI / 2) * 3); lauf.add(r); }   // Kühlrippen
+      ud.blitz = kugel(blitzMat, 3.4, 26.5, 1, 0); lauf.add(ud.blitz);
+      break;
+     }
+     if (form === 'farbrush') {   // 🧽 Farbrush: Sprühpistole mit breitem Bürstenkopf vorne
+      g.add(klotz(m, 10, 5.5, 4.6, 4, 1, 0), klotz(MAT_GRAU, 10.4, 1.1, 5, 4, -1.5, 0));
+      const griff = klotz(MAT_GUMMI, 3.4, 8, 3.8, 0.5, -4.8, 0); griff.rotation.z = 0.25; g.add(griff);
+      abzugBauen(g, 4.5);
+      // Tank als Rucksack-Flasche oben
+      g.add(zylinderX(glasRohrMat, 2.4, 2.4, 9, 3, 5.6, 0), ringX(MAT_METALL, 2.4, 0.5, -1.5, 5.6, 0), ringX(MAT_METALL, 2.4, 0.5, 7.5, 5.6, 0));
+      const tank = new THREE.Group(); tank.position.set(-1.2, 5.6, 0); g.add(tank); ud.tinteFuell = tank;
+      tank.add(zylinderX(tinte, 1.9, 1.9, 8.4, 4.2, 0, 0));
+      const lauf = new THREE.Group(); g.add(lauf); ud.lauf = lauf;
+      lauf.add(zylinderX(MAT_METALL, 1.3, 1.3, 6, 12, 1, 0));
+      lauf.add(klotz(MAT_GRAU, 3, 4, 12, 16.5, 1, 0));                                   // breiter Bürstenkopf
+      const borste = mat('#f4f4f4', { roughness: 0.9 });
+      for (let i = 0; i < 7; i++) lauf.add(klotz(i % 2 ? tinte : borste, 2.6, 3.4, 1.2, 19.3, 1, -5 + i * 1.66));   // Borsten (abwechselnd mit Farbe)
+      for (let i = 0; i < 3; i++) lauf.add(kugel(tinte, 0.7, 18, -1.5, -3 + i * 3));                                // tropft
+      ud.blitz = kugel(blitzMat, 2.4, 22, 1, 0, 0.6, 1, 2.2); lauf.add(ud.blitz);
+      break;
+     }
+     { // Spritzer
       g.add(klotz(m, 12, 6, 5, 6, 1, 0), klotz(MAT_GRAU, 12.4, 1.2, 5.4, 6, -1.6, 0));       // Gehäuse
       const griff = klotz(MAT_GUMMI, 3.5, 8, 4, 1.5, -5, 0); griff.rotation.z = 0.25; g.add(griff);
       abzugBauen(g, 6);
@@ -2520,6 +2565,7 @@ function baueWaffe(art, m, team, watzo = false, variante = null) {
       lauf.add(zylinderX(m, 1.1, 2.3, 3, 21.5, 1.5, 0), klotz(MAT_GUMMI, 5, 2.2, 3, 15, -1, 0));
       for (let i = 0; i < 3; i++) lauf.add(klotz(MAT_GRAU, 0.4, 2.4, 3.2, 13.5 + i * 1.5, -1, 0));
       ud.blitz = kugel(blitzMat, 2.2, 24, 1.5, 0); lauf.add(ud.blitz);
+     }
     }
   }
   if (ud.blitz) { ud.blitz.castShadow = false; ud.blitz.visible = false; }
@@ -2935,7 +2981,7 @@ glCv.addEventListener('click', () => {
 const MP_PEERJS = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const MP_VORSILBE = 'klecks-krieg-';   // Damit unsere Raum-Codes nicht mit anderen Spielen zusammenstoßen
 const MP_SENDE_RATE = 15, MP_EINGABE_RATE = 20, MP_MAX = 8;
-const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete', 'tracker'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand', 'tracker', 'lautsprecher', 'schirm'];
+const BOMBEN_ARTEN = ['klecks', 'klebe', 'sprinkler', 'rakete', 'tracker', 'marker'], GERAET_ARTEN = ['klebe', 'sprinkler', 'mine', 'wand', 'tracker', 'lautsprecher', 'schirm', 'marker', 'springturm'];
 const r0 = v => Math.round(v), r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const zahl = (v, lo, hi, nichts) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : nichts;
 const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste: new Map(), meineId: 'host',
@@ -3279,7 +3325,7 @@ function gastUpdate(dt) {
   else { p.schiesst = false; p.schirmHalten = false; if (!p.tot) bewege(p, 0, 0, dt); }
   const w = WAFFEN[p.waffe];
   mp.schussT -= dt;
-  if (p.schiesst && !p.taucht && w.speed && !w.typ && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
+  if (p.schiesst && !p.taucht && w.speed && (!w.typ || w.typ === 'spritzer') && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
   if (p.schiesst && p.tinte < 2) leerHinweis = 1.5;
   // Die anderen gleiten weich zu ihrer Position
   const k = Math.min(1, dt * 12);
@@ -3799,7 +3845,9 @@ function bewege(e, dx, dy, dt) {
   const feind = tauchenPruefen(e), amBoden = e.z <= 0;
   let speed = e.taucht ? (e.inEigen ? 290 * (1 + e.bonus.tauchen) : feind ? 55 : 130 * (1 + e.bonus.tempo)) : feind ? 75 + 85 * e.bonus.feindfarbe : 160 * (1 + e.bonus.tempo);
   if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : typVon(e.waffe) === 'ling' || typVon(e.waffe) === 'bogen' ? 0.6 : 0.8;
-  if (e.lingT > 0 && !e.taucht) speed *= 0.75;   // Klecksling feuert: langsamer laufen
+  if (e.lingT > 0 && !e.taucht) speed *= 0.75;
+  if (e.schiesst && !e.taucht && WAFFEN[e.waffe] && WAFFEN[e.waffe].schussLaufen) speed *= WAFFEN[e.waffe].schussLaufen / 0.8;   // 💢 Farb-lon: beim Schießen ganz langsam
+  if (e.saugerT > 0) speed *= 0.75;   // 🌪️ Farbsauger ist schwer   // Klecksling feuert: langsamer laufen
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
@@ -5290,7 +5338,7 @@ function welt3D(dt) {
       u.augen.position.y = Math.max(0, Math.sin(zeit * 2 + e.nr)) * 0.8 - (laeuft ? 0.6 : 0);
       u.augen.rotation.y = laeuft ? 0 : Math.sin(zeit * 0.9 + e.nr) * 0.5;   // schaut sich um
       const blinzeln = ((zeit + e.nr * 0.7) % 3.2) < 0.14;
-      for (const l of u.lider) { l.scale.y = blinzeln ? 1 : 0.05; l.position.y = blinzeln ? 0 : 2.4; }
+      for (const l of u.lider) { l.scale.y = blinzeln ? 2.95 : 0.15; l.position.y = blinzeln ? 0 : 2.4; }
       u.glanz.position.x = -2 + Math.sin(zeit * 1.5 + e.nr) * 1.5;
       u.ringe.forEach((r, i) => {
         const f = ((zeit * (laeuft ? 1.6 : 0.6) + i * 0.5 + e.nr * 0.3) % 1);
