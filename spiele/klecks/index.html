@@ -7731,7 +7731,7 @@ function kabeljauHud(cw, ch) {
     ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`🟠 ${kab.kaviar} / ${WL.quote} Kaviarkugeln`, cw / 2, 62);
   }
   ctx.textAlign = 'left'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = (spieler.spezialRest || 0) > 0 ? '#ffd166' : '#888';
-  ctx.fillText(`⚡ Spezial (Q): ${'⚡'.repeat(spieler.spezialRest || 0)}${'·'.repeat(SPEZIAL_ANZAHL - (spieler.spezialRest || 0))} ${spieler.spezialRest || 0}× übrig`, 20, ch - 165);
+  ctx.fillText(`⚡ Spezial (Q): ${'⚡'.repeat(spieler.spezialRest || 0)}${'·'.repeat(SPEZIAL_ANZAHL - (spieler.spezialRest || 0))} ${spieler.spezialRest || 0}× übrig`, 20, ch - 190);
   if (imFlutWasser(spieler.x, spieler.y) && !spieler.tot) { ctx.textAlign = 'center'; textMitRand('🌊 Raus aus dem Wasser!', cw / 2, ch * 0.3, 30, '#6fe3ff'); }
   if (spieler.traegt && !spieler.tot) { ctx.textAlign = 'center'; textMitRand('🟠 Bring den Kaviar zum Korb 🧺 – oder halte E und wirf ihn!', cw / 2, ch - 190, 20, '#ffd166'); }
 }
