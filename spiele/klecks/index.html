@@ -874,14 +874,23 @@ function krach(freq, lang, laut, t, ziel = sfxGain, typ = 'lowpass') {
   g.gain.setValueAtTime(laut, t); g.gain.exponentialRampToValueAtTime(0.0001, t + lang);
   q.connect(f); f.connect(g); g.connect(ziel); q.start(t); q.stop(t + lang + 0.02);
 }
-// 😆 Eine "Ha"-Silbe zum Lachen: Sägezahn durch zwei Vokal-Filter (klingt wie "a")
+// 😆 Eine fröhliche Cartoon-Silbe ("hi!"): hoher, weicher Ton, der kurz nach oben hüpft – klingt wie eine Comicfigur
 function lachSilbe(t, f0, laut) {
-  const o = ac.createOscillator(), g = ac.createGain();
-  o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 1.08, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.9, t + 0.13);
-  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut * 3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-  for (const [fq, q] of [[800, 6], [1250, 8], [2600, 10]]) { const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fq; f.Q.value = q; o.connect(f); f.connect(g); }
-  g.connect(sfxGain); o.start(t); o.stop(t + 0.2);
-  krach(2500, 0.04, laut * 0.15, t, sfxGain, 'highpass');   // das "H"
+  const f = f0 * 1.9;   // viel höher = lustig statt gruselig
+  const g = ac.createGain(), tief = ac.createBiquadFilter(), vokal = ac.createBiquadFilter();
+  tief.type = 'lowpass'; tief.frequency.value = 3200;
+  vokal.type = 'peaking'; vokal.frequency.value = 2300; vokal.Q.value = 1.2; vokal.gain.value = 6;   // ein bisschen "i"
+  for (const [typ, mal, anteil] of [['triangle', 1, 1], ['square', 1, 0.18], ['sine', 2, 0.25]]) {
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = typ; o.frequency.setValueAtTime(f * mal * 0.92, t);
+    o.frequency.exponentialRampToValueAtTime(f * mal * 1.12, t + 0.04);   // hüpft hoch …
+    o.frequency.exponentialRampToValueAtTime(f * mal * 0.98, t + 0.1);    // … und wieder runter
+    og.gain.value = anteil; o.connect(og); og.connect(vokal); o.start(t); o.stop(t + 0.14);
+  }
+  vokal.connect(tief); tief.connect(g);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut * 0.9, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+  g.connect(sfxGain);
+  krach(6000, 0.02, laut * 0.06, t, sfxGain, 'highpass');   // ganz leises "h"
 }
 // 🎺 traurige Posaune: ein Ton mit Wackeln
 function posaune(t, f, lang, laut, vibrato = 0) {
@@ -900,15 +909,15 @@ const SOUNDS = {
   ruf_hilfe:    (t, v) => { lachSilbe(t, 520, 0.13 * v); lachSilbe(t + 0.16, 440, 0.13 * v); osz('square', 880, 660, 0.3, 0.03 * v, t + 0.3, sfxGain, 2000); },
   ruf_los:      (t, v) => { lachSilbe(t, 300, 0.12 * v); lachSilbe(t + 0.12, 450, 0.14 * v); },
   ruf_super:    (t, v) => { lachSilbe(t, 400, 0.11 * v); lachSilbe(t + 0.12, 600, 0.13 * v); [72, 76, 79].forEach((n, i) => osz('triangle', NOTE(n), NOTE(n), 0.12, 0.05 * v, t + 0.25 + i * 0.06)); },
-  ruf_xd:       (t, v) => [360, 330, 300].forEach((f, i) => lachSilbe(t + i * 0.11, f, 0.11 * v)),
+  ruf_xd:       (t, v) => [360, 400, 440, 400].forEach((f, i) => lachSilbe(t + i * 0.1, f, 0.11 * v)),
   ruf_danke:    (t, v) => { lachSilbe(t, 380, 0.11 * v); lachSilbe(t + 0.15, 320, 0.11 * v); },
-  // 💀 VOLL ERWISCHT XD – Gegner-Team weg: Trommelwirbel, Jubel-Fanfare, Becken und ein fettes "HA-HA-HA-HA!"
+  // 💀 VOLL ERWISCHT XD – Gegner-Team weg: Trommelwirbel, Jubel-Fanfare, Becken und ein fröhliches Kichern "hihihi!"
   vollJubel: (t, v) => {
     for (let i = 0; i < 10; i++) krach(1400, 0.05, (0.06 + i * 0.012) * v, t + i * 0.045, sfxGain, 'bandpass');   // Trommelwirbel
     osz('sine', 140, 45, 0.35, 0.35 * v, t + 0.45); krach(5000, 1.2, 0.18 * v, t + 0.45, sfxGain, 'highpass');       // BUMM + Becken
     [67, 72, 76, 79, 84].forEach((n, i) => osz('square', NOTE(n), NOTE(n), 0.12, 0.06 * v, t + 0.45 + i * 0.07, sfxGain, 3500));
     [72, 76, 79, 84].forEach(n => osz('sawtooth', NOTE(n), NOTE(n), 0.8, 0.035 * v, t + 0.8, sfxGain, 2500));      // Akkord hält
-    [330, 300, 280, 260, 240].forEach((f, i) => lachSilbe(t + 1.05 + i * 0.16, f, 0.22 * v));                          // HA-HA-HA-HA-HA!
+    [340, 380, 420, 380, 440, 400].forEach((f, i) => lachSilbe(t + 1.05 + i * 0.12, f, 0.2 * v));                    // hi-hi-hi-hi-hiii!
   },
   // 😱 Eigenes Team weg: traurige Posaune "wah wah wah wahhhh"
   vollTraurig: (t, v) => {
