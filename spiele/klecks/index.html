@@ -16,6 +16,18 @@
     background: linear-gradient(90deg, #ff8a1f, #ff5fa2, #a347ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; color: #ffd166; }
   p { color: #c9c3ff; margin: 0.4rem 0; }
+  .farbcastBox { max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem 1.5rem; }
+  .fcKopf { display: flex; align-items: center; justify-content: center; gap: 0.8rem; }
+  .live { background: #ff3b3b; color: #fff; border-radius: 0.5rem; padding: 0.1rem 0.5rem; font-weight: bold; animation: blinken 1s infinite; }
+  @keyframes blinken { 50% { opacity: 0.4; } }
+  .fcStudio { display: flex; align-items: center; gap: 0.6rem; margin: 0.5rem 0; }
+  .fcStudio canvas { position: static; inset: auto; width: 110px; height: 124px; flex: none; opacity: 0.55; transition: transform 0.2s, opacity 0.2s; }
+  .fcStudio canvas.spricht { opacity: 1; transform: scale(1.1) translateY(-4px); }
+  .fcMitte { flex: 1; text-align: left; } .fcMitte b { color: #ffd166; }
+  #fcKarten { display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; margin: 0.4rem 0; }
+  .arenaKarte { background: #ffffff14; border-radius: 0.8rem; padding: 0.5rem; width: 190px; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.9rem; }
+  .arenaKarte canvas { position: static; inset: auto; width: 176px; height: 110px; border-radius: 0.4rem; }
+  @media (max-height: 640px) { .fcStudio canvas { width: 70px; height: 80px; } .arenaKarte canvas { width: 140px; height: 88px; } .arenaKarte { width: 150px; font-size: 0.78rem; } }
   .papageiBox { display: flex; flex-direction: column; max-height: calc(100vh - 2rem); padding: 1rem 1.5rem; }
   #papageiExtra { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   #papageiKnoepfe { flex: none; }
@@ -145,6 +157,17 @@
   </div>
 </div>
 
+<div id="farbcast" class="overlay hidden">
+  <div class="box farbcastBox">
+    <div class="fcKopf"><span class="live">🔴 LIVE</span><h1 style="font-size:2rem;margin:0">🎙️ FARBCAST</h1><span class="kleinText">der Podcast aus der Stadt</span></div>
+    <div class="fcStudio"><canvas id="fcTini" width="120" height="135"></canvas>
+      <div class="fcMitte"><b id="fcName"></b><p class="sprechblase" id="fcText"></p></div>
+      <canvas id="fcBrummi" width="120" height="135"></canvas></div>
+    <div id="fcKarten"></div>
+    <div><button class="gross" id="fcWeiter">Weiter ▶</button> <button class="klein" id="fcSkip">⏩ Überspringen</button></div>
+    <p class="kleinText" style="margin:0.4rem 0 0">▶ Klicken oder <b>Leertaste</b> / <b>Enter</b> = weiter · <b>Esc</b> = überspringen</p>
+  </div>
+</div>
 <div id="papagei" class="overlay hidden">
   <div class="box papageiBox">
     <div class="papageiKopf"><canvas id="papageiBild" width="160" height="180"></canvas>
@@ -932,6 +955,13 @@ function posaune(t, f, lang, laut, vibrato = 0) {
   o.connect(fl); fl.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + lang + 0.05);
 }
 const SOUNDS = {
+  tiniPlapper: (t, v) => lachSilbe(t, 340 + Math.random() * 160, 0.07 * v),
+  brummiPlapper: (t, v) => { lachSilbe(t, 120 + Math.random() * 50, 0.08 * v); osz('sine', 110, 90, 0.08, 0.03 * v, t); },
+  farbcastJingle: (t, v) => {   // 🎙️ eigene kleine Erkennungsmelodie
+    [67, 71, 74, 79, 76, 79, 83].forEach((n, i) => osz('square', NOTE(n), NOTE(n), 0.12, 0.05 * v, t + i * 0.09, sfxGain, 3000));
+    [55, 59, 62].forEach(n => osz('triangle', NOTE(n), NOTE(n), 0.7, 0.05 * v, t + 0.63));
+    for (let i = 0; i < 4; i++) krach(i % 2 ? 2500 : 300, 0.08, 0.1 * v, t + 0.63 + i * 0.12, sfxGain, i % 2 ? 'highpass' : 'lowpass');
+  },
   papageiPlapper: (t, v) => lachSilbe(t, 260 + Math.random() * 180, 0.07 * v),   // 🦜 Dr. Papagei redet
   // 📢 Rufe: kleine Stimmen-Töne (Vokal-Silben)
   ruf_zumir:    (t, v) => { lachSilbe(t, 330, 0.12 * v); lachSilbe(t + 0.13, 400, 0.12 * v); lachSilbe(t + 0.26, 480, 0.14 * v); },
@@ -3059,6 +3089,10 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   tasten[e.code] = true;
   if (zustand === 'wahl' && !$('papagei').classList.contains('hidden') && ['Space', 'Enter', 'KeyE', 'NumpadEnter'].includes(e.code) && !e.repeat) { e.preventDefault(); papageiTaste(); return; }   // 🦜 weiterreden
+  if (zustand === 'wahl' && farbcast && !e.repeat) {   // 🎙️ Farbcast
+    if (['Space', 'Enter', 'NumpadEnter', 'KeyE'].includes(e.code)) { e.preventDefault(); farbcastWeiter(); return; }
+    if (e.code === 'Escape') { farbcastEnde(); return; }
+  }
   if (e.code === 'Space' && zustand === 'replay' && replay) replay.weiter = true;
   if (e.code === 'Escape' && zustand === 'replay') replayEnde();
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; if (zustand === 'feier' && feier) feier.weiter = true; }
@@ -6938,7 +6972,7 @@ function highlightsListe() {   // ⭐ Match-Highlights unter dem Ergebnis
 // ================== MENÜ, KONTO & SHOPS ==================
 const $ = id => document.getElementById(id);
 function nurZeigen(id) {
-  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl', 'papagei']) $(o).classList.toggle('hidden', o !== id);
+  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl', 'papagei', 'farbcast']) $(o).classList.toggle('hidden', o !== id);
   $('zurueck').classList.toggle('hidden', !['konto', 'menu', 'shop'].includes(id));
 }
 function knopf(inhalt, beiKlick, klasse) {   // Knopf bauen (Text immer mit textContent – sicher!)
@@ -7130,7 +7164,9 @@ function shopZeigen() {
 }
 $('shopZurueck').onclick = () => { ton('klick'); if (shopVonStadt) stadtBetreten(); else menuZeigen(); };
 
-$('start').onclick = () => { ton('klick'); stadtBetreten(); };
+$('start').onclick = () => { ton('klick'); stadtBetreten(true); farbcastStarten(); };   // 🎙️ erst der Farbcast
+$('fcWeiter').onclick = () => farbcastWeiter();
+$('fcSkip').onclick = () => farbcastEnde();
 $('musikKnopf').onclick = () => musikUmschalten();
 $('musikKnopf').textContent = '🎵 Musik: ' + (musikAn ? 'an' : 'aus');
 $('nochmal').onclick = () => lobbyBetreten();
@@ -7338,7 +7374,7 @@ function npcUpdate(n, dt) {
   n.winkel = drehe(n.winkel, Math.atan2(n.vy, n.vx), dt * 6);
 }
 
-function stadtBetreten() {
+function stadtBetreten(ohneMaus = false) {
   if (mp.peer) mpBeenden();                            // Wer in die Stadt geht, verlässt den Online-Raum
   weltLeeren(true); spieler = null; modus = 'match';
   nurZeigen(null); anprobe = null;
@@ -7350,7 +7386,7 @@ function stadtBetreten() {
   sonneAuf(STADT.x, STADT.z); himmelSetzen(STANDARD_THEMA, 'stadt');
   for (const k in kartenGruppe) kartenGruppe[k].visible = false;   // in der Stadt: Arenen weg, die Stadt hat ihren eigenen Hintergrund
   audioStart(); musikModusSetzen('menu', listenSong('menu'));
-  mausFangen();
+  if (!ohneMaus) mausFangen();
 }
 
 // ================== 🐟 KABELJAU RUN (gegen Fische, mit Dr. Papagei) ==================
@@ -7667,7 +7703,7 @@ function kabeljauStarten() {
 }
 function fischSpawnen(art, gold = false) {
   const A = FISCH_ARTEN[art];
-  for (let v = 0; v < 12; v++) {
+  for (let v = 0; v < 40; v++) {
     const flut = kab && kab.ereignis === 'flut';
     const x = flut ? FLUT_X - 40 + Math.random() * 120 : karte === 'insel' ? W * 0.5 + Math.random() * (W * 0.5 - 30) : W - 50 - Math.random() * 170, y = 40 + Math.random() * (H - 80);
     if (istWand(x, y) || kollidiert(x, y, A.r, bodenHoehe(x, y)) || inLava(x, y)) continue;
@@ -7952,6 +7988,135 @@ function riesenKi(f, dt, ziel, zd, a) {
     ton('wurf');
   }
   return false;
+}
+
+// ================== 🗺️ FESTE ARENEN + 🎙️ FARBCAST ==================
+// Alle 2 Stunden sind 2 andere Arenen dran (für alle gleich – berechnet aus der Uhrzeit).
+const ROTATION_MS = 2 * 60 * 60 * 1000;
+function rotationSlot(t = Date.now()) { return Math.floor(t / ROTATION_MS); }
+function aktuelleArenen(slot = rotationSlot()) {
+  let s = (slot * 2654435761) >>> 0;
+  const zz = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const liste = [...REVIER_ARENEN], a = liste.splice(Math.floor(zz() * liste.length), 1)[0], b = liste[Math.floor(zz() * liste.length)];
+  return [a, b];
+}
+function restZeitText() {
+  const ms = ROTATION_MS - (Date.now() % ROTATION_MS), min = Math.ceil(ms / 60000), std = Math.floor(min / 60);
+  return std ? `${std} Stunde${std > 1 ? 'n' : ''} und ${min % 60} Minuten` : `${min} Minuten`;
+}
+// Kleines Bild von einer Arena (von oben)
+function arenaBild(id, w = 176, h = 110) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'), A = ARENEN[id], th = A.thema;
+  const sx = w / W, sy = h / H;
+  x.fillStyle = th.boden; x.fillRect(0, 0, w, h);
+  for (const z of A.zonen || []) {
+    x.fillStyle = { meer: '#2a8fc8', lava: '#ff6a00', gleis: '#8b8f9a', band: '#9aa1bd', sand: '#b08a4a', busch: '#2f7a3a', boost: '#ffd166' }[z.art] || '#888';
+    if (z.w) x.fillRect(z.x * sx, z.y * sy, z.w * sx, z.h * sy); else { x.beginPath(); x.arc(z.x * sx, z.y * sy, Math.max(2, z.r * sx), 0, 7); x.fill(); }
+  }
+  x.fillStyle = 'rgba(255,255,255,0.35)'; for (const s of A.stufen || []) x.fillRect(s.x * sx, s.y * sy, s.w * sx, s.h * sy);
+  x.fillStyle = th.wand; for (const r of A.waende) x.fillRect(r.x * sx, r.y * sy, Math.max(1.5, r.w * sx), Math.max(1.5, r.h * sy));
+  if (!A.nurKabeljau) for (const [t, b] of BASIS.entries()) { x.fillStyle = TEAMS[t].col; x.beginPath(); x.arc(b.x * sx, b.y * sy, 6, 0, 7); x.fill(); }
+  else { x.fillStyle = '#ffd166'; x.beginPath(); x.arc(KORB.x * sx, KORB.y * sy, 5, 0, 7); x.fill(); }
+  x.strokeStyle = '#1b1f3a'; x.lineWidth = 3; x.strokeRect(0, 0, w, h);
+  return c;
+}
+function arenaKarte(id, zusatz) {
+  const A = ARENEN[id], d = document.createElement('div'); d.className = 'arenaKarte';
+  const t = document.createElement('b'); t.textContent = `${A.emoji} ${A.name}`;
+  const s = document.createElement('small'); s.textContent = zusatz || A.spezial;
+  d.append(arenaBild(id), t, s); return d;
+}
+// Die zwei Moderatoren (eigene Figuren!): Tini mit Kopfhörern und Brummi, das Walross mit Sonnenbrille
+function tiniMalen(c) {
+  const x = c.getContext('2d'); x.clearRect(0, 0, 120, 135);
+  const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
+  x.fillStyle = TEAMS[0].col; x.beginPath(); x.moveTo(20, 135); x.quadraticCurveTo(60, 88, 100, 135); x.fill();
+  kreis(60, 62, 34, '#ff5fa2');
+  kreis(60, 70, 28, '#ffdbac');
+  x.fillStyle = '#ff5fa2'; x.beginPath(); x.ellipse(60, 46, 30, 14, 0, Math.PI, 0); x.fill();
+  for (const [px, py, r] of [[34, 40, 5], [86, 52, 4], [70, 30, 3]]) kreis(px, py, r, TEAMS[1].col);
+  for (const px of [49, 71]) { kreis(px, 70, 4.5, '#1b1f3a'); kreis(px + 1.5, 68.5, 1.4, '#fff'); }
+  kreis(44, 80, 5, '#ff9ab0', 1, 0.6); kreis(76, 80, 5, '#ff9ab0', 1, 0.6);
+  x.strokeStyle = '#1b1f3a'; x.lineWidth = 2.5; x.beginPath(); x.arc(60, 82, 8, 0.2, Math.PI - 0.2); x.stroke();
+  x.strokeStyle = '#2b2f4a'; x.lineWidth = 6; x.beginPath(); x.arc(60, 62, 36, Math.PI * 1.05, Math.PI * 1.95); x.stroke();
+  kreis(25, 70, 10, '#2b2f4a'); kreis(95, 70, 10, '#2b2f4a'); kreis(25, 70, 6, TEAMS[0].col); kreis(95, 70, 6, TEAMS[0].col);
+  x.fillStyle = '#4a4f73'; x.fillRect(96, 92, 6, 34); kreis(99, 90, 8, '#9aa1bd');
+}
+function brummiMalen(c) {
+  const x = c.getContext('2d'); x.clearRect(0, 0, 120, 135);
+  const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
+  kreis(60, 112, 48, '#8a6a58', 1, 0.7);
+  kreis(60, 66, 40, '#9a7a66');
+  x.fillStyle = '#ff9f1c'; x.beginPath(); x.ellipse(60, 32, 34, 12, 0, Math.PI, 0); x.fill(); x.fillRect(58, 20, 46, 6);
+  x.fillStyle = '#1b1f3a'; x.fillRect(32, 54, 24, 14); x.fillRect(64, 54, 24, 14); x.fillRect(54, 58, 12, 3);
+  x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillRect(35, 56, 6, 4); x.fillRect(67, 56, 6, 4);
+  kreis(48, 84, 14, '#c9a890'); kreis(72, 84, 14, '#c9a890');
+  x.fillStyle = '#2b1d14'; for (let i = 0; i < 3; i++) for (const s of [-1, 1]) { x.beginPath(); x.arc(60 + s * (8 + i * 5), 82 + i * 3, 1.2, 0, 7); x.fill(); }
+  kreis(60, 74, 5, '#2b1d14');
+  x.fillStyle = '#fffbe8'; for (const s of [-1, 1]) { x.beginPath(); x.moveTo(60 + s * 6, 94); x.lineTo(60 + s * 9, 122); x.lineTo(60 + s * 13, 94); x.fill(); }
+}
+const FARBCAST_NEWS = [
+  'Habt ihr schon den 🐟 Kabeljau Run probiert? Dr. Papagei sucht immer Helfer – und bezahlt gut!',
+  'Tipp: Drückt C zum Rufen! Und wenn ein Freund die Tuffkugel hat: ganz oft „Tuff!“ rufen!',
+  'Im Waffenladen gibt es den 💢 Farb-lon und den 🧽 Farbrush. Zwei Treffer mit dem Farb-lon – und weg!',
+  'Mit M springt ihr per Supersprung zu eurem 🗼 Springturm oder zu euren Mitspielern!',
+  'Nach dem Match gibt es 🎬 Highlight-Aufnahmen. Habt ihr schon mal eine Solo-Auslöschung geschafft?',
+  'Auf der Kabeljau-Insel wurde der 👑 Riesenkabeljau gesichtet! Wer schafft die Extra-Welle?',
+  'Wenn ihr ohne Farbe unter euch abtaucht, werdet ihr zur Pfütze mit Augen. Süß, oder?',
+];
+let farbcast = null;
+function farbcastStarten() {
+  const [a1, a2] = aktuelleArenen(), [n1, n2] = aktuelleArenen(rotationSlot() + 1), A1 = ARENEN[a1], A2 = ARENEN[a2], N1 = ARENEN[n1], N2 = ARENEN[n2];
+  const news = [...FARBCAST_NEWS].sort(() => Math.random() - 0.5);
+  const zeilen = [
+    ['tini', `Hallooo und willkommen beim 🎙️ FARBCAST! Ich bin Tini!`],
+    ['brummi', `Und ich bin Brummi! Wir sagen euch, was gerade in der Stadt los ist. Tusch! 🥁`],
+    ['tini', `In der Farbschlacht spielt ihr gerade in ${A1.emoji} ${A1.name} und ${A2.emoji} ${A2.name}!`, [a1, a2]],
+    ['brummi', `${A1.name}? Uuh! ${A1.spezial}`, [a1]],
+    ['tini', `Und im ${A2.name}: ${A2.spezial}`, [a2]],
+    ['brummi', `Beim 🐟 Kabeljau Run geht es auf die 🏝️ ${ARENEN[KABELJAU_KARTE].name}. Rundherum ist Meer – also nicht reinfallen, sonst macht es PLATSCH!`, [KABELJAU_KARTE]],
+    ['tini', `News! ${news[0]}`],
+    ['brummi', `Und noch was: ${news[1]}`],
+    ['tini', `In ${restZeitText()} wechseln die Arenen. Dann sind ${N1.emoji} ${N1.name} und ${N2.emoji} ${N2.name} dran!`, [n1, n2], 'Danach'],
+    ['brummi', `Das war's vom Farbcast! Bleibt farbig – tschüssiii! 👋`, null, null, true],
+  ];
+  farbcast = { zeilen, nr: -1, tipp: null };
+  zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
+  tiniMalen($('fcTini')); brummiMalen($('fcBrummi'));
+  $('fcText').textContent = ''; $('fcName').textContent = ''; $('fcKarten').replaceChildren();
+  nurZeigen('farbcast'); ton('farbcastJingle');
+  setTimeout(farbcastWeiter, 900);
+}
+function farbcastWeiter() {
+  if (!farbcast) return;
+  if (farbcast.tipp) { farbcastFertig(); return; }
+  farbcast.nr++;
+  const z = farbcast.zeilen[farbcast.nr];
+  if (!z) { farbcastEnde(); return; }
+  const [wer, text, karten, zusatz, letzte] = z;
+  $('fcTini').classList.toggle('spricht', wer === 'tini'); $('fcBrummi').classList.toggle('spricht', wer === 'brummi');
+  $('fcName').textContent = wer === 'tini' ? '🎧 Tini' : '🦭 Brummi';
+  const kb = $('fcKarten'); kb.replaceChildren();
+  if (karten) for (const id of karten) kb.append(arenaKarte(id, zusatz ? `${zusatz}: ${ARENEN[id].spezial}` : null));
+  $('fcWeiter').textContent = letzte ? '🏙️ In die Stadt!' : 'Weiter ▶';
+  const box = $('fcText'), zeichen = [...text]; box.textContent = '';
+  const t = { zeichen, i: 0, wer };
+  t.uhr = setInterval(() => {
+    if (t.i >= zeichen.length) { farbcastFertig(); return; }
+    box.textContent += zeichen[t.i];
+    if (t.i % 3 === 0 && /[a-zäöüß]/i.test(zeichen[t.i])) ton(wer === 'tini' ? 'tiniPlapper' : 'brummiPlapper', 0.7);
+    t.i++;
+  }, 22);
+  farbcast.tipp = t;
+}
+function farbcastFertig() {
+  const t = farbcast && farbcast.tipp; if (!t) return;
+  clearInterval(t.uhr); $('fcText').textContent = t.zeichen.join(''); farbcast.tipp = null;
+}
+function farbcastEnde() {
+  if (farbcast && farbcast.tipp) clearInterval(farbcast.tipp.uhr);
+  farbcast = null; nurZeigen(null); zustand = 'stadt'; ton('klick');
+  mausFangen();
 }
 
 // ================== 🦜 DR. PAPAGEI und seine Fischerei (in der Stadt) ==================
