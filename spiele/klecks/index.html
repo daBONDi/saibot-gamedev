@@ -16,6 +16,13 @@
     background: linear-gradient(90deg, #ff8a1f, #ff5fa2, #a347ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; color: #ffd166; }
   p { color: #c9c3ff; margin: 0.4rem 0; }
+  .papageiKopf { display: flex; gap: 1rem; align-items: center; text-align: left; }
+  .sprechblase { background: #fff; color: #1b1f3a; border-radius: 1rem; padding: 0.8rem 1rem; font-size: 1.1rem; position: relative; margin: 0.5rem 0; }
+  .sprechblase::before { content: ''; position: absolute; left: -14px; top: 22px; border: 8px solid transparent; border-right: 14px solid #fff; }
+  #papageiExtra h3 { color: #ffd166; margin: 0.6rem 0 0.3rem; }
+  .fischZeile { display: flex; gap: 0.8rem; align-items: center; text-align: left; background: #ffffff12; border-radius: 0.8rem; padding: 0.3rem 0.6rem; margin: 0.3rem 0; font-size: 0.95rem; }
+  .fischZeile canvas { flex: none; }
+  #papageiKnoepfe { margin-top: 0.8rem; }
   #highlights h3 { margin: 0.8rem 0 0.3rem; color: #ffd166; }
   #highlights .highlight { background: #ffffff14; border-radius: 0.6rem; padding: 0.3rem 0.7rem; margin: 0.25rem auto; max-width: 34rem; font-size: 0.95rem; }
   button.gross { background: linear-gradient(90deg, #ff8a1f, #a347ff); color: #fff; border: none; border-radius: 1rem;
@@ -133,6 +140,14 @@
   </div>
 </div>
 
+<div id="papagei" class="overlay hidden">
+  <div class="box papageiBox">
+    <div class="papageiKopf"><canvas id="papageiBild" width="160" height="180"></canvas>
+      <div><h1 style="font-size:1.8rem;margin:0">🦜 Dr. Papagei</h1><p class="sprechblase" id="papageiText"></p></div></div>
+    <div id="papageiExtra"></div>
+    <div id="papageiKnoepfe"></div>
+  </div>
+</div>
 <div id="arenaWahl" class="overlay links hidden">
   <div class="box">
     <h1 style="font-size:2.2rem">🏟️ ARENA</h1>
@@ -3583,7 +3598,7 @@ function aufnahmeFrame(s) {
   for (const c of aufnahme.clips) if (!c.fertig) { c.frames.push(f); if (zeit - c.moment > CLIP_NACH) c.fertig = true; }
 }
 function clipStarten(emoji, titel, text, wer) {
-  if (replay || modus !== 'match') return;
+  if (replay || modus !== 'match' || spielArt === 'kabeljau') return;
   const nr = Math.max(0, kleckse.indexOf(wer));
   const laeuft = aufnahme.clips.find(k => !k.fertig && k.stern === nr);
   if (laeuft) {   // gleicher Moment, gleicher Star: den Clip verlängern und den besseren Titel nehmen
@@ -3773,6 +3788,15 @@ function highlightsPruefen(e, wer) {
 let soloAuslo = null;
 // Kill-Meldung aus Sicht von diesem Computer
 function koMeldung(e, wer) {
+  if (spielArt === 'kabeljau' && e.fisch) {   // 🐟 Fisch erwischt: nur groß in der Mitte, wenn du es warst
+    if (wer && wer.spieler) { splatListe.push({ text: `🐟 ${e.name} erwischt!`, team: 1, start: performance.now() / 1000 }); if (splatListe.length > 3) splatListe.shift(); ton('ko'); }
+    return;
+  }
+  if (spielArt === 'kabeljau') {
+    if (e.spieler && wer) todesKam = { wer, start: zeit, pos: null };
+    meldung(e.spieler ? `💥 ${wer ? wer.name : 'Etwas'} hat dich erwischt!` : `💦 ${e.name} wurde erwischt!`); if (e.spieler) ton('erwischt');
+    return;
+  }
   if (replay) { meldung(wer ? `💥 ${wer.name} ➜ ${e.name}` : `💥 ${e.name} erwischt`); return; }   // 🎬 in der Wiederholung nur eine kleine Meldung
   highlightsPruefen(e, wer);
   if (e.spieler && wer && wer !== e) todesKam = { wer, start: zeit, pos: null };   // 🎥 dem zuschauen, der dich erwischt hat
@@ -3987,6 +4011,7 @@ function zugUpdate(dt) {
 }
 
 function weltLeeren(meldungenBehalten = false) {
+  kabeljauAufraeumen();
   if (feier) { feier = null; kameraOverride = null; }   // eine laufende Siegerehrung abbrechen
   buehne.visible = false; kroneMvp.visible = false;
   aufraeumen();
@@ -4183,7 +4208,8 @@ function bewege(e, dx, dy, dt) {
   if ((e.schiesst || e.laden) && !e.taucht) speed *= typVon(e.waffe) === 'sniper' ? 0.5 : typVon(e.waffe) === 'ling' || typVon(e.waffe) === 'bogen' ? 0.6 : 0.8;
   if (e.lingT > 0 && !e.taucht) speed *= 0.75;
   if (e.schiesst && !e.taucht && WAFFEN[e.waffe] && WAFFEN[e.waffe].schussLaufen) speed *= WAFFEN[e.waffe].schussLaufen / 0.8;   // 💢 Farb-lon: beim Schießen ganz langsam
-  if (e.saugerT > 0) speed *= 0.75;   // 🌪️ Farbsauger ist schwer   // Klecksling feuert: langsamer laufen
+  if (e.saugerT > 0) speed *= 0.75;   // 🌪️ Farbsauger ist schwer
+  if (e.traegt) speed *= 0.8;          // 🟠 Kaviarkugel ist schwer   // Klecksling feuert: langsamer laufen
   if (e.rollt) speed = Math.max(speed, WAFFEN[e.waffe].nah.rollTempo);
   if (e.schild > 0) speed *= 1.3;
   if (zone && zone.art === 'sand' && e.z <= 0) speed *= 0.45;          // Treibsand bremst
@@ -5233,6 +5259,11 @@ function naheKlatsch(x, y) {
 }
 
 function treffen(e, schaden, wer) {
+  if (e.fisch === 'panzer' && wer && !e.tot && Math.abs(winkelDiff(e.winkel, Math.atan2(wer.y - e.y, wer.x - e.x))) < 0.9) {   // 🛡️ Topfdeckel: von vorne prallt alles ab
+    e.klonkT = (e.klonkT || 0) - 1;
+    if (e.klonkT < -6) { e.klonkT = 0; if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('treffer'); spritzer(e.x + Math.cos(e.winkel) * 26, e.y + Math.sin(e.winkel) * 26, hAbs(e) + 14, wer.team, 3, 120); }
+    return;
+  }
   if (e.tot || e.schild > 0 || e.gigaT > 0 || e.kugelT > 0) return;   // Gigafisch und Tuffkugel sind unverwundbar
   if (e.panzer > 0) {   // Farbpanzer fängt Schaden ab
     const ab = Math.min(e.panzer, schaden); e.panzer -= ab; schaden -= ab;
@@ -5250,6 +5281,8 @@ function erwischt(e, wer) {
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
   if (wer) wer.ko++;
+  if (e.fisch) { e.totZeit = 0; if (FISCH_ARTEN[e.fisch].boss) kaviarFallenLassen(e); }   // 🟠 Bossfische lassen Kaviar fallen
+  if (spielArt === 'kabeljau' && !e.fisch) e.wiederT = 6;
   koMeldung(e, wer);
   if (wer && !wer.spieler && !wer.mensch && !replay && Math.random() < 0.25) rufen(wer, Math.random() < 0.7 ? 'erwischt' : 'xd');   // Bots freuen sich
   mpEreignis({ k: 'ko', i: kleckse.indexOf(e), w: wer ? kleckse.indexOf(wer) : -1 });
@@ -5346,6 +5379,14 @@ function ki(b, dt) {
     if (d > sichtweite || (!roentgen && !mk && (tauchtVersteckt(e) || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
     if (!roentgen && !sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
+  }
+  if (spielArt === 'kabeljau') {   // 🟠 Kaviar holen und zum Korb bringen
+    if (b.traegt) { feind = null; k.ziel = { x: KORB.x, y: KORB.y }; k.zielT = 1; k.tanken = false; }
+    else if (!feind || fd > 200) {
+      let best = null, bd = 700;
+      for (const kv of kaviarKugeln) if (!kv.traeger) { const d = Math.hypot(kv.x - b.x, kv.y - b.y); if (d < bd) { bd = d; best = kv; } }
+      if (best) { feind = null; k.ziel = { x: best.x, y: best.y }; k.zielT = 1; k.tanken = false; }
+    }
   }
   if (b.gigaT > 0) {   // Gigafisch: auf den nächsten Gegner zuschwimmen und rammen
     let z = null, best = 1e9;
@@ -5534,6 +5575,7 @@ function update(dt) {
     if (startCountdown <= 0) meldung(`LOS! Mal alles ${TEAMS[spieler.team].name} an! ${TEAMS[spieler.team].emoji}`);
     return;
   }
+  else if (spielArt === 'kabeljau') { zeit += dt; klatschCd -= dt; kabeljauUpdate(dt); if (zustand !== 'spiel' && zustand !== 'pause') return; }   // 🐟 Wellen statt Rundenzeit
   else {
   zeit += dt; rest -= dt; klatschCd -= dt;
   if (rest <= 60 && musikModus === 'spiel') { musikModusSetzen('finale', 'finale'); meldung('⏰ NOCH 1 MINUTE!!'); ton('alarm'); }
@@ -5545,6 +5587,7 @@ function update(dt) {
 
   for (const e of kleckse) {
     if (e.tot) {
+      if (e.fisch) continue;   // Fische kommen nicht wieder
       e.wiederT -= dt;
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
@@ -5557,6 +5600,7 @@ function update(dt) {
     if (e.spieler) steuerung(e, dt);
     else if (e.mensch) mpMenschAnwenden(e, dt);              // ein Freund (online)
     else if (e.puppe) { e.winkel = drehe(e.winkel, Math.atan2(spieler.y - e.y, spieler.x - e.x), dt * 2); bewege(e, 0, 0, dt); }   // Übungspuppe steht nur rum
+    else if (e.fisch) fischKi(e, dt);                        // 🐟
     else ki(e, dt);
     schiessen(e, dt);
     if (e.laserT > 0) laserUpdate(e, dt);
@@ -5930,6 +5974,7 @@ function welt3D(dt) {
   if (draussen.material.map && karte === 'farbhafen') { draussen.material.map.offset.x += dt * 0.01; draussen.material.map.offset.y += dt * 0.006; }   // Meer bewegt sich
 
   for (const e of kleckse) {
+    if (e.fisch) { fischZeigen(e, dt); continue; }   // 🐟 eigenes Modell
     const g = e.gruppe;
     const istIch = e.spieler && ichSicht && !kameraOverride;
     const v = Math.hypot(e.vx, e.vy);
@@ -6185,6 +6230,7 @@ function hud() {
   if (spieler.schild > 0) { ctx.strokeStyle = `rgba(255,179,107,0.6)`; ctx.lineWidth = 18; ctx.strokeRect(0, 0, cw, ch); }
 
   if (modus === 'lobby') lobbyHud(cw, ch);
+  else if (spielArt === 'kabeljau') kabeljauHud(cw, ch);
   else {
   // Zeit + Farbanteil oben
   const pO = zaehler[1] / flaeche, pL = zaehler[2] / flaeche;
@@ -6244,6 +6290,7 @@ function hud() {
       ctx.lineTo(ex + Math.cos(e.winkel - 2.5) * 5, ey + Math.sin(e.winkel - 2.5) * 5); ctx.fill();
     } else { ctx.fillStyle = TEAMS[spieler.team].dunkel; ctx.beginPath(); ctx.arc(ex, ey, 3, 0, 7); ctx.fill(); }
   }
+  kabeljauMinikarte(mx, my, mw, mh);
   for (const pg of rufPings) {   // 👋 "Zu mir!" / 🆘 "Hilfe!" blinkt auf der Karte
     const k = (performance.now() / 1000 - pg.start) % 1, px = mx + pg.x / W * mw, py = my + pg.y / H * mh;
     ctx.strokeStyle = pg.farbe; ctx.lineWidth = 3; ctx.globalAlpha = 1 - k;
@@ -6261,7 +6308,7 @@ function hud() {
   if (spieler.tot && zustand === 'spiel') {
     const k = todesKam && todesKam.wer;
     if (k) {   // 🎥 Wer war's – und womit?
-      const set = SETS[k.set] || {}, y0 = ch - 150;
+      const set = k.fisch ? { emoji: FISCH_ARTEN[k.fisch].emoji, name: FISCH_ARTEN[k.fisch].angriff } : SETS[k.set] || {}, y0 = ch - 150;
       ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(cw / 2 - 260, y0, 520, 110);
       ctx.fillStyle = TEAMS[k.team].col; ctx.fillRect(cw / 2 - 260, y0, 8, 110);
       ctx.textAlign = 'center';
@@ -6360,7 +6407,7 @@ function splatUndHighlightHud(cw, ch) {
 const VOLL_DAUER = 3;
 let vollErwischt = null, vollWarWeg = [false, false];
 function vollErwischtPruefen() {
-  if (modus !== 'match' || zustand !== 'spiel') { vollWarWeg = [false, false]; return; }
+  if (modus !== 'match' || zustand !== 'spiel' || spielArt === 'kabeljau') { vollWarWeg = [false, false]; return; }
   for (let t = 0; t < 2; t++) {
     const team = kleckse.filter(e => e.team === t && !e.puppe);
     const alleWeg = team.length >= 2 && team.every(e => e.tot);
@@ -6748,6 +6795,7 @@ function rundenEnde(daten) {
     if (Array.isArray(st)) { spieler.punkte = zahl(st[0], 0, 1e6, 0); spieler.ko = zahl(st[1], 0, 999, 0); spieler.tode = zahl(st[2], 0, 999, 0); }
   }
   if (istHost()) mpAnAlle({ t: 'ende', pO: r1(pO), pL: r1(pL), st: kleckse.map(e => [e.punkte, e.ko, e.tode]) });
+  $('balkenO').parentElement.style.display = ''; $('nochmal').onclick = () => lobbyBetreten();
   $('nochmal').disabled = istGast();
   $('nochmal').textContent = istGast() ? '⏳ Warte auf den Gastgeber …' : istHost() ? '🔁 Nochmal mit Freunden (Lobby)' : '🔁 Nochmal (Lobby)';
   if (daten && Array.isArray(daten.st)) kleckse.forEach((e, i) => { const st = daten.st[i]; if (Array.isArray(st)) { e.punkte = zahl(st[0], 0, 1e6, 0); e.ko = zahl(st[1], 0, 999, 0); } });   // für „Bester Spieler“
@@ -6798,7 +6846,7 @@ function highlightsListe() {   // ⭐ Match-Highlights unter dem Ergebnis
 // ================== MENÜ, KONTO & SHOPS ==================
 const $ = id => document.getElementById(id);
 function nurZeigen(id) {
-  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl']) $(o).classList.toggle('hidden', o !== id);
+  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl', 'papagei']) $(o).classList.toggle('hidden', o !== id);
   $('zurueck').classList.toggle('hidden', !['konto', 'menu', 'shop'].includes(id));
 }
 function knopf(inhalt, beiKlick, klasse) {   // Knopf bauen (Text immer mit textContent – sicher!)
@@ -7212,9 +7260,577 @@ function stadtBetreten() {
   audioStart(); musikModusSetzen('menu', listenSong('menu'));
   mausFangen();
 }
+
+// ================== 🐟 KABELJAU RUN (gegen Fische, mit Dr. Papagei) ==================
+// Die Fische sind auch "Kleckse" (Team 1) – so treffen sie alle Waffen, Bomben und Ultis automatisch.
+// Sie haben aber ein eigenes Modell, eine eigene KI und werden nach dem Erwischen entfernt.
+let spielArt = 'revier';   // 'revier' = normales Farb-Match, 'kabeljau' = Kabeljau Run
+const FISCH_ARTEN = {
+  knirps:   { name: 'Kabeljau-Knirps', emoji: '🐟', hp: 40,  tempo: 1.35, r: 10, groesse: 0.65, nah: 22, schaden: 18, cd: 0.7, spur: 9,  farbe: '#a9c2a4', bauch: '#eef2e0', angriff: 'Knabber-Biss',
+              info: 'Klein und flink. Kommt in Gruppen und knabbert dich an. Ein paar Treffer reichen.' },
+  kabeljau: { name: 'Kabeljau',        emoji: '🐟', hp: 90,  tempo: 1.0,  r: 14, groesse: 1.0,  nah: 28, schaden: 30, cd: 1.0, spur: 12, farbe: '#7f9c7c', bauch: '#e8ecd8', angriff: 'Flossen-Klatscher',
+              info: 'Der ganz normale Kabeljau. Läuft auf dich zu und klatscht dich mit der Flosse.' },
+  dicker:   { name: 'Dicker Kabeljau', emoji: '🐡', hp: 260, tempo: 0.6,  r: 22, groesse: 1.6,  nah: 75, schaden: 70, cd: 2.4, spur: 22, farbe: '#5f7d60', bauch: '#d9e0c8', angriff: 'Bauch-Platscher',
+              info: 'Langsam, aber riesig. Wenn er wackelt, springt er gleich mit dem Bauch auf den Boden – geh weg vom roten Kreis!' },
+  panzer:   { name: 'Panzerdorsch',    emoji: '🛡️', hp: 320, tempo: 0.75, r: 18, groesse: 1.25, nah: 32, schaden: 50, cd: 1.2, spur: 14, farbe: '#6d8193', bauch: '#dfe6ec', angriff: 'Topfdeckel-Schlag', boss: true,
+              info: 'BOSS! Hält einen Topfdeckel als Schild vor sich. Von vorne prallt alles ab – greif ihn von der Seite oder von hinten an!' },
+  spucker:  { name: 'Spuck-Kabeljau',  emoji: '💥', hp: 220, tempo: 0.8,  r: 16, groesse: 1.2,  nah: 0,  schaden: 55, cd: 3.0, spur: 12, farbe: '#9a8a62', bauch: '#f1ead2', angriff: 'Tintenkugel', boss: true,
+              info: 'BOSS! Bleibt auf Abstand und spuckt dicke Tintenkugeln. Wo ein roter Kreis erscheint, landet gleich eine – lauf weg!' },
+  flunder:  { name: 'Springflunder',   emoji: '🥏', hp: 260, tempo: 0.7,  r: 18, groesse: 1.2,  nah: 0,  schaden: 95, cd: 4.5, spur: 14, farbe: '#a7865e', bauch: '#f3e2c4', angriff: 'Plattmacher-Sprung', boss: true,
+              info: 'BOSS! Platt wie ein Pfannkuchen, mit Sprungfedern. Springt hoch und landet genau da, wo du stehst – renn aus dem roten Kreis!' },
+};
+const WELLEN = [
+  { zeit: 75, quote: 5,  spawn: 2.6, boss: 11, max: 13, dicker: 0.08 },
+  { zeit: 75, quote: 8,  spawn: 2.1, boss: 9,  max: 15, dicker: 0.15 },
+  { zeit: 80, quote: 11, spawn: 1.7, boss: 7,  max: 18, dicker: 0.2 },
+];
+const KORB = { x: BASIS[0].x + 300, y: H / 2, r: 62 };
+let kab = null, kaviarKugeln = [], kabMeshes = [];
+
+function baueFisch(art) {
+  const A = FISCH_ARTEN[art], g = new THREE.Group(), ud = g.userData;
+  const haut = mat(A.farbe, { roughness: 0.45 }), bauch = mat(A.bauch, { roughness: 0.6 }), tinte = tintenMaterial(1, 0.3);
+  ud.mat = haut;
+  const k = new THREE.Group(); g.add(k); ud.koerper = k;
+  const flach = art === 'flunder';
+  if (flach) {   // Flunder: platt und breit, beide Augen oben
+    k.add(kugel(haut, 14, 0, 7, 0, 1.25, 0.32, 1.05), kugel(bauch, 13, 0, 5.5, 0, 1.15, 0.22, 0.95));
+    for (const [x, z] of [[-6, 6], [4, -7], [8, 5], [-9, -5], [0, 0]]) k.add(kugel(tinte, 2, x, 11, z, 1, 0.35, 1));   // orange-farbene Tupfen in Tinte
+    const weiss = mat('#ffffff'), schw = mat('#111111');
+    for (const s of [-1, 1]) k.add(kugel(weiss, 3, 9, 12, s * 4), kugel(schw, 1.5, 10.5, 13.6, s * 4));
+    k.add(klotz(mat('#5a2a1a'), 4, 1, 6, 15, 9, 0));   // Mund
+    const schwanz = new THREE.Group(); schwanz.position.set(-17, 7, 0); k.add(schwanz); ud.schwanz = schwanz;
+    schwanz.add(kugel(tinte, 6, -4, 0, 0, 1, 0.25, 1.3));
+    ud.beine = [];
+    for (const [x, z] of [[6, 7], [6, -7], [-6, 7], [-6, -7]]) {   // Sprungfedern
+      const f = new THREE.Group(); f.position.set(x, 4, z); g.add(f); ud.beine.push(f);
+      for (let i = 0; i < 4; i++) f.add(ringY(MAT_METALL, 2, 0.5, 0, -i * 1.1, 0));
+    }
+  } else {
+    const dick = art === 'dicker' ? 1.3 : 1;
+    k.add(kugel(haut, 10, 0, 12, 0, 1.6, 0.85 * dick, 0.75 * dick));                     // Körper
+    k.add(kugel(bauch, 9, 2, 9.5, 0, 1.35, 0.55 * dick, 0.62 * dick));                   // heller Bauch
+    for (const [x, y, z] of [[-6, 16, 5], [2, 17, -5], [-10, 13, -6], [6, 15, 6]]) k.add(kugel(mat(new THREE.Color(A.farbe).multiplyScalar(0.7)), 1.6, x, y, z * dick, 1, 0.7, 0.4));   // Flecken
+    const weiss = mat('#ffffff'), schw = mat('#111111'), auge = art === 'knirps' ? 4.2 : 3.4;
+    for (const s of [-1, 1]) k.add(kugel(weiss, auge, 11, 16, s * 5 * dick), kugel(schw, auge * 0.5, 13.2, 16.5, s * 5.4 * dick), kugel(weiss, auge * 0.17, 13.9, 17.5, s * 5.6 * dick));
+    const maul = new THREE.Group(); maul.position.set(14, 10, 0); k.add(maul); ud.maul = maul;
+    maul.add(klotz(mat(new THREE.Color(A.farbe).multiplyScalar(0.8)), 6, 2, 8, 2, -1, 0), klotz(mat('#c2405a'), 4, 1, 6, 1.5, 0, 0));
+    k.add(zylinder(mat('#c9b27a'), 0.4, 0.25, 6, 15, 4, 0));                             // Bartfaden (den haben echte Kabeljaus!)
+    for (const [x, h] of [[6, 5], [-1, 6], [-8, 4.5]]) { const f = klotz(tinte, 6, h, 0.8, x, 19 + h / 2 - 1, 0); f.rotation.z = -0.3; k.add(f); }   // 3 Rückenflossen in Tinte
+    for (const s of [-1, 1]) { const f = klotz(tinte, 5, 1, 4, 6, 9, s * 7.5 * dick); f.rotation.x = s * 0.6; k.add(f); }   // Brustflossen
+    const schwanz = new THREE.Group(); schwanz.position.set(-15, 12, 0); k.add(schwanz); ud.schwanz = schwanz;
+    for (const s of [-1, 1]) { const f = klotz(tinte, 9, 7, 1, -4, s * 3, 0); f.rotation.z = s * 0.5; schwanz.add(f); }
+    ud.beine = [];
+    for (const s of [-1, 1]) {                                                            // kleine Lauf-Beinchen (Cartoon!)
+      const b = new THREE.Group(); b.position.set(0, 5, s * 4 * dick); g.add(b); ud.beine.push(b);
+      b.add(zylinder(haut, 1.3, 1.1, 5, 0, -2.5, 0), klotz(mat('#4a5a48'), 4, 1.4, 3, 1, -5, 0));
+    }
+    if (art === 'panzer') {   // Topfdeckel-Schild + Helm
+      const deckel = new THREE.Group(); deckel.position.set(21, 12, 0); k.add(deckel); ud.deckel = deckel;
+      const dm = mat('#c9cfe6', { metalness: 0.85, roughness: 0.25 });
+      const d = new THREE.Mesh(new THREE.SphereGeometry(13, 20, 10, 0, Math.PI * 2, 0, 0.6), dm); d.rotation.z = -Math.PI / 2; deckel.add(d);
+      deckel.add(ringX(MAT_GRAU, 7.3, 0.6, 3.8, 0, 0), kugel(mat('#2b1d14'), 1.8, 5, 0, 0));
+      k.add(new THREE.Mesh(new THREE.SphereGeometry(9, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), dm).translateX(4).translateY(18));
+    }
+    if (art === 'spucker') {  // Spuck-Rohr vor dem Mund + Tintentank auf dem Rücken
+      k.add(zylinderX(MAT_GRAU, 3, 4.5, 9, 20, 11, 0), ringX(tinte, 4.6, 0.8, 24.5, 11, 0));
+      k.add(zylinder(glasRohrMat, 5, 5, 10, -4, 24, 0), zylinder(tinte, 4.3, 4.3, 8, -4, 23.5, 0), ringY(MAT_METALL, 5.2, 0.6, -4, 29, 0));
+    }
+  }
+  g.scale.setScalar(A.groesse);
+  if (A.boss) {   // Lebensbalken über dem Boss
+    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : 38); g.add(bar); ud.bar = bar;
+    bar.add(new THREE.Mesh(new THREE.PlaneGeometry(34, 4.5), new THREE.MeshBasicMaterial({ color: '#1b1f3a', depthTest: false })));
+    ud.barFill = new THREE.Mesh(new THREE.PlaneGeometry(32, 3), new THREE.MeshBasicMaterial({ color: '#ff4d4d', depthTest: false }));
+    ud.barFill.position.z = 0.1; bar.add(ud.barFill);
+    bar.children.forEach(c => { c.renderOrder = 997; });
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+function neuerFisch(art, x, y) {
+  const A = FISCH_ARTEN[art], leer = () => new THREE.Group();
+  const e = {
+    team: 1, nr: 9, spieler: false, name: A.name, mensch: null, lebenNr: 0, set: 'spritzer', waffe: 'spritzer', fisch: art,
+    x, y, z: 0, vx: 0, vy: 0, vz: 0, r: A.r, hp: A.hp, maxHp: A.hp, tinte: 100, winkel: Math.PI, pitch: 0,
+    tot: false, wiederT: 99, schussCd: 0, bombeCd: 99, taucht: false, willTauchen: false, schiesst: false, saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null,
+    ladung: 0, laden: false, rollT: 0, rollt: false, schwingT: 0, schwingSeite: 1, haltT: 0, vorherSchiesst: false, schild: 0, slam: false, ulti: 0, rueck: 0,
+    letzterTreffer: 9, ko: 0, tode: 0, punkte: 0, spawnT: 0.45, landT: 0, todT: 0, tauchAnim: 0, lauf: 0, vmPhase: 0,
+    ki: { ziel: null, zielT: 0, stuckT: 0, lastX: 0, lastY: 0, tanken: false, strafe: 1, strafeT: 0, seite: Math.random() < 0.5 ? 1 : -1, umwegT: 0, umwegA: 0, pause: 0 },
+    bonus: { ...BONUS_LEER, tempo: A.tempo - 1, feindfarbe: A.tempo * 0.6 }, ultiArt: 'regen', bombe: 'klecks',
+    schirmHP: 0, schirmAuf: false, schirmWiederT: 0, schirmTreffer: 0, panzer: 0, panzerT: 0, werferT: 0, werferSchuss: 0, kugelT: 0, kugelKraft: 0, gigaT: 0, dashT: 0, dashCd: 0, trifT: 0, trifRest: 0, trifCd: 0, laserT: 0, laserTick: 0,
+    angriffCd: 1 + Math.random(), angriffT: 0, beissT: 0, spurT: 0, totZeit: 0,
+  };
+  e.gruppe = baueFisch(art);
+  for (const t of ['koerper', 'schnorchel', 'klecksForm', 'flugKlecks', 'welle', 'blase', 'laserMesh', 'kugelMesh', 'panzerMesh', 'gigaMesh', 'saugerMesh', 'waffenModell']) e[t] = leer();
+  e.koerper.userData = {};
+  scene.add(e.gruppe);
+  return e;
+}
+// Roter Warnkreis: hier passiert gleich was!
+function warnRing(x, y, r, t) {
+  const rg = new THREE.RingGeometry(r - 5, r, 32); rg.rotateX(-Math.PI / 2);
+  const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: '#ff3b3b', transparent: true, depthWrite: false }));
+  const innen = new THREE.Mesh(new THREE.CircleGeometry(r - 5, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ff3b3b', transparent: true, opacity: 0.18, depthWrite: false }));
+  ring.add(innen); ring.position.set(x, bodenHoehe(x, y) + 1.2, y); scene.add(ring);
+  strahlen.push({ mesh: ring, t });
+}
+function fischKi(f, dt) {
+  const A = FISCH_ARTEN[f.fisch];
+  f.angriffCd -= dt; f.spurT -= dt; f.beissT = Math.max(0, f.beissT - dt);
+  if (f.spurT <= 0) { f.spurT = 0.3; if (f.z <= 1 && !istWand(f.x, f.y)) klecks(f.x, f.y, A.spur, 1, f, false); }   // Fische hinterlassen ihre Tinte
+  if (f.sprung) {   // 🥏 Springflunder fliegt
+    const s = f.sprung; s.t += dt; const k = Math.min(1, s.t / s.dauer);
+    f.x = s.sx + (s.zx - s.sx) * k; f.y = s.sy + (s.zy - s.sy) * k; f.z = Math.sin(k * Math.PI) * 230; f.vx = f.vy = f.vz = 0;
+    if (k >= 1) {
+      f.sprung = null; f.z = 0; f.landT = 0.3;
+      explodieren(f.x, f.y, 85, A.schaden, 1, f, false); wackeln = Math.max(wackeln, 0.4);
+    }
+    return;
+  }
+  if (f.angriffT > 0) {   // 🐡 Dicker Kabeljau holt aus …
+    f.angriffT -= dt;
+    if (f.angriffT <= 0) { explodieren(f.angriffX, f.angriffY, 75, A.schaden, 1, f, false); f.angriffCd = A.cd; f.landT = 0.3; }
+    bewege(f, 0, 0, dt); return;
+  }
+  let ziel = null, zd = 1e9;
+  for (const e of kleckse) if (e.team === 0 && !e.tot) { const d = Math.hypot(e.x - f.x, e.y - f.y); if (d < zd) { zd = d; ziel = e; } }
+  if (!ziel) { bewege(f, 0, 0, dt); return; }
+  const a = Math.atan2(ziel.y - f.y, ziel.x - f.x);
+  f.winkel = drehe(f.winkel, a, dt * (A.boss ? 3 : 6));
+  let vor = 1;
+  if (f.fisch === 'spucker') {
+    vor = zd < 220 ? -1 : zd > 380 ? 1 : 0;
+    if (f.angriffCd <= 0 && zd < 650 && sicht(f.x, f.y, ziel.x, ziel.y)) {
+      f.angriffCd = A.cd; f.beissT = 0.4;
+      const anzahl = kab && kab.welle >= 2 ? 2 : 1;
+      for (let i = 0; i < anzahl; i++) {
+        const tx = Math.max(20, Math.min(W - 20, ziel.x + ziel.vx * 0.8 + (Math.random() - 0.5) * 70 * i)), ty = Math.max(20, Math.min(H - 20, ziel.y + ziel.vy * 0.8 + (Math.random() - 0.5) * 70 * i));
+        bombeWerfen(f, tx, ty, { ulti: true, max: 800, dauer: 1.25, hoehe: 170, r: 55, schaden: A.schaden });
+        warnRing(tx, ty, 55, 1.25);
+      }
+      if (Math.hypot(f.x - spieler.x, f.y - spieler.y) < 700) ton('wurf');
+    }
+  } else if (f.fisch === 'flunder') {
+    if (f.angriffCd <= 0 && zd < 520 && zd > 40) {
+      const zx = ziel.x + ziel.vx * 0.5, zy = ziel.y + ziel.vy * 0.5, p = freieStelle(zx, zy, f.r, bodenHoehe(zx, zy));
+      f.sprung = { sx: f.x, sy: f.y, zx: p.x, zy: p.y, t: 0, dauer: 1.35 }; f.angriffCd = A.cd;
+      warnRing(p.x, p.y, 85, 1.35);
+      if (Math.hypot(f.x - spieler.x, f.y - spieler.y) < 700) ton('boing');
+      return;
+    }
+  } else if (f.fisch === 'dicker') {
+    if (zd < A.nah + ziel.r && f.angriffCd <= 0) {
+      f.angriffT = 0.8; f.angriffX = f.x + Math.cos(f.winkel) * 25; f.angriffY = f.y + Math.sin(f.winkel) * 25;
+      warnRing(f.angriffX, f.angriffY, 75, 0.8); return;
+    }
+  } else if (zd < A.nah + ziel.r && f.angriffCd <= 0 && Math.abs(hAbs(ziel) - hAbs(f)) < 30) {   // beißen / klatschen
+    treffen(ziel, A.schaden, f); f.angriffCd = A.cd; f.beissT = 0.25;
+    f.vx += Math.cos(a) * 140; f.vy += Math.sin(a) * 140;
+  }
+  let dx = Math.cos(a) * vor, dy = Math.sin(a) * vor;
+  if (vor === 0) { dx = Math.cos(a + Math.PI / 2) * f.ki.seite * 0.6; dy = Math.sin(a + Math.PI / 2) * f.ki.seite * 0.6; }
+  if (A.nah && zd < A.nah * 0.7) { dx *= 0.15; dy *= 0.15; }
+  if (dx || dy) { const l = Math.hypot(dx, dy); const [rx, ry] = ausweichen(f, dx / l, dy / l); dx = rx * l; dy = ry * l; }
+  bewege(f, dx, dy, dt);
+}
+function fischZeigen(e, dt) {
+  const A = FISCH_ARTEN[e.fisch], g = e.gruppe, ud = g.userData;
+  e.spawnT = Math.max(0, e.spawnT - dt); e.landT = Math.max(0, e.landT - dt);
+  if (e.tot) {   // erwischt: dreht sich, platzt und verschwindet
+    const k = Math.min(1, e.totZeit / 0.6);
+    g.scale.setScalar(A.groesse * Math.max(0.01, 1 - k)); g.rotation.y += dt * 14; g.position.y = hAbs(e) + Math.sin(k * Math.PI) * 25;
+    return;
+  }
+  const v = Math.hypot(e.vx, e.vy);
+  e.lauf += v * dt * 0.12;
+  const hop = v > 10 && !e.sprung ? Math.abs(Math.sin(e.lauf)) * 4 : 0;
+  g.position.set(e.x, hAbs(e) + hop, e.y); g.rotation.y = -e.winkel; g.visible = true;
+  let s = A.groesse;
+  if (e.spawnT > 0) s *= Math.min(1, (1 - e.spawnT / 0.45) * 1.3);
+  const q = e.landT > 0 ? Math.sin(e.landT / 0.3 * Math.PI) : 0;
+  const wackel = e.angriffT > 0 ? Math.sin(zeit * 45) * 0.08 : 0;
+  g.scale.set(s * (1 + q * 0.15), s * (1 - q * 0.25 + wackel), s * (1 + q * 0.15));
+  if (ud.schwanz) ud.schwanz.rotation.y = Math.sin(zeit * (v > 10 ? 14 : 4) + e.x * 0.01) * 0.5;
+  if (ud.beine) ud.beine.forEach((b, i) => { b.rotation.z = v > 10 ? Math.sin(e.lauf * 2 + i * Math.PI) * 0.7 : 0; b.scale.y = e.sprung ? 1.6 : 1; });
+  if (ud.maul) ud.maul.rotation.z = -(e.beissT > 0 ? 0.8 : 0.1 + Math.sin(zeit * 3) * 0.05);
+  if (ud.koerper) ud.koerper.rotation.z = e.angriffT > 0 ? 0.35 : e.sprung ? -0.3 : 0;   // holt aus
+  ud.mat.emissive.setHex(e.letzterTreffer < 0.1 ? 0x666666 : 0x000000);                   // blinkt bei Treffern
+  if (ud.bar) {
+    ud.barFill.scale.x = Math.max(0.01, e.hp / e.maxHp); ud.barFill.position.x = -16 * (1 - ud.barFill.scale.x);
+    ud.bar.quaternion.copy(g.quaternion).invert().multiply(kamera.quaternion);   // zeigt immer zur Kamera
+  }
+}
+// ----- Kaviarkugeln -----
+function baueKaviar() {
+  const g = new THREE.Group();
+  g.add(kugel(mat('#ff8a1f', { emissive: '#ff6a00', emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.2 }), 7, 0, 0, 0));
+  for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; g.add(kugel(mat('#ffb347', { emissive: '#ff8a1f', emissiveIntensity: 0.5, roughness: 0.1 }), 2.6, Math.cos(a) * 5, Math.sin(i * 2) * 3, Math.sin(a) * 5)); }   // viele kleine Eier
+  g.add(kugel(mat('#ffffff', { transparent: true, opacity: 0.7 }), 2, -2.5, 4, -2));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(9, 11, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.6, depthWrite: false }));
+  g.userData.ring = ring; g.add(ring);
+  return g;
+}
+function kaviarFallenLassen(f) {
+  for (let i = 0; i < 3; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 60;
+    const k = { x: f.x, y: f.y, h: hAbs(f) + 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vh: 220, traeger: null, mesh: baueKaviar() };
+    scene.add(k.mesh); kaviarKugeln.push(k);
+  }
+  if (Math.hypot(f.x - spieler.x, f.y - spieler.y) < 800) { ton('ding'); meldung(`🟠 ${f.name} hat 3 Kaviarkugeln fallen lassen!`); }
+}
+function kaviarUpdate(dt) {
+  for (let i = kaviarKugeln.length - 1; i >= 0; i--) {
+    const k = kaviarKugeln[i];
+    if (k.traeger && (k.traeger.tot || !kleckse.includes(k.traeger))) {   // Träger erwischt: Kugel fällt runter
+      k.traeger.traegt = null; k.traeger = null; k.vh = 150; k.vx = (Math.random() - 0.5) * 80; k.vy = (Math.random() - 0.5) * 80;
+    }
+    if (k.traeger) {
+      const t = k.traeger; k.x = t.x; k.y = t.y; k.h = hAbs(t) + 52 + Math.sin(zeit * 6) * 2;
+      if (Math.hypot(t.x - KORB.x, t.y - KORB.y) < KORB.r) {   // 🧺 abgegeben!
+        t.traegt = null; wegUndEntsorgen(k.mesh); kaviarKugeln.splice(i, 1);
+        kab.kaviar++; kab.gesamt++; t.kaviarAbgabe = (t.kaviarAbgabe || 0) + 1;
+        spritzer(KORB.x, KORB.y, 30, 0, 10, 200); ton('kauf');
+        meldung(`🧺 ${t.spieler ? 'Du hast' : t.name + ' hat'} eine Kaviarkugel abgegeben! (${kab.kaviar}/${WELLEN[kab.welle - 1].quote})`);
+        if (!kab.genug && kab.kaviar >= WELLEN[kab.welle - 1].quote) {
+          kab.genug = true; ton('fanfare');
+          highlightAnzeige.push({ emoji: '✅', titel: 'GENUG KAVIAR!', text: 'Jetzt nur noch überleben, bis die Zeit um ist!', start: performance.now() / 1000 });
+        }
+        continue;
+      }
+    } else {
+      k.vh -= 600 * dt; k.x += k.vx * dt; k.y += k.vy * dt; k.h += k.vh * dt; k.vx *= 0.96; k.vy *= 0.96;
+      if (istWand(k.x, k.y)) { k.x -= k.vx * dt * 2; k.y -= k.vy * dt * 2; k.vx = -k.vx * 0.5; k.vy = -k.vy * 0.5; }
+      k.x = Math.max(10, Math.min(W - 10, k.x)); k.y = Math.max(10, Math.min(H - 10, k.y));
+      const bh = bodenHoehe(k.x, k.y) + 7;
+      if (k.h <= bh) { k.h = bh; k.vh = Math.abs(k.vh) > 80 ? -k.vh * 0.35 : 0; }
+      if (k.h <= bh + 2) for (const e of kleckse) {   // aufheben (jeder trägt nur eine)
+        if (e.team !== 0 || e.tot || e.traegt || Math.hypot(e.x - k.x, e.y - k.y) > 26) continue;
+        k.traeger = e; e.traegt = k; if (e.spieler) { ton('klick'); meldung('🟠 Kaviarkugel! Bring sie zum goldenen Korb 🧺'); }
+        break;
+      }
+    }
+    k.mesh.position.set(k.x, k.h, k.y); k.mesh.rotation.y += dt * 2;
+    k.mesh.userData.ring.visible = !k.traeger; k.mesh.userData.ring.position.y = bodenHoehe(k.x, k.y) - k.h + 1;
+    k.mesh.userData.ring.scale.setScalar(1 + Math.sin(zeit * 5) * 0.15);
+  }
+}
+// ----- Der goldene Korb -----
+function korbBauen() {
+  const g = new THREE.Group(); g.position.set(KORB.x, bodenHoehe(KORB.x, KORB.y), KORB.y);
+  const korbMat = mat('#c98f3c', { roughness: 0.8 }), gold = MAT_GOLD;
+  const korb = new THREE.Mesh(new THREE.CylinderGeometry(24, 17, 22, 20, 1, true), new THREE.MeshStandardMaterial({ color: '#c98f3c', roughness: 0.8, side: THREE.DoubleSide }));
+  korb.position.y = 11; g.add(korb);
+  for (let i = 0; i < 5; i++) g.add(ringY(i % 2 ? korbMat : mat('#a86f28'), 17.5 + i * 1.6, 1.1, 0, 2 + i * 4.5, 0));   // geflochten
+  g.add(zylinder(mat('#a86f28'), 17, 17, 1, 0, 0.5, 0));
+  const henkel = new THREE.Mesh(new THREE.TorusGeometry(22, 1.6, 8, 24, Math.PI), korbMat); henkel.position.y = 22; g.add(henkel);
+  for (let i = 0; i < 9; i++) g.add(kugel(mat('#ff8a1f', { emissive: '#ff6a00', emissiveIntensity: 0.5, roughness: 0.15 }), 5, Math.cos(i * 2.4) * 9, 20 + (i % 3) * 3, Math.sin(i * 2.4) * 9));   // Kaviar im Korb
+  const ring = new THREE.Mesh(new THREE.RingGeometry(KORB.r - 6, KORB.r, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.7, depthWrite: false }));
+  ring.position.y = 1.2; g.add(ring); g.userData.ring = ring;
+  const sch = schild('🧺 KAVIAR', 'hier abgeben!', '#ff8a1f', 70, 18); sch.position.set(0, 48, 0); g.add(sch); g.userData.schild = sch;
+  g.add(zylinder(gold, 1, 1, 30, 0, 30, 0));
+  scene.add(g); kabMeshes.push(g); kab.korb = g;
+}
+function kabeljauAufraeumen() {
+  for (const m of kabMeshes) wegUndEntsorgen(m);
+  for (const k of kaviarKugeln) wegUndEntsorgen(k.mesh);
+  kabMeshes = []; kaviarKugeln = []; kab = null; spielArt = 'revier';
+}
+// ----- Start, Wellen, Ende -----
+function kabeljauStarten() {
+  if (mp.peer) mpBeenden();
+  const auf = matchAufstellung().filter(a => a.team === 0);
+  farbenSetzen(Math.floor(Math.random() * FARB_PAARE.length));
+  weltLeeren(true); meldungen = [];
+  spielArt = 'kabeljau'; modus = 'match'; karteLaden('farbhafen');
+  klecks(BASIS[0].x, BASIS[0].y, 110, 0, null);
+  kleckse = auf.map(a => neuerKlecks(0, zahl(a.nr, 0, 3, 0), aufZuExtra(a)));
+  spieler = kleckse.find(e => e.spieler) || kleckse[0]; spieler.spieler = true;
+  baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
+  kab = { welle: 1, kaviar: 0, gesamt: 0, genug: false, spawnT: 2, bossT: 6, phase: 'sammeln', pauseT: 0, wellenGeschafft: 0 };
+  rest = WELLEN[0].zeit; zeit = 0; pfiff10 = false; lobbySuche = null;
+  matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null; aufnahme = { puffer: [], clips: [], tickT: 0 }; aufnahmeEv = [];
+  korbBauen();
+  nurZeigen(null);
+  zustand = 'spiel'; startCountdown = 3;
+  audioStart(); musikModusSetzen('spiel', spielSong('farbhafen')); ton('fanfare');
+  zielRing.material.color.set(TEAMS[spieler.team].col);
+  highlightAnzeige.push({ emoji: '🌊', titel: 'WELLE 1', text: `Sammle ${WELLEN[0].quote} Kaviarkugeln von den Bossfischen!`, start: performance.now() / 1000 + 2.5 });
+  mausFangen();
+}
+function fischSpawnen(art) {
+  const A = FISCH_ARTEN[art];
+  for (let v = 0; v < 12; v++) {
+    const x = W - 50 - Math.random() * 170, y = 80 + Math.random() * (H - 160);
+    if (istWand(x, y) || kollidiert(x, y, A.r, bodenHoehe(x, y))) continue;
+    const f = neuerFisch(art, x, y); kleckse.push(f);
+    spritzer(x, y, 5, 1, 16, 260);   // Platsch – aus dem Wasser gesprungen!
+    if (A.boss) { meldung(`⚠️ ${A.emoji} Ein ${A.name} kommt!`); ton('alarm'); }
+    return f;
+  }
+  return null;
+}
+function kabeljauUpdate(dt) {
+  if (!kab) return;
+  kaviarUpdate(dt);
+  for (let i = kleckse.length - 1; i >= 0; i--) {   // erwischte Fische verschwinden
+    const f = kleckse[i];
+    if (!f.fisch || !f.tot) continue;
+    f.totZeit += dt;
+    if (f.totZeit > 0.7) { if (f.roentgen) scene.remove(f.roentgen); wegUndEntsorgen(f.gruppe); kleckse.splice(i, 1); }
+  }
+  if (kab.phase === 'pause') {   // kurze Pause zwischen den Wellen
+    kab.pauseT -= dt;
+    if (kab.pauseT <= 0) { kab.phase = 'sammeln'; kab.spawnT = 1; kab.bossT = 4; ton('los'); }
+    return;
+  }
+  const WL = WELLEN[kab.welle - 1];
+  rest -= dt;
+  if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung(kab.genug ? '⏰ Noch 10 Sekunden durchhalten!' : '⏰ Noch 10 Sekunden – schnell Kaviar abgeben!'); }
+  if (rest <= 3 && Math.ceil(rest) !== letzteSek) { letzteSek = Math.ceil(rest); ton('piep'); }
+  const fische = kleckse.filter(e => e.fisch && !e.tot);
+  kab.spawnT -= dt; kab.bossT -= dt;
+  if (kab.spawnT <= 0) {
+    kab.spawnT = WL.spawn * (0.8 + Math.random() * 0.4);
+    const n = 1 + (Math.random() < 0.4 ? 1 : 0) + (kab.welle === 3 && Math.random() < 0.3 ? 1 : 0);
+    for (let i = 0; i < n && fische.length + i < WL.max; i++) fischSpawnen(Math.random() < WL.dicker ? 'dicker' : Math.random() < 0.55 ? 'knirps' : 'kabeljau');
+  }
+  if (kab.bossT <= 0 && fische.filter(f => FISCH_ARTEN[f.fisch].boss).length < 3 + kab.welle) {
+    kab.bossT = WL.boss * (0.8 + Math.random() * 0.4);
+    fischSpawnen(zufallAus(['panzer', 'spucker', 'flunder']));
+  }
+  const team = kleckse.filter(e => !e.fisch);
+  if (team.length && team.every(e => e.tot)) { kabeljauEnde(false, '💀 Alle erwischt – die Schicht ist vorbei!'); return; }
+  if (rest <= 0) {
+    if (kab.kaviar < WL.quote) { kabeljauEnde(false, `⏰ Nicht genug Kaviar! (${kab.kaviar}/${WL.quote})`); return; }
+    kab.wellenGeschafft++;
+    if (kab.welle >= WELLEN.length) { kabeljauEnde(true, '🎉 Alle 3 Wellen geschafft!'); return; }
+    // ➡️ nächste Welle: Fische hauen ab, alle sind wieder da
+    for (const f of kleckse) if (f.fisch && !f.tot) { spritzer(f.x, f.y, 10, 1, 10, 200); f.tot = true; f.totZeit = 0.3; }
+    for (const k of kaviarKugeln) { if (k.traeger) k.traeger.traegt = null; wegUndEntsorgen(k.mesh); }
+    kaviarKugeln = [];
+    for (const e of team) if (e.tot) e.wiederT = Math.min(e.wiederT, 0.5);
+    kab.welle++; kab.kaviar = 0; kab.genug = false; kab.phase = 'pause'; kab.pauseT = 5; pfiff10 = false;
+    rest = WELLEN[kab.welle - 1].zeit;
+    ton('fanfare');
+    highlightAnzeige.push({ emoji: '🌊', titel: `WELLE ${kab.welle}!`, text: `Welle ${kab.welle - 1} geschafft! Jetzt ${WELLEN[kab.welle - 1].quote} Kaviarkugeln sammeln!`, start: performance.now() / 1000 });
+  }
+}
+function kabeljauEnde(gewonnen, grund) {
+  zustand = 'ende';
+  $('pause').classList.add('hidden'); zielRing.visible = false;
+  if (document.pointerLockElement) document.exitPointerLock();
+  musikModusSetzen('menu', listenSong('menu'));
+  ton(gewonnen ? 'vollJubel' : 'vollTraurig');
+  const verdient = kab.gesamt * 10 + kab.wellenGeschafft * 80 + (gewonnen ? 150 : 0) + spieler.ko * 3;
+  konto.muenzen += verdient; konto.kabeljauRekord = Math.max(konto.kabeljauRekord || 0, kab.wellenGeschafft);
+  speichern();
+  $('sieger').textContent = grund;
+  $('balkenO').parentElement.style.display = 'none';
+  $('statistik').innerHTML =
+    `🌊 Wellen geschafft: <b>${kab.wellenGeschafft}/3</b> &nbsp; 🟠 Kaviar abgegeben: <b>${kab.gesamt}</b> (du: <b>${spieler.kaviarAbgabe || 0}</b>)<br>` +
+    `🐟 Fische erwischt: <b>${spieler.ko}</b> &nbsp; 💦 Selbst erwischt worden: <b>${spieler.tode}</b><br>` +
+    `<span style="font-size:1.4rem;color:#ffd166">🪙 +${verdient} Münzen</span> (jetzt: ${konto.muenzen})`;
+  $('highlights').replaceChildren(); $('replayKnopf').classList.add('hidden');
+  const nochmal = $('nochmal'); nochmal.disabled = false; nochmal.textContent = '🐟 Nochmal Kabeljau Run';
+  nochmal.onclick = () => { ton('klick'); kabeljauStarten(); };
+  nurZeigen('ende');
+}
+// ----- Anzeige oben im Kabeljau Run -----
+function kabeljauHud(cw, ch) {
+  if (!kab) return;
+  const WL = WELLEN[kab.welle - 1], bw = Math.min(460, cw - 40), bx = (cw - bw) / 2;
+  ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx - 10, 8, bw + 20, 74, 14); ctx.fill();
+  const r = kab.phase === 'pause' ? WL.zeit : Math.max(0, rest), min = Math.floor(Math.ceil(r) / 60), sek = Math.ceil(r) % 60;
+  ctx.textAlign = 'left'; ctx.font = 'bold 20px system-ui'; ctx.fillStyle = '#6fe3ff'; ctx.fillText(`🌊 Welle ${kab.welle}/3`, bx, 34);
+  ctx.textAlign = 'right'; ctx.fillStyle = r <= 10 && kab.phase !== 'pause' ? '#ff6060' : '#fff'; ctx.font = 'bold 24px system-ui'; ctx.fillText(`${min}:${String(sek).padStart(2, '0')}`, bx + bw, 34);
+  ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = kab.genug ? '#5be37d' : '#ffd166';
+  ctx.fillText(kab.phase === 'pause' ? '⏳ Gleich geht\'s los …' : kab.genug ? '✅ Genug Kaviar – überlebe!' : '🟠 Kaviar sammeln!', cw / 2, 34);
+  ctx.fillStyle = '#ffffff22'; ctx.fillRect(bx, 48, bw, 18);
+  ctx.fillStyle = kab.genug ? '#5be37d' : '#ff8a1f'; ctx.fillRect(bx, 48, bw * Math.min(1, kab.kaviar / WL.quote), 18);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`🟠 ${kab.kaviar} / ${WL.quote} Kaviarkugeln`, cw / 2, 62);
+  if (spieler.traegt && !spieler.tot) { ctx.textAlign = 'center'; textMitRand('🟠 Du trägst Kaviar – bring ihn zum goldenen Korb 🧺', cw / 2, ch - 175, 20, '#ffd166'); }
+}
+function kabeljauMinikarte(mx, my, mw, mh) {
+  if (!kab) return;
+  const kx = mx + KORB.x / W * mw, ky = my + KORB.y / H * mh;
+  ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(kx, ky, 6, 0, 7); ctx.fill(); ctx.strokeStyle = '#1b1f3a'; ctx.lineWidth = 2; ctx.stroke();
+  for (const k of kaviarKugeln) if (!k.traeger) { ctx.fillStyle = '#ff8a1f'; ctx.beginPath(); ctx.arc(mx + k.x / W * mw, my + k.y / H * mh, 3.5, 0, 7); ctx.fill(); }
+  for (const f of kleckse) if (f.fisch && !f.tot && FISCH_ARTEN[f.fisch].boss) { ctx.fillStyle = '#ff3b3b'; ctx.fillRect(mx + f.x / W * mw - 3, my + f.y / H * mh - 3, 6, 6); }
+}
+
+// ================== 🦜 DR. PAPAGEI und seine Fischerei (in der Stadt) ==================
+function baueDrPapagei() {
+  const g = new THREE.Group(), ud = g.userData;
+  const gruen = mat('#2fb84a', { roughness: 0.55 }), rot = mat('#e63946', { roughness: 0.55 }), gelb = mat('#ffd21f', { roughness: 0.4 });
+  const blau = mat('#3b6fd8', { roughness: 0.55 }), kittel = mat('#f4f6fb', { roughness: 0.7 }), schw = mat('#111111');
+  g.add(zylinder(mat('#6b4a2a'), 1.2, 1.2, 16, 0, 8, 0), klotz(mat('#6b4a2a'), 26, 2, 2, 0, 16, 0));   // Sitzstange
+  const vogel = new THREE.Group(); vogel.position.y = 17; g.add(vogel); ud.vogel = vogel;
+  for (const s of [-1, 1]) vogel.add(klotz(mat('#8a8f9e'), 2, 1, 4, 2, 0.5, s * 3));                // Füße
+  vogel.add(kugel(gruen, 8, 0, 11, 0, 0.95, 1.25, 0.9));                                             // Körper
+  vogel.add(kugel(gelb, 6, 3, 9, 0, 0.7, 1.0, 0.75));                                                // Bauch
+  // Laborkittel
+  const k = new THREE.Mesh(new THREE.CylinderGeometry(8.2, 9.5, 12, 16, 1, true, -2.2, 4.4), new THREE.MeshStandardMaterial({ color: '#f4f6fb', roughness: 0.7, side: THREE.DoubleSide }));
+  k.position.set(-0.5, 7, 0); k.rotation.y = Math.PI; vogel.add(k);
+  vogel.add(klotz(kittel, 1, 5, 2.4, 6.5, 12, 3.5), klotz(mat('#3b6fd8'), 0.6, 2.6, 1.4, 6.9, 13, 3.8));   // Kragen + Stift in der Tasche
+  for (const s of [-1, 1]) {                                                                           // Flügel
+    const fl = new THREE.Group(); fl.position.set(-1, 15, s * 7.5); vogel.add(fl); (ud.fluegel = ud.fluegel || []).push(fl);
+    fl.add(kugel(gruen, 5, -2, -4, 0, 1.2, 1.6, 0.35), kugel(blau, 3.5, -5, -9, 0, 1, 1.4, 0.3));
+  }
+  for (const [c, dy] of [[rot, 0], [blau, 1.6], [gelb, 3.2]]) { const f = klotz(c, 3, 16, 1.2, -7, 2 - dy, 0); f.rotation.z = -0.35; vogel.add(f); }   // lange Schwanzfedern
+  const kopf = new THREE.Group(); kopf.position.set(1, 24, 0); vogel.add(kopf); ud.kopf = kopf;
+  kopf.add(kugel(rot, 6.5, 0, 0, 0));
+  for (let i = 0; i < 3; i++) { const f = klotz(rot, 1.5, 5, 1, -2 + i * 1.5, 6.5, 0); f.rotation.z = -0.4 + i * 0.25; kopf.add(f); }   // Federschopf
+  const schnabel = new THREE.Mesh(new THREE.ConeGeometry(2.6, 7, 12), mat('#2b2f3a', { roughness: 0.4 }));
+  schnabel.rotation.z = -Math.PI / 2 - 0.5; schnabel.position.set(7, -2, 0); kopf.add(schnabel); ud.schnabel = schnabel;
+  kopf.add(kugel(mat('#f3e7cf'), 2.4, 5.5, 0, 0, 1, 1, 1.4));
+  for (const s of [-1, 1]) {
+    kopf.add(kugel(mat('#ffffff'), 2.2, 4, 1.5, s * 3.6), kugel(schw, 1.1, 5.4, 1.8, s * 4));
+    kopf.add(ringX(mat('#c9a400', { metalness: 0.8, roughness: 0.3 }), 2.6, 0.35, 5.6, 1.5, s * 3.7));   // runde Brille (er ist ja Doktor!)
+  }
+  kopf.add(klotz(mat('#c9a400', { metalness: 0.8 }), 0.4, 0.4, 2.4, 6, 1.6, 0));
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+let drPapagei3D = null;
+(function papageiHausBauen() {
+  const hx = 430, hz = 395;
+  const g = new THREE.Group(); g.position.set(hx, 0, hz); g.rotation.y = Math.PI; stadtGruppe.add(g);   // Tür zeigt zum Platz
+  const holz = mat('#3f7fa6', { roughness: 0.85 }), dach = mat('#e8e2d0', { roughness: 0.7 }), weiss = mat('#f6f3ea', { roughness: 0.8 });
+  g.add(klotz(holz, 160, 90, 100, 0, 45, 0));                                                     // Bootshaus aus blauem Holz
+  for (let i = 0; i < 9; i++) g.add(klotz(mat('#356d8f'), 160.5, 1.2, 100.5, 0, 6 + i * 10, 0));  // Bretter
+  for (const s of [-1, 1]) { const d = klotz(dach, 92, 4, 112, s * 40, 108, 0); d.rotation.z = s * -0.55; g.add(d); }   // Satteldach
+  g.add(klotz(weiss, 4, 34, 104, 0, 120, 0));
+  g.add(klotz(mat('#2b1d14'), 40, 60, 3, 0, 30, 51.5), kugel(MAT_GOLD, 1.6, 14, 30, 53));        // Tür
+  g.add(ringX(MAT_GOLD, 8, 1.2, 0, 72, 51.5), klotz(mat('#9fd8ff', { roughness: 0.1 }), 2, 12, 12, 0, 72, 51));   // Bullauge
+  for (const s of [-1, 1]) g.add(klotz(mat('#9fd8ff', { roughness: 0.1, metalness: 0.3 }), 30, 26, 2, s * 52, 50, 51), klotz(weiss, 34, 3, 3, s * 52, 36, 51.5));   // Fenster
+  // Rettungsring, Anker und Fischernetz
+  g.add(ringX(mat('#ff5a3a'), 9, 2.6, -58, 72, 52)); g.add(ringX(MAT_WEISS, 9, 2.7, -58, 72, 52.2).rotateX(0)); 
+  const anker = new THREE.Group(); anker.position.set(58, 72, 52); g.add(anker);
+  anker.add(klotz(MAT_GRAU, 2, 18, 2, 0, 0, 0), klotz(MAT_GRAU, 10, 2, 2, 0, 6, 0), new THREE.Mesh(new THREE.TorusGeometry(6, 1, 6, 16, Math.PI), MAT_GRAU).rotateZ(Math.PI).translateY(8));
+  const netz = new THREE.Mesh(new THREE.PlaneGeometry(40, 26, 8, 6), new THREE.MeshBasicMaterial({ color: '#c9b27a', wireframe: true }));
+  netz.position.set(-81, 50, 10); netz.rotation.y = -Math.PI / 2; g.add(netz);
+  // Großer Holzfisch auf dem Dach
+  const fisch = baueFisch('kabeljau'); fisch.scale.setScalar(2.2); fisch.position.set(0, 128, 0); fisch.rotation.y = Math.PI / 2; g.add(fisch);
+  const sch = schild('🦜 Dr. Papageis Fischerei', 'Kabeljau Run – Jobs zu vergeben!', '#2fb84a', 190, 46); sch.position.set(0, 96, 51.6); g.add(sch);
+  stadtHindernisse.push({ x: hx - 82, y: hz - 52, w: 164, h: 104 });
+  // Dr. Papagei sitzt neben der Tür auf seiner Stange
+  drPapagei3D = baueDrPapagei(); drPapagei3D.position.set(hx - 48, 0, hz - 66); drPapagei3D.rotation.y = Math.PI / 2; drPapagei3D.scale.setScalar(1.4);
+  stadtGruppe.add(drPapagei3D);
+  stadtHindernisse.push({ x: hx - 48, y: hz - 66, kreis: 14 });
+  STADT_ZIELE.push({ papagei: true, x: hx, y: hz - 85, r: 55, text: '🦜 Zu Dr. Papagei (Kabeljau Run)' });
+})();
+function papageiAnimieren() {   // wippt, schaut sich um, schlägt manchmal mit den Flügeln
+  if (!drPapagei3D) return;
+  const ud = drPapagei3D.userData;
+  ud.vogel.position.y = 17 + Math.abs(Math.sin(zeit * 2.2)) * 0.8;
+  ud.kopf.rotation.y = Math.sin(zeit * 0.9) * 0.5; ud.kopf.rotation.z = Math.sin(zeit * 1.7) * 0.12;
+  const flatter = (zeit % 5) < 0.6 ? Math.sin(zeit * 30) * 0.7 : 0;
+  ud.fluegel.forEach((f, i) => { f.rotation.x = (i ? -1 : 1) * (0.1 + Math.abs(flatter)); });
+  ud.schnabel.rotation.x = papageiRedet ? Math.sin(zeit * 20) * 0.25 : 0;
+}
+let papageiRedet = false;
+
+// ----- Das Gespräch mit Dr. Papagei (mit Tutorial) -----
+function fischBild(art, w = 120, h = 70) {   // kleines Bild von einem Fisch für das Tutorial
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  const A = FISCH_ARTEN[art], s = { knirps: 0.6, kabeljau: 0.85, dicker: 1.15, panzer: 0.9, spucker: 0.85, flunder: 0.9 }[art];
+  x.translate(w / 2, h / 2 + 4); x.scale(s, s);
+  const tinte = TEAMS[1].col;
+  if (art === 'flunder') {
+    x.fillStyle = A.farbe; x.beginPath(); x.ellipse(0, 0, 46, 24, 0, 0, 7); x.fill();
+    x.fillStyle = tinte; for (const [px, py] of [[-15, -8], [10, 9], [-5, 10], [20, -6]]) { x.beginPath(); x.arc(px, py, 4, 0, 7); x.fill(); }
+    x.beginPath(); x.moveTo(-44, 0); x.lineTo(-62, -14); x.lineTo(-62, 14); x.fill();
+    for (const py of [-8, 4]) { x.fillStyle = '#fff'; x.beginPath(); x.arc(28, py, 6, 0, 7); x.fill(); x.fillStyle = '#111'; x.beginPath(); x.arc(30, py, 3, 0, 7); x.fill(); }
+    x.strokeStyle = '#c9cfe6'; x.lineWidth = 3; for (const px of [-20, 20]) { x.beginPath(); for (let i = 0; i < 4; i++) x.ellipse(px, 26 + i * 4, 6, 2, 0, 0, 7); x.stroke(); }
+    return c;
+  }
+  const dick = art === 'dicker' ? 1.35 : 1;
+  x.fillStyle = tinte; x.beginPath(); x.moveTo(-40, 0); x.lineTo(-60, -18); x.lineTo(-60, 18); x.fill();   // Schwanz
+  for (const px of [-15, 0, 15]) { x.beginPath(); x.moveTo(px - 7, -20 * dick); x.lineTo(px, -32 * dick); x.lineTo(px + 7, -20 * dick); x.fill(); }   // 3 Rückenflossen
+  x.fillStyle = A.farbe; x.beginPath(); x.ellipse(0, 0, 44, 22 * dick, 0, 0, 7); x.fill();
+  x.fillStyle = A.bauch; x.beginPath(); x.ellipse(4, 9 * dick, 34, 10 * dick, 0, 0, 7); x.fill();
+  x.fillStyle = '#fff'; x.beginPath(); x.arc(26, -7, art === 'knirps' ? 10 : 8, 0, 7); x.fill();
+  x.fillStyle = '#111'; x.beginPath(); x.arc(29, -6, art === 'knirps' ? 5 : 4, 0, 7); x.fill();
+  x.strokeStyle = '#c9b27a'; x.lineWidth = 2; x.beginPath(); x.moveTo(38, 10); x.lineTo(40, 22); x.stroke();   // Bartfaden
+  x.strokeStyle = '#4a5a48'; x.lineWidth = 4; for (const px of [-8, 8]) { x.beginPath(); x.moveTo(px, 20 * dick); x.lineTo(px + 3, 30 * dick); x.stroke(); }
+  if (art === 'panzer') { x.fillStyle = '#c9cfe6'; x.beginPath(); x.ellipse(52, 0, 8, 26, 0, 0, 7); x.fill(); x.strokeStyle = '#4a4f73'; x.lineWidth = 2; x.stroke(); x.fillStyle = '#9aa1bd'; x.beginPath(); x.arc(14, -20, 14, Math.PI, 0); x.fill(); }
+  if (art === 'spucker') { x.fillStyle = '#4a4f73'; x.fillRect(40, -4, 22, 10); x.fillStyle = tinte; x.fillRect(58, -6, 5, 14); x.fillStyle = '#9fd8ff'; x.fillRect(-14, -36, 14, 16); }
+  return c;
+}
+const PAPAGEI_SEITEN = [
+  { text: name => `Krah! Hallo ${name}! 🦜 Ich bin Dr. Papagei – Fischforscher und Chef dieser Fischerei. Schön, dass du vorbeischaust!` },
+  { text: () => 'Krah, ich hab ein Problem: Die Kabeljaus aus der Bucht sind total frech geworden! Sie kommen an den Hafen und kleckern alles mit ihrer Tinte voll.', },
+  { text: () => 'Und ich brauche für meine Forschung dringend Kaviarkugeln! 🟠 Willst du für mich arbeiten? Du bekommst natürlich Münzen dafür! 🪙', job: true },
+  { titel: 'Die normalen Kabeljaus', fische: ['knirps', 'kabeljau', 'dicker'], text: () => 'Super! Dann zeig ich dir erst mal, wer da so rumschwimmt. Diese drei kommen ganz oft:' },
+  { titel: 'Die Bossfische', fische: ['panzer', 'spucker', 'flunder'], text: () => 'Krah! Und dann gibt es noch die BOSSFISCHE. Die sind stark – aber nur sie haben Kaviar dabei!' },
+  { titel: '🟠 Kaviarkugeln', kaviar: true, text: () => 'Wenn du einen Bossfisch erwischst, lässt er 3 Kaviarkugeln fallen. Lauf drüber, dann trägst du eine. Bring sie zum goldenen Korb 🧺 bei deiner Basis! Mit Kugel bist du etwas langsamer.' },
+  { titel: '🌊 3 Wellen', wellen: true, text: () => 'Es gibt 3 Wellen. In jeder Welle hast du ein Zeitlimit, um genug Kaviar abzugeben. Hast du alle? Dann musst du nur noch überleben, bis die Zeit um ist! Wenn euer ganzes Team gleichzeitig erwischt ist, ist die Schicht vorbei.' },
+  { text: () => 'Deine 3 Helfer kommen mit. Viel Glück – und lass dich nicht anknabbern! Krah! 🦜', los: true },
+];
+let papageiSeite = 0;
+function papageiOeffnen() {
+  zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
+  papageiSeite = konto.papageiJob ? -1 : 0;   // schon mal dagewesen? dann gleich die Auswahl
+  nurZeigen('papagei'); papageiZeigen(); papageiRedet = true; ton('ruf_super', 0.8);
+}
+function papageiZeigen() {
+  const box = $('papageiText'), extra = $('papageiExtra'), knoepfe = $('papageiKnoepfe');
+  extra.replaceChildren(); knoepfe.replaceChildren();
+  const k = (txt, f, kl) => { const b = knopf([txt], () => { ton('klick'); f(); }, kl); knoepfe.append(b); };
+  if (papageiSeite === -1) {   // Wiederkommer
+    box.textContent = `Krah! Da bist du ja wieder, ${konto.name}! 🦜 Bereit für eine neue Schicht? ${konto.kabeljauRekord ? `(Dein Rekord: ${konto.kabeljauRekord}/3 Wellen)` : ''}`;
+    k('🐟 Los, Kabeljau Run starten!', () => kabeljauStarten(), 'gross');
+    k('📖 Tutorial nochmal ansehen', () => { papageiSeite = 3; papageiZeigen(); }, 'klein');
+    k('⬅ Zurück in die Stadt', papageiZu, 'klein');
+    return;
+  }
+  const S = PAPAGEI_SEITEN[papageiSeite];
+  box.textContent = S.text(konto.name);
+  if (S.titel) { const h = document.createElement('h3'); h.textContent = S.titel; extra.append(h); }
+  if (S.fische) for (const art of S.fische) {
+    const A = FISCH_ARTEN[art], z = document.createElement('div'); z.className = 'fischZeile';
+    const t = document.createElement('div'); const b = document.createElement('b'); b.textContent = `${A.emoji} ${A.name}`;
+    const p = document.createElement('span'); p.textContent = ` – ${A.info} (${A.angriff}, ${A.hp} Leben)`;
+    t.append(b, p); z.append(fischBild(art), t); extra.append(z);
+  }
+  if (S.kaviar) { const z = document.createElement('div'); z.className = 'fischZeile'; z.textContent = '🛡️/💥/🥏 Boss erwischt ➜ 🟠🟠🟠 fallen raus ➜ drüberlaufen ➜ 🧺 zum goldenen Korb tragen ➜ ✅'; extra.append(z); }
+  if (S.wellen) { const z = document.createElement('div'); z.className = 'fischZeile'; z.textContent = WELLEN.map((w, i) => `🌊 Welle ${i + 1}: ${w.quote} Kugeln in ${w.zeit} s`).join('  ·  '); extra.append(z); }
+  if (S.job) {
+    k('✅ Ja, ich mach den Job!', () => { konto.papageiJob = true; speichern(); papageiSeite++; papageiZeigen(); }, 'gross');
+    k('❌ Nein danke', () => { $('papageiText').textContent = 'Krah … schade! Komm wieder, wenn du es dir anders überlegst! 🦜'; knoepfe.replaceChildren(); knoepfe.append(knopf(['⬅ Zurück in die Stadt'], papageiZu, 'klein')); }, 'klein');
+  } else if (S.los) {
+    k('🐟 Los geht\'s!', () => kabeljauStarten(), 'gross');
+    k('⬅ Doch nicht – zurück in die Stadt', papageiZu, 'klein');
+  } else {
+    k('Weiter ▶', () => { papageiSeite++; papageiZeigen(); }, 'gross');
+    if (papageiSeite >= 3) k('⏩ Tutorial überspringen', () => { papageiSeite = PAPAGEI_SEITEN.length - 1; papageiZeigen(); }, 'klein');
+  }
+  ton('ruf_los', 0.5);
+}
+function papageiZu() { papageiRedet = false; shopVonStadt = true; stadtBetreten(); }
+// Dr. Papagei als Bild (für das Gesprächsfenster)
+function papageiPortraet() {
+  const c = $('papageiBild'), x = c.getContext('2d'); x.clearRect(0, 0, 160, 180);
+  const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
+  x.fillStyle = '#e63946'; x.fillRect(42, 150, 12, 30); x.fillStyle = '#3b6fd8'; x.fillRect(54, 150, 12, 30); x.fillStyle = '#ffd21f'; x.fillRect(66, 150, 12, 30);   // Schwanz
+  kreis(80, 125, 40, '#2fb84a', 1, 1.15);                     // Körper
+  x.fillStyle = '#f4f6fb'; x.beginPath(); x.moveTo(40, 120); x.lineTo(120, 120); x.lineTo(126, 178); x.lineTo(34, 178); x.fill();   // Kittel
+  x.fillStyle = '#d9dde8'; x.beginPath(); x.moveTo(80, 120); x.lineTo(70, 150); x.lineTo(90, 150); x.fill();
+  x.fillStyle = '#3b6fd8'; x.fillRect(100, 132, 4, 14);       // Stift
+  kreis(80, 128, 18, '#ffd21f', 1, 0.6);
+  kreis(80, 62, 36, '#e63946');                                // Kopf
+  for (let i = 0; i < 3; i++) { x.fillStyle = '#e63946'; x.beginPath(); x.ellipse(70 + i * 10, 26, 5, 14, -0.4 + i * 0.3, 0, 7); x.fill(); }
+  kreis(80, 72, 16, '#f3e7cf', 1.3, 1);
+  x.fillStyle = '#2b2f3a'; x.beginPath(); x.moveTo(72, 74); x.quadraticCurveTo(80, 70, 92, 74); x.quadraticCurveTo(92, 100, 78, 104); x.closePath(); x.fill();   // Schnabel
+  for (const px of [64, 96]) { kreis(px, 58, 10, '#fff'); kreis(px + 2, 59, 5, '#111'); x.strokeStyle = '#c9a400'; x.lineWidth = 3; x.beginPath(); x.arc(px, 58, 12, 0, 7); x.stroke(); }
+  x.beginPath(); x.moveTo(76, 58); x.lineTo(84, 58); x.stroke();
+}
+
 function stadtBetretenTaste() {
   if (!stadtZiel) return;
   ton('klick');
+  if (stadtZiel.papagei) { papageiOeffnen(); papageiPortraet(); return; }   // 🦜 Kabeljau Run
   if (stadtZiel.arena) {
     zustand = 'wahl';
     if (document.pointerLockElement) document.exitPointerLock();
@@ -7259,6 +7875,7 @@ function stadtZeigen(dt) {
   const q = p.landT > 0 ? Math.sin(p.landT / 0.25 * Math.PI) : 0;
   g.scale.set(1 + q * 0.1, 1 - q * 0.16, 1 + q * 0.1);
   animiereFigur(p, v, dt);
+  papageiAnimieren();
   for (const n of npcs) {
     n.gruppe.position.set(n.x, 0, n.y); n.gruppe.rotation.y = -n.winkel;
     animiereFigur(n, Math.hypot(n.vx, n.vy), dt);
@@ -7315,7 +7932,7 @@ function schleife(t) {
   const dt = Math.min(0.05, (t - letzt) / 1000); letzt = t;
   const onlinePause = zustand === 'pause' && mp.aktiv;     // online läuft das Spiel auch in der Pause weiter
   if (zustand === 'spiel' || zustand === 'lobby' || onlinePause) { if (istGast()) gastUpdate(dt); else update(dt); }
-  if (zustand === 'spiel' && modus === 'match' && !istGast() && startCountdown <= 0) aufnahmeTick(dt);   // 🎬 Rekorder läuft mit
+  if (zustand === 'spiel' && modus === 'match' && spielArt === 'revier' && !istGast() && startCountdown <= 0) aufnahmeTick(dt);   // 🎬 Rekorder läuft mit
   if (zustand === 'replay') replayUpdate(dt);
   if (zustand === 'intro') introUpdate(dt);
   if (zustand === 'feier') feierUpdate(dt);
