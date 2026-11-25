@@ -4310,7 +4310,7 @@ function werte(e, dt, feind) {
   // Leben
   e.letzterTreffer += dt;
   if (feind && e.schild <= 0) { if (e.hp > 30) e.hp -= 12 * (1 - e.bonus.feindfarbe) * dt; }
-  else if (e.letzterTreffer > 2) e.hp = Math.min(100, e.hp + 30 * (1 + e.bonus.heilen) * dt);
+  else if (e.letzterTreffer > 2) e.hp = Math.min(e.maxHp || 100, e.hp + 30 * (1 + e.bonus.heilen) * dt);   // Fische haben mehr Leben als 100
   if (e.schild > 0) e.schild -= dt;
 }
 
