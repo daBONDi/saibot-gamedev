@@ -869,7 +869,38 @@ function krach(freq, lang, laut, t, ziel = sfxGain, typ = 'lowpass') {
   g.gain.setValueAtTime(laut, t); g.gain.exponentialRampToValueAtTime(0.0001, t + lang);
   q.connect(f); f.connect(g); g.connect(ziel); q.start(t); q.stop(t + lang + 0.02);
 }
+// 😆 Eine "Ha"-Silbe zum Lachen: Sägezahn durch zwei Vokal-Filter (klingt wie "a")
+function lachSilbe(t, f0, laut) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 1.08, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.9, t + 0.13);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut * 3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+  for (const [fq, q] of [[800, 6], [1250, 8], [2600, 10]]) { const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fq; f.Q.value = q; o.connect(f); f.connect(g); }
+  g.connect(sfxGain); o.start(t); o.stop(t + 0.2);
+  krach(2500, 0.04, laut * 0.15, t, sfxGain, 'highpass');   // das "H"
+}
+// 🎺 traurige Posaune: ein Ton mit Wackeln
+function posaune(t, f, lang, laut, vibrato = 0) {
+  const o = ac.createOscillator(), g = ac.createGain(), fl = ac.createBiquadFilter();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(f * 1.03, t); o.frequency.linearRampToValueAtTime(f, t + 0.06);
+  fl.type = 'lowpass'; fl.frequency.setValueAtTime(500, t); fl.frequency.linearRampToValueAtTime(1400, t + 0.08); fl.frequency.linearRampToValueAtTime(700, t + lang);
+  if (vibrato) { const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 6; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * vibrato, t + lang * 0.5); l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + lang + 0.05); }
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(laut, t + 0.05); g.gain.setValueAtTime(laut, t + lang * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + lang);
+  o.connect(fl); fl.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + lang + 0.05);
+}
 const SOUNDS = {
+  // 💀 VOLL ERWISCHT XD – Gegner-Team weg: Trommelwirbel, Jubel-Fanfare, Becken und ein fettes "HA-HA-HA-HA!"
+  vollJubel: (t, v) => {
+    for (let i = 0; i < 10; i++) krach(1400, 0.05, (0.06 + i * 0.012) * v, t + i * 0.045, sfxGain, 'bandpass');   // Trommelwirbel
+    osz('sine', 140, 45, 0.35, 0.35 * v, t + 0.45); krach(5000, 1.2, 0.18 * v, t + 0.45, sfxGain, 'highpass');       // BUMM + Becken
+    [67, 72, 76, 79, 84].forEach((n, i) => osz('square', NOTE(n), NOTE(n), 0.12, 0.06 * v, t + 0.45 + i * 0.07, sfxGain, 3500));
+    [72, 76, 79, 84].forEach(n => osz('sawtooth', NOTE(n), NOTE(n), 0.8, 0.035 * v, t + 0.8, sfxGain, 2500));      // Akkord hält
+    [330, 300, 280, 260, 240].forEach((f, i) => lachSilbe(t + 1.05 + i * 0.16, f, 0.22 * v));                          // HA-HA-HA-HA-HA!
+  },
+  // 😱 Eigenes Team weg: traurige Posaune "wah wah wah wahhhh"
+  vollTraurig: (t, v) => {
+    [[NOTE(55), 0.38], [NOTE(54), 0.38], [NOTE(53), 0.38]].forEach(([f, l], i) => posaune(t + i * 0.42, f, l, 0.16 * v));
+    posaune(t + 1.26, NOTE(52), 1.3, 0.16 * v, 0.03);
+  },
   schuss:  (t, v) => krach(1800, 0.06, 0.05 * v, t),
   klatsch: (t, v) => krach(900, 0.09, 0.06 * v, t),
   platsch: (t, v) => { krach(600, 0.4, 0.4 * v, t); osz('sine', 200, 50, 0.3, 0.25 * v, t); },
@@ -6017,7 +6048,7 @@ function vollErwischtPruefen() {
     const alleWeg = team.length >= 2 && team.every(e => e.tot);
     if (alleWeg && !vollWarWeg[t]) {
       vollErwischt = { team: t, start: performance.now() / 1000, eigenes: t === spieler.team };
-      if (vollErwischt.eigenes) ton('erwischt'); else { ton('fanfare'); ton('ko'); }
+      ton(vollErwischt.eigenes ? 'vollTraurig' : 'vollJubel');
       spritzerFeuerwerk(1 - t);
     }
     vollWarWeg[t] = alleWeg;
