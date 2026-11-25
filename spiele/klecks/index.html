@@ -6005,6 +6005,51 @@ function hud() {
       ctx.beginPath(); ctx.arc(x, y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * spieler.ladung); ctx.stroke();
     }
   }
+  vollErwischtHud(cw, ch);
+}
+// 💀 VOLL ERWISCHT XD: ein ganzes Team ist gleichzeitig erwischt (läuft auf jedem Computer selbst, auch online)
+const VOLL_DAUER = 3;
+let vollErwischt = null, vollWarWeg = [false, false];
+function vollErwischtPruefen() {
+  if (modus !== 'match' || zustand !== 'spiel') { vollWarWeg = [false, false]; return; }
+  for (let t = 0; t < 2; t++) {
+    const team = kleckse.filter(e => e.team === t && !e.puppe);
+    const alleWeg = team.length >= 2 && team.every(e => e.tot);
+    if (alleWeg && !vollWarWeg[t]) {
+      vollErwischt = { team: t, start: performance.now() / 1000, eigenes: t === spieler.team };
+      if (vollErwischt.eigenes) ton('erwischt'); else { ton('fanfare'); ton('ko'); }
+      spritzerFeuerwerk(1 - t);
+    }
+    vollWarWeg[t] = alleWeg;
+  }
+}
+function spritzerFeuerwerk(team) {   // Farbe spritzt über dem Spieler in die Luft
+  if (!spieler) return;
+  for (let i = 0; i < 5; i++) spritzer(spieler.x + (Math.random() - 0.5) * 200, spieler.y + (Math.random() - 0.5) * 200, hAbs(spieler) + 60 + Math.random() * 60, team, 16, 300);
+}
+function vollErwischtHud(cw, ch) {
+  vollErwischtPruefen();
+  if (!vollErwischt) return;
+  const k = performance.now() / 1000 - vollErwischt.start;
+  if (k > VOLL_DAUER) { vollErwischt = null; return; }
+  const rein = Math.min(1, k / 0.25), raus = k > VOLL_DAUER - 0.4 ? (VOLL_DAUER - k) / 0.4 : 1;
+  const pop = rein < 1 ? 0.3 + rein * 1.0 + Math.sin(rein * Math.PI) * 0.35 : 1 + Math.sin(k * 10) * 0.04;
+  const sieger = TEAMS[1 - vollErwischt.team];
+  ctx.save(); ctx.globalAlpha = Math.max(0, raus);
+  // Farbstreifen quer übers Bild
+  ctx.fillStyle = sieger.col; ctx.globalAlpha = Math.max(0, raus) * 0.75;
+  ctx.save(); ctx.translate(cw / 2, ch * 0.4); ctx.rotate(-0.06); ctx.fillRect(-cw, -60 * rein, cw * 2, 120 * rein); ctx.restore();
+  ctx.globalAlpha = Math.max(0, raus);
+  ctx.save(); ctx.translate(cw / 2, ch * 0.4); ctx.rotate(-0.06 + Math.sin(k * 7) * 0.03); ctx.scale(pop, pop);
+  ctx.textAlign = 'center';
+  ctx.font = '900 72px system-ui'; ctx.lineWidth = 12; ctx.strokeStyle = '#1b1f3a'; ctx.strokeText('VOLL ERWISCHT XD', 0, 22);
+  const verlauf = ctx.createLinearGradient(-300, 0, 300, 0);
+  for (let i = 0; i <= 6; i++) verlauf.addColorStop(i / 6, `hsl(${(i * 60 + k * 400) % 360},95%,62%)`);
+  ctx.fillStyle = verlauf; ctx.fillText('VOLL ERWISCHT XD', 0, 22);
+  ctx.restore();
+  ctx.textAlign = 'center';
+  textMitRand(vollErwischt.eigenes ? '😱 Euer ganzes Team ist weg!' : '😎 Das ganze Gegner-Team ist weg!', cw / 2, ch * 0.4 + 85, 28, '#ffffff');
+  ctx.restore();
 }
 
 function textMitRand(text, x, y, groesse, farbe = '#fff') {
