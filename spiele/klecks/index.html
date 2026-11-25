@@ -107,7 +107,8 @@
       <span class="taste">F halten</span><span>Schirm aufmachen ☂️</span>
       <span class="taste">Rechtsklick</span><span>Mit Schwertern: Dash 💨 (abtauchen dann mit Shift)</span>
       <span class="taste">V</span><span>Ich-Sicht / Sicht von hinten</span>
-      <span class="taste">M</span><span>Musik an/aus 🎵</span>
+      <span class="taste">M</span><span>Supersprung 🚀 zum Springturm oder zu Mitspielern (dann Zahl drücken)</span>
+      <span class="taste">N</span><span>Musik an/aus 🎵</span>
       <span class="taste">E (Stadt)</span><span>Laden / Arena betreten</span>
       <span class="taste">Esc</span><span>Menü / Pause</span>
     </div>
@@ -2937,8 +2938,18 @@ addEventListener('keydown', e => {
   }
   if (e.code === 'KeyQ') ultiWunsch = true;
   if (e.code === 'KeyV') ichSicht = !ichSicht;
-  if (e.code === 'KeyM') musikUmschalten();
+  if (e.code === 'KeyN') musikUmschalten();
+  if (e.code === 'KeyM' && spieler && modus === 'match' && (zustand === 'spiel' || zustand === 'pause')) {   // 🗼 Supersprung-Menü
+    sprungMenu = !sprungMenu; ton('klick');
+    if (sprungMenu && !sprungZiele(spieler).length) { sprungMenu = false; meldung('🗼 Kein Springturm und keine Mitspieler zum Hinspringen!'); }
+  }
+  const zifferNr = /^Digit([1-9])$/.exec(e.code) || /^Numpad([1-9])$/.exec(e.code);
+  if (sprungMenu && zifferNr && spieler) {
+    const ziel = sprungZiele(spieler)[+zifferNr[1] - 1];
+    if (ziel) { sprungMenu = false; if (!sprungStarten(spieler, ziel)) meldung('Gerade kannst du nicht springen!'); }
+  }
 });
+let sprungMenu = false;
 addEventListener('keyup', e => { tasten[e.code] = false; if (e.code === 'KeyE') bombeLos = true; });
 addEventListener('blur', () => { for (const k in tasten) tasten[k] = false; maus.links = maus.rechts = false; });
 let mausKlicks = 0;
@@ -3140,7 +3151,7 @@ function mpVomGast(g, d) {
   if (!d || typeof d !== 'object') return;
   const e = kleckse.find(k => k.mensch === g.id);
   if (d.t === 'e') {
-    g.e = { x: zahl(d.x, 0, W, null), y: zahl(d.y, 0, H, null), z: zahl(d.z, 0, 300, 0), w: zahl(d.w, -1e4, 1e4, 0), p: zahl(d.p, -1.3, 1.1, 0),
+    g.e = { x: zahl(d.x, 0, W, null), y: zahl(d.y, 0, H, null), z: zahl(d.z, 0, 700, 0), w: zahl(d.w, -1e4, 1e4, 0), p: zahl(d.p, -1.3, 1.1, 0),
             vx: zahl(d.vx, -600, 600, 0), vy: zahl(d.vy, -600, 600, 0), s: !!d.s, u: !!d.u, sf: !!d.sf, n: d.n | 0 };
     if (!e || e.tot || !mpLaeuft()) return;
     if (d.tk && e.trifT > 0) e.trifWunsch = true;
@@ -3169,11 +3180,11 @@ function mpSchnappschussSenden() {
   const s = {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
-      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0]),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0) | (e.markiertBis > zeit ? 4096 : 0) | (e.saugerT > 0 ? 8192 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0, r0(e.saugMenge || 0)]),
     s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.pfeil ? -1 : o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.art === 'tracker' ? 'tracker' : o.ulti ? 'rakete' : o.art)]),
-    g: geraete.map(o => [objId(o), GERAET_ARTEN.indexOf(o.art), r0(o.x), r0(o.y), o.team, r2(o.winkel), r1(o.t), o.zuend >= 0 ? 1 : 0, o.treffer > 0 ? 1 : 0]),
+    g: geraete.map(o => [objId(o), GERAET_ARTEN.indexOf(o.art), r0(o.x), r0(o.y), o.team, r2(o.winkel), r1(o.t), o.zuend >= 0 ? 1 : 0, o.treffer > 0 ? 1 : 0, kleckse.indexOf(o.wer)]),
     w: wellen.map(o => [objId(o), r0(o.x), r0(o.y), r2(o.winkel), r2(o.t), o.dauer, o.team]),
     to: tornados.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
     wo: wolken.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
@@ -3238,11 +3249,11 @@ function mpSchnappschuss(d) {
   if (Array.isArray(d.e)) d.e.forEach((a, i) => {
     const e = kleckse[i];
     if (!e || !Array.isArray(a)) return;
-    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte, panzer, werferT, kugelT, werferSchuss, kugelKraft, trifRest] = a;
+    const [x, y, z, w, pi, hp, tinte, ulti, vx, vy, fl, ladung, schild, laserT, schwingT, schwingSeite, rueck, lt, wiederT, lebenNr, ko, tode, punkte, panzer, werferT, kugelT, werferSchuss, kugelKraft, trifRest, saugMenge] = a;
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schirmAuf: !!(fl & 1024), wirbelBis: fl & 2048 ? zeit + 0.15 : 0, schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0,
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0,
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
@@ -3259,15 +3270,15 @@ function mpSchnappschuss(d) {
     (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; o.vx = a[4]; o.vy = a[5]; o.vz = a[6]; });
   bomben = proxySync(bomben, d.b, a => {
     const art = BOMBEN_ARTEN[a[5]] || 'klecks', team = a[4] ? 1 : 0;
-    const mesh = art === 'tracker' ? baueTracker(team) : art === 'rakete' ? baueRakete(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : baueBombe(team);
+    const mesh = art === 'marker' ? baueMarker(team) : art === 'tracker' ? baueTracker(team) : art === 'rakete' ? baueRakete(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : baueBombe(team);
     mesh.position.set(a[1], a[3], a[2]);
     return { mesh, ulti: art === 'rakete', art, team };
   }, (o, a) => { o.x = a[1]; o.y = a[2]; o.h = a[3]; });
   geraete = proxySync(geraete, d.g, a => {
     const art = GERAET_ARTEN[a[1]] || 'klebe', team = a[4] ? 1 : 0;
-    const mesh = art === 'schirm' ? baueSchirmFlug(team) : art === 'lautsprecher' ? baueLautsprecher(team) : art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
+    const mesh = art === 'springturm' ? baueSpringturm(team) : art === 'marker' ? baueMarker(team) : art === 'schirm' ? baueSchirmFlug(team) : art === 'lautsprecher' ? baueLautsprecher(team) : art === 'tracker' ? baueTracker(team) : art === 'klebe' ? baueKlebe(team) : art === 'sprinkler' ? baueSprinkler(team) : art === 'mine' ? baueMine(team) : baueFarbwand(team);
     mesh.position.set(a[2], bodenHoehe(a[2], a[3]) + (art === 'klebe' ? 6 : 0), a[3]); mesh.rotation.y = -a[5];
-    return { mesh, art, team, x: a[2], y: a[3], winkel: a[5], treffer: 0 };
+    return { mesh, art, team, x: a[2], y: a[3], winkel: a[5], treffer: 0, wer: kleckse[a[9]] || null };
   }, (o, a) => { o.t = a[6]; o.zuend = a[7] ? 0.1 : -1; if (a[8]) o.treffer = 0.12; if (o.art === 'schirm') { o.x = a[2]; o.y = a[3]; } });
   wellen = proxySync(wellen, d.w, a => ({ mesh: baueWelle(a[6] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.winkel = a[3]; o.t = a[4]; o.dauer = a[5]; });
   tornados = proxySync(tornados, d.to, a => ({ mesh: baueTornado(a[4] ? 1 : 0) }), (o, a) => { o.x = a[1]; o.y = a[2]; o.t = a[3]; });
@@ -3285,6 +3296,10 @@ function mpEreignisAusfuehren(ev) {
     const u = ULTIS[e.ultiArt];
     meldung(e === spieler ? `⚡ ${u.emoji} ${u.name}!` : `${e.name}: ${u.emoji} ${u.name}!`);
     if (e === spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('ulti');
+  } else if (ev.k === 'pyr' && Array.isArray(ev.a)) {
+    pyramideZeigen(ev.a[0], ev.a[1], ev.a[2], ev.a[3], ev.a[4], ev.team ? 1 : 0);
+  } else if (ev.k === 'mark' && e) { markiertMeldung(e);
+  } else if (ev.k === 'turmweg') { turmWegMeldung(e);
   } else if (ev.k === 'strahl' && Array.isArray(ev.a)) {
     strahlZeigen(ev.a[0], ev.a[1], ev.a[2], ev.a[3], ev.a[4], ev.team ? 1 : 0);
     if (Math.hypot(ev.a[0] - spieler.x, ev.a[1] - spieler.y) < 500) ton('sniper');
@@ -3325,7 +3340,7 @@ function gastUpdate(dt) {
   else { p.schiesst = false; p.schirmHalten = false; if (!p.tot) bewege(p, 0, 0, dt); }
   const w = WAFFEN[p.waffe];
   mp.schussT -= dt;
-  if (p.schiesst && !p.taucht && w.speed && (!w.typ || w.typ === 'spritzer') && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
+  if (p.schiesst && !p.taucht && w.speed && (!w.typ || w.typ === 'spritzer') && !(p.saugerT > 0) && !p.superSprung && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
   if (p.schiesst && p.tinte < 2) leerHinweis = 1.5;
   // Die anderen gleiten weich zu ihrer Position
   const k = Math.min(1, dt * 12);
@@ -3418,6 +3433,8 @@ function geraetAnim(g) {
     ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
     ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
     g.mesh.scale.y = Math.min(1, g.t * 6);
+  } else if (g.art === 'marker' || g.art === 'springturm') {
+    geraetMarkerTurmAnim(g);
   } else if (g.art === 'schirm') {
     g.mesh.position.set(g.x, bodenHoehe(g.x, g.y), g.y);
     g.mesh.scale.setScalar(Math.min(1, 0.3 + g.t * 4) * (g.t > SCHIRM_FAHRT + 1.1 ? Math.max(0.05, 1 - (g.t - SCHIRM_FAHRT - 1.1) / 0.4) : 1));
@@ -3444,6 +3461,14 @@ function baueWolke(team) {
   const g = new THREE.Group(), m = mat(TEAMS[team].hell, { roughness: 0.9 });
   for (let i = 0; i < 7; i++) g.add(kugel(m, 30 + Math.random() * 20, (Math.random() - 0.5) * 120, Math.random() * 20, (Math.random() - 0.5) * 120));
   return g;
+}
+function markiertMeldung(f) {
+  if (!spieler) return;
+  if (f === spieler) { meldung('🧲 Du bist markiert – die Gegner sehen dich!'); ton('piep'); }
+  else if (f.team !== spieler.team) meldung(`🧲 ${f.name} ist markiert!`);
+}
+function turmWegMeldung(wer) {
+  if (wer && wer === spieler) { meldung('🗼💥 Dein Springturm wurde zerstört!'); ton('aua'); }
 }
 // Kill-Meldung aus Sicht von diesem Computer
 function koMeldung(e, wer) {
@@ -3474,7 +3499,7 @@ function neuerKlecks(team, nr, extra = {}) {
     team, nr, spieler: sp, name: NAMEN[team][nr] || 'Bot', mensch: null, lebenNr: 0,
     set: sp ? konto.an.waffe : zufall(SETS), waffe: null,
     x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: 16, hp: 100, tinte: 100, winkel: team ? Math.PI : 0, pitch: 0,
-    tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false,
+    tot: false, wiederT: 0, schussCd: 0, bombeCd: 2, taucht: false, willTauchen: false, schiesst: false, saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null,
     ladung: 0, laden: false, rollT: 0, rollt: false, schwingT: 0, schwingSeite: 1, haltT: 0, vorherSchiesst: false, schild: 0, slam: false, ulti: 0, rueck: 0,
     letzterTreffer: 9, ko: 0, tode: 0, punkte: 0,
     spawnT: 0.45, landT: 0, todT: 0, tauchAnim: 0, lauf: 0, vmPhase: 0,
@@ -3511,7 +3536,8 @@ function neuerKlecks(team, nr, extra = {}) {
   e.gigaMesh = baueGigafisch(team);
   e.schirmHP = WAFFEN[e.waffe].schirmHP || 0; e.schirmAuf = false; e.schirmWiederT = 0; e.schirmTreffer = 0;
   e.panzer = 0; e.panzerT = 0; e.werferT = 0; e.werferSchuss = 0; e.kugelT = 0; e.kugelKraft = 0; e.gigaT = 0; e.dashT = 0; e.dashCd = 0; e.trifT = 0; e.trifRest = 0; e.trifCd = 0;
-  scene.add(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh);
+  e.saugerMesh = baueSauger(team);
+  scene.add(e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh, e.saugerMesh);
   return e;
 }
 
@@ -3525,7 +3551,7 @@ function entsorgen(o) {
 }
 function wegUndEntsorgen(o) { if (!o) return; scene.remove(o); entsorgen(o); }
 function aufraeumen() {
-  for (const e of kleckse) for (const o of [e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh]) wegUndEntsorgen(o);
+  for (const e of kleckse) for (const o of [e.gruppe, e.welle, e.blase, e.laserMesh, e.kugelMesh, e.panzerMesh, e.gigaMesh, e.saugerMesh]) if (o) wegUndEntsorgen(o);
   for (const e of kleckse) if (e.roentgen) { scene.remove(e.roentgen); e.roentgen.children[0].material.dispose(); }
   for (const g of [...geraete, ...wellen, ...tornados, ...blasen]) wegUndEntsorgen(g.mesh);
   for (const s of schuesse) scene.remove(s.mesh);
@@ -3947,6 +3973,7 @@ function werte(e, dt, feind) {
 
 // ================== WAFFEN ==================
 function schiessen(e, dt) {
+  if (e.saugerT > 0 || e.superSprung) { e.laden = false; return; }   // 🌪️ mit dem Farbsauger / im Supersprung wird nicht geschossen
   e.schussCd -= dt;
   e.rollt = false;
   if (e.tot || e.taucht) e.schirmAuf = false;
@@ -4188,7 +4215,7 @@ const roentgenGeoK = new THREE.CylinderGeometry(7, 6, 22, 10).translate(0, 13, 0
 function roentgenZeigen() {
   const an = spieler && spieler.laserT > 0 && !spieler.tot && zustand !== 'stadt';
   for (const e of kleckse) {
-    const zeigen = an && e.team !== spieler.team && !e.tot;
+    const zeigen = (an || e.markiertBis > zeit) && e.team !== spieler.team && !e.tot;   // 🧲 Markierte sieht man durch Wände
     if (!e.roentgen) {
       if (!zeigen) continue;
       const m = new THREE.MeshBasicMaterial({ color: TEAMS[e.team].hell, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false });
@@ -4474,8 +4501,8 @@ function bombeWerfen(e, zx, zy, extra = {}) {
     e.tinte -= bombeKosten(e);
   }
   const art = extra.art || (extra.ulti ? 'rakete' : e.bombe);
-  if (art === 'mine' || art === 'wand') {   // wird direkt hingestellt
-    const d = art === 'mine' ? 0 : 40;
+  if (art === 'mine' || art === 'wand' || art === 'springturm') {   // wird direkt hingestellt
+    const d = art === 'mine' ? 0 : art === 'springturm' ? 30 : 40;
     geraetSetzen(art, e.x + Math.cos(e.winkel) * d, e.y + Math.sin(e.winkel) * d, e.team, e, e.winkel);
     if (e.spieler) ton('klick');
     return true;
@@ -4485,7 +4512,7 @@ function bombeWerfen(e, zx, zy, extra = {}) {
   zx = Math.max(10, Math.min(W - 10, zx)); zy = Math.max(10, Math.min(H - 10, zy));
   const b = { sx: e.x, sy: e.y, zx, zy, x: e.x, y: e.y, h0: hAbs(e) + 20, t: 0, dauer: 0.6, hoehe: 70, r: 65, schaden: 90,
     team: e.team, wer: e, ulti: false, art, ...extra };
-  b.mesh = art === 'tracker' ? baueTracker(e.team) : b.ulti ? baueRakete(e.team) : art === 'klebe' ? baueKlebe(e.team) : art === 'sprinkler' ? baueSprinkler(e.team) : baueBombe(e.team);
+  b.mesh = art === 'marker' ? baueMarker(e.team) : art === 'tracker' ? baueTracker(e.team) : b.ulti ? baueRakete(e.team) : art === 'klebe' ? baueKlebe(e.team) : art === 'sprinkler' ? baueSprinkler(e.team) : baueBombe(e.team);
   b.mesh.position.set(e.x, b.h0, e.y); scene.add(b.mesh);
   bomben.push(b);
   if (e.spieler && !b.ulti) ton('wurf');
@@ -4497,9 +4524,9 @@ function geraetSetzen(art, x, y, team, wer, winkel, mesh) {
     for (let i = geraete.length - 1; i >= 0; i--) if (geraete[i].wer === wer && geraete[i].art === art) { scene.remove(geraete[i].mesh); geraete.splice(i, 1); }
   }
   x = Math.max(10, Math.min(W - 10, x)); y = Math.max(10, Math.min(H - 10, y));
-  if (!mesh) mesh = art === 'mine' ? baueMine(team) : baueFarbwand(team);
+  if (!mesh) mesh = art === 'mine' ? baueMine(team) : art === 'springturm' ? baueSpringturm(team) : art === 'marker' ? baueMarker(team) : baueFarbwand(team);
   mesh.position.set(x, bodenHoehe(x, y) + (art === 'klebe' ? 6 : 0), y); mesh.rotation.set(0, -winkel, 0); scene.add(mesh);
-  geraete.push({ art, x, y, team, wer, winkel, mesh, t: 0, spT: 0, dreh: 0, zuend: -1, treffer: 0 });
+  geraete.push({ art, x, y, team, wer, winkel, mesh, t: 0, spT: 0, dreh: 0, zuend: -1, treffer: 0, hp: art === 'springturm' ? TURM_HP : undefined });
 }
 // Ein Tropfen klatscht seitlich an ein Podest: die Kletterwand an dieser Stelle anmalen
 function seiteTreffen(px, py, x, y, h, r, team) {
@@ -4534,6 +4561,7 @@ function explodieren(x, y, r, schaden, team, wer, ultiLaden = true) {
     const d = Math.hypot(e.x - x, e.y - y);
     if (d < r + 15) treffen(e, schaden * (1 - d / (r + 45)), wer);
   }
+  for (const g of geraete) if (g.art === 'springturm' && g.team !== team && Math.hypot(g.x - x, g.y - y) < r + 10) { g.hp -= schaden * 0.7; g.treffer = 0.12; }
   const d = Math.hypot(spieler.x - x, spieler.y - y);
   if (d < 500) ton('platsch', Math.min(1, r / 60) * (1 - d / 600));
 }
@@ -4548,6 +4576,208 @@ function tropfen(x, y, h, winkel, pitch, speed, w, team, wer) {
 function bombenZiel(e) {
   const d = Math.max(60, Math.min(240, 150 + e.pitch * 260));
   return { x: e.x + Math.cos(e.winkel) * d, y: e.y + Math.sin(e.winkel) * d };
+}
+
+
+// ================== 🧲 MARKER, 🗼 SPRINGTURM, 🌪️ FARBSAUGER ==================
+const MARKER_R = 120, MARKER_ZEIT = 8, TURM_HP = 160, SPRUNG_HOEHE = 380;
+const SAUGER_ZEIT = 7, SAUG_R = 190, SAUG_W = 0.75;
+// Marker: kleiner Magnet, der ein schimmerndes Magnetfeld aufspannt
+function baueMarker(team) {
+  const g = new THREE.Group(), ud = g.userData;
+  g.add(zylinder(MAT_GRAU, 4, 5, 2, 0, 1, 0));
+  const magnet = new THREE.Group(); magnet.position.y = 7; g.add(magnet); ud.magnet = magnet;
+  const bogen = new THREE.Mesh(new THREE.TorusGeometry(3.4, 1.3, 8, 16, Math.PI), mat('#e63946', { roughness: 0.4 })); bogen.position.y = 1; magnet.add(bogen);
+  magnet.add(klotz(MAT_METALL, 2.6, 3, 2.6, 3.4, -1.2, 0), klotz(MAT_METALL, 2.6, 3, 2.6, -3.4, -1.2, 0));
+  ud.licht = mat(TEAMS[team].hell, { emissive: TEAMS[team].hell, emissiveIntensity: 1 });
+  magnet.add(kugel(ud.licht, 1.2, 0, 5.4, 0));
+  const fg = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+  ud.feld = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false }));
+  ud.feld.scale.set(MARKER_R, MARKER_R * 0.45, MARKER_R); ud.feld.visible = false; g.add(ud.feld);
+  const rg = new THREE.RingGeometry(MARKER_R - 4, MARKER_R, 40); rg.rotateX(-Math.PI / 2);
+  ud.ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.6, depthWrite: false })); ud.ring.position.y = 1; ud.ring.visible = false; g.add(ud.ring);
+  ud.linien = [];   // Magnetfeld-Linien, die sich drehen
+  for (let i = 0; i < 3; i++) {
+    const l = new THREE.Mesh(new THREE.TorusGeometry(MARKER_R * 0.7, 0.8, 4, 40, Math.PI), new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.35 }));
+    l.scale.y = 0.6; l.rotation.y = i * Math.PI / 3; l.visible = false; g.add(l); ud.linien.push(l);
+  }
+  return g;
+}
+// Springturm: Standfuß, Stange, federndes Sprungkissen oben und ein Blinklicht
+function baueSpringturm(team) {
+  const g = new THREE.Group(), ud = g.userData;
+  ud.mat = mat(TEAMS[team].col, { roughness: 0.4 });
+  g.add(zylinder(MAT_GRAU, 11, 13, 3, 0, 1.5, 0));
+  for (let i = 0; i < 3; i++) { const a = i * Math.PI * 2 / 3, bein = klotz(MAT_METALL, 2, 26, 2, Math.cos(a) * 6, 15, Math.sin(a) * 6); bein.rotation.set(Math.sin(a) * 0.18, 0, -Math.cos(a) * 0.18); g.add(bein); }
+  g.add(zylinder(MAT_GRAU, 2.2, 2.2, 30, 0, 17, 0), ringY(ud.mat, 3, 0.8, 0, 10, 0), ringY(ud.mat, 3, 0.8, 0, 20, 0));
+  const kopf = new THREE.Group(); kopf.position.y = 32; g.add(kopf); ud.kopf = kopf;
+  for (let i = 0; i < 4; i++) kopf.add(ringY(MAT_METALL, 4.5, 0.7, 0, i * 1.6, 0));   // Sprungfeder
+  ud.kissen = zylinder(ud.mat, 10, 9, 3, 0, 7.5, 0); kopf.add(ud.kissen);
+  kopf.add(ringY(MAT_WEISS, 9.6, 0.8, 0, 9.1, 0));
+  ud.licht = mat('#ffffff', { emissive: TEAMS[team].hell, emissiveIntensity: 1 });
+  kopf.add(zylinder(MAT_GRAU, 0.6, 0.6, 8, 0, 13, 0), kugel(ud.licht, 2, 0, 17.5, 0));
+  // Fähnchen mit Pfeil nach oben
+  const fahne = klotz(ud.mat, 7, 4.5, 0.4, 3.8, 15.5, 0); kopf.add(fahne);
+  return g;
+}
+function geraetMarkerTurmAnim(g) {
+  const ud = g.mesh.userData;
+  if (g.art === 'marker') {
+    const an = g.t > 0.25 && g.t < MARKER_ZEIT;
+    const auf = Math.min(1, (g.t - 0.25) * 4), aus = g.t > MARKER_ZEIT - 0.5 ? Math.max(0, (MARKER_ZEIT - g.t) * 2) : 1;
+    ud.feld.visible = ud.ring.visible = an;
+    for (const l of ud.linien) { l.visible = an; l.rotation.y += 0.02; l.scale.set(auf, 0.6 * auf, auf); }
+    if (an) {
+      ud.feld.scale.set(MARKER_R * auf, MARKER_R * 0.45 * auf, MARKER_R * auf);
+      ud.feld.material.opacity = (0.1 + Math.sin(g.t * 6) * 0.05) * aus;
+      ud.ring.material.opacity = 0.6 * aus;
+    }
+    ud.magnet.rotation.y = g.t * 3; ud.magnet.position.y = 7 + Math.sin(g.t * 5) * 1;
+    ud.licht.emissiveIntensity = Math.sin(g.t * 12) > 0 ? 2 : 0.4;
+  } else if (g.art === 'springturm') {
+    g.mesh.scale.setScalar(Math.min(1, 0.2 + g.t * 4));
+    ud.licht.emissiveIntensity = Math.sin(g.t * 5) > 0.3 ? 2.5 : 0.3;
+    ud.kopf.position.y = 32 + Math.abs(Math.sin(g.t * 3)) * 2;
+    ud.mat.emissive.setHex(g.treffer > 0 ? 0x888888 : 0x000000);
+  }
+}
+// Steht hier ein gegnerischer Springturm im Weg? (Schüsse machen ihn kaputt)
+function turmTreffer(x, y, h, team) {
+  for (const g of geraete) if (g.art === 'springturm' && g.team !== team && !(g.hp <= 0) && h - bodenHoehe(g.x, g.y) < 52 && Math.hypot(x - g.x, y - g.y) < 13) return g;
+  return null;
+}
+// Wohin kann man springen? Eigene Springtürme, Türme der Mitspieler und die Mitspieler selbst
+function sprungZiele(e) {
+  const liste = [];
+  for (const g of geraete) if (g.art === 'springturm' && g.team === e.team && !(g.hp <= 0)) {
+    liste.push({ x: g.x, y: g.y, emoji: '🗼', name: g.wer === e ? 'Dein Springturm' : `Springturm von ${g.wer ? g.wer.name : '?'}` });
+  }
+  for (const f of kleckse) if (f !== e && f.team === e.team && !f.tot && !f.puppe) liste.push({ wer: f, emoji: '👤', name: f.name });
+  return liste.slice(0, 9);
+}
+function sprungStarten(e, z) {
+  if (e.tot || e.superSprung || e.panzerT > 0 || e.gigaT > 0 || e.kugelT > 0 || e.saugerT > 0 || e.trifT > 0) return false;
+  const zx = z.wer ? z.wer.x : z.x, zy = z.wer ? z.wer.y : z.y;
+  const f = freieStelle(zx + (z.wer ? 0 : 18), zy, e.r || 12, bodenHoehe(zx, zy));
+  const d = Math.hypot(f.x - e.x, f.y - e.y);
+  e.superSprung = { sx: e.x, sy: e.y, h0: hAbs(e), zx: f.x, zy: f.y, h1: bodenHoehe(f.x, f.y), t: 0, dauer: 1.1 + d / 2200 };
+  e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.schirmAuf = false;
+  spritzer(e.x, e.y, hAbs(e) + 2, e.team, 14, 200);
+  // Landeplatz-Ring (sieht man, wo jemand gleich landet)
+  const rg = new THREE.RingGeometry(16, 22, 28); rg.rotateX(-Math.PI / 2);
+  const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: TEAMS[e.team].hell, transparent: true, depthWrite: false }));
+  ring.position.set(f.x, bodenHoehe(f.x, f.y) + 1.5, f.y); scene.add(ring); strahlen.push({ mesh: ring, t: e.superSprung.dauer + 0.2 });
+  if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('sprung');
+  return true;
+}
+function sprungFliegen(e, dt) {
+  const s = e.superSprung;
+  s.t += dt;
+  const f = Math.min(1, s.t / s.dauer), k = f * f * (3 - 2 * f);
+  e.x = s.sx + (s.zx - s.sx) * k; e.y = s.sy + (s.zy - s.sy) * k;
+  const hoch = s.h0 + (s.h1 - s.h0) * f + Math.sin(f * Math.PI) * SPRUNG_HOEHE;
+  e.z = Math.max(0.01, hoch - bodenHoehe(e.x, e.y)); e.vx = e.vy = e.vz = 0;
+  if (f >= 1) {   // gelandet!
+    e.superSprung = null; e.z = 0; e.landT = 0.25;
+    if (!istGast()) klecks(e.x, e.y, 45, e.team, e, false);
+    spritzer(e.x, e.y, hAbs(e) + 2, e.team, 24, 260);
+    if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('platsch');
+  }
+}
+// 🌪️ Farbsauger
+function baueSauger(team) {
+  const g = new THREE.Group(), ud = g.userData, m = mat(TEAMS[team].col, { roughness: 0.35 });
+  const geraet = new THREE.Group(); g.add(geraet); ud.geraet = geraet;
+  geraet.add(zylinderX(MAT_GRAU, 4, 4, 12, 6, 0, 0), ringX(m, 4.3, 0.8, 2, 0, 0), ringX(m, 4.3, 0.8, 10, 0, 0));
+  const trichter = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 9, 10, 18, 1, true), mat('#c9cfe6', { metalness: 0.7, roughness: 0.25, side: THREE.DoubleSide }));
+  trichter.rotation.z = -Math.PI / 2; trichter.position.x = 17; geraet.add(trichter);
+  geraet.add(ringX(m, 9, 0.9, 22, 0, 0));
+  geraet.add(zylinderX(glasRohrMat, 3.6, 3.6, 9, -3, 4.5, 0));                       // Glastank: füllt sich beim Saugen
+  ud.fuell = new THREE.Group(); ud.fuell.position.set(-7.5, 4.5, 0); geraet.add(ud.fuell);
+  ud.fuell.add(zylinderX(tintenMaterial(team), 3, 3, 9, 4.5, 0, 0));
+  ud.wirbel = new THREE.Group(); ud.wirbel.position.x = 20; geraet.add(ud.wirbel);
+  for (let i = 0; i < 3; i++) ud.wirbel.add(klotz(MAT_SCHWARZ, 0.6, 12, 1.2, 0, 0, 0)).children;
+  ud.wirbel.children.forEach((c, i) => { c.rotation.x = i * Math.PI / 3; });
+  // Saug-Ringe, die zum Trichter gezogen werden
+  ud.ringe = [];
+  for (let i = 0; i < 5; i++) {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(1, 0.06, 4, 24), new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0.4, depthWrite: false }));
+    r.rotation.y = Math.PI / 2; g.add(r); ud.ringe.push(r);
+  }
+  g.visible = false;
+  return g;
+}
+function saugerZeigen(e) {
+  const m = e.saugerMesh; if (!m) return;
+  m.visible = e.saugerT > 0 && !e.tot && zustand !== 'feier';
+  if (!m.visible) return;
+  const ud = m.userData, ich = e.spieler && ichSicht && !kameraOverride;
+  m.position.set(e.x, hAbs(e) + (ich ? 14 : 20), e.y); m.rotation.y = -e.winkel;
+  ud.geraet.visible = !ich;
+  ud.wirbel.rotation.x += 0.5;
+  ud.fuell.scale.x = Math.max(0.05, Math.min(1, (e.saugMenge || 0) / 40));
+  ud.ringe.forEach((r, i) => {
+    const k = (zeit * 1.8 + i / ud.ringe.length) % 1, d = 24 + (SAUG_R - 24) * (1 - k);
+    r.position.x = d; r.scale.setScalar(6 + d * Math.tan(SAUG_W) * 0.55); r.material.opacity = 0.45 * k;
+  });
+}
+function imSaugKegel(e, x, y, r = SAUG_R) {
+  const dx = x - e.x, dy = y - e.y, d = Math.hypot(dx, dy);
+  if (d > r) return false;
+  if (d < 26) return true;
+  let a = Math.atan2(dy, dx) - e.winkel; a = Math.atan2(Math.sin(a), Math.cos(a));
+  return Math.abs(a) < SAUG_W;
+}
+function saugerUpdate(e, dt) {
+  e.saugerT -= dt;
+  const vorher = e.saugMenge || 0, h0 = hAbs(e);
+  for (let i = schuesse.length - 1; i >= 0; i--) {   // Gegner-Tinte einsaugen
+    const s = schuesse[i];
+    if (s.team === e.team || Math.abs(s.h - h0) > 90 || !imSaugKegel(e, s.x, s.y)) continue;
+    scene.remove(s.mesh); schuesse.splice(i, 1); e.saugMenge = (e.saugMenge || 0) + 1;
+  }
+  for (let i = bomben.length - 1; i >= 0; i--) {     // Bomben und Raketen einsaugen
+    const b = bomben[i];
+    if (b.team === e.team || !imSaugKegel(e, b.x, b.y, SAUG_R + 40)) continue;
+    wegUndEntsorgen(b.mesh); bomben.splice(i, 1); e.saugMenge = (e.saugMenge || 0) + (b.ulti ? 8 : 5);
+  }
+  for (const g of geraete) {                          // liegende Bomben auch
+    if (g.team === e.team || g.kaputt || !['klebe', 'sprinkler', 'mine', 'marker', 'tracker'].includes(g.art) || !imSaugKegel(e, g.x, g.y)) continue;
+    g.kaputt = true; e.saugMenge = (e.saugMenge || 0) + 5;
+  }
+  if ((e.saugMenge || 0) > vorher && (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 400) && Math.random() < 0.3) ton('blubb');
+  const warte = e.spieler || e.mensch ? 0.4 : 2;
+  if ((e.schiesst && SAUGER_ZEIT - e.saugerT > warte) || e.saugerT <= 0) pyramideFeuer(e);
+}
+// 🔺 Alles Eingesaugte als Pyramiden-Explosion zurückschießen: je mehr gesaugt, desto größer und stärker
+function pyramideFeuer(e) {
+  const menge = Math.min(40, e.saugMenge || 0), L = 200 + menge * 7, schaden = 55 + menge * 2.4;
+  e.saugerT = 0; e.saugMenge = 0; e.rueck = 2;
+  const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
+  for (let d = 20; d < L; d += 22) {
+    const hw = d * 0.45;
+    for (let q = -hw; q <= hw + 1; q += 26) {
+      const px = e.x + c * d - s * q, py = e.y + s * d + c * q;
+      if (px > 0 && py > 0 && px < W && py < H && !istWand(px, py)) klecks(px, py, 15 + d * 0.03, e.team, e, false);
+    }
+  }
+  const inPyramide = (x, y) => { const dx = x - e.x, dy = y - e.y, l = dx * c + dy * s, q = Math.abs(-dx * s + dy * c); return l > 0 && l < L && q < l * 0.45 + 12; };
+  for (const f of kleckse) if (f.team !== e.team && !f.tot && inPyramide(f.x, f.y)) treffen(f, schaden, e);
+  for (const g of geraete) if (g.team !== e.team && inPyramide(g.x, g.y)) { if (g.art === 'springturm') { g.hp -= schaden; g.treffer = 0.12; } else g.kaputt = true; }
+  const h = hAbs(e) + 22;
+  pyramideZeigen(e.x, e.y, h, e.winkel, L, e.team);
+  mpEreignis({ k: 'pyr', a: [r0(e.x), r0(e.y), r0(h), r2(e.winkel), r0(L)], team: e.team });
+  if (e.spieler) meldung(`🔺 Pyramiden-Explosion! (${menge} eingesaugt)`);
+}
+function pyramideZeigen(x, y, h, winkel, L, team) {
+  const geo = new THREE.ConeGeometry(1, 1, 4, 1, true);
+  geo.rotateY(Math.PI / 4); geo.rotateZ(Math.PI / 2); geo.translate(0.5, 0, 0);   // Spitze bei dir, Grundfläche vorne
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  mesh.position.set(x, h, y); mesh.rotation.y = -winkel; mesh.scale.set(L, L * 0.25 / 0.707, L * 0.45 / 0.707);
+  scene.add(mesh); strahlen.push({ mesh, t: 0.45 });
+  const c = Math.cos(winkel), s = Math.sin(winkel);
+  for (let d = 60; d < L; d += 70) spritzer(x + c * d, y + s * d, h, team, 8, 220);
+  if (Math.hypot(x - spieler.x, y - spieler.y) < 800) { ton('platsch'); ton('wusch'); }
 }
 
 // ================== ULTIS ==================
@@ -4613,6 +4843,10 @@ function ultiStarten(e, zx, zy) {
       geraetSetzen('lautsprecher', f.x, f.y, e.team, e, e.winkel, baueLautsprecher(e.team));
       break;
     }
+    case 'sauger':   // 🌪️ Farbsauger anwerfen
+      e.saugerT = SAUGER_ZEIT; e.saugMenge = 0; e.laden = false; e.ladung = 0; e.lingT = 0;
+      if (e.spieler) meldung('🌪️ Saug Gegner-Tinte und Bomben ein – dann Klick!');
+      break;
     case 'kugel':    // hochfliegen und Kraft sammeln
       e.kugelT = 3; e.kugelKraft = 0; e.taucht = false;
       break;
@@ -4654,7 +4888,7 @@ function treffen(e, schaden, wer) {
 }
 
 function erwischt(e, wer) {
-  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0; e.panzerT = 0; e.gigaT = 0; e.trifT = 0; e.dashT = 0;
+  e.tot = true; e.wiederT = e.puppe ? 1.5 : 4; e.tode++; e.todT = 0.5; e.tauchAnim = 0; e.taucht = false; e.laden = false; e.ladung = 0; e.lingT = 0; e.slam = false; e.z = 0; e.vz = 0; e.laserT = 0; e.werferT = 0; e.kugelT = 0; e.panzer = 0; e.panzerT = 0; e.gigaT = 0; e.trifT = 0; e.dashT = 0; e.saugerT = 0; e.saugMenge = 0; e.superSprung = null; e.markiertBis = 0;
   const farbe = wer ? wer.team : 1 - e.team;
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
@@ -4742,6 +4976,7 @@ function lavaPruefen(e, dt) {
 }
 
 function ki(b, dt) {
+  if (b.superSprung) { b.schiesst = false; b.willTauchen = false; sprungFliegen(b, dt); return; }
   const k = b.ki, w = WAFFEN[b.waffe];
   const roentgen = b.laserT > 0;   // Hochdruckfärber: sieht alle Gegner durch Wände
   const sichtweite = roentgen ? LASER_LAENGE : sandsturm() ? 150 : typVon(b.waffe) === 'sniper' ? Math.max(330, w.reichweite + 40) : 330;
@@ -4749,7 +4984,8 @@ function ki(b, dt) {
   for (const e of kleckse) {
     if (e.team === b.team || e.tot) continue;
     const d = Math.hypot(e.x - b.x, e.y - b.y);
-    if (d > sichtweite || (!roentgen && (tauchtVersteckt(e) || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
+    const mk = e.markiertBis > zeit;   // 🧲 markierte Gegner sieht das ganze Team
+    if (d > sichtweite || (!roentgen && !mk && (tauchtVersteckt(e) || imGebuesch(e)) && d > 90)) continue;     // Abgetauchte (oder im Gebüsch) sieht man fast nicht!
     if (!roentgen && !sicht(b.x, b.y, e.x, e.y)) continue;
     if (d < fd) { fd = d; feind = e; }
   }
@@ -4769,6 +5005,11 @@ function ki(b, dt) {
     if (z) { b.winkel = drehe(b.winkel, Math.atan2(z.y - b.y, z.x - b.x), dt * 4); k.zielPunkt = { x: z.x, y: z.y }; }
     b.schiesst = false; b.willTauchen = false; bewege(b, 0, 0, dt); return;
   }
+  // 🗼 Von zu Hause zum eigenen Springturm springen
+  if (!feind && modus === 'match' && Math.random() < dt * 0.5 && Math.hypot(b.x - BASIS[b.team].x, b.y - BASIS[b.team].y) < 320) {
+    const tu = geraete.find(g => g.art === 'springturm' && g.team === b.team && g.hp > 0 && Math.hypot(g.x - b.x, g.y - b.y) > 500);
+    if (tu && sprungStarten(b, { x: tu.x, y: tu.y })) return;
+  }
   let dx = 0, dy = 0;
   b.schiesst = false; b.willTauchen = false;
   if (b.tinte < 10) { if (!k.tanken) { k.tanken = true; k.ziel = null; } }
@@ -4778,7 +5019,7 @@ function ki(b, dt) {
   // Ulti benutzen
   if (b.ulti >= 1) {
     const art = b.ultiArt;
-    const nurMitFeind = ['wirbel', 'laser', 'schild', 'panzer', 'werfer', 'kugel', 'gigafisch', 'lautsprecher'].includes(art);
+    const nurMitFeind = ['wirbel', 'laser', 'schild', 'panzer', 'werfer', 'kugel', 'gigafisch', 'lautsprecher', 'sauger'].includes(art);
     if (feind && (art !== 'wirbel' || fd < 150) && (art !== 'welle' || fd < 350) && (art !== 'kugel' || fd < 300)) ultiStarten(b, feind.x, feind.y);
     else if (!feind && !nurMitFeind && Math.random() < dt * 0.3) {
       const z = k.ziel || { x: W / 2, y: H / 2 }; b.winkel = Math.atan2(z.y - b.y, z.x - b.x); ultiStarten(b, z.x, z.y);
@@ -4815,7 +5056,7 @@ function ki(b, dt) {
     dx = Math.cos(a) * vor + Math.cos(a + Math.PI / 2) * k.strafe * quer;
     dy = Math.sin(a) * vor + Math.sin(a + Math.PI / 2) * k.strafe * quer;
     if (w.abkoppeln && b.schirmHP > 0 && fd > 80 && fd < 320 && gutGezielt && Math.random() < dt * 0.5) b.abkoppelWunsch = true;   // Schirm losschicken
-    if (b.bombeCd <= 0 && b.tinte > 60 && fd > 110 && fd < 230 && Math.random() < dt * 0.6) {
+    if (b.bombe !== 'springturm' && b.bombeCd <= 0 && b.tinte > 60 && fd > 110 && fd < 230 && Math.random() < dt * 0.6) {
       if (bombeWerfen(b, feind.x, feind.y)) b.bombeCd = 7;
     }
   } else {
@@ -4839,8 +5080,18 @@ function ki(b, dt) {
         b.schiesst = !(b.laden && b.ladung > 0.6);
       } else b.schiesst = true;
     }
-    if (!k.tanken && b.bombeCd <= 0 && b.tinte > 90 && Math.random() < dt * 0.15) {
+    if (!k.tanken && b.bombeCd <= 0 && b.tinte > 90 && Math.random() < dt * 0.15 && (b.bombe !== 'springturm' || Math.hypot(b.x - BASIS[b.team].x, b.y - BASIS[b.team].y) > 600)) {
       if (bombeWerfen(b, b.x + dx * 200, b.y + dy * 200)) b.bombeCd = 8;
+    }
+  }
+  // 🗼 Gegnerischen Springturm in der Nähe kaputt schießen
+  if (!feind && !k.tanken && !w.nah && b.tinte > 15) {
+    let tu = null, td = 280;
+    for (const g of geraete) if (g.art === 'springturm' && g.team !== b.team) { const d = Math.hypot(g.x - b.x, g.y - b.y); if (d < td && sicht(b.x, b.y, g.x, g.y)) { td = d; tu = g; } }
+    if (tu) {
+      b.winkel = drehe(b.winkel, Math.atan2(tu.y - b.y, tu.x - b.x), dt * 6);
+      b.pitch = botPitch(b, td, bodenHoehe(tu.x, tu.y) + 25); b.schiesst = true; b.willTauchen = false;
+      if (td < Math.min(w.reichweite || 200, 200)) { dx = 0; dy = 0; }
     }
   }
   // Ziel liegt oben auf einem Podest? Dann die Kletterwand anmalen und hochschwimmen
@@ -4868,6 +5119,7 @@ function ki(b, dt) {
 
 // ================== SPIELER ==================
 function steuerung(p, dt) {
+  if (p.superSprung) { p.schiesst = false; p.willTauchen = false; p.schirmHalten = false; sprungFliegen(p, dt); return; }   // 🚀 im Supersprung
   if (zustand === 'pause') { p.schiesst = false; p.willTauchen = false; p.schirmHalten = false; bewege(p, 0, 0, dt); return; }   // (online läuft das Spiel weiter)
   const vor = (tasten.KeyW || tasten.ArrowUp ? 1 : 0) - (tasten.KeyS || tasten.ArrowDown ? 1 : 0);
   const seit = (tasten.KeyD || tasten.ArrowRight ? 1 : 0) - (tasten.KeyA || tasten.ArrowLeft ? 1 : 0);
@@ -4935,7 +5187,7 @@ function update(dt) {
       if (e.wiederT <= 0) {
         const p = spawnPunkt(e);
         Object.assign(e, { x: p.x, y: p.y, z: 0, vx: 0, vy: 0, vz: 0, hp: 100, tinte: 100, tot: false, letzterTreffer: 9,
-          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, z: 260, vz: -60, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0, gigaT: 0, trifT: 0, dashT: 0 });
+          winkel: e.team ? Math.PI : 0, pitch: 0, schild: 0, spawnT: 0.45, z: 260, vz: -60, schwingT: 0, lebenNr: (e.lebenNr || 0) + 1, panzer: 0, panzerT: 0, werferT: 0, kugelT: 0, gigaT: 0, trifT: 0, dashT: 0, saugerT: 0, saugMenge: 0, superSprung: null, markiertBis: 0 });
         if (e.spieler) ton('plopp');
       }
       continue;
@@ -4946,6 +5198,7 @@ function update(dt) {
     else ki(e, dt);
     schiessen(e, dt);
     if (e.laserT > 0) laserUpdate(e, dt);
+    if (e.saugerT > 0) saugerUpdate(e, dt);
     if (e.kugelT > 0) kugelUpdate(e, dt);
     if (e.gigaT > 0) gigaUpdate(e, dt);
     if (e.trifT > 0) trifUpdate(e, dt);
@@ -4983,6 +5236,8 @@ function update(dt) {
       }
       const fw = feindWand(s.x, s.y, s.h, s.team);
       if (fw) { fw.treffer = 0.12; if (fw.art === 'schirm') fw.hp -= w.schaden; spritzer(s.x, s.y, s.h, s.team, 4); weg = true; break; }   // Farbwand hält den Tropfen ab
+      const tu = turmTreffer(s.x, s.y, s.h, s.team);
+      if (tu) { tu.treffer = 0.12; tu.hp -= w.schaden; spritzer(s.x, s.y, s.h, s.team, 5); if (s.wer && s.wer.spieler) ton('treffer'); weg = true; break; }   // 🗼 Springturm getroffen
       for (const e of kleckse) {
         if (e.team === s.team || e.tot) continue;
         if (schirmBlockt(e, s.x, s.y, s.h, w.schaden)) { weg = true; break; }   // ☂️ vom Schirm abgehalten
@@ -5012,7 +5267,7 @@ function update(dt) {
     b.h = b.h0 * (1 - f) + bodenHoehe(b.zx, b.zy) * f + Math.sin(f * Math.PI) * b.hoehe + 6;
     if (f >= 1) {
       bomben.splice(i, 1);
-      if (b.art === 'klebe' || b.art === 'sprinkler' || b.art === 'tracker') { geraetSetzen(b.art, b.x, b.y, b.team, b.wer, 0, b.mesh); continue; }
+      if (b.art === 'klebe' || b.art === 'sprinkler' || b.art === 'tracker' || b.art === 'marker') { geraetSetzen(b.art, b.x, b.y, b.team, b.wer, 0, b.mesh); continue; }
       explodieren(b.x, b.y, b.r, b.schaden, b.team, b.wer, !b.ulti);
       wegUndEntsorgen(b.mesh);
     }
@@ -5086,6 +5341,21 @@ function update(dt) {
         }
       }
       if (g.t > 7) weg = true;
+    } else if (g.art === 'marker') {   // 🧲 Magnetfeld markiert Gegner für das ganze Team
+      geraetMarkerTurmAnim(g);
+      if (g.t > 0.25) for (const f of kleckse) {
+        if (f.team === g.team || f.tot || Math.hypot(f.x - g.x, f.y - g.y) > MARKER_R || Math.abs(hAbs(f) - bodenHoehe(g.x, g.y)) > 90) continue;
+        if (!(f.markiertBis > zeit)) { mpEreignis({ k: 'mark', i: kleckse.indexOf(f) }); markiertMeldung(f); }
+        f.markiertBis = zeit + 4;
+      }
+      if (g.t > MARKER_ZEIT) weg = true;
+    } else if (g.art === 'springturm') {   // 🗼 bleibt stehen, bis er kaputt ist
+      geraetMarkerTurmAnim(g);
+      if (g.hp <= 0) {
+        weg = true; spritzer(g.x, g.y, bodenHoehe(g.x, g.y) + 30, 1 - g.team, 25, 260);
+        mpEreignis({ k: 'turmweg', i: kleckse.indexOf(g.wer) }); turmWegMeldung(g.wer);
+        if (Math.hypot(spieler.x - g.x, spieler.y - g.y) < 600) ton('platsch');
+      }
     } else if (g.art === 'wand') {
       ud.wandMat.emissiveIntensity = 0.3 + g.treffer * 6;
       ud.wandMat.opacity = g.t > 4.3 ? 0.55 * (Math.sin(g.t * 30) > 0 ? 1 : 0.3) : 0.55;
@@ -5309,7 +5579,7 @@ function welt3D(dt) {
     if (e.tot) e.tauchAnim = 0;
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
     const inEigen = !e.taucht || tauchtVersteckt(e);
-    const versteckt = e.team !== spieler.team && !feindNah && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
+    const versteckt = e.team !== spieler.team && !feindNah && !(e.markiertBis > zeit) && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
     g.visible = !((e.tot && e.todT <= 0) || istIch || versteckt);
     let gx = 1, gy = 1, hoch = 0, dreh = 0;
     if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
@@ -5330,6 +5600,7 @@ function welt3D(dt) {
     e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6 && inEigen;
     e.klecksForm.visible = e.taucht && e.tauchAnim > 0.6 && !inEigen && !istIch;   // Pfütze mit Augen auf trockenem Boden
     if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
+    saugerZeigen(e);
     if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
     if (e.klecksForm.visible) {   // Pfütze: Augen gucken heraus, blinzeln, Wellen beim Rutschen
       const u = e.klecksForm.userData, laeuft = v > 10;
@@ -5488,6 +5759,23 @@ function hud() {
     ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(bx, by, bw * kraft / 25, 18);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui'; ctx.fillText(`Kraft ${Math.round(kraft)} / 25 · Wurf in ${spieler.kugelT.toFixed(1)} s`, cw / 2, by + 14);
   }
+  if (spieler.saugerT > 0) {   // 🌪️ Farbsauger
+    const puls = 1 + Math.sin(zeit * 14) * 0.05;
+    ctx.textAlign = 'center'; textMitRand(`🌪️ FARBSAUGER: ${Math.round(spieler.saugMenge || 0)} eingesaugt`, cw / 2, ch * 0.72, 28 * puls, '#ffd166');
+    textMitRand(`Klick = 🔺 Pyramiden-Explosion! (${Math.ceil(spieler.saugerT)} s)`, cw / 2, ch * 0.72 + 30, 20, '#ffffff');
+  }
+  if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand('🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
+  if (sprungMenu && !spieler.tot) {   // 🗼 wohin springen?
+    const ziele = sprungZiele(spieler), x0 = 20, y0 = ch * 0.3, zh = 30;
+    ctx.fillStyle = '#1b1f3add'; ctx.fillRect(x0 - 10, y0 - 34, 330, 44 + ziele.length * zh + 20);
+    ctx.textAlign = 'left'; ctx.font = 'bold 18px system-ui'; ctx.fillStyle = '#ffd166'; ctx.fillText('🚀 Wohin springen? (Zahl drücken)', x0, y0 - 10);
+    ctx.font = 'bold 17px system-ui';
+    ziele.forEach((z, i) => {
+      const zx = z.wer ? z.wer.x : z.x, zy = z.wer ? z.wer.y : z.y;
+      ctx.fillStyle = '#ffffff'; ctx.fillText(`${i + 1}  ${z.emoji} ${z.name}  (${Math.round(Math.hypot(zx - spieler.x, zy - spieler.y) / 10)} m)`, x0, y0 + 22 + i * zh);
+    });
+    ctx.fillStyle = '#aab'; ctx.font = '14px system-ui'; ctx.fillText('M = schließen', x0, y0 + 26 + ziele.length * zh);
+  }
   if (spieler.werferT > 0) { ctx.textAlign = 'center'; textMitRand(`🧨 ${spieler.werferSchuss} Raketen – Klick = Feuer! (${Math.ceil(spieler.werferT)} s)`, cw / 2, ch * 0.75, 26, '#ffd166'); }
   if (spieler.gigaT > 0) {
     ctx.globalAlpha = 0.2; ctx.fillStyle = TEAMS[spieler.team].col; ctx.fillRect(0, 0, cw, ch); ctx.globalAlpha = 1;
@@ -5584,7 +5872,7 @@ function hud() {
     ctx.strokeText(z, cw / 2, ch / 2 + 40); ctx.fillText(z, cw / 2, ch / 2 + 40);
   }
   ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffffffaa';
-  ctx.fillText(musikAn ? '🎵 Musik an (Taste M)' : '🔇 MUSIK IST AUS – drück M!', cw - 16, 22);
+  ctx.fillText(musikAn ? '🎵 Musik an (Taste N)' : '🔇 MUSIK IST AUS – drück N!', cw - 16, 22);
   if ((zustand === 'spiel' || zustand === 'lobby') && document.pointerLockElement !== glCv) {
     ctx.textAlign = 'center'; textMitRand('🖱️ Klick ins Bild, um zu steuern', cw / 2, ch / 2 + 80, 26, '#ffd166');
   }
@@ -5862,7 +6150,7 @@ function feierStarten(pO, pL) {
   for (const e of kleckse) { const w = (e.punkte || 0) * 2 + (e.ko || 0) * 100; e.mvpWert = w; if (w > best) { best = w; mvp = e; } }
   feier = { pO, pL, sieger, mvp, phase: 0, t: 0, weiter: false };
   for (const e of kleckse) {
-    Object.assign(e, { tot: false, todT: 0, spawnT: 0, taucht: false, tauchAnim: 0, schild: 0, gigaT: 0, panzerT: 0, kugelT: 0, laserT: 0, werferT: 0, trifT: 0, wirbelBis: 0, tanaDashBis: 0, schwingT: 0, laden: false, ladung: 0, rueck: 0 });
+    Object.assign(e, { saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null, tot: false, todT: 0, spawnT: 0, taucht: false, tauchAnim: 0, schild: 0, gigaT: 0, panzerT: 0, kugelT: 0, laserT: 0, werferT: 0, trifT: 0, wirbelBis: 0, tanaDashBis: 0, schwingT: 0, laden: false, ladung: 0, rueck: 0 });
     e.emote = null; e.koerper.rotation.z = 0;
   }
   for (const b of bomben) wegUndEntsorgen(b.mesh); bomben = [];
