@@ -163,6 +163,7 @@
     <div class="balken"><div id="balkenO" style="background:#ff8a1f"></div><div id="balkenL" style="background:#a347ff"></div></div>
     <p id="statistik"></p>
     <div id="highlights"></div>
+    <button class="gross hidden" id="replayKnopf">🎬 Highlight-Aufnahmen ansehen</button>
     <button class="gross" id="nochmal">🔁 Nochmal (Lobby)</button>
     <button class="gross" id="zumMenu">🏙️ Zur Stadt</button>
   </div>
@@ -2960,6 +2961,8 @@ let ichSicht = true;
 addEventListener('keydown', e => {
   if (e.repeat) return;
   tasten[e.code] = true;
+  if (e.code === 'Space' && zustand === 'replay' && replay) replay.weiter = true;
+  if (e.code === 'Escape' && zustand === 'replay') replayEnde();
   if (e.code === 'Space') { e.preventDefault(); sprungWunsch = true; if (zustand === 'intro') introSkip = true; if (zustand === 'feier' && feier) feier.weiter = true; }
   // 🤫 Geheimer Cheatcode: KLECKSI tippen (in der Stadt, im Menü oder im Laden)
   let cheatTippen = false;
@@ -3054,7 +3057,7 @@ const mp = { aktiv: false, rolle: null, code: '', peer: null, conn: null, gaeste
   farbe: [], ev: [], sendeT: 0, eingabeT: 0, bitte: {}, status: '', wunschTeam: 0, verbinde: false, objId: 0, schussT: 0 };
 const istGast = () => mp.aktiv && mp.rolle === 'gast';
 const istHost = () => mp.aktiv && mp.rolle === 'host';
-function mpEreignis(e) { if (istHost() && mp.gaeste.size && mp.ev.length < 400) mp.ev.push(e); }
+function mpEreignis(e) { if (istHost() && mp.gaeste.size && mp.ev.length < 400) mp.ev.push(e); if (!replay && aufnahmeEv.length < 300) aufnahmeEv.push(e); }
 const objId = o => o.id || (o.id = ++mp.objId);
 
 function mpLadePeerJS() {
@@ -3231,7 +3234,13 @@ function mpMenschAnwenden(e, dt) {
   werte(e, dt, feind);
 }
 function mpSchnappschussSenden() {
-  const s = {
+  const s = schnappschussBauen();
+  s.k = mp.farbe; s.ev = mp.ev;
+  mpAnAlle(s);
+  mp.farbe = []; mp.ev = [];
+}
+function schnappschussBauen() {
+  return {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
       (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0) | (e.markiertBis > zeit ? 4096 : 0) | (e.saugerT > 0 ? 8192 : 0) | (e.sprungBlob ? 16384 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
@@ -3243,10 +3252,7 @@ function mpSchnappschussSenden() {
     to: tornados.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
     wo: wolken.map(o => [objId(o), r0(o.x), r0(o.y), r1(o.t), o.team]),
     bl: blasen.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), r1(o.rAkt || o.r), o.team, o.phase === 'flug' ? 1 : 0, o.form === 'pyramide' ? r2(o.winkel) : null]),
-    k: mp.farbe, ev: mp.ev,
   };
-  mpAnAlle(s);
-  mp.farbe = []; mp.ev = [];
 }
 
 // ----- Freund (Gast) -----
@@ -3288,15 +3294,16 @@ function proxySync(liste, daten, erzeugen, setzen) {   // Dinge vom Gastgeber na
   return neu;
 }
 function mpSchnappschuss(d) {
-  if (zustand === 'feier' || zustand === 'ende') return;   // Siegerehrung läuft bei jedem selbst
+  if (!replay && (zustand === 'feier' || zustand === 'ende')) return;   // Siegerehrung läuft bei jedem selbst
   if (!spieler) return;
-  const k = Array.isArray(d.k) ? d.k : [];
+  if (!replay && istGast() && zustand === 'spiel' && modus === 'match') aufnahmeFrame(d);   // 🎬 Freunde nehmen auch auf
+  const k = Array.isArray(d.k) && !replay ? d.k : [];
   for (let i = 0; i + 3 < k.length; i += 4) {   // Farbe vom Gastgeber malen
     const t = k[i + 3] === 1 ? 1 : 0;
     klecks(k[i], k[i + 1], k[i + 2], t, null);
     if (k[i + 2] >= 20) spritzer(k[i], k[i + 1], 5, t, 6, 150);
   }
-  if (Array.isArray(d.ev)) for (const ev of d.ev) mpEreignisAusfuehren(ev);
+  if (Array.isArray(d.ev)) for (const ev of d.ev) if (!replay || ev.k !== 'wk') mpEreignisAusfuehren(ev);
   if (modus === 'match' && Number.isFinite(d.r)) rest = d.r;
   if (d.kw === 'zufall' || hat(ARENEN, d.kw)) mp.karteWahl = d.kw;
   if (Number.isInteger(d.fw) && d.fw >= -1 && d.fw < FARB_PAARE.length) mp.farbWahl = d.fw;
@@ -3307,13 +3314,14 @@ function mpSchnappschuss(d) {
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schirmAuf: !!(fl & 1024), wirbelBis: fl & 2048 ? zeit + 0.15 : 0, schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0, ...(e === spieler ? {} : { sprungBlob: !!(fl & 16384) }),
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0, ...(e === spieler && !replay ? {} : { sprungBlob: !!(fl & 16384) }),
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
-    if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = e === spieler && modus === 'match' ? 260 : 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
+    if (replay && replay.hart) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = z; e.winkel = w; e.spawnT = 0; e.todT = 0; }
+    else if (neuGeboren) { e.lebenNr = lebenNr; e.x = x; e.y = y; e.z = e === spieler && modus === 'match' && !replay ? 260 : 0; e.vx = e.vy = e.vz = 0; e.winkel = w; e.spawnT = 0.45; e.ziel = null; if (e === spieler && !tot) ton('plopp'); }
     if (e !== spieler || !(e.kugelT > 0)) e.kugelKraft = kugelKraft || 0;   // eigene Klicks zählen wir selbst
-    if (e === spieler) {
+    if (e === spieler && !replay) {
       if (e.ulti < 1 && ulti >= 1) { meldung('⚡ Ulti bereit! Drück Q!'); ton('ulti'); }
       e.ulti = ulti;
     } else {
@@ -3397,10 +3405,19 @@ function gastUpdate(dt) {
   mp.schussT -= dt;
   if (p.schiesst && !p.taucht && w.speed && (!w.typ || w.typ === 'spritzer') && !(p.saugerT > 0) && !p.superSprung && p.tinte > 2 && mp.schussT <= 0) { mp.schussT = w.cd; ton('schuss'); }
   if (p.schiesst && p.tinte < 2) leerHinweis = 1.5;
+  proxiesBewegen(dt, p);
+  for (const m of meldungen) m.t -= dt;
+  meldungen = meldungen.filter(m => m.t > 0);
+  rotBlitz = Math.max(0, rotBlitz - dt); leerHinweis = Math.max(0, leerHinweis - dt);
+  if (p.tot) zielRing.visible = false;
+  bombeLos = ultiWunsch = sprungWunsch = false;
+}
+// Zwischen zwei Schnappschüssen alles weich weiterbewegen (Freunde online + 🎬 Wiederholung)
+function proxiesBewegen(dt, p) {
   // Die anderen gleiten weich zu ihrer Position
   const k = Math.min(1, dt * 12);
   for (const e of kleckse) {
-    if (e !== p && e.ziel) { e.x += (e.ziel.x - e.x) * k; e.y += (e.ziel.y - e.y) * k; e.z += (e.ziel.z - e.z) * k; e.winkel += winkelDiff(e.winkel, e.ziel.w) * k; }
+    if ((e !== p || replay) && e.ziel) { e.x += (e.ziel.x - e.x) * k; e.y += (e.ziel.y - e.y) * k; e.z += (e.ziel.z - e.z) * k; e.winkel += winkelDiff(e.winkel, e.ziel.w) * k; }
     if (e.laserT > 0) e.laserT -= dt;
     if (e.kugelT > 0) e.kugelT -= dt;
     laserZeigen(e);
@@ -3431,11 +3448,6 @@ function gastUpdate(dt) {
     q.vh -= 600 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.h += q.vh * dt; q.vx *= 0.95; q.vy *= 0.95; q.leben -= dt;
     if (q.leben <= 0 || q.h < 0) partikel.splice(i, 1);
   }
-  for (const m of meldungen) m.t -= dt;
-  meldungen = meldungen.filter(m => m.t > 0);
-  rotBlitz = Math.max(0, rotBlitz - dt); leerHinweis = Math.max(0, leerHinweis - dt);
-  if (p.tot) zielRing.visible = false;
-  bombeLos = ultiWunsch = sprungWunsch = false;
 }
 // Jeden Bild-Schritt: Nachrichten verschicken
 function mpTick(dt) {
@@ -3525,11 +3537,109 @@ function markiertMeldung(f) {
 function turmWegMeldung(wer) {
   if (wer && wer === spieler) { meldung('🗼💥 Dein Springturm wurde zerstört!'); ton('aua'); }
 }
+
+// ================== 🎬 AUFNAHMEN (Highlight-Wiederholung) ==================
+// Der Rekorder speichert 15-mal pro Sekunde, wo alles ist (wie die Nachrichten an Freunde online).
+// Bei einem Highlight wird daraus ein Clip: 5 Sekunden davor bis 2,5 Sekunden danach.
+const AUFNAHME_RATE = 15, CLIP_VOR = 5, CLIP_NACH = 2.5, CLIPS_MAX = 6;
+let aufnahme = { puffer: [], clips: [], tickT: 0 }, aufnahmeEv = [], replay = null;
+const CLIP_WICHTIG = { '👑': 0, '💀': 1, '🔥': 2, '😤': 3, '⚡': 4 };
+function aufnahmeTick(dt) {
+  aufnahme.tickT -= dt;
+  if (aufnahme.tickT > 0) return;
+  aufnahme.tickT = 1 / AUFNAHME_RATE;
+  const s = schnappschussBauen(); s.ev = aufnahmeEv; aufnahmeEv = [];
+  aufnahmeFrame(s);
+}
+function aufnahmeFrame(s) {
+  const f = { t: zeit, s };
+  aufnahme.puffer.push(f);
+  while (aufnahme.puffer.length && zeit - aufnahme.puffer[0].t > CLIP_VOR + 0.5) aufnahme.puffer.shift();
+  for (const c of aufnahme.clips) if (!c.fertig) { c.frames.push(f); if (zeit - c.moment > CLIP_NACH) c.fertig = true; }
+}
+function clipStarten(emoji, titel, text, wer) {
+  if (replay || modus !== 'match') return;
+  const c = { emoji, titel, text, stern: Math.max(0, kleckse.indexOf(wer)), moment: zeit, uhr: uhrText(), frames: aufnahme.puffer.filter(f => zeit - f.t <= CLIP_VOR), fertig: false };
+  // zu viele? den unwichtigsten fertigen Clip wegwerfen
+  aufnahme.clips.push(c);
+  if (aufnahme.clips.length > CLIPS_MAX) {
+    let weg = -1, schlecht = -1;
+    aufnahme.clips.forEach((k, i) => { const w = CLIP_WICHTIG[k.emoji] ?? 9; if (w >= schlecht) { schlecht = w; weg = i; } });
+    aufnahme.clips.splice(weg, 1);
+  }
+}
+function replayTempo() {
+  if (!replay) return 1;
+  const c = replay.clips[replay.nr]; if (!c) return 1;
+  return Math.abs(replay.uhr - c.moment) < 1.2 ? 0.45 : 1;   // Zeitlupe rund um den großen Moment
+}
+function replayStarten(clips) {
+  clips = [...clips].sort((a, b) => (CLIP_WICHTIG[a.emoji] ?? 9) - (CLIP_WICHTIG[b.emoji] ?? 9) || a.moment - b.moment);
+  replay = { clips, nr: -1, alt: { rest, zeit } };
+  nurZeigen(null);
+  buehne.visible = false; kroneMvp.visible = false;
+  for (const e of kleckse) { e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0; }
+  zustand = 'replay';
+  naechsterClip();
+}
+function naechsterClip() {
+  replay.nr++;
+  const c = replay.clips[replay.nr];
+  if (!c) { replayEnde(); return; }
+  replay.i = 0; replay.uhr = c.frames[0].t; replay.weiter = false; replay.kam = null;
+  replay.hart = true; mpSchnappschuss(c.frames[0].s); replay.hart = false; replay.i = 1;
+  meldungen = []; ton('kauf');
+}
+function replayUpdate(dt) {
+  const c = replay.clips[replay.nr]; if (!c) return;
+  const tempo = replayTempo(), sdt = dt * tempo;
+  replay.uhr += sdt;
+  while (replay.i < c.frames.length && c.frames[replay.i].t <= replay.uhr) { mpSchnappschuss(c.frames[replay.i].s); replay.i++; }
+  proxiesBewegen(sdt, spieler);
+  for (const m of meldungen) m.t -= dt;
+  meldungen = meldungen.filter(m => m.t > 0);
+  for (const e of kleckse) { e.landT = Math.max(0, (e.landT || 0) - sdt); }
+  // Kamera: schräg hinter dem Star des Clips, weich hinterher
+  const st = kleckse[c.stern] || spieler, sh = hAbs(st);
+  const zielPos = [st.x - Math.cos(st.winkel) * 110 + Math.sin(st.winkel) * 40, sh + 75, st.y - Math.sin(st.winkel) * 110 - Math.cos(st.winkel) * 40];
+  if (!replay.kam) replay.kam = [...zielPos];
+  const k = Math.min(1, dt * 3);
+  for (let i = 0; i < 3; i++) replay.kam[i] += (zielPos[i] - replay.kam[i]) * k;
+  kameraOverride = { pos: replay.kam, ziel: [st.x + Math.cos(st.winkel) * 50, sh + 25, st.y + Math.sin(st.winkel) * 50] };
+  if (replay.weiter || replay.i >= c.frames.length && replay.uhr > c.frames[c.frames.length - 1].t + 0.6) naechsterClip();
+}
+function replayEnde() {
+  if (!replay) return;
+  rest = replay.alt.rest; replay = null; kameraOverride = null;
+  zustand = 'ende'; nurZeigen('ende');
+}
+function replayHud(cw, ch) {
+  const c = replay && replay.clips[replay.nr]; if (!c) return;
+  const balken = ch * 0.1;   // Kino-Balken oben und unten
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, balken); ctx.fillRect(0, ch - balken, cw, balken);
+  ctx.textAlign = 'left';
+  if (Math.sin(performance.now() / 250) > -0.3) { ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(30, balken / 2, 9, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 20px system-ui'; ctx.fillText(`WIEDERHOLUNG  ${replay.nr + 1}/${replay.clips.length}`, 48, balken / 2 + 7);
+  ctx.textAlign = 'right'; ctx.font = 'bold 16px system-ui'; ctx.fillStyle = '#ccd';
+  ctx.fillText(`🕐 ${c.uhr}   ·   Leertaste = weiter   ·   Esc = fertig`, cw - 20, balken / 2 + 6);
+  const st = kleckse[c.stern];
+  ctx.textAlign = 'center';
+  textMitRand(`${c.emoji} ${c.titel}`, cw / 2, ch - balken / 2 - 4, 30, '#ffd166');
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 15px system-ui'; ctx.fillText(`${c.text}${st ? '  ·  🎥 ' + st.name : ''}`, cw / 2, ch - balken / 2 + 22);
+  if (replayTempo() < 1) { textMitRand('🐢 ZEITLUPE', cw - 110, balken + 34, 22, '#6fe3ff'); }
+  // Fortschritt
+  const t0 = c.frames[0].t, t1 = c.frames[c.frames.length - 1].t, f = Math.max(0, Math.min(1, (replay.uhr - t0) / Math.max(0.1, t1 - t0)));
+  ctx.fillStyle = '#ffffff33'; ctx.fillRect(0, ch - balken - 4, cw, 4); ctx.fillStyle = '#ff3b3b'; ctx.fillRect(0, ch - balken - 4, cw * f, 4);
+  ctx.textAlign = 'center'; ctx.font = 'bold 18px system-ui';
+  meldungen.forEach((m, i) => { ctx.globalAlpha = Math.min(1, m.t); textMitRand(m.text, cw / 2, balken + 34 + i * 26, 18, '#fff'); });
+  ctx.globalAlpha = 1;
+}
 // ================== ⭐ MATCH-HIGHLIGHTS ==================
 let todesKam = null, splatListe = [], highlightAnzeige = [], matchHighlights = [];
 function uhrText() { const r = Math.max(0, RUNDE - rest); return `${Math.floor(r / 60)}:${String(Math.floor(r % 60)).padStart(2, '0')}`; }
-function highlight(emoji, titel, text, gross) {
+function highlight(emoji, titel, text, gross, wer) {
   matchHighlights.push({ emoji, titel, text, uhr: uhrText() });
+  clipStarten(emoji, titel, text, wer);
   if (gross) { highlightAnzeige.push({ emoji, titel, text, start: performance.now() / 1000 }); if (highlightAnzeige.length > 2) highlightAnzeige.shift(); ton('fanfare'); }
   else meldung(`${emoji} ${text}`);
 }
@@ -3540,9 +3650,9 @@ function highlightsPruefen(e, wer) {
   const jetzt = zeit;
   wer.killZeiten = (wer.killZeiten || []).filter(z => jetzt - z < 5); wer.killZeiten.push(jetzt);
   const n = wer.killZeiten.length, ich = wer.spieler, name = ich ? 'Du' : wer.name;
-  if (n === 2) highlight('⚡', 'DOPPEL-KLECKS!', `${name} ${ich ? 'hast' : 'hat'} 2 Gegner ganz schnell erwischt!`, ich);
-  else if (n === 3) highlight('🔥', 'DREIFACH-KLECKS!', `${name} ${ich ? 'hast' : 'hat'} 3 Gegner ganz schnell erwischt!`, ich || wer.team === spieler.team);
-  if (!e.spieler && wer.spieler && spieler.letzterKiller === e && !spieler.racheErledigt) { spieler.racheErledigt = true; highlight('😤', 'RACHE!', `Du hast dich an ${e.name} gerächt!`, true); }
+  if (n === 2) highlight('⚡', 'DOPPEL-KLECKS!', `${name} ${ich ? 'hast' : 'hat'} 2 Gegner ganz schnell erwischt!`, ich, wer);
+  else if (n === 3) highlight('🔥', 'DREIFACH-KLECKS!', `${name} ${ich ? 'hast' : 'hat'} 3 Gegner ganz schnell erwischt!`, ich || wer.team === spieler.team, wer);
+  if (!e.spieler && wer.spieler && spieler.letzterKiller === e && !spieler.racheErledigt) { spieler.racheErledigt = true; highlight('😤', 'RACHE!', `Du hast dich an ${e.name} gerächt!`, true, wer); }
   if (e.spieler) spieler.racheErledigt = false;
   // 👑 Solo-Auslöschung: das ganze Team ist erwischt – und alle von derselben Person!
   const team = kleckse.filter(f => f.team === e.team && !f.puppe);
@@ -3550,12 +3660,14 @@ function highlightsPruefen(e, wer) {
     wer.soloAus = (wer.soloAus || 0) + 1;
     highlightAnzeige = [];   // das große VOLL ERWISCHT XD zeigt es schon an
     matchHighlights.push({ emoji: '👑', titel: 'SOLO-AUSLÖSCHUNG!', text: `${name} ${ich ? 'hast' : 'hat'} das GANZE Team allein erwischt!`, uhr: uhrText() });
+    clipStarten('👑', 'SOLO-AUSLÖSCHUNG!', `${name} ${ich ? 'hast' : 'hat'} das GANZE Team allein erwischt!`, wer);
     soloAuslo = { wer, start: performance.now() / 1000 };
   }
 }
 let soloAuslo = null;
 // Kill-Meldung aus Sicht von diesem Computer
 function koMeldung(e, wer) {
+  if (replay) { meldung(wer ? `💥 ${wer.name} ➜ ${e.name}` : `💥 ${e.name} erwischt`); return; }   // 🎬 in der Wiederholung nur eine kleine Meldung
   highlightsPruefen(e, wer);
   if (e.spieler && wer && wer !== e) todesKam = { wer, start: zeit, pos: null };   // 🎥 dem zuschauen, der dich erwischt hat
   if (wer && wer.spieler && !e.spieler) {   // 💥 eigene Treffer stehen groß in der Mitte
@@ -3794,7 +3906,7 @@ function neueRunde(auf, karteId, farben) {
   spieler.spieler = true;
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
   rest = RUNDE; zeit = 0; pfiff10 = false; lobbySuche = null;
-  matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null;
+  matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null; aufnahme = { puffer: [], clips: [], tickT: 0 }; aufnahmeEv = [];
   // Erst das Intro, dann 3-2-1-LOS
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;
@@ -5718,7 +5830,7 @@ function welt3D(dt) {
     if (e.tot) e.tauchAnim = 0;
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
     const inEigen = !e.taucht || tauchtVersteckt(e);
-    const versteckt = e.team !== spieler.team && !feindNah && !(e.markiertBis > zeit) && !(todesKam && todesKam.wer === e && spieler.tot) && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
+    const versteckt = zustand !== 'replay' && e.team !== spieler.team && !feindNah && !(e.markiertBis > zeit) && !(todesKam && todesKam.wer === e && spieler.tot) && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
     g.visible = !((e.tot && e.todT <= 0) || istIch || versteckt);
     let gx = 1, gy = 1, hoch = 0, dreh = 0;
     if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
@@ -5895,6 +6007,7 @@ function hud() {
   if (!spieler || zustand === 'menu') return;
   if (zustand === 'intro') { introHud(cw, ch); return; }
   if (zustand === 'feier') { feierHud(cw, ch); return; }
+  if (zustand === 'replay') { replayHud(cw, ch); return; }
   if (sandsturm()) {   // Sand vor den Augen
     ctx.fillStyle = 'rgba(201,150,90,0.35)'; ctx.fillRect(0, 0, cw, ch);
     ctx.fillStyle = 'rgba(255,230,180,0.5)'; for (let i = 0; i < 120; i++) ctx.fillRect((i * 97 + zeit * 900 * (1 + i % 3)) % cw, (i * 53 + Math.sin(zeit + i) * 20) % ch, 3, 1);
@@ -6131,6 +6244,8 @@ function vollErwischtPruefen() {
     const alleWeg = team.length >= 2 && team.every(e => e.tot);
     if (alleWeg && !vollWarWeg[t]) {
       vollErwischt = { team: t, start: performance.now() / 1000, eigenes: t === spieler.team };
+      const opfer = kleckse.filter(e => e.team === t && !e.puppe), letzter = opfer.map(e => e.letzterKiller).filter(Boolean).pop();
+      if (!(soloAuslo && performance.now() / 1000 - soloAuslo.start < 1)) clipStarten('💀', 'VOLL ERWISCHT XD', `Das ganze Team ${TEAMS[t].name} war auf einmal weg!`, letzter);
       ton(vollErwischt.eigenes ? 'vollTraurig' : 'vollJubel');
       spritzerFeuerwerk(1 - t);
     }
@@ -6541,6 +6656,10 @@ function rundenEndeAnzeigen() {
   setTimeout(() => ton('kauf'), 500);
   document.getElementById('ende').classList.remove('hidden');
   highlightsListe();
+  const rk = $('replayKnopf'), fertig = aufnahme.clips.filter(c => c.frames.length > 5);
+  rk.classList.toggle('hidden', !fertig.length);
+  rk.textContent = `🎬 Highlight-Aufnahmen ansehen (${fertig.length})`;
+  rk.onclick = () => replayStarten(fertig);
   const d = endeDaten; if (d) setTimeout(() => { d.bO.style.width = d.wO + '%'; d.bL.style.width = d.wL + '%'; }, 100);
 }
 
@@ -7074,13 +7193,15 @@ function schleife(t) {
   const dt = Math.min(0.05, (t - letzt) / 1000); letzt = t;
   const onlinePause = zustand === 'pause' && mp.aktiv;     // online läuft das Spiel auch in der Pause weiter
   if (zustand === 'spiel' || zustand === 'lobby' || onlinePause) { if (istGast()) gastUpdate(dt); else update(dt); }
+  if (zustand === 'spiel' && modus === 'match' && !istGast() && startCountdown <= 0) aufnahmeTick(dt);   // 🎬 Rekorder läuft mit
+  if (zustand === 'replay') replayUpdate(dt);
   if (zustand === 'intro') introUpdate(dt);
   if (zustand === 'feier') feierUpdate(dt);
   if (zustand === 'stadt') stadtUpdate(dt);
   mpTick(dt);
   if (zustand === 'menu') vorschauZeigen(dt);           // Menü & Shops: dein Junge dreht sich auf dem Podest
   else if (zustand === 'stadt' || zustand === 'wahl') stadtZeigen(zustand === 'stadt' ? dt : 0);
-  else if (spieler) { vmHalter.visible = true; welt3D(['spiel', 'lobby', 'intro', 'feier'].includes(zustand) || onlinePause ? dt : 0); }
+  else if (spieler) { vmHalter.visible = true; welt3D(['spiel', 'lobby', 'intro', 'feier', 'replay'].includes(zustand) || onlinePause ? dt * (zustand === 'replay' ? replayTempo() : 1) : 0); }
   hud();
   requestAnimationFrame(schleife);
 }
