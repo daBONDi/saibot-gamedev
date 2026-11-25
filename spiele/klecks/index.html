@@ -16,6 +16,10 @@
     background: linear-gradient(90deg, #ff8a1f, #ff5fa2, #a347ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; color: #ffd166; }
   p { color: #c9c3ff; margin: 0.4rem 0; }
+  .papageiBox { display: flex; flex-direction: column; max-height: calc(100vh - 2rem); padding: 1rem 1.5rem; }
+  #papageiExtra { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  #papageiKnoepfe { flex: none; }
+  @media (max-height: 640px) { #papageiBild { width: 80px !important; height: 90px !important; } .papageiBox h1 { font-size: 1.3rem !important; } .sprechblase { font-size: 0.95rem; padding: 0.5rem 0.8rem; } .fischZeile { font-size: 0.82rem; } .fischZeile canvas { width: 90px !important; height: 52px !important; } }
   .papageiKopf { display: flex; gap: 1rem; align-items: center; text-align: left; }
   .sprechblase { background: #fff; color: #1b1f3a; border-radius: 1rem; padding: 0.8rem 1rem; font-size: 1.1rem; position: relative; margin: 0.5rem 0; }
   .sprechblase::before { content: ''; position: absolute; left: -14px; top: 22px; border: 8px solid transparent; border-right: 14px solid #fff; }
