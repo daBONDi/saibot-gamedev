@@ -110,6 +110,7 @@
       <span class="taste">Rechtsklick</span><span>Mit Schwertern: Dash 💨 (abtauchen dann mit Shift)</span>
       <span class="taste">V</span><span>Ich-Sicht / Sicht von hinten</span>
       <span class="taste">M</span><span>Supersprung 🚀 zum Springturm oder zu Mitspielern (dann Zahl drücken)</span>
+      <span class="taste">C</span><span>Rufen 📢 (Zu mir!, Tuff!, Erwischt! … dann Zahl) – „Tuff!“ lädt die Tuffkugel von Mitspielern auf!</span>
       <span class="taste">N</span><span>Musik an/aus 🎵</span>
       <span class="taste">E (Stadt)</span><span>Laden / Arena betreten</span>
       <span class="taste">Esc</span><span>Menü / Pause</span>
@@ -892,6 +893,15 @@ function posaune(t, f, lang, laut, vibrato = 0) {
   o.connect(fl); fl.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + lang + 0.05);
 }
 const SOUNDS = {
+  // 📢 Rufe: kleine Stimmen-Töne (Vokal-Silben)
+  ruf_zumir:    (t, v) => { lachSilbe(t, 330, 0.12 * v); lachSilbe(t + 0.13, 400, 0.12 * v); lachSilbe(t + 0.26, 480, 0.14 * v); },
+  ruf_tuff:     (t, v) => { krach(1800, 0.05, 0.12 * v, t, sfxGain, 'highpass'); osz('square', 220, 110, 0.18, 0.09 * v, t + 0.02, sfxGain, 900); osz('sine', 120, 50, 0.2, 0.25 * v, t); },
+  ruf_erwischt: (t, v) => { lachSilbe(t, 420, 0.11 * v); lachSilbe(t + 0.12, 360, 0.11 * v); lachSilbe(t + 0.24, 520, 0.13 * v); },
+  ruf_hilfe:    (t, v) => { lachSilbe(t, 520, 0.13 * v); lachSilbe(t + 0.16, 440, 0.13 * v); osz('square', 880, 660, 0.3, 0.03 * v, t + 0.3, sfxGain, 2000); },
+  ruf_los:      (t, v) => { lachSilbe(t, 300, 0.12 * v); lachSilbe(t + 0.12, 450, 0.14 * v); },
+  ruf_super:    (t, v) => { lachSilbe(t, 400, 0.11 * v); lachSilbe(t + 0.12, 600, 0.13 * v); [72, 76, 79].forEach((n, i) => osz('triangle', NOTE(n), NOTE(n), 0.12, 0.05 * v, t + 0.25 + i * 0.06)); },
+  ruf_xd:       (t, v) => [360, 330, 300].forEach((f, i) => lachSilbe(t + i * 0.11, f, 0.11 * v)),
+  ruf_danke:    (t, v) => { lachSilbe(t, 380, 0.11 * v); lachSilbe(t + 0.15, 320, 0.11 * v); },
   // 💀 VOLL ERWISCHT XD – Gegner-Team weg: Trommelwirbel, Jubel-Fanfare, Becken und ein fettes "HA-HA-HA-HA!"
   vollJubel: (t, v) => {
     for (let i = 0; i < 10; i++) krach(1400, 0.05, (0.06 + i * 0.012) * v, t + i * 0.045, sfxGain, 'bandpass');   // Trommelwirbel
@@ -2997,11 +3007,15 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyV') ichSicht = !ichSicht;
   if (e.code === 'KeyN') musikUmschalten();
   if (e.code === 'KeyM' && spieler && modus === 'match' && (zustand === 'spiel' || zustand === 'pause')) {   // 🗼 Supersprung-Menü
-    sprungMenu = !sprungMenu; ton('klick');
+    sprungMenu = !sprungMenu; rufMenu = false; ton('klick');
     if (sprungMenu && !sprungZiele(spieler).length) { sprungMenu = false; meldung('🗼 Kein Springturm und keine Mitspieler zum Hinspringen!'); }
   }
   const zifferNr = /^Digit([1-9])$/.exec(e.code) || /^Numpad([1-9])$/.exec(e.code);
-  if (sprungMenu && zifferNr && spieler) {
+  if (e.code === 'KeyC' && spieler && (zustand === 'spiel' || zustand === 'lobby' || zustand === 'pause') && !cheatTippen) { rufMenu = !rufMenu; sprungMenu = false; ton('klick'); }
+  if (rufMenu && zifferNr && spieler) {   // 📢 rufen!
+    const id = RUF_LISTE[+zifferNr[1] - 1];
+    if (id) { rufMenu = false; if (istGast()) mp.bitte.sg = id; else rufen(spieler, id); }
+  } else if (sprungMenu && zifferNr && spieler) {
     const ziel = sprungZiele(spieler)[+zifferNr[1] - 1];
     if (ziel) { sprungMenu = false; if (!sprungStarten(spieler, ziel)) meldung('Gerade kannst du nicht springen!'); }
   }
@@ -3213,6 +3227,7 @@ function mpVomGast(g, d) {
     if (!e || e.tot || !mpLaeuft()) return;
     if (d.tk && e.trifT > 0) e.trifWunsch = true;
     if (d.ak) e.abkoppelWunsch = true;
+    if (typeof d.sg === 'string' && hat(RUFE, d.sg)) rufen(e, d.sg);
     if (d.da) { e.tanaDashBis = zeit + 0.2; e.dashGetroffen = new Set(); e.dashMalT = 0; e.tinte = Math.max(0, e.tinte - 6); }
     if (d.kk > 0 && e.kugelT > 0) e.kugelKraft = Math.min(25, (e.kugelKraft || 0) + Math.min(10, d.kk | 0));
     if (Array.isArray(d.b)) { e.winkel = g.e.w; bombeWerfen(e, zahl(d.b[0], 0, W, e.x), zahl(d.b[1], 0, H, e.y)); }
@@ -3359,6 +3374,7 @@ function mpEreignisAusfuehren(ev) {
     const u = ULTIS[e.ultiArt];
     meldung(e === spieler ? `⚡ ${u.emoji} ${u.name}!` : `${e.name}: ${u.emoji} ${u.name}!`);
     if (e === spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('ulti');
+  } else if (ev.k === 'ruf' && e && typeof ev.r === 'string') { rufZeigen(e, ev.r);
   } else if (ev.k === 'pyr' && Array.isArray(ev.a)) {
     pyramideZeigen(ev.a[0], ev.a[1], ev.a[2], ev.a[3], ev.a[4], ev.team ? 1 : 0);
   } else if (ev.k === 'mark' && e) { markiertMeldung(e);
@@ -3462,7 +3478,7 @@ function mpTick(dt) {
       mp.eingabeT = 1 / MP_EINGABE_RATE;
       const p = spieler;
       mpSende({ t: 'e', x: r1(p.x), y: r1(p.y), z: r1(p.z), w: r2(p.winkel), p: r2(p.pitch), vx: r0(p.vx), vy: r0(p.vy),
-        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, sb: p.sprungBlob ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak, da: mp.bitte.da });
+        s: p.schiesst ? 1 : 0, u: p.willTauchen ? 1 : 0, sf: p.schirmHalten ? 1 : 0, sb: p.sprungBlob ? 1 : 0, n: p.lebenNr || 0, b: mp.bitte.b, uz: mp.bitte.u, kk: mp.bitte.kk, tk: mp.bitte.tk, ak: mp.bitte.ak, da: mp.bitte.da, sg: mp.bitte.sg });
       mp.bitte = {};
     }
   }
@@ -3642,6 +3658,78 @@ function replayHud(cw, ch) {
   ctx.textAlign = 'center'; ctx.font = 'bold 18px system-ui';
   meldungen.forEach((m, i) => { ctx.globalAlpha = Math.min(1, m.t); textMitRand(m.text, cw / 2, balken + 34 + i * 26, 18, '#fff'); });
   ctx.globalAlpha = 1;
+}
+
+// ================== 📢 RUFE (Taste C, dann Zahl) ==================
+const RUFE = {
+  zumir:    { text: 'Zu mir!!!', emoji: '👋', farbe: '#6fe3ff' },
+  tuff:     { text: 'Tuff!',     emoji: '💪', farbe: '#ffd166' },
+  erwischt: { text: 'Erwischt!', emoji: '😎', farbe: '#ff8a5b' },
+  hilfe:    { text: 'Hilfe!',    emoji: '🆘', farbe: '#ff4d4d' },
+  los:      { text: 'Los, vorwärts!', emoji: '⬆️', farbe: '#5be37d' },
+  super:    { text: 'Super!',    emoji: '🎉', farbe: '#ff9ad3' },
+  xd:       { text: 'XD',        emoji: '😂', farbe: '#c9a7ff' },
+  danke:    { text: 'Danke!',    emoji: '🙏', farbe: '#ffffff' },
+};
+const RUF_LISTE = Object.keys(RUFE);
+const TUFF_KRAFT = 3;   // so viel Kraft bekommt die Tuffkugel von jedem "Tuff!" eines Mitspielers
+let rufMenu = false, rufBlasen = [], rufPings = [];
+function rufen(e, id) {   // nur der Gastgeber (oder offline) entscheidet
+  if (!e || e.tot || !hat(RUFE, id) || (e.rufBis || 0) > zeit) return;
+  e.rufBis = zeit + (id === 'tuff' ? 0.35 : 1.2);
+  if (id === 'tuff') for (const f of kleckse) if (f !== e && f.team === e.team && f.kugelT > 0) f.kugelKraft = Math.min(25, (f.kugelKraft || 0) + TUFF_KRAFT);   // 💪 Mitspieler pushen die Tuffkugel!
+  mpEreignis({ k: 'ruf', i: kleckse.indexOf(e), r: id });
+  rufZeigen(e, id);
+}
+function rufZeigen(e, id) {   // auf jedem Computer: Sprechblase + Ton + Meldung
+  const r = RUFE[id]; if (!r || !e) return;
+  const nah = spieler && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 900;
+  const freund = spieler && e.team === spieler.team;
+  if (id === 'tuff' && spieler && spieler !== e && freund && spieler.kugelT > 0 && istGast()) spieler.kugelKraft = Math.min(25, (spieler.kugelKraft || 0) + TUFF_KRAFT);
+  if (id === 'tuff' && spieler && spieler !== e && freund && spieler.kugelT > 0) { tuffAnzeige = { start: performance.now() / 1000, wer: e.name }; }
+  if (!freund && !nah) return;   // Gegner hört man nur, wenn sie nah sind
+  // Sprechblase über dem Kopf
+  for (let i = rufBlasen.length - 1; i >= 0; i--) if (rufBlasen[i].e === e) { scene.remove(rufBlasen[i].sprite); rufBlasen[i].sprite.material.map.dispose(); rufBlasen[i].sprite.material.dispose(); rufBlasen.splice(i, 1); }
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#ffffff'; c.strokeStyle = TEAMS[e.team].col; c.lineWidth = 6;
+  c.beginPath(); c.roundRect(6, 6, 244, 66, 20); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(112, 70); c.lineTo(128, 92); c.lineTo(144, 70); c.closePath(); c.fill();
+  c.font = 'bold 30px system-ui'; c.textAlign = 'center'; c.fillStyle = '#1b1f3a'; c.fillText(`${r.emoji} ${r.text}`, 128, 50);
+  const tex = new THREE.CanvasTexture(cv);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sprite.scale.set(64, 24, 1); sprite.renderOrder = 998; scene.add(sprite);
+  rufBlasen.push({ e, sprite, start: performance.now() / 1000 });
+  if (freund) {
+    meldung(`${e.spieler ? 'Du' : e.name}: ${r.emoji} ${r.text}`);
+    if (id === 'zumir' || id === 'hilfe') rufPings.push({ x: e.x, y: e.y, farbe: r.farbe, start: performance.now() / 1000 });
+  }
+  if (nah || freund) ton('ruf_' + id, e.spieler ? 1 : 0.6);
+}
+let tuffAnzeige = null;
+function rufBlasenUpdate() {
+  const jetzt = performance.now() / 1000;
+  for (let i = rufBlasen.length - 1; i >= 0; i--) {
+    const b = rufBlasen[i], k = jetzt - b.start;
+    if (k > 2.2 || !kleckse.includes(b.e)) { scene.remove(b.sprite); b.sprite.material.map.dispose(); b.sprite.material.dispose(); rufBlasen.splice(i, 1); continue; }
+    const pop = k < 0.15 ? k / 0.15 * 1.15 : k < 0.25 ? 1.15 - (k - 0.15) * 1.5 : 1;
+    b.sprite.position.set(b.e.x, hAbs(b.e) + 72 + k * 4, b.e.y); b.sprite.scale.set(64 * pop, 24 * pop, 1);
+    b.sprite.material.opacity = k > 1.8 ? (2.2 - k) / 0.4 : 1;
+    b.sprite.visible = !(b.e.spieler && ichSicht && !kameraOverride);
+  }
+  rufPings = rufPings.filter(p => jetzt - p.start < 3);
+}
+function rufMenuHud(cw, ch) {
+  const x0 = cw - 250, y0 = ch * 0.28, zh = 28;
+  ctx.fillStyle = '#1b1f3add'; ctx.fillRect(x0 - 10, y0 - 34, 240, 46 + RUF_LISTE.length * zh);
+  ctx.textAlign = 'left'; ctx.font = 'bold 18px system-ui'; ctx.fillStyle = '#ffd166'; ctx.fillText('📢 Was rufen? (Zahl)', x0, y0 - 10);
+  ctx.font = 'bold 17px system-ui';
+  RUF_LISTE.forEach((id, i) => {
+    const r = RUFE[id], tuffNuetzlich = id === 'tuff' && kleckse.some(f => f !== spieler && f.team === spieler.team && f.kugelT > 0);
+    ctx.fillStyle = tuffNuetzlich ? '#ffd166' : '#fff';
+    ctx.fillText(`${i + 1}  ${r.emoji} ${r.text}${tuffNuetzlich ? '  ← Tuffkugel!' : ''}`, x0, y0 + 20 + i * zh);
+  });
+  ctx.fillStyle = '#aab'; ctx.font = '13px system-ui'; ctx.fillText('C = schließen', x0, y0 + 24 + RUF_LISTE.length * zh);
 }
 // ================== ⭐ MATCH-HIGHLIGHTS ==================
 let todesKam = null, splatListe = [], highlightAnzeige = [], matchHighlights = [];
@@ -5154,6 +5242,7 @@ function erwischt(e, wer) {
   spritzer(e.x, e.y, 15, farbe, 40, 260);
   if (wer) wer.ko++;
   koMeldung(e, wer);
+  if (wer && !wer.spieler && !wer.mensch && !replay && Math.random() < 0.25) rufen(wer, Math.random() < 0.7 ? 'erwischt' : 'xd');   // Bots freuen sich
   mpEreignis({ k: 'ko', i: kleckse.indexOf(e), w: wer ? kleckse.indexOf(wer) : -1 });
 }
 
@@ -5265,6 +5354,10 @@ function ki(b, dt) {
     if (z) { b.winkel = drehe(b.winkel, Math.atan2(z.y - b.y, z.x - b.x), dt * 4); k.zielPunkt = { x: z.x, y: z.y }; }
     b.schiesst = false; b.willTauchen = false; bewege(b, 0, 0, dt); return;
   }
+  // 📢 Bots rufen auch: "Tuff!" für die Tuffkugel von Mitspielern, "Hilfe!" wenn es eng wird
+  if (kleckse.some(f => f !== b && f.team === b.team && f.kugelT > 0) && Math.random() < dt * 1.5) rufen(b, 'tuff');
+  else if (feind && b.hp < 35 && Math.random() < dt * 0.3) rufen(b, 'hilfe');
+  else if (!feind && Math.random() < dt * 0.01) rufen(b, Math.random() < 0.5 ? 'los' : 'zumir');
   // 🗼 Von zu Hause zum eigenen Springturm springen
   if (!feind && modus === 'match' && Math.random() < dt * 0.5 && Math.hypot(b.x - BASIS[b.team].x, b.y - BASIS[b.team].y) < 320) {
     const tu = geraete.find(g => g.art === 'springturm' && g.team === b.team && g.hp > 0 && Math.hypot(g.x - b.x, g.y - b.y) > 500);
@@ -6053,6 +6146,12 @@ function hud() {
     textMitRand(`Klick = 🔺 Pyramide werfen (${Math.ceil(spieler.saugerT)} s)`, kx, ky + kr + 30, 20, '#ffffff');
   }
   if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand('🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
+  rufBlasenUpdate();
+  if (rufMenu) rufMenuHud(cw, ch);
+  if (tuffAnzeige && performance.now() / 1000 - tuffAnzeige.start < 0.8 && spieler.kugelT > 0) {   // 💪 jemand pusht deine Tuffkugel
+    const k = performance.now() / 1000 - tuffAnzeige.start;
+    ctx.textAlign = 'center'; ctx.globalAlpha = 1 - k / 0.8; textMitRand(`💪 +${TUFF_KRAFT} TUFF! (${tuffAnzeige.wer})`, cw / 2, ch * 0.7 - 130 - k * 40, 34, '#ffd166'); ctx.globalAlpha = 1;
+  }
   if (sprungMenu && !spieler.tot) {   // 🗼 wohin springen?
     const ziele = sprungZiele(spieler), x0 = 20, y0 = ch * 0.3, zh = 30;
     ctx.fillStyle = '#1b1f3add'; ctx.fillRect(x0 - 10, y0 - 34, 330, 44 + ziele.length * zh + 20);
@@ -6135,6 +6234,11 @@ function hud() {
       ctx.lineTo(ex + Math.cos(e.winkel + 2.5) * 5, ey + Math.sin(e.winkel + 2.5) * 5);
       ctx.lineTo(ex + Math.cos(e.winkel - 2.5) * 5, ey + Math.sin(e.winkel - 2.5) * 5); ctx.fill();
     } else { ctx.fillStyle = TEAMS[spieler.team].dunkel; ctx.beginPath(); ctx.arc(ex, ey, 3, 0, 7); ctx.fill(); }
+  }
+  for (const pg of rufPings) {   // 👋 "Zu mir!" / 🆘 "Hilfe!" blinkt auf der Karte
+    const k = (performance.now() / 1000 - pg.start) % 1, px = mx + pg.x / W * mw, py = my + pg.y / H * mh;
+    ctx.strokeStyle = pg.farbe; ctx.lineWidth = 3; ctx.globalAlpha = 1 - k;
+    ctx.beginPath(); ctx.arc(px, py, 4 + k * 16, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
   }
 
   // Meldungen
