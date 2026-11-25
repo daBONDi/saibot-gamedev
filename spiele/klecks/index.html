@@ -1506,7 +1506,7 @@ for (let i = 0; i < 14; i++) {
   const h = 150 + (i * 97) % 200;
   const tm = new THREE.MeshStandardMaterial({ color: i % 2 ? TEAMS[0].col : TEAMS[1].col }); turmMats.push(tm);
   const t = new THREE.Mesh(new THREE.CylinderGeometry(40, 50, h, 12), tm);
-  t.position.set(rx, h / 2, rz); scene.add(t);
+  t.position.set(rx, h / 2, rz); randGruppe.add(t);   // gehören zur Arena-Umgebung (auf der Insel ausgeblendet)
 }
 
 // ---------- Bausteine für Figuren ----------
@@ -1829,7 +1829,7 @@ function bodenBild(art) {
   else if (art === 'lava') { x.fillStyle = '#2a1c1a'; x.fillRect(0, 0, 256, 256); flecken(['#3a2a26', '#1e1412'], 200, 8);
     x.strokeStyle = '#ff5a10'; x.lineWidth = 4; for (let i = 0; i < 14; i++) { let px = zz() * 256, py = zz() * 256; x.beginPath(); x.moveTo(px, py); for (let k = 0; k < 5; k++) { px += (zz() - 0.5) * 70; py += (zz() - 0.5) * 70; x.lineTo(px, py); } x.stroke(); } }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(36, 36);
-  t.anisotropy = 4;
+  t.anisotropy = art === 'wasser' ? 1 : 4;   // große Wasserflächen: ohne Anisotropie viel schneller
   return t;
 }
 const bodenBilder = {};
