@@ -16,6 +16,8 @@
     background: linear-gradient(90deg, #ff8a1f, #ff5fa2, #a347ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; color: #ffd166; }
   p { color: #c9c3ff; margin: 0.4rem 0; }
+  #highlights h3 { margin: 0.8rem 0 0.3rem; color: #ffd166; }
+  #highlights .highlight { background: #ffffff14; border-radius: 0.6rem; padding: 0.3rem 0.7rem; margin: 0.25rem auto; max-width: 34rem; font-size: 0.95rem; }
   button.gross { background: linear-gradient(90deg, #ff8a1f, #a347ff); color: #fff; border: none; border-radius: 1rem;
     padding: 0.8rem 2rem; font: bold 1.4rem system-ui, sans-serif; cursor: pointer; margin-top: 1rem; transition: transform .15s; }
   button.gross:hover { transform: scale(1.07); }
@@ -160,6 +162,7 @@
     <h1 id="sieger">…</h1>
     <div class="balken"><div id="balkenO" style="background:#ff8a1f"></div><div id="balkenL" style="background:#a347ff"></div></div>
     <p id="statistik"></p>
+    <div id="highlights"></div>
     <button class="gross" id="nochmal">🔁 Nochmal (Lobby)</button>
     <button class="gross" id="zumMenu">🏙️ Zur Stadt</button>
   </div>
@@ -3522,8 +3525,42 @@ function markiertMeldung(f) {
 function turmWegMeldung(wer) {
   if (wer && wer === spieler) { meldung('🗼💥 Dein Springturm wurde zerstört!'); ton('aua'); }
 }
+// ================== ⭐ MATCH-HIGHLIGHTS ==================
+let todesKam = null, splatListe = [], highlightAnzeige = [], matchHighlights = [];
+function uhrText() { const r = Math.max(0, RUNDE - rest); return `${Math.floor(r / 60)}:${String(Math.floor(r % 60)).padStart(2, '0')}`; }
+function highlight(emoji, titel, text, gross) {
+  matchHighlights.push({ emoji, titel, text, uhr: uhrText() });
+  if (gross) { highlightAnzeige.push({ emoji, titel, text, start: performance.now() / 1000 }); if (highlightAnzeige.length > 2) highlightAnzeige.shift(); ton('fanfare'); }
+  else meldung(`${emoji} ${text}`);
+}
+function highlightsPruefen(e, wer) {
+  if (modus !== 'match') return;
+  e.letzterKiller = wer || null;
+  if (!wer || wer === e) return;
+  const jetzt = zeit;
+  wer.killZeiten = (wer.killZeiten || []).filter(z => jetzt - z < 5); wer.killZeiten.push(jetzt);
+  const n = wer.killZeiten.length, ich = wer.spieler, name = ich ? 'Du' : wer.name;
+  if (n === 2) highlight('⚡', 'DOPPEL-KLECKS!', `${name} ${ich ? 'hast' : 'hat'} 2 Gegner ganz schnell erwischt!`, ich);
+  else if (n === 3) highlight('🔥', 'DREIFACH-KLECKS!', `${name} ${ich ? 'hast' : 'hat'} 3 Gegner ganz schnell erwischt!`, ich || wer.team === spieler.team);
+  if (!e.spieler && wer.spieler && spieler.letzterKiller === e && !spieler.racheErledigt) { spieler.racheErledigt = true; highlight('😤', 'RACHE!', `Du hast dich an ${e.name} gerächt!`, true); }
+  if (e.spieler) spieler.racheErledigt = false;
+  // 👑 Solo-Auslöschung: das ganze Team ist erwischt – und alle von derselben Person!
+  const team = kleckse.filter(f => f.team === e.team && !f.puppe);
+  if (team.length >= 2 && team.every(f => f.tot || f === e) && team.every(f => f.letzterKiller === wer)) {
+    wer.soloAus = (wer.soloAus || 0) + 1;
+    highlight('👑', 'SOLO-AUSLÖSCHUNG!', `${name} ${ich ? 'hast' : 'hat'} das GANZE Team allein erwischt!`, true);
+    soloAuslo = { wer, start: performance.now() / 1000 };
+  }
+}
+let soloAuslo = null;
 // Kill-Meldung aus Sicht von diesem Computer
 function koMeldung(e, wer) {
+  highlightsPruefen(e, wer);
+  if (e.spieler && wer && wer !== e) todesKam = { wer, start: zeit, pos: null };   // 🎥 dem zuschauen, der dich erwischt hat
+  if (wer && wer.spieler && !e.spieler) {   // 💥 eigene Treffer stehen groß in der Mitte
+    splatListe.push({ text: `💥 ${e.name} erwischt!`, team: e.team, start: performance.now() / 1000 }); if (splatListe.length > 3) splatListe.shift();
+    ton('ko'); return;
+  }
   if (e.spieler) { meldung(!wer && inLava(e.x, e.y) ? '🌋 Autsch! Die Lava hat dich erwischt!' : !wer && imGleis(e.x, e.y, 30) ? '🚂 Tuuut! Der Zug hat dich umgerammt!' : `💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
   else if (!wer && imGleis(e.x, e.y, 30)) meldung(`🚂 ${e.name} wurde vom Zug umgerammt!`);
   else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
@@ -3756,6 +3793,7 @@ function neueRunde(auf, karteId, farben) {
   spieler.spieler = true;
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
   rest = RUNDE; zeit = 0; pfiff10 = false; lobbySuche = null;
+  matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null;
   // Erst das Intro, dann 3-2-1-LOS
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;
@@ -5679,7 +5717,7 @@ function welt3D(dt) {
     if (e.tot) e.tauchAnim = 0;
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
     const inEigen = !e.taucht || tauchtVersteckt(e);
-    const versteckt = e.team !== spieler.team && !feindNah && !(e.markiertBis > zeit) && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
+    const versteckt = e.team !== spieler.team && !feindNah && !(e.markiertBis > zeit) && !(todesKam && todesKam.wer === e && spieler.tot) && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
     g.visible = !((e.tot && e.todT <= 0) || istIch || versteckt);
     let gx = 1, gy = 1, hoch = 0, dreh = 0;
     if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
@@ -5790,8 +5828,17 @@ function welt3D(dt) {
   const zielAuge = p.taucht ? 9 : p.gigaT > 0 ? 26 : AUGE;   // als Gigafisch ganz nah am Boden
   augenHoehe += (zielAuge - augenHoehe) * Math.min(1, dt * 12);
   const fx = Math.cos(p.winkel) * Math.cos(p.pitch), fy = Math.sin(p.pitch), fz = Math.sin(p.winkel) * Math.cos(p.pitch);
+  const tk = todesKam && p.tot && zustand === 'spiel' && !kameraOverride ? todesKam : null;
+  if (!p.tot) todesKam = null;
   if (kameraOverride) {
     kamera.position.set(...kameraOverride.pos); kamera.lookAt(...kameraOverride.ziel);
+  } else if (tk) {   // 🎥 Todes-Kamera: erst kurz hochschauen, dann fliegt die Kamera zum Gegner, der dich erwischt hat
+    const k = tk.wer, kh = hAbs(k) + 28, dx = p.x - k.x, dy = p.y - k.y, d = Math.max(1, Math.hypot(dx, dy));
+    const ziel = [k.x + dx / d * 95 + dy / d * 35, kh + 45, k.y + dy / d * 95 - dx / d * 35];   // schräg vor dem Gegner (aus deiner Richtung)
+    if (!tk.pos) tk.pos = [p.x, hAbs(p) + augenHoehe, p.y];
+    const f = Math.min(1, dt * ((zeit - tk.start) < 0.6 ? 1.5 : 3.5));
+    for (let i = 0; i < 3; i++) tk.pos[i] += (ziel[i] - tk.pos[i]) * f;
+    kamera.position.set(...tk.pos); kamera.lookAt(k.x, kh, k.y);
   } else if (ichSicht) {
     const ph = hAbs(p);
     kamera.position.set(p.x, ph + augenHoehe, p.y);
@@ -5976,10 +6023,22 @@ function hud() {
   ctx.globalAlpha = 1;
   if (leerHinweis > 0) { ctx.fillStyle = '#ff6060'; ctx.font = 'bold 22px system-ui'; ctx.fillText('Tinte leer! Halte SHIFT in deiner Farbe 🌊', cw / 2, ch - 60); }
   if (spieler.tot && zustand === 'spiel') {
-    ctx.fillStyle = '#1b1f3aaa'; ctx.fillRect(0, ch / 2 - 50, cw, 100);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 34px system-ui';
-    ctx.fillText(`💦 Erwischt! Zurück in ${Math.ceil(spieler.wiederT)} …`, cw / 2, ch / 2 + 12);
+    const k = todesKam && todesKam.wer;
+    if (k) {   // 🎥 Wer war's – und womit?
+      const set = SETS[k.set] || {}, y0 = ch - 150;
+      ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(cw / 2 - 260, y0, 520, 110);
+      ctx.fillStyle = TEAMS[k.team].col; ctx.fillRect(cw / 2 - 260, y0, 8, 110);
+      ctx.textAlign = 'center';
+      textMitRand(`😵 Erwischt von ${k.name}`, cw / 2, y0 + 36, 30, TEAMS[k.team].hell);
+      textMitRand(`mit ${set.emoji || ''} ${set.name || 'Farbe'}`, cw / 2, y0 + 70, 22, '#ffffff');
+      ctx.fillStyle = '#ccd'; ctx.font = 'bold 16px system-ui'; ctx.fillText(`Zurück in ${Math.ceil(spieler.wiederT)} …`, cw / 2, y0 + 97);
+    } else {
+      ctx.fillStyle = '#1b1f3aaa'; ctx.fillRect(0, ch / 2 - 50, cw, 100);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 34px system-ui';
+      ctx.fillText(`💦 Erwischt! Zurück in ${Math.ceil(spieler.wiederT)} …`, cw / 2, ch / 2 + 12);
+    }
   }
+  splatUndHighlightHud(cw, ch);
   if (rest <= 10 && zustand === 'spiel') {
     ctx.globalAlpha = 0.5 + (rest % 1) * 0.5; ctx.fillStyle = '#fff'; ctx.font = 'bold 120px system-ui';
     ctx.fillText(Math.ceil(rest), cw / 2, ch / 2 - 60); ctx.globalAlpha = 1;
@@ -6038,6 +6097,29 @@ function hud() {
   }
   vollErwischtHud(cw, ch);
 }
+// 💥 "X erwischt!" groß in der Mitte + ⭐ Highlight-Banner
+function splatUndHighlightHud(cw, ch) {
+  const jetzt = performance.now() / 1000;
+  splatListe = splatListe.filter(s => jetzt - s.start < 1.8);
+  ctx.textAlign = 'center';
+  splatListe.forEach((s, i) => {
+    const k = jetzt - s.start, pop = k < 0.15 ? 0.5 + k / 0.15 * 0.7 : k < 0.3 ? 1.2 - (k - 0.15) / 0.15 * 0.2 : 1;
+    ctx.save(); ctx.globalAlpha = k > 1.4 ? Math.max(0, (1.8 - k) / 0.4) : 1;
+    ctx.translate(cw / 2, ch / 2 + 70 + (splatListe.length - 1 - i) * -38); ctx.scale(pop, pop);
+    textMitRand(s.text, 0, 0, 30, '#ffffff');
+    ctx.restore();
+  });
+  highlightAnzeige = highlightAnzeige.filter(s => jetzt - s.start < 2.8);
+  highlightAnzeige.forEach((s, i) => {
+    const k = jetzt - s.start, rein = Math.min(1, k / 0.3), y = ch * 0.22 + i * 90;
+    ctx.save(); ctx.globalAlpha = k > 2.3 ? Math.max(0, (2.8 - k) / 0.5) : 1;
+    ctx.translate(cw / 2 + (1 - rein) * cw * 0.6, y);
+    ctx.fillStyle = '#1b1f3add'; ctx.fillRect(-280, -38, 560, 76); ctx.fillStyle = '#ffd166'; ctx.fillRect(-280, -38, 560, 5); ctx.fillRect(-280, 33, 560, 5);
+    textMitRand(`${s.emoji} ${s.titel}`, 0, 2, 34 * (1 + Math.sin(k * 12) * 0.03), '#ffd166');
+    textMitRand(s.text, 0, 26, 16, '#ffffff');
+    ctx.restore();
+  });
+}
 // 💀 VOLL ERWISCHT XD: ein ganzes Team ist gleichzeitig erwischt (läuft auf jedem Computer selbst, auch online)
 const VOLL_DAUER = 3;
 let vollErwischt = null, vollWarWeg = [false, false];
@@ -6079,7 +6161,8 @@ function vollErwischtHud(cw, ch) {
   ctx.fillStyle = verlauf; ctx.fillText('VOLL ERWISCHT XD', 0, 22);
   ctx.restore();
   ctx.textAlign = 'center';
-  textMitRand(vollErwischt.eigenes ? '😱 Euer ganzes Team ist weg!' : '😎 Das ganze Gegner-Team ist weg!', cw / 2, ch * 0.4 + 85, 28, '#ffffff');
+  const solo = soloAuslo && performance.now() / 1000 - soloAuslo.start < VOLL_DAUER + 0.5 && soloAuslo.wer.team !== vollErwischt.team ? soloAuslo.wer : null;
+  textMitRand(solo ? `👑 ${solo.spieler ? 'DU hast' : solo.name + ' hat'} ALLE ganz allein erwischt!` : vollErwischt.eigenes ? '😱 Euer ganzes Team ist weg!' : '😎 Das ganze Gegner-Team ist weg!', cw / 2, ch * 0.4 + 85, 28, solo ? '#ffd166' : '#ffffff');
   ctx.restore();
 }
 
@@ -6456,9 +6539,20 @@ function rundenEndeAnzeigen() {
   musikModusSetzen('menu', listenSong('menu'));
   setTimeout(() => ton('kauf'), 500);
   document.getElementById('ende').classList.remove('hidden');
+  highlightsListe();
   const d = endeDaten; if (d) setTimeout(() => { d.bO.style.width = d.wO + '%'; d.bL.style.width = d.wL + '%'; }, 100);
 }
 
+function highlightsListe() {   // ⭐ Match-Highlights unter dem Ergebnis
+  const box = $('highlights'); box.replaceChildren();
+  if (!matchHighlights.length) return;
+  const t = document.createElement('h3'); t.textContent = '⭐ Match-Highlights'; box.append(t);
+  const wichtig = { '👑': 0, '🔥': 1, '😤': 2, '⚡': 3 };
+  [...matchHighlights].sort((a, b) => (wichtig[a.emoji] ?? 9) - (wichtig[b.emoji] ?? 9)).slice(0, 6).forEach(h => {
+    const z = document.createElement('div'); z.className = 'highlight';
+    z.textContent = `${h.emoji} ${h.titel} – ${h.text} (${h.uhr})`; box.append(z);
+  });
+}
 // ================== MENÜ, KONTO & SHOPS ==================
 const $ = id => document.getElementById(id);
 function nurZeigen(id) {
