@@ -2242,16 +2242,28 @@ function baueSchnorchel(team) {
   g.visible = false;
   return g;
 }
-// Tintenform auf trockenem Boden: ein glänzender Klecks mit Kulleraugen (vorne = +x)
+// Tintenform auf trockenem Boden: eine flache, glänzende Pfütze, aus der zwei Augen herausgucken (vorne = +x)
 function baueKlecksForm(team) {
-  const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.15, metalness: 0.1 });
-  const rumpf = kugel(m, 10, 0, 5, 0); rumpf.scale.set(1.15, 0.6, 1); g.add(rumpf);
-  const beule = kugel(m, 5, -3, 9.5, 0); beule.scale.set(1, 0.8, 1); g.add(beule);
-  g.add(kugel(m, 3, -9, 2, 6), kugel(m, 2.5, -8, 2, -7), kugel(m, 2, 9, 1.5, -7));   // kleine Spritzer am Rand
-  const weiss = mat('#ffffff', { roughness: 0.3 }), schwarz = mat('#111111', { roughness: 0.2 });
-  for (const s of [-1, 1]) g.add(kugel(weiss, 2.6, 7, 9, s * 3.6), kugel(schwarz, 1.3, 9.2, 9.3, s * 3.6));
-  const pg = new THREE.CircleGeometry(12, 18); pg.rotateX(-Math.PI / 2);
-  const pfuetze = new THREE.Mesh(pg, mat(TEAMS[team].dunkel)); pfuetze.position.y = 0.6; g.add(pfuetze);
+  const g = new THREE.Group(), m = mat(TEAMS[team].col, { roughness: 0.08, metalness: 0.15 });
+  const flach = (r, x, z, y, mt = m) => { const k = kugel(mt, r, x, y, z); k.scale.set(1, 0.09, 1); g.add(k); return k; };
+  flach(11, 0, 0, 0.6); flach(7, -7, 5, 0.5); flach(6, -6, -6, 0.5); flach(5, 7, -6, 0.5); flach(4, 9, 6, 0.5);   // unregelmäßige Pfütze
+  g.add(kugel(m, 1.6, -15, 0.4, 3, 1, 0.3, 1), kugel(m, 1.1, 13, 0.4, -10, 1, 0.3, 1), kugel(m, 1.3, -4, 0.4, 13, 1, 0.3, 1));   // Spritzer
+  const glanz = flach(3.2, -2, -3, 1.4, mat('#ffffff', { transparent: true, opacity: 0.55, roughness: 0 }));   // Glanzfleck
+  glanz.scale.set(1.6, 0.05, 0.7);
+  // Augen: halb in der Pfütze versunken, mit Lidern zum Blinzeln
+  const augen = new THREE.Group(); g.add(augen);
+  const weiss = mat('#ffffff', { roughness: 0.25 }), schwarz = mat('#111111', { roughness: 0.15 });
+  const lider = [];
+  for (const s of [-1, 1]) {
+    const auge = new THREE.Group(); auge.position.set(4, 1, s * 3.4); augen.add(auge);
+    auge.add(kugel(weiss, 2.7, 0, 0, 0), kugel(schwarz, 1.35, 2.1, 0.7, 0), kugel(weiss, 0.45, 3.1, 1.3, -0.5));
+    const lid = kugel(m, 2.85, 0, 0.2, 0, 1, 1, 1); lid.scale.set(1.05, 0.05, 1.05); lid.position.y = 2.4; auge.add(lid); lider.push(lid);
+  }
+  g.userData = { augen, lider, glanz };
+  // Wellenringe beim Rutschen
+  const rg = new THREE.RingGeometry(10, 11.5, 24); rg.rotateX(-Math.PI / 2);
+  const ringe = [0, 1].map(() => { const r = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: TEAMS[team].hell, transparent: true, opacity: 0 })); r.position.y = 0.8; g.add(r); return r; });
+  g.userData.ringe = ringe;
   g.visible = false;
   return g;
 }
@@ -5268,12 +5280,22 @@ function welt3D(dt) {
     e.koerper.visible = e.tauchAnim < 0.97;
     e.koerper.position.y = -e.tauchAnim * 50;
     e.schnorchel.visible = e.taucht && e.tauchAnim > 0.6 && inEigen;
-    e.klecksForm.visible = e.taucht && e.tauchAnim > 0.6 && !inEigen && !istIch;   // Tintenklecks auf trockenem Boden
+    e.klecksForm.visible = e.taucht && e.tauchAnim > 0.6 && !inEigen && !istIch;   // Pfütze mit Augen auf trockenem Boden
     if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
     if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
-    if (e.klecksForm.visible) {   // wabbelt beim Rutschen
-      const w = Math.sin(zeit * (v > 10 ? 14 : 5) + e.nr) * (v > 10 ? 0.12 : 0.05);
-      e.klecksForm.scale.set(1 + w, 1 - w, 1 + w);
+    if (e.klecksForm.visible) {   // Pfütze: Augen gucken heraus, blinzeln, Wellen beim Rutschen
+      const u = e.klecksForm.userData, laeuft = v > 10;
+      const w = Math.sin(zeit * (laeuft ? 12 : 3) + e.nr) * (laeuft ? 0.08 : 0.03);
+      e.klecksForm.scale.set(1 + w + (laeuft ? 0.12 : 0), 1, 1 - w);   // beim Rutschen etwas länger gezogen
+      u.augen.position.y = Math.max(0, Math.sin(zeit * 2 + e.nr)) * 0.8 - (laeuft ? 0.6 : 0);
+      u.augen.rotation.y = laeuft ? 0 : Math.sin(zeit * 0.9 + e.nr) * 0.5;   // schaut sich um
+      const blinzeln = ((zeit + e.nr * 0.7) % 3.2) < 0.14;
+      for (const l of u.lider) { l.scale.y = blinzeln ? 1 : 0.05; l.position.y = blinzeln ? 0 : 2.4; }
+      u.glanz.position.x = -2 + Math.sin(zeit * 1.5 + e.nr) * 1.5;
+      u.ringe.forEach((r, i) => {
+        const f = ((zeit * (laeuft ? 1.6 : 0.6) + i * 0.5 + e.nr * 0.3) % 1);
+        r.scale.setScalar(0.9 + f * 0.9); r.material.opacity = (1 - f) * (laeuft ? 0.55 : 0.25);
+      });
     }
     if (zustand === 'feier') g.visible = !!e.emote;   // bei der Siegerehrung nur die auf der Bühne
     if (g.visible && e.koerper.visible) {
