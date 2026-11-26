@@ -1490,30 +1490,6 @@ for (const id in ARENEN) for (let t = 0; t < 2; t++) {
     const r2_ = new THREE.Mesh(rg2, basisRingMat[t]); r2_.position.set(BASIS[t].x, 40.7, BASIS[t].y); r2_.userData.spawnRing = i; kartenGruppe[id].add(r2_);
   }
 }
-// 📦 START-BOXEN: in jeder Arena 4 Boxen pro Team auf der Startplattform. Man sitzt drin, sucht den Landeplatz aus und wird rausgeschossen!
-const startBoxen = {};   // startBoxen[arena][team][nr] = { g, deckel, offen }
-function baueStartBox(t) {
-  const g = new THREE.Group(), tm = teamMat[t], dunkel = mat('#23263d', { roughness: 0.5, metalness: 0.4 }), metall = mat('#c9cfe6', { roughness: 0.3, metalness: 0.8 });
-  g.add(klotz(tm, 36, 44, 36, 0, 22, 0));                                                     // die Box (in Teamfarbe)
-  for (const [x, z] of [[-18, -18], [18, -18], [-18, 18], [18, 18]]) g.add(klotz(dunkel, 4, 46, 4, x, 23, z));   // Kanten
-  for (const y of [2, 44]) g.add(klotz(dunkel, 40, 3, 40, 0, y, 0));
-  g.add(klotz(metall, 0.8, 30, 22, 18.3, 22, 0));                                            // Klappe vorne
-  const pfeil = new THREE.Mesh(new THREE.ConeGeometry(6, 10, 3), mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.5 }));
-  pfeil.rotation.z = -Math.PI / 2; pfeil.position.set(18.9, 26, 0); pfeil.scale.z = 0.2; g.add(pfeil);   // weißer Pfeil: da geht's lang
-  for (const z of [-12, 12]) g.add(kugel(mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 1 }), 1.6, 18.6, 40, z));   // Lämpchen
-  for (const z of [-19, 19]) g.add(klotz(mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.3 }), 26, 3, 0.6, 0, 30, z));   // Streifen an der Seite
-  const deckel = new THREE.Group(); deckel.position.set(-18, 46, 0); g.add(deckel);           // Deckel mit Scharnier hinten
-  deckel.add(klotz(tm, 38, 3, 38, 18, 1.5, 0), klotz(dunkel, 10, 1.5, 10, 18, 3.5, 0), ringY(metall, 4, 0.8, 18, 4.5, 0));
-  return { g, deckel, offen: 0 };
-}
-function startBoxenBauen() { for (const id in ARENEN) {
-  if (ARENEN[id].nurKabeljau) continue;
-  startBoxen[id] = [0, 1].map(t => [0, 1, 2, 3].map(nr => {
-    const b = baueStartBox(t);
-    b.g.position.set(BASIS[t].x - (t ? -8 : 8), 40, H / 2 + (nr - 1.5) * 70); b.g.rotation.y = t ? Math.PI : 0;
-    kartenGruppe[id].add(b.g); return b;
-  }));
-} }
 // Lobby: großes Schild an der Wand
 (function lobbySchild() {
   const c = leinwand(512, 128), x = c.getContext('2d');
@@ -1574,7 +1550,6 @@ const MAT_WEISS = mat('#ffffff'), MAT_SCHWARZ = mat('#1b1f3a'), MAT_GRAU = mat('
 const MAT_CREME = mat('#f3e7cf'), MAT_GLOW = mat('#6fe3ff', { emissive: '#6fe3ff' });
 const VULKAN_GLUT = mat('#ff6a00', { emissive: '#ff4500', emissiveIntensity: 1 });   // glühende Lava (leuchtet stärker beim Ausbruch)
 const teamMat = TEAMS.map(t => mat(t.col, { roughness: 0.35 }));
-startBoxenBauen();   // 📦 (braucht die Teamfarben)
 let zugWarnFlaeche = null, zugMesh = null;   // 🚉 Bahnhof: rote Warnfläche auf dem Gleis und der Zug
 const SIGNAL_MATS = [0, 1].map(() => mat('#5a1010', { emissive: '#ff2020', emissiveIntensity: 0 }));
 // Farben fürs nächste Match setzen
@@ -3618,7 +3593,7 @@ function schnappschussBauen() {
   return {
     t: 's', r: r1(rest), kw: mp.karteWahl, fw: mp.farbWahl,
     e: kleckse.map(e => [r0(e.x), r0(e.y), r1(e.z), r2(e.winkel), r2(e.pitch), r0(e.hp), r0(e.tinte), r2(e.ulti), r0(e.vx), r0(e.vy),
-      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0) | (e.markiertBis > zeit ? 4096 : 0) | (e.saugerT > 0 ? 8192 : 0) | (e.sprungBlob ? 16384 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
+      (e.tot ? 1 : 0) | (e.taucht ? 2 : 0) | (e.rollt ? 4 : 0) | (e.laden ? 8 : 0) | (e.schwungArt === 'hoch' ? 16 : 0) | (e.panzerT > 0 ? 64 : 0) | (e.gigaT > 0 ? 128 : 0) | (e.trifT > 0 ? 256 : 0) | (e.lingT > 0 ? 512 : 0) | (e.schirmAuf ? 1024 : 0) | (e.wirbelBis > zeit ? 2048 : 0) | (e.markiertBis > zeit ? 4096 : 0) | (e.saugerT > 0 ? 8192 : 0) | (e.sprungBlob ? 16384 : 0) | (e.inBox ? 32768 : 0), r2(e.ladung), r1(e.schild), r1(e.laserT),
       r2(e.schwingT), e.schwingSeite, r1(e.rueck), r2(Math.min(9, e.letzterTreffer)), r1(e.wiederT), e.lebenNr || 0, e.ko, e.tode, e.punkte, r0(e.panzer), r1(e.werferT), r1(e.kugelT), e.werferSchuss, r0(e.kugelKraft || 0), e.trifRest || 0, r0(e.saugMenge || 0)]),
     s: schuesse.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h), r0(o.vx), r0(o.vy), r0(o.vz), o.team, o.w.pfeil ? -1 : o.w.gross ? r1(o.w.gross) : 0]),
     b: bomben.map(o => [objId(o), r0(o.x), r0(o.y), r0(o.h || 0), o.team, BOMBEN_ARTEN.indexOf(o.art === 'tracker' ? 'tracker' : o.ulti ? 'rakete' : o.art)]),
@@ -3689,7 +3664,7 @@ function mpSchnappschuss(d) {
     const tot = !!(fl & 1);
     if (tot && !e.tot) { e.todT = 0.5; e.tauchAnim = 0; e.z = 0; e.taucht = false; }
     Object.assign(e, { tot, hp, tinte, schild, laserT, ladung, laden: !!(fl & 8), rollt: !!(fl & 4), schirmAuf: !!(fl & 1024), wirbelBis: fl & 2048 ? zeit + 0.15 : 0, schwingT, schwingSeite,
-      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0, ...(e === spieler && !replay ? {} : { sprungBlob: !!(fl & 16384) }),
+      letzterTreffer: lt, wiederT, ko, tode, punkte, panzer: panzer || 0, werferT: werferT || 0, kugelT: kugelT || 0, werferSchuss: werferSchuss || 0, panzerT: fl & 64 ? Math.max(e.panzerT || 0, 0.5) : 0, gigaT: fl & 128 ? Math.max(e.gigaT || 0, 0.5) : 0, trifT: fl & 256 ? Math.max(e.trifT || 0, 0.5) : 0, lingT: fl & 512 ? Math.max(e.lingT || 0, 0.2) : 0, trifRest: trifRest || 0, markiertBis: fl & 4096 ? zeit + 0.3 : 0, saugerT: fl & 8192 ? Math.max(e.saugerT || 0, 0.5) : 0, saugMenge: saugMenge || 0, ...(e === spieler && !replay ? {} : { sprungBlob: !!(fl & 16384), inBox: fl & 32768 ? (e.inBox || { x: e.x, y: e.y, t: 9, zx: e.x, zy: e.y }) : null }),
       schwungArt: typVon(e.waffe) === 'roller' ? (fl & 16 ? 'hoch' : 'seite') : undefined });
     e.rueck = Math.max(e.rueck, rueck);
     const neuGeboren = lebenNr !== (e.lebenNr || 0);
@@ -5355,14 +5330,16 @@ function sprungStarten(e, z) {
 }
 // ---------- 📦 Start-Box: Landeplatz aussuchen und rausschießen ----------
 const BOX_MIN = 110, BOX_MAX = 560, BOX_ZEIT = 5;   // so nah / weit kann man fliegen, so lange darf man aussuchen
-function boxErlaubt() { return modus === 'match' && spielArt !== 'kabeljau' && !!startBoxen[karte]; }
+const BOX_SCHWEBE = 70;   // so hoch über dem Boden schwebt die Stahlbox (da stehst du drauf)
+function boxErlaubt() { return modus === 'match' && spielArt !== 'kabeljau' && !!ARENEN[karte] && !ARENEN[karte].nurKabeljau; }
 function lokalGesteuert(e) { return e.spieler || (!istGast() && !e.mensch && !e.puppe && !e.fisch); }
 function boxRein(e, start = false) {
   if (!boxErlaubt()) return false;
   const p = spawnPunkt(e);
   e.x = p.x; e.y = p.y; e.z = 0; e.vx = e.vy = e.vz = 0; e.superSprung = null;
   e.winkel = e.team ? Math.PI : 0; e.pitch = -0.15;
-  e.inBox = { x: p.x, y: p.y, t: BOX_ZEIT, alter: 0, zx: p.x, zy: p.y, klicks: mausKlicks, start, warte: 0.35 + Math.random() * 1.2 };
+  e.inBox = { x: p.x, y: p.y, t: BOX_ZEIT, alter: 0, ankunft: 0.7, zx: p.x, zy: p.y, klicks: mausKlicks, start, warte: 0.35 + Math.random() * 1.2 };
+  e.z = BOX_SCHWEBE + 220;
   if (!e.spieler) {   // 🤖 Bots: irgendwo nach vorne Richtung Mitte
     const a = (e.team ? Math.PI : 0) + (Math.random() - 0.5) * 1.3, d = 260 + Math.random() * 280;
     e.inBox.zx = p.x + Math.cos(a) * d; e.inBox.zy = p.y + Math.sin(a) * d; boxZielPruefen(e);
@@ -5391,23 +5368,24 @@ function boxZielen(e) {   // Maus links/rechts = Richtung, hoch/runter = wie wei
 }
 function boxSteuern(e, dt) {
   const B = e.inBox;
-  e.x = B.x; e.y = B.y; e.z = 0; e.vx = e.vy = e.vz = 0;
+  B.ankunft = Math.max(0, B.ankunft - dt);   // 🛸 die Stahlbox fliegt mit dir ein …
+  const k = B.ankunft / 0.7;
+  e.x = B.x; e.y = B.y; e.z = BOX_SCHWEBE + Math.sin(zeit * 2.2 + e.nr) * 3 + k * k * 220; e.vx = e.vy = e.vz = 0;
   e.schiesst = false; e.willTauchen = false; e.schirmHalten = false; e.laden = false;
   if (e.spieler) boxZielen(e);
   if (startCountdown > 0) return;   // erst nach dem Countdown geht's los
   B.t -= dt; B.warte -= dt; B.alter += dt;
-  const klick = e.spieler && (mausKlicks > B.klicks || tasten.Space) && B.alter > 0.3;
+  const klick = e.spieler && (mausKlicks > B.klicks || tasten.Space) && B.alter > 0.3 && B.ankunft <= 0;
   if (B.t <= 0 || klick || (!e.spieler && B.warte <= 0)) boxLos(e);
 }
 function boxLos(e) {
   const B = e.inBox; if (!B) return;
   e.inBox = null;
   const d = Math.hypot(B.zx - B.x, B.zy - B.y);
-  e.superSprung = { sx: B.x, sy: B.y, h0: 40 + 30, zx: B.zx, zy: B.zy, h1: bodenHoehe(B.zx, B.zy), t: 0, dauer: 0.75 + d / 1300, vorT: 0, box: true };
+  const h0 = bodenHoehe(B.x, B.y) + e.z;
+  e.superSprung = { sx: B.x, sy: B.y, h0, zx: B.zx, zy: B.zy, h1: bodenHoehe(B.zx, B.zy), t: 0, dauer: 0.75 + d / 1300, vorT: 0, box: true };
   e.sprungBlob = false; e.spawnT = 0;
-  const bx = startBoxen[karte] && startBoxen[karte][e.team] && startBoxen[karte][e.team][Math.min(3, e.nr | 0)];
-  if (bx) bx.offen = 1;   // Deckel springt auf
-  spritzer(B.x, B.y, 90, e.team, 20, 260);
+  spritzer(B.x, B.y, h0, e.team, 20, 260);
   if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('sprung');
 }
 let boxMarker = null;
@@ -5431,17 +5409,67 @@ function boxMarkerZeigen() {   // Landeplatz-Anzeige (nur für dich): Ring, Lich
   boxMarker.position.set(B.zx, h1 + 1.5, B.zy); ud.ring.scale.setScalar(1 + Math.sin(zeit * 6) * 0.12);
   ud.punkte.forEach((k, i) => {
     const f = (i + 1) / 15 + ((zeit * 0.6) % (1 / 15));
-    k.position.set(B.x + (B.zx - B.x) * f, 70 + (h1 - 70) * f + Math.sin(f * Math.PI) * SPRUNG_HOEHE * 0.8, B.y + (B.zy - B.y) * f);
+    const h0 = bodenHoehe(B.x, B.y) + BOX_SCHWEBE;
+    k.position.set(B.x + (B.zx - B.x) * f, h0 + (h1 - h0) * f + Math.sin(f * Math.PI) * SPRUNG_HOEHE * 0.8, B.y + (B.zy - B.y) * f);
   });
 }
-function boxDeckelAnimieren(dt) {
-  if (zustand === 'feier' || zustand === 'ende' || zustand === 'replay') for (const e of kleckse) if (e.inBox) e.inBox = null;   // Runde vorbei: alle raus
-  const liste = startBoxen[karte]; if (!liste) return;
-  for (const team of liste) for (const b of team) {
-    b.offen = Math.max(0, b.offen - dt * 0.6);
-    const ziel = b.offen > 0.3 ? -1.9 : 0;
-    b.deckel.rotation.z += (ziel - b.deckel.rotation.z) * Math.min(1, dt * (ziel ? 18 : 4));
+// 🛸 Die fliegende Stahlbox: schwebt unter dir, solange du drauf stehst – danach fliegt sie weg
+const stahlBoxen = new Map();   // Klecks -> { g, weg }
+function baueStahlBox(team) {
+  const g = new THREE.Group(), ud = g.userData;
+  const stahl = mat('#9aa3b8', { metalness: 0.85, roughness: 0.3 }), dunkel = mat('#3a3f55', { metalness: 0.7, roughness: 0.4 });
+  const licht = mat(TEAMS[team].col, { emissive: TEAMS[team].col, emissiveIntensity: 1.2 });
+  g.add(klotz(stahl, 30, 16, 30, 0, -8, 0), klotz(dunkel, 32, 1.6, 32, 0, -0.8, 0));         // Stahlkörper + Trittplatte oben
+  for (let i = -3; i <= 3; i++) g.add(klotz(mat('#2b2f40'), 0.6, 0.4, 28, i * 4, 0.1, 0));    // Riffelblech
+  for (const [x, z] of [[-15, -15], [15, -15], [-15, 15], [15, 15]]) {
+    g.add(klotz(dunkel, 3, 17, 3, x, -8, z));                                              // Kanten
+    for (const y of [-3, -13]) g.add(kugel(MAT_METALL, 0.7, x * 1.03, y, z * 1.03));      // Nieten
   }
+  for (let i = 0; i < 8; i++) {                                                            // gelb-schwarze Warnstreifen
+    const m = mat(i % 2 ? '#1b1b22' : '#ffd21f');
+    g.add(klotz(m, 3.75, 3, 0.5, -13 + i * 3.75, -10, 15.3), klotz(m, 3.75, 3, 0.5, -13 + i * 3.75, -10, -15.3));
+  }
+  g.add(ringY(licht, 15.8, 0.7, 0, -4, 0));                                              // Leuchtband in Teamfarbe
+  ud.duesen = [];
+  for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) {                    // 4 Düsen unten
+    g.add(zylinder(dunkel, 3, 4, 4, x, -18, z));
+    const f = new THREE.Mesh(new THREE.ConeGeometry(3, 12, 10), new THREE.MeshBasicMaterial({ color: '#6fe3ff', transparent: true, opacity: 0.8, depthWrite: false }));
+    f.rotation.x = Math.PI; f.position.set(x, -26, z); g.add(f); ud.duesen.push(f);
+  }
+  const antenne = zylinder(MAT_GRAU, 0.4, 0.4, 8, -12, -12 + 4, -12); g.add(antenne);
+  ud.lampe = kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 1, 14, -2, 14); g.add(ud.lampe);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(g);
+  return g;
+}
+function stahlBoxenZeigen(dt) {
+  if (zustand === 'feier' || zustand === 'ende') for (const e of kleckse) if (e.inBox) e.inBox = null;   // Runde vorbei: alle runter
+  for (const e of kleckse) {
+    if (e.fisch) continue;
+    let st = stahlBoxen.get(e);
+    if (e.inBox && !e.tot) {
+      if (!st) { st = { g: baueStahlBox(e.team), weg: null }; stahlBoxen.set(e, st); }
+      st.weg = null; st.an = true;
+      st.g.visible = true; st.g.position.set(e.x, hAbs(e) - 0.5, e.y); st.g.rotation.set(0, -e.winkel, 0);
+    } else if (st && st.an) {   // 🚀 gerade abgeschossen: die Box fliegt weg
+      st.an = false; const a = (e.team ? 0 : Math.PI) + (Math.random() - 0.5) * 1.2;
+      st.weg = { t: 0, x: st.g.position.x, h: st.g.position.y, y: st.g.position.z, dx: Math.cos(a), dy: Math.sin(a) };
+    }
+    if (st && st.weg) {
+      const w = st.weg; w.t += dt;
+      const k = w.t;
+      st.g.position.set(w.x + w.dx * 260 * k * k, w.h + 140 * k + 200 * k * k, w.y + w.dy * 260 * k * k);
+      st.g.rotation.z = Math.min(0.6, k * 0.8); st.g.rotation.y += dt * 2;
+      st.g.scale.setScalar(Math.max(0.01, 1 - Math.max(0, k - 1.2) * 1.5));
+      if (k > 1.9) { st.weg = null; st.g.visible = false; st.g.scale.setScalar(1); st.g.rotation.z = 0; }
+    }
+    if (st && st.g.visible) {
+      const ud = st.g.userData, stark = st.weg ? 1.6 : 1;
+      ud.duesen.forEach((f, i) => { f.scale.set(1, stark * (0.8 + Math.sin(zeit * 40 + i * 2) * 0.2 + Math.random() * 0.15), 1); });
+      ud.lampe.material.emissiveIntensity = Math.sin(zeit * 6) > 0 ? 1.5 : 0.1;
+    }
+  }
+  for (const [e, st] of stahlBoxen) if (!kleckse.includes(e)) { wegUndEntsorgen(st.g); stahlBoxen.delete(e); }   // alte Runde: aufräumen
 }
 function sprungFliegen(e, dt) {
   const s = e.superSprung;
@@ -6398,7 +6426,7 @@ let sturmVorher = false, zoomStufe = 0;
 function fovSetzen(f) { if (Math.abs(kamera.fov - f) > 0.05) { kamera.fov = f; kamera.updateProjectionMatrix(); } }
 function welt3D(dt) {
   bildZaehler++;
-  boxMarkerZeigen(); boxDeckelAnimieren(dt);
+  boxMarkerZeigen(); stahlBoxenZeigen(dt);
   if (farbeGeaendert && bildZaehler % 3 === 0) { bodenAktualisieren(); farbeGeaendert = false; }   // nur jedes 3. Bild – spart viel Arbeit für die Grafikkarte
   for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
@@ -6444,7 +6472,7 @@ function welt3D(dt) {
     const feindNah = e.team !== spieler.team && Math.hypot(e.x - spieler.x, e.y - spieler.y) < 90;
     const inEigen = !e.taucht || tauchtVersteckt(e);
     const versteckt = zustand !== 'replay' && e.team !== spieler.team && !feindNah && !(e.markiertBis > zeit) && !(todesKam && todesKam.wer === e && spieler.tot) && ((e.taucht && inEigen && e.tauchAnim > 0.9) || imGebuesch(e));
-    g.visible = !((e.tot && e.todT <= 0) || istIch || versteckt || e.inBox);
+    g.visible = !((e.tot && e.todT <= 0) || (istIch && !e.inBox) || versteckt);
     let gx = 1, gy = 1, hoch = 0, dreh = 0;
     if (e.tot) {                                   // Erwischt: dreht sich, fliegt hoch und schrumpft
       const f = 1 - e.todT / 0.5;
@@ -6567,7 +6595,7 @@ function welt3D(dt) {
     kamera.position.set(...tk.pos); kamera.lookAt(k.x, kh, k.y);
   } else if (p.inBox && !p.tot) {   // 📦 Kamera hinter der Start-Box, schaut zum Landeplatz
     const B = p.inBox, c = Math.cos(p.winkel), s2 = Math.sin(p.winkel);
-    kamera.position.set(B.x - c * 75, 40 + 105, B.y - s2 * 75);
+    kamera.position.set(B.x - c * 85, hAbs(p) + 62, B.y - s2 * 85);
     kamera.lookAt(B.x + (B.zx - B.x) * 0.75, bodenHoehe(B.zx, B.zy) + 10, B.y + (B.zy - B.y) * 0.75);
   } else if (ichSicht && !p.rettung) {
     const ph = hAbs(p);
@@ -6661,7 +6689,7 @@ function hud() {
     textMitRand('🌪️ Saug Gegner-Tinte & Bomben ein!', kx, ky - kr - 16, 22, '#ffd166');
     textMitRand(`Klick = 🔺 Pyramide werfen (${Math.ceil(spieler.saugerT)} s)`, kx, ky + kr + 30, 20, '#ffffff');
   }
-  if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand(spieler.superSprung.box ? '📦 RAUS AUS DER BOX!' : '🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
+  if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand(spieler.superSprung.box ? '🚀 ABGESCHOSSEN!' : '🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
   rufBlasenUpdate();
   if (rufMenu) rufMenuHud(cw, ch);
   if (tuffAnzeige && performance.now() / 1000 - tuffAnzeige.start < 0.8 && spieler.kugelT > 0) {   // 💪 jemand pusht deine Tuffkugel
@@ -6801,7 +6829,7 @@ function hud() {
   }
   if (spieler && spieler.inBox && !spieler.tot && zustand === 'spiel') {   // 📦 Hinweis in der Start-Box
     ctx.textAlign = 'center';
-    textMitRand('📦 START-BOX', cw / 2, ch * 0.16, 30, '#ffd166');
+    textMitRand('🛸 STAHLBOX', cw / 2, ch * 0.16, 30, '#ffd166');
     textMitRand('🖱️ Maus = Landeplatz aussuchen (hoch = weiter weg)', cw / 2, ch * 0.16 + 32, 18, '#ffffff');
     textMitRand(startCountdown > 0 ? '⏳ Gleich geht\'s los …' : `🚀 Klick oder Leertaste = LOS!  (automatisch in ${Math.ceil(spieler.inBox.t)} s)`, cw / 2, ch * 0.16 + 58, 18, '#ffffff');
   }
