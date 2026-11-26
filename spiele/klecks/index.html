@@ -5338,7 +5338,7 @@ function boxRein(e, start = false) {
   const p = spawnPunkt(e);
   e.x = p.x; e.y = p.y; e.z = 0; e.vx = e.vy = e.vz = 0; e.superSprung = null;
   e.winkel = e.team ? Math.PI : 0; e.pitch = -0.15;
-  e.inBox = { x: p.x, y: p.y, t: BOX_ZEIT, alter: 0, ankunft: 0.7, zx: p.x, zy: p.y, klicks: mausKlicks, start, warte: 0.35 + Math.random() * 1.2 };
+  e.inBox = { x: p.x, y: p.y, t: BOX_ZEIT, alter: 0, ankunft: 0.7, raus: 0.6, zx: p.x, zy: p.y, klicks: mausKlicks, start, warte: 0.35 + Math.random() * 1.2 };
   e.z = BOX_SCHWEBE + 220;
   if (!e.spieler) {   // 🤖 Bots: irgendwo nach vorne Richtung Mitte
     const a = (e.team ? Math.PI : 0) + (Math.random() - 0.5) * 1.3, d = 260 + Math.random() * 280;
@@ -5369,13 +5369,18 @@ function boxZielen(e) {   // Maus links/rechts = Richtung, hoch/runter = wie wei
 function boxSteuern(e, dt) {
   const B = e.inBox;
   B.ankunft = Math.max(0, B.ankunft - dt);   // 🛸 die Stahlbox fliegt mit dir ein …
+  if (B.ankunft <= 0 && B.raus > 0) {        // … die Klappe geht auf und du kommst raus!
+    if (B.raus === 0.6 && (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500)) ton('plopp');
+    B.raus = Math.max(0, B.raus - dt);
+  }
   const k = B.ankunft / 0.7;
   e.x = B.x; e.y = B.y; e.z = BOX_SCHWEBE + Math.sin(zeit * 2.2 + e.nr) * 3 + k * k * 220; e.vx = e.vy = e.vz = 0;
   e.schiesst = false; e.willTauchen = false; e.schirmHalten = false; e.laden = false;
   if (e.spieler) boxZielen(e);
   if (startCountdown > 0) return;   // erst nach dem Countdown geht's los
   B.t -= dt; B.warte -= dt; B.alter += dt;
-  const klick = e.spieler && (mausKlicks > B.klicks || tasten.Space) && B.alter > 0.3 && B.ankunft <= 0;
+  const klick = e.spieler && (mausKlicks > B.klicks || tasten.Space) && B.alter > 0.3 && B.ankunft <= 0 && !(B.raus > 0);
+  if (B.ankunft > 0 || B.raus > 0) return;
   if (B.t <= 0 || klick || (!e.spieler && B.warte <= 0)) boxLos(e);
 }
 function boxLos(e) {
@@ -5388,8 +5393,28 @@ function boxLos(e) {
   e.winkel = Math.atan2(B.zy - B.y, B.zx - B.x); e.pitch = -Math.atan2(h0 - bodenHoehe(B.zx, B.zy), Math.max(1, d)) * 0.8;   // schaut zum Landeplatz runter
   spritzer(B.x, B.y, h0, e.team, 20, 260);
   if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('sprung');
+  if (e.spieler) ton('wind');   // 💨
 }
-let boxMarker = null;
+// Pose: aus der Box rauskommen und im Flug nach vorne lehnen (wie ein Superheld)
+function boxPose(e, dt) {
+  const g = e.gruppe, ud = e.koerper.userData, B = e.inBox;
+  if (B && B.ankunft > 0) { g.visible = false; return; }   // noch drin in der Box
+  if (B && B.raus > 0) {   // kommt aus der Klappe hoch und wird groß
+    const k = 1 - B.raus / 0.6, s2 = Math.min(1, 0.15 + k * 1.1) + Math.sin(k * Math.PI) * 0.12;
+    g.scale.set(s2, s2, s2); g.position.y -= (1 - k) * 16;
+    for (const a of ud.arme) a.schulter.rotation.z = Math.PI * 0.9 * (1 - k);   // Arme hoch beim Rausspringen
+  }
+  const fl = e.superSprung && e.superSprung.box ? e.superSprung : null;
+  e.boxLehne = (e.boxLehne || 0) + ((fl ? 1 : 0) - (e.boxLehne || 0)) * Math.min(1, dt * (fl ? 14 : 8));
+  const L = e.boxLehne; if (L < 0.01) return;
+  const a = -1.25 * L;   // Kopf und Körper nach vorne
+  e.koerper.rotation.z = a; e.koerper.position.x = 20 * Math.sin(a); e.koerper.position.y += 20 - 20 * Math.cos(a);
+  ud.arme[0].schulter.rotation.z = 2.9 * L; ud.arme[1].schulter.rotation.z = 0.3 * L;   // ein Arm nach vorne, einer am Körper
+  ud.arme.forEach(x => { x.ellbogen.rotation.z = 0; });
+  ud.beine.forEach((b, i) => { b.huefte.rotation.z = (i ? -0.15 : 0.1) * L; b.knie.rotation.z = -0.15 * L; });
+  if (ud.kopf) ud.kopf.rotation.z = 0.6 * L;   // Kopf schaut nach vorne zum Ziel
+}
+let boxMarker = null, windStufe = 0;
 function boxMarkerZeigen() {   // Landeplatz-Anzeige (nur für dich): Ring, Lichtsäule und Flugbahn aus Punkten
   if (!boxMarker) {
     boxMarker = new THREE.Group(); scene.add(boxMarker);
@@ -5416,30 +5441,62 @@ function boxMarkerZeigen() {   // Landeplatz-Anzeige (nur für dich): Ring, Lich
 }
 // 🛸 Die fliegende Stahlbox: schwebt unter dir, solange du drauf stehst – danach fliegt sie weg
 const stahlBoxen = new Map();   // Klecks -> { g, weg }
-function baueStahlBox(team) {   // kleiner Stahlwürfel (20 × 20 × 20), oben eine Trittplatte, unten 4 Düsen
-  const g = new THREE.Group(), ud = g.userData;
+function baueStahlBox(team) {   // kleiner Stahlwürfel (20 × 20 × 20) mit Klappe oben, Düsen unten und vielen Details
+  const g = new THREE.Group(), ud = g.userData, T = TEAMS[team];
   const stahl = mat('#c9d1e0', { metalness: 0.45, roughness: 0.35 }), dunkel = mat('#5a6078', { metalness: 0.4, roughness: 0.45 });
-  const licht = mat(TEAMS[team].col, { emissive: TEAMS[team].col, emissiveIntensity: 1.2 });
-  g.add(klotz(stahl, 20, 20, 20, 0, -10, 0), klotz(dunkel, 21, 1.4, 21, 0, -0.7, 0));        // Würfel + Trittplatte
-  for (let i = -2; i <= 2; i++) g.add(klotz(mat('#2b2f40'), 0.6, 0.4, 19, i * 4, 0.1, 0));    // Riffelblech
+  const platte = mat('#aab3c6', { metalness: 0.5, roughness: 0.4 }), gummi = mat('#22242e', { roughness: 0.9 });
+  const licht = mat(T.col, { emissive: T.col, emissiveIntensity: 1.2 }), schwarz = mat('#1b1b22');
+  g.add(klotz(stahl, 20, 20, 20, 0, -10, 0));
+  // Kanten und Gummi-Ecken
   for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) {
-    g.add(klotz(dunkel, 2.4, 21, 2.4, x, -10, z));                                        // Kanten
-    for (const y of [-4, -16]) g.add(kugel(MAT_METALL, 0.6, x * 1.03, y, z * 1.03));      // Nieten
+    g.add(klotz(dunkel, 2.4, 21, 2.4, x, -10, z));
+    for (const y of [-0.8, -19.2]) g.add(klotz(gummi, 3.4, 2.4, 3.4, x, y, z));
+    g.add(kugel(licht, 0.55, x * 1.12, -10, z * 1.12));                                  // Lämpchen an jeder Kante
   }
-  for (let i = 0; i < 5; i++) {                                                           // gelb-schwarze Warnstreifen
-    const m = mat(i % 2 ? '#1b1b22' : '#ffd21f');
-    for (const z of [-10.3, 10.3]) g.add(klotz(m, 3.6, 2.6, 0.5, -7.2 + i * 3.6, -15, z));
-    for (const x of [-10.3, 10.3]) g.add(klotz(m, 0.5, 2.6, 3.6, x, -15, -7.2 + i * 3.6));
+  for (const y of [-0.6, -19.4]) for (const [w, d, x, z] of [[20, 1.6, 0, 10], [20, 1.6, 0, -10], [1.6, 20, 10, 0], [1.6, 20, -10, 0]]) g.add(klotz(dunkel, w, 1.4, d, x, y, z));
+  // Seitenplatten mit Schrauben (alle 4 Seiten)
+  for (let sd = 0; sd < 4; sd++) {
+    const seite = new THREE.Group(); seite.rotation.y = sd * Math.PI / 2; g.add(seite);
+    seite.add(klotz(platte, 0.6, 9, 13, 10.2, -8, 0));
+    for (const [y, z] of [[-4, -5.5], [-4, 5.5], [-12, -5.5], [-12, 5.5]]) seite.add(kugel(MAT_METALL, 0.45, 10.6, y, z));
+    for (let i = 0; i < 5; i++) { const m = i % 2 ? schwarz : mat('#ffd21f'); seite.add(klotz(m, 0.5, 2.4, 3.2, 10.3, -16, -6.4 + i * 3.2)); }   // Warnstreifen
+    if (sd === 0) {   // vorne: Wappen mit Farbtropfen + Bildschirm
+      seite.add(zylinderX(mat('#ffffff'), 3.3, 3.3, 0.4, 10.6, -8, 0), zylinderX(licht, 2.6, 2.6, 0.5, 10.7, -8, 0));
+      seite.add(kugel(mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.4 }), 0.9, 11, -7.6, 0.6, 0.5, 1.2, 1));
+      ud.bildschirm = klotz(mat('#5be37d', { emissive: '#5be37d', emissiveIntensity: 1 }), 0.3, 1.4, 5, 10.6, -2.6, 0); seite.add(ud.bildschirm);
+    } else if (sd === 2) {   // hinten: Lüftungsgitter
+      for (let i = 0; i < 4; i++) seite.add(klotz(schwarz, 0.4, 0.8, 10, 10.5, -4.5 - i * 2, 0));
+    } else {               // Seiten: Haltegriff
+      seite.add(zylinderZ(MAT_METALL, 0.45, 0.45, 9, 11.8, -6, 0), zylinderX(MAT_METALL, 0.45, 0.45, 2, 11, -6, -4.5), zylinderX(MAT_METALL, 0.45, 0.45, 2, 11, -6, 4.5));
+    }
   }
-  g.add(ringY(licht, 10.6, 0.6, 0, -6, 0));                                              // Leuchtband in Teamfarbe
+  g.add(ringY(licht, 10.75, 0.45, 0, -13.2, 0));                                         // Leuchtband in Teamfarbe
+  // oben: Loch mit Leuchten und zwei Klappen
+  g.add(klotz(schwarz, 15, 0.3, 15, 0, 0.1, 0), klotz(mat(T.col, { emissive: T.col, emissiveIntensity: 0.6 }), 11, 0.2, 11, 0, 0.3, 0));
+  ud.klappen = [];
+  for (const sx of [-1, 1]) {
+    const k = new THREE.Group(); k.position.set(sx * 7.6, 0.6, 0); g.add(k); ud.klappen.push({ k, sx });
+    k.add(klotz(dunkel, 7.6, 1, 15.6, -sx * 3.8, 0, 0));
+    for (let i = 0; i < 4; i++) k.add(klotz(mat('#2b2f40'), 0.5, 0.3, 14, -sx * (1 + i * 1.8), 0.6, 0));   // Riffelblech
+    k.add(zylinderZ(MAT_METALL, 0.6, 0.6, 15.6, 0, 0, 0));                                 // Scharnier
+    k.add(klotz(mat('#ffd21f'), 0.6, 0.4, 3, -sx * 6.8, 0.6, 0));                         // Griff
+  }
+  // unten: 4 Düsen mit Ringen, glühendem Kern und doppelter Flamme
   ud.duesen = [];
-  for (const [x, z] of [[-5.5, -5.5], [5.5, -5.5], [-5.5, 5.5], [5.5, 5.5]]) {            // 4 Düsen unten
-    g.add(zylinder(dunkel, 2.2, 3, 3, x, -21.5, z));
-    const f = new THREE.Mesh(new THREE.ConeGeometry(2.4, 10, 10), new THREE.MeshBasicMaterial({ color: '#6fe3ff', transparent: true, opacity: 0.8, depthWrite: false }));
-    f.rotation.x = Math.PI; f.position.set(x, -28, z); g.add(f); ud.duesen.push(f);
+  for (const [x, z] of [[-5.5, -5.5], [5.5, -5.5], [-5.5, 5.5], [5.5, 5.5]]) {
+    g.add(zylinder(dunkel, 2.2, 3.2, 3.4, x, -21.6, z), ringY(MAT_METALL, 3.2, 0.4, x, -23.2, z));
+    g.add(zylinder(mat('#ff9a3c', { emissive: '#ff6a00', emissiveIntensity: 1.5 }), 2, 2, 0.4, x, -23.4, z));
+    const aussen = new THREE.Mesh(new THREE.ConeGeometry(2.6, 11, 10), new THREE.MeshBasicMaterial({ color: '#6fe3ff', transparent: true, opacity: 0.6, depthWrite: false }));
+    const innen = new THREE.Mesh(new THREE.ConeGeometry(1.2, 6, 8), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
+    aussen.rotation.x = innen.rotation.x = Math.PI; aussen.position.set(x, -29, z); innen.position.set(x, -26.5, z);
+    g.add(aussen, innen); ud.duesen.push(aussen, innen);
   }
-  g.add(zylinder(MAT_GRAU, 0.35, 0.35, 6, -8, -1, -8));                                  // kleine Antenne
-  ud.lampe = kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 0.9, 8.5, -2, 8.5); g.add(ud.lampe);
+  for (const r of [0, 1, 2, 3]) {   // kleine Flügel an den unteren Ecken
+    const f = klotz(dunkel, 0.6, 5, 5, 0, 0, 0), a = Math.PI / 4 + r * Math.PI / 2;
+    f.position.set(Math.cos(a) * 14.5, -18, Math.sin(a) * 14.5); f.rotation.y = -a; g.add(f);
+  }
+  g.add(zylinder(MAT_GRAU, 0.3, 0.3, 7, -8, -0.5, -8), zylinder(MAT_GRAU, 1.4, 0.2, 0.6, -8, 3, -8));   // Antenne + Mini-Schüssel
+  ud.lampe = kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 0.7, -8, 3.4, -8); g.add(ud.lampe);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   scene.add(g);
   return g;
@@ -5454,13 +5511,13 @@ function stahlBoxenZeigen(dt) {
       st.weg = null; st.an = true;
       st.g.visible = true; st.g.position.set(e.x, hAbs(e) - 0.5, e.y); st.g.rotation.set(0, -e.winkel, 0);
     } else if (st && st.an) {   // 🚀 gerade abgeschossen: die Box fliegt weg
-      st.an = false; const a = (e.team ? 0 : Math.PI) + (Math.random() - 0.5) * 1.2;
+      st.an = false; const a = (e.team ? Math.PI : 0) + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2 + Math.random() * 0.4);   // zur Seite weg (nicht in die Kamera)
       st.weg = { t: 0, x: st.g.position.x, h: st.g.position.y, y: st.g.position.z, dx: Math.cos(a), dy: Math.sin(a) };
     }
     if (st && st.weg) {
       const w = st.weg; w.t += dt;
       const k = w.t;
-      st.g.position.set(w.x + w.dx * 260 * k * k, w.h + 140 * k + 200 * k * k, w.y + w.dy * 260 * k * k);
+      st.g.position.set(w.x + w.dx * 260 * k * k, w.h + 220 * k + 160 * k * k, w.y + w.dy * 260 * k * k);
       st.g.rotation.z = Math.min(0.6, k * 0.8); st.g.rotation.y += dt * 2;
       st.g.scale.setScalar(Math.max(0.01, 1 - Math.max(0, k - 1.2) * 1.5));
       if (k > 1.9) { st.weg = null; st.g.visible = false; st.g.scale.setScalar(1); st.g.rotation.z = 0; }
@@ -5469,6 +5526,10 @@ function stahlBoxenZeigen(dt) {
       const ud = st.g.userData, stark = st.weg ? 1.6 : 1;
       ud.duesen.forEach((f, i) => { f.scale.set(1, stark * (0.8 + Math.sin(zeit * 40 + i * 2) * 0.2 + Math.random() * 0.15), 1); });
       ud.lampe.material.emissiveIntensity = Math.sin(zeit * 6) > 0 ? 1.5 : 0.1;
+      const B = e.inBox, auf = B && B.ankunft <= 0 && B.raus > 0 ? 1 : st.weg && st.weg.t < 0.5 ? 1 : 0;   // Klappe auf: beim Rauskommen und beim Abschuss
+      st.auf = (st.auf || 0) + (auf - (st.auf || 0)) * Math.min(1, dt * 12);
+      for (const { k, sx } of ud.klappen) k.rotation.z = sx * 1.9 * st.auf;
+      ud.bildschirm.material.emissiveIntensity = 0.6 + Math.sin(zeit * 9) * 0.4;
     }
   }
   for (const [e, st] of stahlBoxen) if (!kleckse.includes(e)) { wegUndEntsorgen(st.g); stahlBoxen.delete(e); }   // alte Runde: aufräumen
@@ -6523,7 +6584,7 @@ function welt3D(dt) {
     if (zustand === 'feier') g.visible = !!e.emote;   // bei der Siegerehrung nur die auf der Bühne
     if (g.visible && e.koerper.visible) {
       if (e.emote) { const r = posieren(e, dt); g.position.y += r.hoch; g.rotation.y += r.dreh; }
-      else { e.koerper.rotation.z = 0; e.koerper.position.x = 0; animiereFigur(e, v, dt); }
+      else { e.koerper.rotation.z = 0; e.koerper.position.x = 0; animiereFigur(e, v, dt); boxPose(e, dt); }
     }
     e.mat.emissive.setHex(e.letzterTreffer < 0.08 ? 0x888888 : 0x000000);
     // Wellen, wenn ein Gegner abgetaucht schwimmt
@@ -6620,7 +6681,9 @@ function welt3D(dt) {
   // Zielfernrohr: beim Aufladen mit dem Sniper reinzoomen
   const zoomen = !kameraOverride && ichSicht && !p.tot && p.laden && typVon(p.waffe) === 'sniper' && ['spiel', 'lobby', 'pause'].includes(zustand);
   zoomStufe += ((zoomen ? 1 : 0) - zoomStufe) * Math.min(1, dt * 10);
-  fovSetzen(75 + ((WAFFEN[p.waffe].zoom || 35) - 75) * zoomStufe);
+  windStufe += ((p.superSprung && p.superSprung.box ? 1 : 0) - windStufe) * Math.min(1, dt * 6);
+  fovSetzen(75 + ((WAFFEN[p.waffe].zoom || 35) - 75) * zoomStufe + windStufe * 16);   // 💨 im Flug: breitere Sicht = schneller
+  if (windStufe > 0.05 && !kameraOverride) { kamera.position.x += (Math.random() - 0.5) * windStufe * 1.6; kamera.position.y += (Math.random() - 0.5) * windStufe * 1.6; }
   if (haendeWaffe) {
     const v = Math.hypot(p.vx, p.vy), amp = p.z > 0 ? 0 : Math.min(1, v / 160);
     p.vmPhase += dt * (5 + v * 0.05);
@@ -6690,6 +6753,17 @@ function hud() {
     ctx.textAlign = 'center'; textMitRand(voll >= 1 ? 'VOLL!' : `${Math.round(voll * 100)}%`, kx, ky + 8, 22, '#ffffff');
     textMitRand('🌪️ Saug Gegner-Tinte & Bomben ein!', kx, ky - kr - 16, 22, '#ffd166');
     textMitRand(`Klick = 🔺 Pyramide werfen (${Math.ceil(spieler.saugerT)} s)`, kx, ky + kr + 30, 20, '#ffffff');
+  }
+  if (windStufe > 0.05) {   // 💨 Wind-Streifen am Bildrand
+    ctx.save(); ctx.lineCap = 'round';
+    for (let i = 0; i < 46; i++) {
+      const a = Math.random() * Math.PI * 2, r0 = Math.min(cw, ch) * (0.32 + Math.random() * 0.25), l = 40 + Math.random() * 140 * windStufe;
+      ctx.strokeStyle = `rgba(255,255,255,${(0.15 + Math.random() * 0.35) * windStufe})`; ctx.lineWidth = 1 + Math.random() * 2.5;
+      ctx.beginPath(); ctx.moveTo(cw / 2 + Math.cos(a) * r0, ch / 2 + Math.sin(a) * r0); ctx.lineTo(cw / 2 + Math.cos(a) * (r0 + l), ch / 2 + Math.sin(a) * (r0 + l)); ctx.stroke();
+    }
+    const vg = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.3, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
+    vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, `rgba(220,240,255,${0.35 * windStufe})`);
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, cw, ch); ctx.restore();
   }
   if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand(spieler.superSprung.box ? '🚀 ABGESCHOSSEN!' : '🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
   rufBlasenUpdate();
