@@ -16,7 +16,12 @@
     background: linear-gradient(90deg, #ff8a1f, #ff5fa2, #a347ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; color: #ffd166; }
   p { color: #c9c3ff; margin: 0.4rem 0; }
-  .farbcastBox { max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem 1.5rem; }
+  .fcOverlay { background: #05040ee6; }
+  .fcRahmen { width: min(96vw, calc((100vh - 5rem) * 16 / 9)); text-align: center; }
+  #fcVideo { position: static; inset: auto; width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border-radius: 12px; box-shadow: 0 0 40px #a347ff66; background: #000; }
+  .fcLeiste { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.4rem; }
+  .fcFortschritt { flex: 1; height: 8px; background: #ffffff33; border-radius: 4px; overflow: hidden; }
+  #fcBalken { height: 100%; width: 0; background: #ff3b3b; }
   .fcKopf { display: flex; align-items: center; justify-content: center; gap: 0.8rem; }
   .live { background: #ff3b3b; color: #fff; border-radius: 0.5rem; padding: 0.1rem 0.5rem; font-weight: bold; animation: blinken 1s infinite; }
   @keyframes blinken { 50% { opacity: 0.4; } }
@@ -157,15 +162,11 @@
   </div>
 </div>
 
-<div id="farbcast" class="overlay hidden">
-  <div class="box farbcastBox">
-    <div class="fcKopf"><span class="live">🔴 LIVE</span><h1 style="font-size:2rem;margin:0">🎙️ FARBCAST</h1><span class="kleinText">der Podcast aus der Stadt</span></div>
-    <div class="fcStudio"><canvas id="fcTini" width="120" height="135"></canvas>
-      <div class="fcMitte"><b id="fcName"></b><p class="sprechblase" id="fcText"></p></div>
-      <canvas id="fcBrummi" width="120" height="135"></canvas></div>
-    <div id="fcKarten"></div>
-    <div><button class="gross" id="fcWeiter">Weiter ▶</button> <button class="klein" id="fcSkip">⏩ Überspringen</button></div>
-    <p class="kleinText" style="margin:0.4rem 0 0">▶ Klicken oder <b>Leertaste</b> / <b>Enter</b> = weiter · <b>Esc</b> = überspringen</p>
+<div id="farbcast" class="overlay hidden fcOverlay">
+  <div class="fcRahmen">
+    <canvas id="fcVideo" width="1280" height="720"></canvas>
+    <div class="fcLeiste"><button class="klein" id="fcWeiter">⏭ Weiter</button><div class="fcFortschritt"><div id="fcBalken"></div></div><button class="klein" id="fcSkip">⏩ Überspringen</button></div>
+    <p class="kleinText" style="margin:0.2rem 0 0">Leertaste = weiter · Esc = überspringen</p>
   </div>
 </div>
 <div id="papagei" class="overlay hidden">
@@ -8685,33 +8686,48 @@ function arenaKarte(id, zusatz) {
   d.append(arenaBild(id), t, s); return d;
 }
 // Die zwei Moderatoren (eigene Figuren!): Tini mit Kopfhörern und Brummi, das Walross mit Sonnenbrille
-function tiniMalen(c) {
-  const x = c.getContext('2d'); x.clearRect(0, 0, 120, 135);
+// p = { mund: 0..1 (offen), blinzel: true/false, winken: 0..1, nicken: Pixel }
+function tiniZeichnen(x, p = {}) {
   const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
-  x.fillStyle = TEAMS[0].col; x.beginPath(); x.moveTo(20, 135); x.quadraticCurveTo(60, 88, 100, 135); x.fill();
+  x.fillStyle = TEAMS[0].col; x.beginPath(); x.moveTo(14, 140); x.quadraticCurveTo(60, 86, 106, 140); x.fill();   // Pulli
+  if (p.winken > 0) {   // winkt mit der Hand
+    const hx = 104 + Math.sin(performance.now() / 120) * 7 * p.winken, hy = 112 - 48 * p.winken;
+    x.strokeStyle = TEAMS[0].col; x.lineWidth = 11; x.lineCap = 'round'; x.beginPath(); x.moveTo(92, 120); x.lineTo(hx, hy); x.stroke(); kreis(hx, hy - 4, 7, '#ffdbac');
+  }
+  x.save(); x.translate(0, p.nicken || 0);
   kreis(60, 62, 34, '#ff5fa2');
   kreis(60, 70, 28, '#ffdbac');
   x.fillStyle = '#ff5fa2'; x.beginPath(); x.ellipse(60, 46, 30, 14, 0, Math.PI, 0); x.fill();
   for (const [px, py, r] of [[34, 40, 5], [86, 52, 4], [70, 30, 3]]) kreis(px, py, r, TEAMS[1].col);
-  for (const px of [49, 71]) { kreis(px, 70, 4.5, '#1b1f3a'); kreis(px + 1.5, 68.5, 1.4, '#fff'); }
+  for (const px of [49, 71]) {
+    if (p.blinzel) { x.strokeStyle = '#1b1f3a'; x.lineWidth = 2.5; x.beginPath(); x.moveTo(px - 4, 70); x.lineTo(px + 4, 70); x.stroke(); }
+    else { kreis(px, 70, 4.5, '#1b1f3a'); kreis(px + 1.5, 68.5, 1.4, '#fff'); }
+  }
   kreis(44, 80, 5, '#ff9ab0', 1, 0.6); kreis(76, 80, 5, '#ff9ab0', 1, 0.6);
-  x.strokeStyle = '#1b1f3a'; x.lineWidth = 2.5; x.beginPath(); x.arc(60, 82, 8, 0.2, Math.PI - 0.2); x.stroke();
+  if ((p.mund || 0) > 0.08) { x.fillStyle = '#8a1c34'; x.beginPath(); x.ellipse(60, 84, 6.5, 1.5 + p.mund * 5.5, 0, 0, 7); x.fill(); kreis(60, 86 + p.mund * 2.5, 3, '#ff7a9a', 1, 0.6); }
+  else { x.strokeStyle = '#1b1f3a'; x.lineWidth = 2.5; x.beginPath(); x.arc(60, 82, 8, 0.2, Math.PI - 0.2); x.stroke(); }
   x.strokeStyle = '#2b2f4a'; x.lineWidth = 6; x.beginPath(); x.arc(60, 62, 36, Math.PI * 1.05, Math.PI * 1.95); x.stroke();
   kreis(25, 70, 10, '#2b2f4a'); kreis(95, 70, 10, '#2b2f4a'); kreis(25, 70, 6, TEAMS[0].col); kreis(95, 70, 6, TEAMS[0].col);
-  x.fillStyle = '#4a4f73'; x.fillRect(96, 92, 6, 34); kreis(99, 90, 8, '#9aa1bd');
+  x.restore();
 }
-function brummiMalen(c) {
-  const x = c.getContext('2d'); x.clearRect(0, 0, 120, 135);
+function brummiZeichnen(x, p = {}) {
   const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
-  kreis(60, 112, 48, '#8a6a58', 1, 0.7);
+  kreis(60, 118, 50, '#8a6a58', 1, 0.7);
+  if (p.winken > 0) {   // winkt mit der Flosse
+    const hx = 110 + Math.sin(performance.now() / 130) * 6 * p.winken, hy = 118 - 46 * p.winken;
+    kreis(hx, hy, 12, '#8a6a58', 0.7, 1.2);
+  }
+  x.save(); x.translate(0, p.nicken || 0);
   kreis(60, 66, 40, '#9a7a66');
   x.fillStyle = '#ff9f1c'; x.beginPath(); x.ellipse(60, 32, 34, 12, 0, Math.PI, 0); x.fill(); x.fillRect(58, 20, 46, 6);
   x.fillStyle = '#1b1f3a'; x.fillRect(32, 54, 24, 14); x.fillRect(64, 54, 24, 14); x.fillRect(54, 58, 12, 3);
   x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillRect(35, 56, 6, 4); x.fillRect(67, 56, 6, 4);
-  kreis(48, 84, 14, '#c9a890'); kreis(72, 84, 14, '#c9a890');
+  if ((p.mund || 0) > 0.08) { x.fillStyle = '#5a1c24'; x.beginPath(); x.ellipse(60, 99, 9, 2 + p.mund * 7, 0, 0, 7); x.fill(); }
+  kreis(48, 84 - (p.mund || 0) * 2, 14, '#c9a890'); kreis(72, 84 - (p.mund || 0) * 2, 14, '#c9a890');
   x.fillStyle = '#2b1d14'; for (let i = 0; i < 3; i++) for (const s of [-1, 1]) { x.beginPath(); x.arc(60 + s * (8 + i * 5), 82 + i * 3, 1.2, 0, 7); x.fill(); }
   kreis(60, 74, 5, '#2b1d14');
-  x.fillStyle = '#fffbe8'; for (const s of [-1, 1]) { x.beginPath(); x.moveTo(60 + s * 6, 94); x.lineTo(60 + s * 9, 122); x.lineTo(60 + s * 13, 94); x.fill(); }
+  x.fillStyle = '#fffbe8'; for (const s of [-1, 1]) { x.beginPath(); x.moveTo(60 + s * 6, 94); x.lineTo(60 + s * 9, 124); x.lineTo(60 + s * 13, 94); x.fill(); }
+  x.restore();
 }
 const FARBCAST_NEWS = [
   'Habt ihr schon den 🐟 Kabeljau Run probiert? Dr. Papagei sucht immer Helfer – und bezahlt gut!',
@@ -8721,8 +8737,16 @@ const FARBCAST_NEWS = [
   'Nach dem Match gibt es 🎬 Highlight-Aufnahmen. Habt ihr schon mal eine Solo-Auslöschung geschafft?',
   'Auf der Kabeljau-Insel wurde der 👑 Riesenkabeljau gesichtet! Wer schafft die Extra-Welle?',
   'Wenn ihr ohne Farbe unter euch abtaucht, werdet ihr zur Pfütze mit Augen. Süß, oder?',
+  'Neu in der Arena: 🛸 fliegende Stahlboxen! Sucht euch mit der Maus den Landeplatz aus – und ab geht\'s!',
+  'Dr. Papagei verteilt jetzt 🎖️ Ränge! Wer wird als Erstes 🤴 Kabeljau-König?',
+  'Achtung, neue Bossfische: 🗼 Stelzen-Dorsch, 🚜 Ramm-Barsch und 🎈 Puste-Kugelfisch!',
+  'Die Stadt ist jetzt eine echte Großstadt – mit Hochhäusern, Straßen und Autos! Passt beim Überqueren auf! 🚗',
 ];
+// 🎬 FARBCAST als Video: Intro, Studio mit Kamerafahrten, sprechende Moderatoren, Untertitel, Laufband, Arena-Clips, Outro
 let farbcast = null;
+const FC_BILDER = {};
+function fcArenaBild(id) { return FC_BILDER[id] || (FC_BILDER[id] = arenaBild(id, 1024, 640)); }
+const FC_SHOTS = { totale: { x: 640, y: 360, z: 1 }, tini: { x: 395, y: 400, z: 1.85 }, brummi: { x: 885, y: 400, z: 1.85 } };
 function farbcastStarten() {
   const [a1, a2] = aktuelleArenen(), [n1, n2] = aktuelleArenen(rotationSlot() + 1), A1 = ARENEN[a1], A2 = ARENEN[a2], N1 = ARENEN[n1], N2 = ARENEN[n2];
   const news = [...FARBCAST_NEWS].sort(() => Math.random() - 0.5);
@@ -8738,45 +8762,195 @@ function farbcastStarten() {
     ['tini', `In ${restZeitText()} wechseln die Arenen. Dann sind ${N1.emoji} ${N1.name} und ${N2.emoji} ${N2.name} dran!`, [n1, n2], 'Danach'],
     ['brummi', `Das war's vom Farbcast! Bleibt farbig – tschüssiii! 👋`, null, null, true],
   ];
-  farbcast = { zeilen, nr: -1, tipp: null };
+  farbcast = { zeilen, nr: -1, phase: 'intro', t: 0, zeilenT: 0, getippt: 0, fertigT: 0, kam: { ...FC_SHOTS.totale }, shot: 'totale', zuletzt: performance.now(), plapperNr: 0,
+    ticker: news.join('   ✦   '), blinzel: { tini: 2, brummi: 3.2 }, splats: [] };
   zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
-  tiniMalen($('fcTini')); brummiMalen($('fcBrummi'));
-  $('fcText').textContent = ''; $('fcName').textContent = ''; $('fcKarten').replaceChildren();
+  $('fcWeiter').textContent = '⏭ Weiter';
   nurZeigen('farbcast'); ton('farbcastJingle');
-  setTimeout(farbcastWeiter, 900);
+  requestAnimationFrame(fcSchleife);
+}
+function fcZeileStarten() {
+  const f = farbcast; f.nr++;
+  const z = f.zeilen[f.nr];
+  if (!z) { f.phase = 'outro'; f.t = 0; ton('farbcastJingle'); return; }
+  f.phase = 'zeile'; f.zeilenT = 0; f.getippt = 0; f.fertigT = 0; f.plapperNr = 0;
+  const [wer, , karten] = z;
+  const shot = karten ? 'clip' : f.nr === 0 ? 'totale' : Math.random() < 0.72 ? wer : 'totale';
+  f.shot = shot;
+  if (FC_SHOTS[shot]) Object.assign(f.kam, FC_SHOTS[shot]);   // harter Schnitt
+  if (f.nr === f.zeilen.length - 1) $('fcWeiter').textContent = '🏙️ In die Stadt!';
 }
 function farbcastWeiter() {
-  if (!farbcast) return;
-  if (farbcast.tipp) { farbcastFertig(); return; }
-  farbcast.nr++;
-  const z = farbcast.zeilen[farbcast.nr];
-  if (!z) { farbcastEnde(); return; }
-  const [wer, text, karten, zusatz, letzte] = z;
-  $('fcTini').classList.toggle('spricht', wer === 'tini'); $('fcBrummi').classList.toggle('spricht', wer === 'brummi');
-  $('fcName').textContent = wer === 'tini' ? '🎧 Tini' : '🦭 Brummi';
-  const kb = $('fcKarten'); kb.replaceChildren();
-  if (karten) for (const id of karten) kb.append(arenaKarte(id, zusatz ? `${zusatz}: ${ARENEN[id].spezial}` : null));
-  $('fcWeiter').textContent = letzte ? '🏙️ In die Stadt!' : 'Weiter ▶';
-  const box = $('fcText'), zeichen = [...text]; box.textContent = '';
-  const t = { zeichen, i: 0, wer };
-  t.uhr = setInterval(() => {
-    if (t.i >= zeichen.length) { farbcastFertig(); return; }
-    box.textContent += zeichen[t.i];
-    if (t.i % 3 === 0 && /[a-zäöüß]/i.test(zeichen[t.i])) ton(wer === 'tini' ? 'tiniPlapper' : 'brummiPlapper', 0.7);
-    t.i++;
-  }, 22);
-  farbcast.tipp = t;
-}
-function farbcastFertig() {
-  const t = farbcast && farbcast.tipp; if (!t) return;
-  clearInterval(t.uhr); $('fcText').textContent = t.zeichen.join(''); farbcast.tipp = null;
+  const f = farbcast; if (!f) return;
+  if (f.phase === 'intro') { fcZeileStarten(); return; }
+  if (f.phase === 'outro') { farbcastEnde(); return; }
+  const z = f.zeilen[f.nr];
+  if (z && f.getippt < z[1].length) { f.getippt = z[1].length; return; }   // erst ganz zu Ende sprechen
+  fcZeileStarten();
 }
 function farbcastEnde() {
-  if (farbcast && farbcast.tipp) clearInterval(farbcast.tipp.uhr);
   farbcast = null; nurZeigen(null); zustand = 'stadt'; ton('klick');
   mausFangen();
 }
-
+function fcSchleife(jetzt) {
+  const f = farbcast; if (!f) return;
+  const dt = Math.min(0.05, (jetzt - f.zuletzt) / 1000); f.zuletzt = jetzt; f.t += dt;
+  if (f.phase === 'intro' && f.t > 2.6) fcZeileStarten();
+  if (f.phase === 'outro' && f.t > 2.4) { farbcastEnde(); return; }
+  if (f.phase === 'zeile') {
+    const z = f.zeilen[f.nr], text = [...z[1]];
+    f.zeilenT += dt;
+    const vorher = Math.floor(f.getippt);
+    if (f.getippt < text.length) f.getippt = Math.min(text.length, f.getippt + dt * 38);
+    for (let i = vorher; i < Math.floor(f.getippt); i++) if (i % 3 === 0 && /[a-zäöüß]/i.test(text[i] || '')) ton(z[0] === 'tini' ? 'tiniPlapper' : 'brummiPlapper', 0.7);
+    if (f.getippt >= text.length) { f.fertigT += dt; if (f.fertigT > 1.4 + text.length * 0.012) fcZeileStarten(); }
+  }
+  // Kamera: langsam ranfahren und leicht wackeln (wie eine echte Fernsehkamera)
+  if (FC_SHOTS[f.shot]) f.kam.z += dt * 0.02;
+  for (const k of ['tini', 'brummi']) { f.blinzel[k] -= dt; if (f.blinzel[k] < -0.12) f.blinzel[k] = 2 + Math.random() * 3; }
+  fcZeichnen(f);
+  const anteil = f.phase === 'intro' ? 0 : f.phase === 'outro' ? 1 : (f.nr + Math.min(1, f.getippt / Math.max(1, [...f.zeilen[f.nr][1]].length))) / f.zeilen.length;
+  $('fcBalken').style.width = `${Math.round(anteil * 100)}%`;
+  requestAnimationFrame(fcSchleife);
+}
+function fcSprecher(f) { return f.phase === 'zeile' ? f.zeilen[f.nr][0] : null; }
+function fcMund(f, wer) {   // Mund geht auf und zu, solange getippt wird
+  if (fcSprecher(f) !== wer) return 0;
+  const z = f.zeilen[f.nr]; if (f.getippt >= [...z[1]].length) return 0;
+  return Math.abs(Math.sin(f.t * 17)) * 0.8 + Math.abs(Math.sin(f.t * 7.3)) * 0.2;
+}
+function fcFigur(x, f, wer, cx, unten, s) {   // Moderator an Position zeichnen
+  x.save(); x.translate(cx - 60 * s, unten - 140 * s); x.scale(s, s);
+  const p = { mund: fcMund(f, wer), blinzel: f.blinzel[wer] < 0, nicken: fcSprecher(f) === wer ? Math.sin(f.t * 4) * 1.5 : Math.sin(f.t * 1.3 + (wer === 'tini' ? 0 : 2)) * 0.8,
+    winken: (f.phase === 'zeile' && (f.nr === 0 || f.nr === f.zeilen.length - 1) && fcSprecher(f) === wer) || f.phase === 'outro' ? 1 : 0 };
+  if (wer === 'tini') tiniZeichnen(x, p); else brummiZeichnen(x, p);
+  x.restore();
+}
+function fcStudio(x, f) {   // das Studio (Weltkoordinaten 1280 × 720)
+  const t = f.t;
+  const wand = x.createLinearGradient(0, 0, 0, 720); wand.addColorStop(0, '#2a1b5c'); wand.addColorStop(1, '#0e0a26');
+  x.fillStyle = wand; x.fillRect(-400, -300, 2080, 1320);
+  x.save(); x.globalAlpha = 0.35; x.lineWidth = 6;   // Neon-Ringe an der Wand
+  for (let i = 0; i < 5; i++) { x.strokeStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.shadowColor = x.strokeStyle; x.shadowBlur = 25; x.beginPath(); x.arc(640, 250, 330 + i * 60, Math.PI * 1.05, Math.PI * 1.95); x.stroke(); }
+  x.restore();
+  // Seitenbildschirme mit Equalizer
+  for (const sx of [120, 960]) {
+    x.fillStyle = '#0b0b1a'; x.beginPath(); x.roundRect(sx, 150, 200, 130, 10); x.fill();
+    for (let i = 0; i < 12; i++) { const h = 20 + Math.abs(Math.sin(t * 5 + i * 0.7 + sx)) * 85; x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.fillRect(sx + 12 + i * 15.5, 270 - h, 11, h); }
+  }
+  // großer Bildschirm hinten: zeigt das Farbcast-Logo oder die Arena
+  x.save(); x.shadowColor = '#a347ff'; x.shadowBlur = 40; x.fillStyle = '#0b0b1a'; x.beginPath(); x.roundRect(390, 70, 500, 290, 14); x.fill(); x.restore();
+  x.save(); x.beginPath(); x.roundRect(400, 80, 480, 270, 10); x.clip();
+  const z = f.phase === 'zeile' && f.zeilen[f.nr];
+  const bildId = z && z[2] ? z[2][Math.floor(f.zeilenT / 3) % z[2].length] : null;
+  if (bildId) x.drawImage(fcArenaBild(bildId), 400 - Math.sin(t * 0.3) * 20, 70, 520, 325);
+  else {
+    for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.beginPath(); x.arc(640 + Math.cos(t * 0.6 + i) * 190, 215 + Math.sin(t * 0.8 + i * 2) * 90, 35 + 15 * Math.sin(t + i), 0, 7); x.fill(); }
+    x.fillStyle = '#fff'; x.font = 'bold 56px system-ui'; x.textAlign = 'center'; x.fillText('🎙️ FARBCAST', 640, 235);
+  }
+  x.restore();
+  // Lichtgerüst mit Scheinwerfern
+  x.fillStyle = '#1b1b2e'; x.fillRect(-200, 20, 1680, 14);
+  for (let i = 0; i < 9; i++) {
+    const lx = 80 + i * 140, a = Math.sin(t * 0.7 + i) * 0.35;
+    x.save(); x.globalCompositeOperation = 'lighter';
+    const g = x.createLinearGradient(lx, 40, lx, 640); g.addColorStop(0, i % 2 ? '#ff8a1f44' : '#a347ff44'); g.addColorStop(1, '#00000000');
+    x.fillStyle = g; x.beginPath(); x.moveTo(lx - 8, 40); x.lineTo(lx + Math.sin(a) * 600 - 90, 680); x.lineTo(lx + Math.sin(a) * 600 + 90, 680); x.lineTo(lx + 8, 40); x.fill(); x.restore();
+    x.fillStyle = '#3a3a55'; x.beginPath(); x.roundRect(lx - 12, 26, 24, 22, 5); x.fill(); x.fillStyle = '#fff6c8'; x.beginPath(); x.arc(lx, 46, 7, 0, 7); x.fill();
+  }
+  // Boden
+  const bd = x.createLinearGradient(0, 560, 0, 720); bd.addColorStop(0, '#221a48'); bd.addColorStop(1, '#0a0820');
+  x.fillStyle = bd; x.fillRect(-400, 560, 2080, 460);
+  // Moderatoren hinter dem Tisch
+  fcFigur(x, f, 'tini', 395, 590, 2.35); fcFigur(x, f, 'brummi', 885, 600, 2.5);
+  // Tisch mit Logo, Mikros und Tasse
+  const ts = x.createLinearGradient(0, 540, 0, 720); ts.addColorStop(0, '#3a2f7a'); ts.addColorStop(1, '#1a1440');
+  x.fillStyle = ts; x.beginPath(); x.moveTo(170, 545); x.lineTo(1110, 545); x.lineTo(1160, 730); x.lineTo(120, 730); x.closePath(); x.fill();
+  x.save(); x.shadowColor = '#ff5fa2'; x.shadowBlur = 18; x.fillStyle = '#ff5fa2'; x.fillRect(170, 540, 940, 7); x.restore();
+  x.fillStyle = '#fff'; x.font = 'bold 44px system-ui'; x.textAlign = 'center'; x.fillText('🎙️ FARBCAST', 640, 640);
+  x.fillStyle = '#c9c3ff'; x.font = 'bold 18px system-ui'; x.fillText('DIE SHOW AUS DER STADT', 640, 668);
+  for (const mx of [470, 800]) {
+    x.strokeStyle = '#555a7a'; x.lineWidth = 5; x.beginPath(); x.moveTo(mx, 545); x.lineTo(mx - 10, 470); x.stroke();
+    x.fillStyle = '#2b2f4a'; x.beginPath(); x.ellipse(mx - 12, 458, 13, 18, -0.3, 0, 7); x.fill();
+    x.fillStyle = '#9aa1bd'; for (let i = 0; i < 4; i++) x.fillRect(mx - 22, 446 + i * 6, 20, 2);
+  }
+  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(1010, 505, 30, 38, 5); x.fill(); x.fillStyle = TEAMS[1].col; x.fillRect(1010, 515, 30, 10);
+}
+function fcClip(x, f) {   // Arena-Clip: Kamerafahrt über die Arena
+  const z = f.zeilen[f.nr], ids = z[2], idx = Math.floor(f.zeilenT / 3.2) % ids.length, id = ids[idx], tt = (f.zeilenT % 3.2) / 3.2;
+  x.fillStyle = '#000'; x.fillRect(0, 0, 1280, 720);
+  x.save(); x.translate(640, 380); x.rotate(-0.06 + tt * 0.08); const s = 1.35 + tt * 0.3; x.scale(s, s * 0.82);
+  x.drawImage(fcArenaBild(id), -512 + (idx ? -1 : 1) * (tt - 0.5) * 120, -320);
+  x.restore();
+  const vg = x.createRadialGradient(640, 360, 250, 640, 360, 800); vg.addColorStop(0, '#0000'); vg.addColorStop(1, '#000c'); x.fillStyle = vg; x.fillRect(0, 0, 1280, 720);
+  const A = ARENEN[id];
+  x.fillStyle = '#1b1f3add'; x.beginPath(); x.roundRect(40, 470, 700, 96, 14); x.fill();
+  x.fillStyle = TEAMS[idx % 2].col; x.fillRect(40, 470, 12, 96);
+  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = 'bold 42px system-ui'; x.fillText(`${A.emoji} ${A.name}`, 72, 516);
+  x.fillStyle = '#ffd166'; x.font = 'bold 20px system-ui'; x.fillText(((z[3] ? z[3] + ': ' : '') + A.spezial).slice(0, 60), 72, 548);
+  x.fillStyle = '#ff3b3b'; x.font = 'bold 22px system-ui'; x.textAlign = 'right'; x.fillText('🎥 CLIP', 1240, 100);
+  // Bild-im-Bild: wer gerade spricht
+  const wer = z[0]; x.save(); x.beginPath(); x.arc(1150, 480, 85, 0, 7); x.fillStyle = '#2a1b5c'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#fff'; x.stroke(); x.clip();
+  fcFigur(x, f, wer, 1150, 610, 1.6); x.restore();
+}
+function fcText(x, text, maxB) {   // Text in Zeilen umbrechen
+  const woerter = text.split(' '), zeilen = []; let z = '';
+  for (const w of woerter) { const t = z ? z + ' ' + w : w; if (x.measureText(t).width > maxB && z) { zeilen.push(z); z = w; } else z = t; }
+  if (z) zeilen.push(z); return zeilen;
+}
+function fcZeichnen(f) {
+  const c = $('fcVideo'), x = c.getContext('2d'), t = f.t;
+  x.setTransform(1, 0, 0, 1, 0, 0); x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  if (f.phase === 'intro' || f.phase === 'outro') {   // ✨ Logo-Animation mit Farbklecksen
+    const g = x.createRadialGradient(640, 360, 50, 640, 360, 800); g.addColorStop(0, '#3a1f7a'); g.addColorStop(1, '#0a0620'); x.fillStyle = g; x.fillRect(0, 0, 1280, 720);
+    for (let i = 0; i < 26; i++) {
+      const k = Math.min(1, Math.max(0, (t - i * 0.05) * 3)), px = (i * 397) % 1280, py = (i * 233) % 720;
+      x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.globalAlpha = 0.85; x.beginPath(); x.arc(px, py, k * (30 + (i * 13) % 50), 0, 7); x.fill();
+    }
+    x.globalAlpha = 1;
+    const k = Math.min(1, t / 0.7), el = 1 + Math.sin(k * Math.PI * 2.5) * (1 - k) * 0.4;
+    x.save(); x.translate(640, 340); x.scale(k * el, k * el); x.rotate((1 - k) * -0.5);
+    x.font = 'bold 120px system-ui'; x.lineWidth = 14; x.strokeStyle = '#1b1f3a'; x.strokeText('🎙️ FARBCAST', 0, 0); x.fillStyle = '#fff'; x.fillText('🎙️ FARBCAST', 0, 0);
+    x.restore();
+    if (t > 0.8) { x.font = 'bold 34px system-ui'; x.fillStyle = '#ffd166'; x.fillText(f.phase === 'intro' ? 'mit Tini & Brummi – LIVE aus der Stadt!' : 'Bis zum nächsten Mal! Bleibt farbig! 👋', 640, 430); }
+    if (f.phase === 'outro') { fcFigur(x, f, 'tini', 250, 720, 2); fcFigur(x, f, 'brummi', 1030, 720, 2.1); }
+    return;
+  }
+  // Studio oder Clip
+  if (f.shot === 'clip') fcClip(x, f);
+  else {
+    const k = f.kam, wx = Math.sin(t * 0.5) * 6, wy = Math.sin(t * 0.37) * 4;
+    x.save(); x.translate(640, 360); x.scale(k.z, k.z); x.translate(-k.x + wx, -k.y + wy); fcStudio(x, f); x.restore();
+    if (f.shot !== 'totale' && f.zeilenT < 3) {   // Bauchbinde: wer spricht?
+      const n = f.shot === 'tini' ? ['🎧 TINI', 'Moderatorin'] : ['🦭 BRUMMI', 'Moderator & Walross'];
+      const ein = Math.min(1, f.zeilenT * 4) * Math.min(1, (3 - f.zeilenT) * 4);
+      x.save(); x.globalAlpha = ein; x.fillStyle = '#ff5fa2'; x.fillRect(60, 470, 300, 52); x.fillStyle = '#1b1f3a'; x.fillRect(60, 522, 300, 30);
+      x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = 'bold 32px system-ui'; x.fillText(n[0], 76, 508); x.font = 'bold 18px system-ui'; x.fillText(n[1], 76, 544); x.restore();
+    }
+  }
+  // Senderlogo, LIVE, Uhrzeit
+  x.textAlign = 'left'; x.font = 'bold 26px system-ui'; x.fillStyle = '#ffffffdd'; x.fillText('🎙️ FARBCAST', 28, 48);
+  x.textAlign = 'right'; x.fillStyle = Math.sin(t * 5) > 0 ? '#ff3b3b' : '#a32020'; x.fillText('● LIVE', 1252, 48);
+  // Untertitel
+  if (f.phase === 'zeile') {
+    const z = f.zeilen[f.nr], gesagt = [...z[1]].slice(0, Math.floor(f.getippt)).join('');
+    x.font = 'bold 28px system-ui'; const zeilen = fcText(x, gesagt, 1040).slice(-3);
+    if (zeilen.length) {
+      const h = zeilen.length * 36 + 22, y0 = 662 - h;
+      x.fillStyle = '#000000b0'; x.beginPath(); x.roundRect(100, y0, 1080, h, 12); x.fill();
+      x.textAlign = 'center'; zeilen.forEach((zl, i) => { x.fillStyle = i === 0 ? (z[0] === 'tini' ? '#ff9ad3' : '#ffd166') : '#fff'; x.fillText(zl, 640, y0 + 40 + i * 36); });
+      x.fillStyle = z[0] === 'tini' ? '#ff9ad3' : '#ffd166'; x.textAlign = 'left'; x.font = 'bold 18px system-ui'; x.fillText(z[0] === 'tini' ? 'TINI:' : 'BRUMMI:', 112, y0 + 18);
+    }
+  }
+  // Laufband unten
+  x.fillStyle = '#1b1f3a'; x.fillRect(0, 676, 1280, 44); x.fillStyle = '#ffd166'; x.fillRect(0, 676, 130, 44);
+  x.save(); x.beginPath(); x.rect(130, 676, 1150, 44); x.clip();
+  x.font = 'bold 22px system-ui'; x.textAlign = 'left'; x.fillStyle = '#fff';
+  const tb = x.measureText(f.ticker).width + 120, off = (t * 110) % tb;
+  x.fillText(f.ticker, 150 - off, 706); x.fillText(f.ticker, 150 - off + tb, 706);
+  x.restore();
+  x.fillStyle = '#1b1f3a'; x.font = 'bold 22px system-ui'; x.textAlign = 'center'; x.fillText('NEWS', 65, 706);
+}
 // ================== 🦜 DR. PAPAGEI und seine Fischerei (in der Stadt) ==================
 function baueDrPapagei() {
   const g = new THREE.Group(), ud = g.userData;
