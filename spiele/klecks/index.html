@@ -462,6 +462,12 @@ const HEMDEN = {
   ruestung: { name: 'Ritterrüstung', emoji: '🛡️', preis: 650, info: '🛡️ 15% weniger Schaden, aber 🏃 -4% Laufen (schwer!)', bonus: { schutz: 0.15, tempo: -0.04 }, farbe: '#aeb6c8', ruestung: true, aermel: 'lang' },
   wappenrock: { name: 'Wappenrock', emoji: '🦁', preis: 380, info: '⚡ Ulti +10%, 🛡️ +4%', bonus: { ulti: 0.1, schutz: 0.04 }, farbe: '#b31f2e', wappen: true, aermel: 'lang' },
   ninja:    { name: 'Ninja-Anzug',   emoji: '🥷', preis: 480, info: '🏃 +6% Laufen, 🌊 +8% Abtauchen – mit Schwert auf dem Rücken!', bonus: { tempo: 0.06, tauchen: 0.08 }, farbe: '#1e1e26', ninja: true, aermel: 'lang' },
+  // 🧑‍🚒 Arbeitskleidung im Kabeljau Run (kann man nicht kaufen – bekommt man bei der Schicht)
+  einsatzjacke: { name: 'Einsatzjacke', emoji: '🧑‍🚒', preis: 0, info: 'Die Arbeitsjacke von Dr. Papageis Fischerei-Wache', bonus: {}, farbe: '#24304f', einsatz: true, aermel: 'lang', versteckt: true },
+  // 🏅 Belohnungen vom Kabeljau Run (gibt es nur bei Dr. Papagei)
+  fischerpulli: { name: 'Fischerpulli', emoji: '🐟', preis: 0, info: '❤️ Heilt 20% schneller, 🛡️ +4% – mit Fisch drauf!', bonus: { heilen: 0.2, schutz: 0.04 }, farbe: '#1f4e79', streifen: '#f3e7cf', fischBild: true, aermel: 'lang', versteckt: true, belohnung: true },
+  papageihemd:  { name: 'Papageien-Hemd', emoji: '🦜', preis: 0, info: '⚡ Ulti +15%, 🏃 +4% – genau wie Dr. Papagei!', bonus: { ulti: 0.15, tempo: 0.04 }, farbe: '#2fbf71', blumen: true, papagei: true, aermel: 'kurz', versteckt: true, belohnung: true },
+  kapitaensjacke: { name: 'Kapitänsjacke', emoji: '⚓', preis: 0, info: '🛡️ 12% weniger Schaden, ⚡ Ulti +8%', bonus: { schutz: 0.12, ulti: 0.08 }, farbe: '#1b2440', jacke: true, kapitaen: true, aermel: 'lang', versteckt: true, belohnung: true },
   held:     { name: 'Heldenkostüm',  emoji: '🦸', preis: 800, info: '🏃 +8% Laufen, ⬆️ +20% Springen – mit Umhang!', bonus: { tempo: 0.08, sprung: 0.2 }, farbe: '#3b6fd8', umhang: '#e63946', logo: true, aermel: 'lang' },
 };
 const SCHUHE = {
@@ -480,6 +486,8 @@ const SCHUHE = {
   u24_boots:     { name: 'U24 Boots', emoji: '🥾', preis: 380, info: '🟣 Gegnerfarbe stört 40% weniger, 🛡️ +4%', bonus: { feindfarbe: 0.4, schutz: 0.04 }, farbe: '#1f9d55', modell: 'stiefel', firma: 'u24' },
   eisen:      { name: 'Eisenstiefel', emoji: '🦿', preis: 420, info: '🛡️ 6% weniger Schaden, 🟣 Gegnerfarbe stört 30% weniger', bonus: { schutz: 0.06, feindfarbe: 0.3 }, farbe: '#aeb6c8' },
   tabi:       { name: 'Ninja-Tabi', emoji: '🥷', preis: 320, info: '🏃 Laufen +7%, 🌊 Abtauchen +6% – ganz leise!', bonus: { tempo: 0.07, tauchen: 0.06 }, farbe: '#1e1e26' },
+  einsatzstiefel: { name: 'Einsatzstiefel', emoji: '🥾', preis: 0, info: 'Feste Stiefel für die Schicht', bonus: {}, farbe: '#1b1b22', versteckt: true },
+  fischflossen:   { name: 'Goldflossen', emoji: '🐠', preis: 0, info: '🌊 Abtauchen +15%, 🏃 +6% – glänzen wie ein Goldfisch!', bonus: { tauchen: 0.15, tempo: 0.06 }, farbe: '#ffb627', versteckt: true, belohnung: true },
   raketen:    { name: 'Raketenschuhe', emoji: '🚀', preis: 700, info: '⬆️ 50% höher springen', bonus: { sprung: 0.5 }, farbe: '#c9cfe6', akzent: '#e63946', sohle: '#4a4f73' },
 };
 const KOEPFE = {
@@ -502,6 +510,10 @@ const KOEPFE = {
   ritterhelm: { name: 'Ritterhelm',  emoji: '🪖', preis: 550,  info: '🛡️ 12% weniger Schaden – mit rotem Federbusch!', bonus: { schutz: 0.12 }, farbe: '#e63946' },
   ninjamaske: { name: 'Ninja-Maske',  emoji: '🥷', preis: 350,  info: '🏃 Laufen +4%, 🌊 Abtauchen +6%', bonus: { tempo: 0.04, tauchen: 0.06 }, farbe: '#1e1e26' },
   stirnband:  { name: 'Ninja-Stirnband', emoji: '🎌', preis: 160, info: '⚡ Ulti +7%', bonus: { ulti: 0.07 }, farbe: '#e63946' },
+  einsatzhelm: { name: 'Einsatzhelm', emoji: '⛑️', preis: 0, info: 'Der Helm von der Fischerei-Wache', bonus: {}, farbe: '#f2f2f2', versteckt: true },
+  fischhut:    { name: 'Kabeljau-Hut', emoji: '🐟', preis: 0, info: '⚡ Ulti +10%, ❤️ +10% – ein ganzer Fisch auf dem Kopf!', bonus: { ulti: 0.1, heilen: 0.1 }, versteckt: true, belohnung: true },
+  kapitaensmuetze: { name: 'Kapitänsmütze', emoji: '🧑‍✈️', preis: 0, info: '🛡️ 8% weniger Schaden, 🎨 Tinte -5%', bonus: { schutz: 0.08, tinte: 0.05 }, versteckt: true, belohnung: true },
+  papageikrone: { name: 'Kabeljau-Krone', emoji: '👑', preis: 0, info: '⚡ Ulti +20%, 🛡️ +5% – nur für Kabeljau-Könige!', bonus: { ulti: 0.2, schutz: 0.05 }, versteckt: true, belohnung: true },
   astronaut:  { name: 'Astronautenhelm', emoji: '👨‍🚀', preis: 900, info: '🛡️ 8% weniger Schaden, ⚡ Ulti +10%', bonus: { schutz: 0.08, ulti: 0.1 } },
 };
 const FRISUREN = { kurz: { name: 'Kurz', emoji: '💇' }, stachel: { name: 'Stacheln', emoji: '🦔' }, locken: { name: 'Locken', emoji: '🌀' },
@@ -512,6 +524,7 @@ function zufallsAussehen() {   // für Bots und Kinder in der Stadt: Jungen und 
   const figur = Math.random() < 0.5 ? 'maedchen' : 'junge';
   return { haut: zufallAus(HAUTFARBEN), haar: zufallAus(HAARFARBEN), figur, frisur: zufallAus(figur === 'maedchen' ? MAEDCHEN_FRISUREN : JUNGEN_FRISUREN) };
 }
+const ARBEITS_KLEIDUNG = { hemd: 'einsatzjacke', schuhe: 'einsatzstiefel', kopf: 'einsatzhelm' };   // 🧑‍🚒 im Kabeljau Run tragen alle das
 const HAUTFARBEN = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
 const HAARFARBEN = ['#5a3825', '#2b1d14', '#e8c15a', '#b5522b', '#1b1f3a'];
 const SLOT_LISTE = { waffe: SETS, hemd: HEMDEN, schuhe: SCHUHE, kopf: KOEPFE };
@@ -3922,7 +3935,7 @@ function spawnPunkt(e) {
   return { x: BASIS[e.team].x, y: H / 2 + (e.nr - 1.5) * 70 };
 }
 function zufallAus(liste) { return liste[(Math.random() * liste.length) | 0]; }
-function zufall(obj) { const k = Object.keys(obj); return k[(Math.random() * k.length) | 0]; }
+function zufall(obj) { const k = Object.keys(obj).filter(id => !obj[id].versteckt); return k[(Math.random() * k.length) | 0]; }
 
 function neuerKlecks(team, nr, extra = {}) {
   const sp = extra.spieler !== undefined ? extra.spieler : team === 0 && nr === 0;
@@ -7128,7 +7141,7 @@ function shopZeigen() {
   const box = $('shopItems'); box.innerHTML = '';
   // Im Firmen-Laden: alles von dieser Firma (Waffen und Kleidung) – sonst nur die Sachen von diesem Laden
   const eintraege = F ? Object.keys(SHOPS).flatMap(slot => Object.entries(SHOPS[slot].liste).filter(([, it]) => it.firma === shopFirma).map(([id, it]) => [slot, id, it]))
-                      : Object.entries(SHOPS[shopTab].liste).map(([id, it]) => [shopTab, id, it]);
+                      : Object.entries(SHOPS[shopTab].liste).filter(([id, it]) => !it.versteckt || (it.belohnung && konto.besitz[shopTab].includes(id))).map(([id, it]) => [shopTab, id, it]);
   for (const [slot, id, it] of eintraege) {
     const preis = preisVon(slot, id), besitzt = konto.besitz[slot].includes(id), traegt = konto.an[slot] === id;
     const karte = document.createElement('div');
@@ -7138,6 +7151,7 @@ function shopZeigen() {
     const info = document.createElement('small');
     info.textContent = it.info;
     karte.append(em, nm, info);
+    if (it.belohnung) { const bs = document.createElement('div'); bs.textContent = '🏅 Kabeljau-Belohnung'; bs.style.cssText = 'background:#ff8a1f;color:#fff;border-radius:8px;padding:1px 8px;font-size:12px;font-weight:bold;align-self:center'; karte.append(bs); }
     if (it.firma) {   // Firmen-Schild
       const fs = document.createElement('div'), FF = FIRMEN[it.firma];
       fs.textContent = `${FF.emoji} ${FF.name}`; fs.style.cssText = `background:${FF.farbe};color:${FF.farbe2 === '#1b1b22' ? '#fff' : FF.farbe2};border-radius:8px;padding:1px 8px;font-size:12px;font-weight:bold;align-self:center`;
