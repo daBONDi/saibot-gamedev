@@ -1506,14 +1506,14 @@ function baueStartBox(t) {
   deckel.add(klotz(tm, 38, 3, 38, 18, 1.5, 0), klotz(dunkel, 10, 1.5, 10, 18, 3.5, 0), ringY(metall, 4, 0.8, 18, 4.5, 0));
   return { g, deckel, offen: 0 };
 }
-for (const id in ARENEN) {
+function startBoxenBauen() { for (const id in ARENEN) {
   if (ARENEN[id].nurKabeljau) continue;
   startBoxen[id] = [0, 1].map(t => [0, 1, 2, 3].map(nr => {
     const b = baueStartBox(t);
     b.g.position.set(BASIS[t].x - (t ? -8 : 8), 40, H / 2 + (nr - 1.5) * 70); b.g.rotation.y = t ? Math.PI : 0;
     kartenGruppe[id].add(b.g); return b;
   }));
-}
+} }
 // Lobby: großes Schild an der Wand
 (function lobbySchild() {
   const c = leinwand(512, 128), x = c.getContext('2d');
@@ -1574,6 +1574,7 @@ const MAT_WEISS = mat('#ffffff'), MAT_SCHWARZ = mat('#1b1f3a'), MAT_GRAU = mat('
 const MAT_CREME = mat('#f3e7cf'), MAT_GLOW = mat('#6fe3ff', { emissive: '#6fe3ff' });
 const VULKAN_GLUT = mat('#ff6a00', { emissive: '#ff4500', emissiveIntensity: 1 });   // glühende Lava (leuchtet stärker beim Ausbruch)
 const teamMat = TEAMS.map(t => mat(t.col, { roughness: 0.35 }));
+startBoxenBauen();   // 📦 (braucht die Teamfarben)
 let zugWarnFlaeche = null, zugMesh = null;   // 🚉 Bahnhof: rote Warnfläche auf dem Gleis und der Zug
 const SIGNAL_MATS = [0, 1].map(() => mat('#5a1010', { emissive: '#ff2020', emissiveIntensity: 0 }));
 // Farben fürs nächste Match setzen
@@ -6660,7 +6661,7 @@ function hud() {
     textMitRand('🌪️ Saug Gegner-Tinte & Bomben ein!', kx, ky - kr - 16, 22, '#ffd166');
     textMitRand(`Klick = 🔺 Pyramide werfen (${Math.ceil(spieler.saugerT)} s)`, kx, ky + kr + 30, 20, '#ffffff');
   }
-  if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand('🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
+  if (spieler.superSprung) { ctx.textAlign = 'center'; textMitRand(spieler.superSprung.box ? '📦 RAUS AUS DER BOX!' : '🚀 SUPERSPRUNG!', cw / 2, ch * 0.3, 34, '#ffd166'); }
   rufBlasenUpdate();
   if (rufMenu) rufMenuHud(cw, ch);
   if (tuffAnzeige && performance.now() / 1000 - tuffAnzeige.start < 0.8 && spieler.kugelT > 0) {   // 💪 jemand pusht deine Tuffkugel
