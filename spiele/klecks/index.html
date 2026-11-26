@@ -7638,12 +7638,13 @@ $('aufgeben').onclick = e => {
 };
 // ================== DIE STADT ==================
 const STADT = { x: W / 2, z: -4200 };
-const STADT_GRENZE = { x: 640, y: 460 };
+const STADT_GRENZE = { x: 1600, y: 1350 };   // 🏙️ die Großstadt (der Platz in der Mitte ist ±700 × ±640)
 const stadtGruppe = new THREE.Group(); stadtGruppe.position.set(STADT.x, 0, STADT.z); scene.add(stadtGruppe);
 kulisseBauen('stadt', stadtGruppe, 0, 0);   // Berge, Hochhäuser und Bäume rund um die Stadt
 const stadtHindernisse = [];        // Rechtecke {x, y, w, h} oder Kreise {x, y, kreis}
 const STADT_ZIELE = [];             // Türen: Läden und Arena
 let brunnenWasser = null, brunnenMat = null;
+const arenaLED = { cv: null, tex: null, strahlen: [], bild: 0 };
 function schildTextur(oben, unten, farbe) {
   const c = leinwand(512, 128), x = c.getContext('2d');
   x.fillStyle = farbe; x.beginPath(); x.roundRect(4, 4, 504, 120, 24); x.fill();
@@ -7675,13 +7676,9 @@ function sKlotz(m, w, h, d, x, y, z, hindernis) {   // Klotz in der Stadt (x/z =
   }
   b.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-  const bodenGeo = new THREE.PlaneGeometry(1500, 1100); bodenGeo.rotateX(-Math.PI / 2);
+  const bodenGeo = new THREE.PlaneGeometry(1400, 1280); bodenGeo.rotateX(-Math.PI / 2);
   const bodenS = new THREE.Mesh(bodenGeo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
   bodenS.position.y = 0.3; bodenS.receiveShadow = true; stadtGruppe.add(bodenS);
-  // Zaun am Rand
-  const zaun = mat('#5a6091');
-  sKlotz(zaun, 1500, 14, 6, 0, 7, -STADT_GRENZE.y - 10); sKlotz(zaun, 1500, 14, 6, 0, 7, STADT_GRENZE.y + 10);
-  sKlotz(zaun, 6, 14, 1100, -STADT_GRENZE.x - 10, 7, 0); sKlotz(zaun, 6, 14, 1100, STADT_GRENZE.x + 10, 7, 0);
 
   // Die 4 Läden
   const LAEDEN = [
@@ -7728,28 +7725,40 @@ function sKlotz(m, w, h, d, x, y, z, hindernis) {   // Klotz in der Stadt (x/z =
     STADT_ZIELE.push({ firma: l.firma, x: l.x + Math.sin(l.dreh) * 78, y: l.z + Math.cos(l.dreh) * 78, r: 50, text: `${F.emoji} ${F.name}-Store betreten` });
   }
 
-  // Die Arena
-  const az = 390;
-  const streifen = leinwand(512, 64), sx = streifen.getContext('2d');
-  for (let i = 0; i < 16; i++) { sx.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; sx.fillRect(i * 32, 0, 32, 64); }
-  const st = new THREE.CanvasTexture(streifen); st.colorSpace = THREE.SRGBColorSpace;
-  const turm = new THREE.Mesh(new THREE.CylinderGeometry(185, 195, 150, 32), new THREE.MeshStandardMaterial({ map: st, roughness: 0.6 }));
-  turm.position.set(0, 75, az); turm.castShadow = true; stadtGruppe.add(turm);
-  const kuppel = new THREE.Mesh(new THREE.SphereGeometry(185, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat('#e8f6ff', { roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.85 }));
-  kuppel.position.set(0, 150, az); kuppel.scale.y = 0.45; stadtGruppe.add(kuppel);
-  stadtHindernisse.push({ x: 0, y: az, kreis: 195 });
-  sKlotz(mat('#1b1f3a'), 90, 100, 30, 0, 50, az - 185);                                // Eingang
-  const leucht = mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 0.6 });
-  const bogen = new THREE.Mesh(new THREE.TorusGeometry(52, 6, 8, 24, Math.PI), leucht);
-  bogen.position.set(0, 52, az - 200); stadtGruppe.add(bogen);
-  sKlotz(leucht, 8, 52, 8, -52, 26, az - 200); sKlotz(leucht, 8, 52, 8, 52, 26, az - 200);
-  const ash = schild('🏟️ ARENA', 'Farbschlacht – hier geht\'s rein!', '#a347ff', 260, 65); ash.position.set(0, 135, az - 196); ash.rotation.x = -0.1; stadtGruppe.add(ash);
-  for (let i = 0; i < 8; i++) {                                                           // Fahnen auf dem Dach
-    const a = i / 8 * Math.PI * 2, fx = Math.cos(a) * 175, fz = az + Math.sin(a) * 175;
-    sKlotz(MAT_METALL, 2, 40, 2, fx, 170, fz);
-    sKlotz(teamMat[i % 2], 18, 12, 1, fx + 9, 184, fz);
+  // 🏟️ Die Arena: eine moderne Halle aus Glas und Stahl mit LED-Bildschirm
+  const az = 390, HW = 400, HD = 210, HH = 120, vorne = az - HD / 2;
+  const stahl = mat('#c9d1e0', { metalness: 0.6, roughness: 0.3 }), dunkelS = mat('#2b2f40', { metalness: 0.4, roughness: 0.5 });
+  const glasA = mat('#8fd3ff', { roughness: 0.05, metalness: 0.5, transparent: true, opacity: 0.55 });
+  sKlotz(mat('#3a3f55'), HW + 24, 10, HD + 24, 0, 5, az);                                   // Sockel
+  sKlotz(mat('#151a33'), HW - 16, HH - 4, HD - 16, 0, 10 + HH / 2, az);                     // Innenraum (dunkel, mit Licht)
+  sKlotz(glasA, HW, HH, HD, 0, 10 + HH / 2, az);                                            // Glashülle
+  for (let i = 0; i <= 10; i++) for (const z of [vorne - 0.5, az + HD / 2 + 0.5]) sKlotz(stahl, 3, HH, 3, -HW / 2 + i * HW / 10, 10 + HH / 2, z);   // Stahlpfosten
+  for (let i = 0; i <= 5; i++) for (const x of [-HW / 2 - 0.5, HW / 2 + 0.5]) sKlotz(stahl, 3, HH, 3, x, 10 + HH / 2, az - HD / 2 + i * HD / 5);
+  for (const y of [10, 10 + HH / 3, 10 + HH * 2 / 3]) { sKlotz(stahl, HW + 4, 2.5, 3, 0, y, vorne - 0.5); sKlotz(stahl, HW + 4, 2.5, 3, 0, y, az + HD / 2 + 0.5); sKlotz(stahl, 3, 2.5, HD + 4, -HW / 2 - 0.5, y, az); sKlotz(stahl, 3, 2.5, HD + 4, HW / 2 + 0.5, y, az); }
+  for (let i = 0; i < 8; i++) sKlotz(mat(i % 2 ? TEAMS[0].col : TEAMS[1].col, { emissive: i % 2 ? TEAMS[0].col : TEAMS[1].col, emissiveIntensity: 0.6 }), 26, HH - 30, 1, -HW / 2 + 25 + i * 50, 10 + HH / 2, vorne - 2.5).material.transparent = false;   // Lichtsäulen hinterm Glas
+  const dachA = new THREE.Mesh(new THREE.CylinderGeometry(HD / 2 + 18, HD / 2 + 18, HW + 40, 40, 1, false, 0, Math.PI), mat('#e8eef7', { metalness: 0.5, roughness: 0.25, side: THREE.DoubleSide }));
+  dachA.rotation.z = Math.PI / 2; dachA.scale.x = 0.42; dachA.position.set(0, 10 + HH, az); dachA.castShadow = true; stadtGruppe.add(dachA);   // geschwungenes Dach
+  for (const x of [-HW / 2 - 20, HW / 2 + 20]) { const r = new THREE.Mesh(new THREE.TorusGeometry(HD / 2 + 18, 2.2, 6, 40, Math.PI), mat(TEAMS[0].col, { emissive: TEAMS[0].col, emissiveIntensity: 1 })); r.rotation.y = Math.PI / 2; r.scale.y = 0.42; r.position.set(x, 10 + HH, az); stadtGruppe.add(r); }   // LED-Bogen
+  sKlotz(mat(TEAMS[1].col, { emissive: TEAMS[1].col, emissiveIntensity: 1 }), HW + 8, 3, 3, 0, 10 + HH + 1, vorne - 3);   // LED-Kante oben
+  // großer LED-Bildschirm vorne (wird in stadtZeigen animiert)
+  arenaLED.cv = leinwand(512, 160); arenaLED.tex = new THREE.CanvasTexture(arenaLED.cv); arenaLED.tex.colorSpace = THREE.SRGBColorSpace;
+  const led = new THREE.Mesh(new THREE.PlaneGeometry(300, 94), new THREE.MeshBasicMaterial({ map: arenaLED.tex }));
+  led.position.set(0, 10 + HH + 42, vorne - 6); led.rotation.y = Math.PI; stadtGruppe.add(led);
+  sKlotz(dunkelS, 312, 104, 6, 0, 10 + HH + 42, vorne - 2);
+  for (const x of [-140, 140]) sKlotz(stahl, 6, 60, 6, x, 10 + HH + 10, vorne - 2);
+  // Eingang: leuchtendes Tor, Treppe, Schild
+  const leucht = mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 0.8 });
+  sKlotz(mat('#0d0f1f'), 110, 80, 6, 0, 50, vorne - 3);
+  sKlotz(leucht, 8, 84, 8, -59, 52, vorne - 5); sKlotz(leucht, 8, 84, 8, 59, 52, vorne - 5); sKlotz(leucht, 126, 8, 8, 0, 94, vorne - 5);
+  for (let i = 0; i < 3; i++) sKlotz(mat('#8f96a8'), 170 - i * 20, 3.4, 14, 0, 1.7 + i * 3.4, vorne - 16 - (2 - i) * 13);
+  const ash = schild('🏟️ ARENA', 'Farbschlacht – hier geht\'s rein!', '#a347ff', 200, 50); ash.position.set(0, 72, vorne - 7); ash.rotation.y = Math.PI; stadtGruppe.add(ash);
+  // Lichtstrahlen in den Himmel
+  for (const [x, z] of [[-HW / 2, vorne], [HW / 2, vorne], [-HW / 2, az + HD / 2], [HW / 2, az + HD / 2]]) {
+    const st = new THREE.Mesh(new THREE.ConeGeometry(26, 700, 16, 1, true), new THREE.MeshBasicMaterial({ color: '#c9b8ff', transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    st.position.set(x, 10 + HH + 350, z); st.rotation.set(x < 0 ? 0.12 : -0.12, 0, x < 0 ? 0.15 : -0.15); stadtGruppe.add(st); arenaLED.strahlen.push(st);
   }
-  STADT_ZIELE.push({ arena: true, x: 0, y: az - 225, r: 60, text: '🏟️ Zur Arena (Lobby)' });
+  stadtHindernisse.push({ x: -HW / 2 - 12, y: az - HD / 2 - 12, w: HW + 24, h: HD + 24 });
+  STADT_ZIELE.push({ arena: true, x: 0, y: vorne - 50, r: 60, text: '🏟️ Zur Arena (Lobby)' });
 
   // Brunnen in der Mitte mit wechselnder Farbe
   stadtGruppe.add(zylinder(mat('#a89f8b'), 70, 76, 16, 0, 8, 0), zylinder(mat('#8f866f'), 62, 62, 2, 0, 15.5, 0));
