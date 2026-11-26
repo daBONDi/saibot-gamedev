@@ -555,7 +555,8 @@ function neuesKonto(name, haut, haar, frisur, figur = 'junge') {
   return { name, muenzen: 150, haut, haar, frisur, figur,
     besitz: { waffe: ['spritzer'], hemd: ['tshirt'], schuhe: ['turnschuhe'], kopf: ['keine'] },
     an: { waffe: 'spritzer', hemd: 'tshirt', schuhe: 'turnschuhe', kopf: 'keine' },
-    rekord: 0, runden: 0, siege: 0 };
+    rekord: 0, runden: 0, siege: 0,
+    papageiJob: false, kabeljauRekord: 0, kabRang: 0, kabPunkte: 0, kabStats: { schichten: 0, siege: 0, kaviar: 0, rettungen: 0, bosse: 0, riesen: 0 }, abzeichen: [], kabKarte: 'auto' };
 }
 // Falls gespeicherte Daten kaputt oder alt sind: alles Wichtige wieder richtig machen
 function kontoReparieren(k) {
@@ -563,6 +564,15 @@ function kontoReparieren(k) {
     HAUTFARBEN.includes(k.haut) ? k.haut : HAUTFARBEN[1], HAARFARBEN.includes(k.haar) ? k.haar : HAARFARBEN[0], hat(FRISUREN, k.frisur) ? k.frisur : 'kurz', hat(FIGUREN, k.figur) ? k.figur : 'junge');
   v.muenzen = Math.max(0, Math.floor(Number(k.muenzen) || 0));
   for (const f of ['rekord', 'runden', 'siege']) v[f] = Math.max(0, Math.floor(Number(k[f]) || 0));
+  // 🐟 Kabeljau Run: Job, Rekord, Rang, Statistik, Abzeichen, Kartenwahl
+  v.papageiJob = !!k.papageiJob;
+  v.kabeljauRekord = Math.max(0, Math.min(3, Math.floor(Number(k.kabeljauRekord) || 0)));
+  v.kabRang = Math.max(0, Math.min(4, Math.floor(Number(k.kabRang) || 0)));
+  v.kabPunkte = Math.max(0, Math.min(100, Math.floor(Number(k.kabPunkte) || 0)));
+  v.kabStats = {};
+  for (const f of ['schichten', 'siege', 'kaviar', 'rettungen', 'bosse', 'riesen']) v.kabStats[f] = Math.max(0, Math.floor(Number(k.kabStats && k.kabStats[f]) || 0));
+  v.abzeichen = Array.isArray(k.abzeichen) ? k.abzeichen.filter(a => typeof a === 'string').slice(0, 30) : [];
+  v.kabKarte = ['auto', 'insel', 'wrack'].includes(k.kabKarte) ? k.kabKarte : 'auto';
   for (const slot of Object.keys(SLOT_LISTE)) {
     const liste = SLOT_LISTE[slot];
     if (k.besitz && Array.isArray(k.besitz[slot])) for (const id of k.besitz[slot]) if (hat(liste, id) && !v.besitz[slot].includes(id)) v.besitz[slot].push(id);
@@ -7628,7 +7638,59 @@ const WELLEN = [
 ];
 const BOSS_LISTE = ['panzer', 'spucker', 'flunder', 'stelze', 'ramme', 'kugelfisch'];
 const KORB = { x: BASIS[0].x + 300, y: H / 2, r: 62 };
-const KABELJAU_KARTE = 'insel';
+// 🗺️ Welche Karte? Normalerweise wechselt sie alle 2 Stunden – man kann sie bei Dr. Papagei aber auch selbst aussuchen
+function kabeljauRotation() { return KABELJAU_KARTEN[rotationSlot() % KABELJAU_KARTEN.length]; }
+function kabeljauKarte() { return konto && KABELJAU_KARTEN.includes(konto.kabKarte) ? konto.kabKarte : kabeljauRotation(); }
+// 🎖️ Ränge: je höher, desto schwerer – aber es gibt auch mehr Münzen
+const RAENGE = [
+  { name: 'Lehrling',       emoji: '🐣', schwer: 1.0,  lohn: 1.0 },
+  { name: 'Fischer',        emoji: '🎣', schwer: 1.15, lohn: 1.2 },
+  { name: 'Profi',          emoji: '⭐', schwer: 1.3,  lohn: 1.4 },
+  { name: 'Meister',        emoji: '🏅', schwer: 1.5,  lohn: 1.7 },
+  { name: 'Kabeljau-König', emoji: '🤴', schwer: 1.75, lohn: 2.0 },
+];
+const RANG_BELOHNUNG = { 1: [['hemd', 'fischerpulli']], 2: [['schuhe', 'fischflossen']], 3: [['hemd', 'kapitaensjacke'], ['kopf', 'kapitaensmuetze']], 4: [['kopf', 'papageikrone']] };
+// 🏅 Abzeichen (manche geben auch ein Kleidungsstück)
+const ABZEICHEN = [
+  { id: 'erste',  emoji: '🐣', name: 'Erste Schicht',   text: 'Spiel eine Schicht.',                                ok: s => s.schichten >= 1 },
+  { id: 'sieg',   emoji: '🌊', name: 'Alle 3 Wellen',   text: 'Schaff alle 3 Wellen.',                              ok: s => s.siege >= 1 },
+  { id: 'kaviar', emoji: '🟠', name: 'Kaviar-Sammler',  text: 'Gib insgesamt 30 Kaviarkugeln selbst ab.',           ok: s => s.kaviar >= 30, sache: ['hemd', 'papageihemd'] },
+  { id: 'retter', emoji: '🫧', name: 'Lebensretter',    text: 'Rette insgesamt 10-mal jemanden.',                   ok: s => s.rettungen >= 10 },
+  { id: 'bosse',  emoji: '💪', name: 'Boss-Jäger',      text: 'Erwisch insgesamt 25 Bossfische.',                   ok: s => s.bosse >= 25 },
+  { id: 'riese',  emoji: '👑', name: 'Riesenbezwinger', text: 'Besieg den Riesenkabeljau.',                         ok: s => s.riesen >= 1, sache: ['kopf', 'fischhut'] },
+  { id: 'ohne',   emoji: '💯', name: 'Unerwischbar',    text: 'Gewinn eine Schicht, ohne selbst erwischt zu werden.', ok: (s, r) => r && r.gewonnen && r.tode === 0 },
+  { id: 'koenig', emoji: '🤴', name: 'Kabeljau-König',  text: 'Erreich den höchsten Rang.',                         ok: () => konto.kabRang >= 4 },
+];
+function sacheGeben(slot, id) {   // gibt ein Kleidungsstück – true, wenn es neu ist
+  if (konto.besitz[slot].includes(id)) return false;
+  konto.besitz[slot].push(id); return true;
+}
+function wQuote(WL) { return Math.round(WL.quote * (1 + ((kab ? kab.schwer : 1) - 1) * 0.6)); }   // auf hohen Rängen braucht man mehr Kaviar
+// Nach der Schicht: Rang-Punkte, Statistik, Abzeichen, Belohnungen
+function schichtAuswerten(gewonnen) {
+  const st = konto.kabStats, r = { gewonnen, tode: spieler.tode, rangAlt: konto.kabRang, punkteAlt: konto.kabPunkte, aufstieg: false, neueSachen: [], neueAbzeichen: [] };
+  st.schichten++; if (gewonnen) st.siege++; if (kab.riesenSieg) st.riesen++;
+  st.kaviar += spieler.kaviarAbgabe || 0; st.rettungen += spieler.rettungen || 0; st.bosse += spieler.bossKo || 0;
+  r.delta = gewonnen ? 25 + (kab.riesenSieg ? 10 : 0) : [-10, -5, 5][Math.min(2, kab.wellenGeschafft)];
+  let p = konto.kabPunkte + r.delta;
+  if (p >= 100 && konto.kabRang < RAENGE.length - 1) {   // ⬆️ Aufstieg!
+    konto.kabRang++; p = 20; r.aufstieg = true;
+    for (const [slot, id] of RANG_BELOHNUNG[konto.kabRang] || []) if (sacheGeben(slot, id)) r.neueSachen.push(SLOT_LISTE[slot][id]);
+  }
+  konto.kabPunkte = Math.max(0, Math.min(100, p));
+  for (const A of ABZEICHEN) {
+    if (konto.abzeichen.includes(A.id) || !A.ok(st, r)) continue;
+    konto.abzeichen.push(A.id); r.neueAbzeichen.push(A);
+    if (A.sache && sacheGeben(A.sache[0], A.sache[1])) r.neueSachen.push(SLOT_LISTE[A.sache[0]][A.sache[1]]);
+  }
+  return r;
+}
+function rangBalkenHtml() {   // kleiner Fortschrittsbalken (nur eigene feste Texte, keine Namen)
+  const R = RAENGE[konto.kabRang], max = konto.kabRang >= RAENGE.length - 1;
+  return `<div style="display:flex;align-items:center;gap:8px;justify-content:center;margin:4px 0"><b>${R.emoji} ${R.name}</b>` +
+    `<div style="width:160px;height:12px;background:#ffffff33;border-radius:6px;overflow:hidden"><div style="width:${konto.kabPunkte}%;height:100%;background:#ffd166"></div></div>` +
+    `<small>${max ? 'Höchster Rang!' : `${konto.kabPunkte}/100 bis ${RAENGE[konto.kabRang + 1].emoji} ${RAENGE[konto.kabRang + 1].name}`}</small></div>`;
+}
 let kab = null, kaviarKugeln = [], kabMeshes = [];
 
 function baueFisch(art) {
@@ -8026,15 +8088,16 @@ function kabeljauAufraeumen() {
 // ----- Start, Wellen, Ende -----
 function kabeljauStarten() {
   if (mp.peer) mpBeenden();
-  const auf = matchAufstellung().filter(a => a.team === 0);
+  const auf = matchAufstellung().filter(a => a.team === 0).map(a => ({ ...a, an: { ...ARBEITS_KLEIDUNG } }));   // 🧑‍🚒 alle in Einsatzkleidung
   farbenSetzen(Math.floor(Math.random() * FARB_PAARE.length));
   weltLeeren(true); meldungen = [];
-  spielArt = 'kabeljau'; modus = 'match'; karteLaden(KABELJAU_KARTE);
+  spielArt = 'kabeljau'; modus = 'match'; karteLaden(kabeljauKarte());
   klecks(BASIS[0].x, BASIS[0].y, 110, 0, null);
   kleckse = auf.map(a => neuerKlecks(0, zahl(a.nr, 0, 3, 0), aufZuExtra(a)));
   spieler = kleckse.find(e => e.spieler) || kleckse[0]; spieler.spieler = true;
-  baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
-  kab = { welle: 1, kaviar: 0, gesamt: 0, genug: false, spawnT: 2, bossT: 6, phase: 'sammeln', pauseT: 0, wellenGeschafft: 0 };
+  baueHaendeWaffe(spieler.waffe, kontoAussehen(), { ...konto.an, ...ARBEITS_KLEIDUNG });
+  const rang = konto.kabRang || 0;
+  kab = { welle: 1, kaviar: 0, gesamt: 0, genug: false, spawnT: 2, bossT: 6, phase: 'sammeln', pauseT: 0, wellenGeschafft: 0, rang, schwer: RAENGE[rang].schwer };
   rest = WELLEN[0].zeit; zeit = 0; pfiff10 = false; lobbySuche = null;
   matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null; aufnahme = { puffer: [], clips: [], tickT: 0 }; aufnahmeEv = [];
   korbBauen();
@@ -8044,7 +8107,7 @@ function kabeljauStarten() {
   zustand = 'spiel'; startCountdown = 3;
   audioStart(); musikModusSetzen('spiel', spielSong('farbhafen')); ton('fanfare');
   zielRing.material.color.set(TEAMS[spieler.team].col);
-  highlightAnzeige.push({ emoji: '🌊', titel: 'WELLE 1', text: `Sammle ${WELLEN[0].quote} Kaviarkugeln von den Bossfischen!`, start: performance.now() / 1000 + 2.5 });
+  highlightAnzeige.push({ emoji: '🌊', titel: 'WELLE 1', text: `Sammle ${wQuote(WELLEN[0])} Kaviarkugeln von den Bossfischen! (${RAENGE[rang].emoji} ${RAENGE[rang].name} · ${ARENEN[karte].emoji} ${ARENEN[karte].name})`, start: performance.now() / 1000 + 2.5 });
   mausFangen();
 }
 function fischSpawnen(art, gold = false) {
@@ -8092,14 +8155,14 @@ function kabeljauUpdate(dt) {
       kab.spawnT = 0.6;
       for (let i = 0; i < 2 && fische.length + i < 24; i++) { kab.rauschNr = (kab.rauschNr || 0) + 1; fischSpawnen('knirps', kab.rauschNr % 3 === 0); }
     } else {
-      kab.spawnT = WL.spawn * (0.8 + Math.random() * 0.4) * (kab.ereignis === 'nebel' ? 0.75 : 1);
+      kab.spawnT = WL.spawn * (0.8 + Math.random() * 0.4) * (kab.ereignis === 'nebel' ? 0.75 : 1) / Math.sqrt(kab.schwer);
       const n = 1 + (Math.random() < 0.4 ? 1 : 0) + (kab.welle === 3 && Math.random() < 0.3 ? 1 : 0);
-      for (let i = 0; i < n && fische.length + i < WL.max; i++) fischSpawnen(Math.random() < WL.dicker ? 'dicker' : Math.random() < 0.55 ? 'knirps' : 'kabeljau');
+      for (let i = 0; i < n && fische.length + i < WL.max + kab.rang * 2; i++) fischSpawnen(Math.random() < WL.dicker ? 'dicker' : Math.random() < 0.55 ? 'knirps' : 'kabeljau');
     }
   }
   if (WL.extra && kab.riese && kab.riese.tot) { kab.riesenSieg = true; kabeljauEnde(true, '👑 RIESENKABELJAU BESIEGT! Alle Wellen geschafft!'); return; }
   if (!rausch && !WL.extra && kab.bossT <= 0 && fische.filter(f => FISCH_ARTEN[f.fisch].boss).length < 3 + kab.welle) {
-    kab.bossT = WL.boss * (0.8 + Math.random() * 0.4);
+    kab.bossT = WL.boss * (0.8 + Math.random() * 0.4) / Math.sqrt(kab.schwer);
     fischSpawnen(zufallAus(BOSS_LISTE));
   }
   const team = kleckse.filter(e => !e.fisch);
@@ -8110,7 +8173,7 @@ function kabeljauUpdate(dt) {
   }
   if (rest <= 0) {
     if (WL.extra) { kabeljauEnde(true, '🎉 3 Wellen geschafft! (Der Riesenkabeljau ist entkommen 🐟💨)'); return; }
-    if (kab.kaviar < WL.quote) { kabeljauEnde(false, `⏰ Nicht genug Kaviar! (${kab.kaviar}/${WL.quote})`); return; }
+    if (kab.kaviar < wQuote(WL)) { kabeljauEnde(false, `⏰ Nicht genug Kaviar! (${kab.kaviar}/${wQuote(WL)})`); return; }
     kab.wellenGeschafft++;
     ereignisBeenden();
     // ➡️ nächste Welle: Fische hauen ab, alle sind wieder da
@@ -8124,7 +8187,7 @@ function kabeljauUpdate(dt) {
     ton('fanfare');
     if (NW.extra) highlightAnzeige.push({ emoji: '👑', titel: 'EXTRA-WELLE!', text: 'Alle 3 Wellen geschafft! Jetzt kommt der RIESENKABELJAU – besiegt ihn!', start: performance.now() / 1000 });
     else {
-      highlightAnzeige.push({ emoji: '🌊', titel: `WELLE ${kab.welle}!`, text: `Welle ${kab.welle - 1} geschafft! Jetzt ${NW.quote} Kaviarkugeln sammeln!`, start: performance.now() / 1000 });
+      highlightAnzeige.push({ emoji: '🌊', titel: `WELLE ${kab.welle}!`, text: `Welle ${kab.welle - 1} geschafft! Jetzt ${wQuote(NW)} Kaviarkugeln sammeln!`, start: performance.now() / 1000 });
       if (Math.random() < 0.45) ereignisStarten(zufallAus(Object.keys(EREIGNISSE)));   // 🌊🌫️✨ manchmal passiert was Besonderes
       leihwaffenVerteilen();
     }
@@ -8137,16 +8200,24 @@ function kabeljauEnde(gewonnen, grund) {
   musikModusSetzen('menu', listenSong('menu'));
   ton(gewonnen ? 'vollJubel' : 'vollTraurig');
   ereignisBeenden();
-  const verdient = kab.gesamt * 10 + kab.wellenGeschafft * 80 + (gewonnen ? 150 : 0) + (kab.riesenSieg ? 300 : 0) + spieler.ko * 3 + (spieler.rettungen || 0) * 15;
+  const lohn = RAENGE[kab.rang].lohn;
+  const verdient = Math.round((kab.gesamt * 10 + kab.wellenGeschafft * 80 + (gewonnen ? 150 : 0) + (kab.riesenSieg ? 300 : 0) + spieler.ko * 3 + (spieler.rettungen || 0) * 15) * lohn);
   konto.muenzen += verdient; konto.kabeljauRekord = Math.max(konto.kabeljauRekord || 0, kab.wellenGeschafft);
+  const aus = schichtAuswerten(gewonnen);
   speichern();
+  const RN = RAENGE[konto.kabRang];
+  let rangHtml = `<div style="margin-top:6px">🎖️ Rang-Punkte: <b style="color:${aus.delta >= 0 ? '#5be37d' : '#ff6060'}">${aus.delta >= 0 ? '+' : ''}${aus.delta}</b></div>` + rangBalkenHtml();
+  if (aus.aufstieg) rangHtml += `<div style="font-size:1.3rem;color:#ffd166">⬆️ AUFGESTIEGEN! Du bist jetzt ${RN.emoji} <b>${RN.name}</b>! (Ab jetzt schwerer – aber mehr Münzen)</div>`;
+  for (const A of aus.neueAbzeichen) rangHtml += `<div>🏅 Neues Abzeichen: ${A.emoji} <b>${A.name}</b></div>`;
+  for (const it of aus.neueSachen) rangHtml += `<div style="color:#ffb347">🎁 Neue Belohnung: ${it.emoji} <b>${it.name}</b> – zieh sie im Laden oder bei Dr. Papagei an!</div>`;
+  if (aus.aufstieg || aus.neueSachen.length || aus.neueAbzeichen.length) setTimeout(() => ton('fanfare'), 1200);
   $('sieger').textContent = grund;
   $('balkenO').parentElement.style.display = 'none';
   $('statistik').innerHTML =
     `🌊 Wellen geschafft: <b>${kab.wellenGeschafft}/3</b> &nbsp; 🟠 Kaviar abgegeben: <b>${kab.gesamt}</b> (du: <b>${spieler.kaviarAbgabe || 0}</b>)<br>` +
     `🐟 Fische erwischt: <b>${spieler.ko}</b> &nbsp; 🫧 Gerettet: <b>${spieler.rettungen || 0}</b> &nbsp; 💦 Selbst erwischt worden: <b>${spieler.tode}</b><br>` +
     (kab.riesenSieg ? '👑 <b>Riesenkabeljau besiegt! +300 Bonus</b><br>' : '') +
-    `<span style="font-size:1.4rem;color:#ffd166">🪙 +${verdient} Münzen</span> (jetzt: ${konto.muenzen})`;
+    `<span style="font-size:1.4rem;color:#ffd166">🪙 +${verdient} Münzen</span> (jetzt: ${konto.muenzen})${lohn > 1 ? ` <small>(×${lohn} Rang-Bonus)</small>` : ''}` + rangHtml;
   $('highlights').replaceChildren(); $('replayKnopf').classList.add('hidden');
   const nochmal = $('nochmal'); nochmal.disabled = false; nochmal.textContent = '🐟 Nochmal Kabeljau Run';
   nochmal.onclick = () => { ton('klick'); kabeljauStarten(); };
@@ -8159,6 +8230,7 @@ function kabeljauHud(cw, ch) {
   ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx - 10, 8, bw + 20, 74, 14); ctx.fill();
   const r = kab.phase === 'pause' ? WL.zeit : Math.max(0, rest), min = Math.floor(Math.ceil(r) / 60), sek = Math.ceil(r) % 60;
   ctx.textAlign = 'left'; ctx.font = 'bold 20px system-ui'; ctx.fillStyle = WL.extra ? '#ffd166' : '#6fe3ff'; ctx.fillText(WL.extra ? '👑 EXTRA' : `🌊 Welle ${kab.welle}/3`, bx, 34);
+  ctx.font = 'bold 12px system-ui'; ctx.fillStyle = '#ffffffcc'; ctx.fillText(`${RAENGE[kab.rang].emoji} ${RAENGE[kab.rang].name}`, bx, 78);
   ctx.textAlign = 'right'; ctx.fillStyle = r <= 10 && kab.phase !== 'pause' ? '#ff6060' : '#fff'; ctx.font = 'bold 24px system-ui'; ctx.fillText(`${min}:${String(sek).padStart(2, '0')}`, bx + bw, 34);
   ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = kab.genug ? '#5be37d' : '#ffd166';
   const ev = kab.ereignis ? EREIGNISSE[kab.ereignis] : null;
@@ -8169,8 +8241,8 @@ function kabeljauHud(cw, ch) {
     ctx.fillStyle = '#ff4d4d'; ctx.fillRect(bx, 48, bw * f, 18);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`👑 Riesenkabeljau: ${Math.round(f * 100)}%`, cw / 2, 62);
   } else {
-    ctx.fillStyle = kab.genug ? '#5be37d' : '#ff8a1f'; ctx.fillRect(bx, 48, bw * Math.min(1, kab.kaviar / WL.quote), 18);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`🟠 ${kab.kaviar} / ${WL.quote} Kaviarkugeln`, cw / 2, 62);
+    ctx.fillStyle = kab.genug ? '#5be37d' : '#ff8a1f'; ctx.fillRect(bx, 48, bw * Math.min(1, kab.kaviar / wQuote(WL)), 18);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui'; ctx.fillText(`🟠 ${kab.kaviar} / ${wQuote(WL)} Kaviarkugeln`, cw / 2, 62);
   }
   ctx.textAlign = 'left'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = (spieler.spezialRest || 0) > 0 ? '#ffd166' : '#888';
   ctx.fillText(`⚡ Spezial (Q): ${'⚡'.repeat(spieler.spezialRest || 0)}${'·'.repeat(SPEZIAL_ANZAHL - (spieler.spezialRest || 0))} ${spieler.spezialRest || 0}× übrig`, 20, ch - 190);
@@ -8261,8 +8333,8 @@ function kaviarAbgeben(k, wer) {
   if (wer) wer.kaviarAbgabe = (wer.kaviarAbgabe || 0) + 1;
   spritzer(KORB.x, KORB.y, 30, 0, 10, 200); ton('kauf');
   const WL = WELLEN[kab.welle - 1];
-  meldung(`🧺 ${wer ? (wer.spieler ? 'Du hast' : wer.name + ' hat') : 'Jemand hat'} eine Kaviarkugel abgegeben! (${kab.kaviar}/${WL.quote})`);
-  if (!kab.genug && kab.kaviar >= WL.quote) {
+  meldung(`🧺 ${wer ? (wer.spieler ? 'Du hast' : wer.name + ' hat') : 'Jemand hat'} eine Kaviarkugel abgegeben! (${kab.kaviar}/${wQuote(WL)})`);
+  if (!kab.genug && kab.kaviar >= wQuote(WL)) {
     kab.genug = true; ton('fanfare');
     highlightAnzeige.push({ emoji: '✅', titel: 'GENUG KAVIAR!', text: 'Jetzt nur noch überleben, bis die Zeit um ist!', start: performance.now() / 1000 });
   }
@@ -8276,7 +8348,7 @@ function waffeWechseln(e, setId) {
   e.set = setId; e.waffe = S.basis; e.bombe = S.bombe; e.ultiArt = S.ulti;
   e.schirmHP = WAFFEN[e.waffe].schirmHP || 0; e.laden = false; e.ladung = 0; e.lingT = 0;
   e.waffenModell = baueWaffe(e.waffe, e.mat, e.team, S.watzo, S.variante); if (ober) ober.add(e.waffenModell);
-  if (e.spieler) baueHaendeWaffe(e.waffe, kontoAussehen(), { ...konto.an, waffe: setId });
+  if (e.spieler) baueHaendeWaffe(e.waffe, kontoAussehen(), { ...konto.an, ...(spielArt === 'kabeljau' ? ARBEITS_KLEIDUNG : {}), waffe: setId });
 }
 function leihwaffenVerteilen() {
   const frei = [...LEIH_SETS].sort(() => Math.random() - 0.5);
@@ -8420,7 +8492,7 @@ function farbcastStarten() {
     ['tini', `In der Farbschlacht spielt ihr gerade in ${A1.emoji} ${A1.name} und ${A2.emoji} ${A2.name}!`, [a1, a2]],
     ['brummi', `${A1.name}? Uuh! ${A1.spezial}`, [a1]],
     ['tini', `Und im ${A2.name}: ${A2.spezial}`, [a2]],
-    ['brummi', `Beim 🐟 Kabeljau Run geht es auf die 🏝️ ${ARENEN[KABELJAU_KARTE].name}. Rundherum ist Meer – also nicht reinfallen, sonst macht es PLATSCH!`, [KABELJAU_KARTE]],
+    ['brummi', `Beim 🐟 Kabeljau Run geht es gerade auf die ${ARENEN[kabeljauRotation()].emoji} ${ARENEN[kabeljauRotation()].name}. Rundherum ist Meer – also nicht reinfallen, sonst macht es PLATSCH!`, [kabeljauRotation()]],
     ['tini', `News! ${news[0]}`],
     ['brummi', `Und noch was: ${news[1]}`],
     ['tini', `In ${restZeitText()} wechseln die Arenen. Dann sind ${N1.emoji} ${N1.name} und ${N2.emoji} ${N2.name} dran!`, [n1, n2], 'Danach'],
@@ -8539,9 +8611,23 @@ let papageiRedet = false;
 // ----- Das Gespräch mit Dr. Papagei (mit Tutorial) -----
 function fischBild(art, w = 120, h = 70) {   // kleines Bild von einem Fisch für das Tutorial
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
-  const A = FISCH_ARTEN[art], s = { knirps: 0.6, kabeljau: 0.85, dicker: 1.15, panzer: 0.9, spucker: 0.85, flunder: 0.9, riese: 1.15 }[art];
+  const A = FISCH_ARTEN[art], s = { knirps: 0.6, kabeljau: 0.85, dicker: 1.15, panzer: 0.9, spucker: 0.85, flunder: 0.9, riese: 1.15, stelze: 0.62, ramme: 0.72, kugelfisch: 0.85 }[art];
   x.translate(w / 2, h / 2 + 4); x.scale(s, s);
   const tinte = TEAMS[1].col;
+  if (art === 'kugelfisch') {   // rund mit Stacheln
+    x.fillStyle = '#8a6a1e'; for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; x.beginPath(); x.moveTo(Math.cos(a - 0.15) * 30, Math.sin(a - 0.15) * 30); x.lineTo(Math.cos(a) * 42, Math.sin(a) * 42); x.lineTo(Math.cos(a + 0.15) * 30, Math.sin(a + 0.15) * 30); x.fill(); }
+    x.fillStyle = A.farbe; x.beginPath(); x.arc(0, 0, 32, 0, 7); x.fill();
+    x.fillStyle = A.bauch; x.beginPath(); x.ellipse(4, 12, 24, 14, 0, 0, 7); x.fill();
+    for (const py of [-10]) for (const px of [8, 22]) { x.fillStyle = '#fff'; x.beginPath(); x.arc(px, py, 8, 0, 7); x.fill(); x.fillStyle = '#111'; x.beginPath(); x.arc(px + 2, py, 4, 0, 7); x.fill(); }
+    x.fillStyle = '#e07a5f'; x.beginPath(); x.arc(28, 8, 5, 0, 7); x.fill();
+    x.fillStyle = '#ff3b3b'; x.beginPath(); x.arc(-4, -34, 5, 0, 7); x.fill();
+    return c;
+  }
+  if (art === 'stelze') {   // lange Stelzen unter dem Fisch
+    x.strokeStyle = '#9aa3b8'; x.lineWidth = 5; for (const px of [-10, 10]) { x.beginPath(); x.moveTo(px, 0); x.lineTo(px, 52); x.stroke(); }
+    x.strokeStyle = '#ffd21f'; for (const px of [-10, 10]) for (const py of [18, 38]) { x.beginPath(); x.moveTo(px, py); x.lineTo(px, py + 5); x.stroke(); }
+    x.translate(0, -26);
+  }
   if (art === 'flunder') {
     x.fillStyle = A.farbe; x.beginPath(); x.ellipse(0, 0, 46, 24, 0, 0, 7); x.fill();
     x.fillStyle = tinte; for (const [px, py] of [[-15, -8], [10, 9], [-5, 10], [20, -6]]) { x.beginPath(); x.arc(px, py, 4, 0, 7); x.fill(); }
@@ -8561,6 +8647,12 @@ function fischBild(art, w = 120, h = 70) {   // kleines Bild von einem Fisch fü
   x.strokeStyle = '#4a5a48'; x.lineWidth = 4; for (const px of [-8, 8]) { x.beginPath(); x.moveTo(px, 20 * dick); x.lineTo(px + 3, 30 * dick); x.stroke(); }
   if (art === 'panzer') { x.fillStyle = '#c9cfe6'; x.beginPath(); x.ellipse(52, 0, 8, 26, 0, 0, 7); x.fill(); x.strokeStyle = '#4a4f73'; x.lineWidth = 2; x.stroke(); x.fillStyle = '#9aa1bd'; x.beginPath(); x.arc(14, -20, 14, Math.PI, 0); x.fill(); }
   if (art === 'riese') { x.fillStyle = '#ffd166'; x.beginPath(); x.moveTo(4, -20); for (let i = 0; i <= 4; i++) { x.lineTo(4 + i * 8, i % 2 ? -26 : -40); } x.lineTo(36, -20); x.fill(); }   // Krone
+  if (art === 'ramme') {   // Baggerschaufel + Bauhelm
+    x.fillStyle = '#ffb627'; x.beginPath(); x.arc(56, 4, 22, -Math.PI / 2, Math.PI / 2); x.lineTo(50, 26); x.lineTo(50, -18); x.fill();
+    x.fillStyle = '#1b1b22'; for (let i = 0; i < 4; i++) x.fillRect(66 + (i % 2) * 2, -14 + i * 9, 6, 4);
+    x.fillStyle = '#ffb627'; x.beginPath(); x.arc(10, -20, 16, Math.PI, 0); x.fill(); x.fillRect(-10, -22, 40, 4);
+    x.fillStyle = '#ff8a1f'; x.beginPath(); x.arc(10, -38, 4, 0, 7); x.fill();
+  }
   if (art === 'spucker') { x.fillStyle = '#4a4f73'; x.fillRect(40, -4, 22, 10); x.fillStyle = tinte; x.fillRect(58, -6, 5, 14); x.fillStyle = '#9fd8ff'; x.fillRect(-14, -36, 14, 16); }
   return c;
 }
@@ -8570,11 +8662,13 @@ const PAPAGEI_SEITEN = [
   { text: () => 'Und ich brauche für meine Forschung dringend Kaviarkugeln! 🟠 Willst du für mich arbeiten? Du bekommst natürlich Münzen dafür! 🪙', job: true },
   { titel: 'Die normalen Kabeljaus', fische: ['knirps', 'kabeljau', 'dicker'], text: () => 'Super! Dann zeig ich dir erst mal, wer da so rumschwimmt. Diese drei kommen ganz oft:' },
   { titel: 'Die Bossfische', fische: ['panzer', 'spucker', 'flunder'], text: () => 'Krah! Und dann gibt es noch die BOSSFISCHE. Die sind stark – aber nur sie haben Kaviar dabei!' },
+  { titel: '🆕 Noch mehr Bossfische', fische: ['stelze', 'ramme', 'kugelfisch'], text: () => 'Krah! Und seit Neuestem tauchen noch DREI andere Bossfische auf. Die sind ganz schön gemein:' },
   { titel: '🟠 Kaviarkugeln', kaviar: true, text: () => 'Wenn du einen Bossfisch erwischst, lässt er 3 Kaviarkugeln fallen. Lauf drüber, dann trägst du eine. Bring sie zum goldenen Korb 🧺 bei deiner Basis – oder halte E, ziel und WIRF sie rein! Mit Kugel bist du etwas langsamer.' },
   { titel: '🫧 Retten', text: () => 'Krah, ganz wichtig: Wenn dich ein Fisch erwischt, wirst du zu einer RETTUNGSBLASE. Deine Freunde müssen die Blase mit Tinte anmalen – dann bist du wieder da! Als Blase kannst du mit WASD langsam schweben. Sind alle gleichzeitig Blasen, ist die Schicht vorbei!' },
   { titel: '🎲 Leihwaffen & ⚡ Spezial', text: () => `In jeder Welle leihe ich dir eine ZUFÄLLIGE Waffe – lass dich überraschen! Dein Spezial (Q) musst du nicht aufladen, aber du hast es nur ${SPEZIAL_ANZAHL}-mal pro Schicht. Spar es für Notfälle!` },
   { titel: '🌊 3 Wellen', wellen: true, text: () => 'Es gibt 3 Wellen. In jeder Welle hast du ein Zeitlimit, um genug Kaviar abzugeben. Hast du alle? Dann musst du nur noch überleben, bis die Zeit um ist! Manchmal passiert auch was Besonderes:' },
   { titel: '👑 Die Extra-Welle', fische: ['riese'], text: () => 'Und wenn ihr alle 3 Wellen schafft, kommt noch der RIESENKABELJAU! Besiegt ihn in der Extra-Welle, dann gibt es einen Riesen-Bonus!' },
+  { titel: '🧑‍🚒 Einsatzkleidung & 🎖️ Ränge', raenge: true, text: () => 'Bei der Schicht ziehst du die Einsatzkleidung der Fischerei-Wache an – wie bei der Feuerwehr! Und je besser du arbeitest, desto höher steigt dein Rang. Höhere Ränge sind schwerer, aber es gibt mehr Münzen und tolle Belohnungen!' },
   { text: () => 'Deine 3 Helfer kommen mit. Viel Glück – und lass dich nicht anknabbern! Krah! 🦜', los: true },
 ];
 let papageiSeite = 0;
@@ -8587,11 +8681,56 @@ function papageiZeigen() {
   const box = $('papageiText'), extra = $('papageiExtra'), knoepfe = $('papageiKnoepfe');
   extra.replaceChildren(); knoepfe.replaceChildren();
   const k = (txt, f, kl) => { const b = knopf([txt], () => { ton('klick'); f(); }, kl); knoepfe.append(b); };
+  const zeile = (text, aus = false) => { const z = document.createElement('div'); z.className = 'fischZeile'; z.textContent = text; if (aus) z.style.opacity = '0.45'; extra.append(z); return z; };
+  const titel = t => { const h = document.createElement('h3'); h.textContent = t; extra.append(h); };
   if (papageiSeite === -1) {   // Wiederkommer
-    papageiSagt(`Krah! Da bist du ja wieder, ${konto.name}! 🦜 Bereit für eine neue Schicht? ${konto.kabeljauRekord ? `(Dein Rekord: ${konto.kabeljauRekord}/3 Wellen)` : ''}`);
+    const R = RAENGE[konto.kabRang], K = ARENEN[kabeljauKarte()];
+    papageiSagt(`Krah! Da bist du ja wieder, ${konto.name}! 🦜 Du bist ${R.emoji} ${R.name}. Heute geht es auf die ${K.emoji} ${K.name}. Zieh deine Einsatzkleidung an – bereit für eine neue Schicht?`);
+    const balken = document.createElement('div'); balken.innerHTML = rangBalkenHtml(); extra.append(balken);
+    const st = konto.kabStats;
+    zeile(`📊 Schichten: ${st.schichten} · Gewonnen: ${st.siege} · 🟠 Kaviar: ${st.kaviar} · 🫧 Gerettet: ${st.rettungen} · 💪 Bosse: ${st.bosse}${konto.kabeljauRekord ? ` · Rekord: ${konto.kabeljauRekord}/3 Wellen` : ''}`);
     k('🐟 Los, Kabeljau Run starten!', () => kabeljauStarten(), 'gross');
-    k('📖 Tutorial nochmal ansehen', () => { papageiSeite = 3; papageiZeigen(); }, 'klein');
+    const naechste = { auto: 'insel', insel: 'wrack', wrack: 'auto' };
+    k(`🗺️ Karte: ${konto.kabKarte === 'auto' ? `🔄 wechselt (jetzt ${K.emoji} ${K.name})` : `${K.emoji} ${K.name}`}`, () => { konto.kabKarte = naechste[konto.kabKarte] || 'auto'; speichern(); papageiZeigen(); }, 'klein');
+    k(`🏅 Abzeichen & Belohnungen (${konto.abzeichen.length}/${ABZEICHEN.length})`, () => { papageiSeite = -2; papageiZeigen(); }, 'klein');
+    k('🆕 Neue Bossfische', () => { papageiSeite = -3; papageiZeigen(); }, 'klein');
+    k('📖 Tutorial', () => { papageiSeite = 3; papageiZeigen(); }, 'klein');
     k('⬅ Zurück in die Stadt', papageiZu, 'klein');
+    return;
+  }
+  if (papageiSeite === -2) {   // 🏅 Abzeichen & Belohnungen
+    papageiSagt('Krah! Hier sind deine Abzeichen. Für manche gibt es sogar was zum Anziehen! 🦜');
+    titel(`🏅 Abzeichen (${konto.abzeichen.length}/${ABZEICHEN.length})`);
+    for (const A of ABZEICHEN) {
+      const hat2 = konto.abzeichen.includes(A.id), it = A.sache && SLOT_LISTE[A.sache[0]][A.sache[1]];
+      zeile(`${hat2 ? '✅' : '🔒'} ${A.emoji} ${A.name} – ${A.text}${it ? `  🎁 ${it.emoji} ${it.name}` : ''}`, !hat2);
+    }
+    titel('🎁 Belohnungen zum Anziehen');
+    const liste = [];
+    for (const [rang, sachen] of Object.entries(RANG_BELOHNUNG)) for (const [slot, id] of sachen) liste.push([slot, id, `Rang ${RAENGE[rang].emoji} ${RAENGE[rang].name}`]);
+    for (const A of ABZEICHEN) if (A.sache) liste.push([A.sache[0], A.sache[1], `Abzeichen ${A.emoji} ${A.name}`]);
+    for (const [slot, id, wie] of liste) {
+      const it = SLOT_LISTE[slot][id], hat2 = konto.besitz[slot].includes(id);
+      const z = zeile(`${it.emoji} ${it.name} – ${it.info}  (${hat2 ? 'hast du!' : 'bekommst du mit: ' + wie})`, !hat2);
+      if (hat2) {
+        if (konto.an[slot] === id) { const t = document.createElement('b'); t.textContent = ' ✔ Angezogen'; t.style.color = '#5be37d'; z.append(t); }
+        else z.append(knopf(['👕 Anziehen'], () => { konto.an[slot] = id; speichern(); ton('kauf'); papageiZeigen(); }, 'klein'));
+      }
+    }
+    k('⬅ Zurück', () => { papageiSeite = -1; papageiZeigen(); }, 'gross');
+    return;
+  }
+  if (papageiSeite === -3) {   // 🆕 neue Bosse
+    papageiSagt('Krah! Pass auf, diese drei Bossfische sind neu in der Bucht! 🦜');
+    titel('🆕 Neue Bossfische');
+    for (const art of ['stelze', 'ramme', 'kugelfisch']) {
+      const A = FISCH_ARTEN[art], z = document.createElement('div'); z.className = 'fischZeile';
+      const t = document.createElement('div'); const b = document.createElement('b'); b.textContent = `${A.emoji} ${A.name}`;
+      const sp = document.createElement('span'); sp.textContent = ` – ${A.info} (${A.angriff}, ${A.hp} Leben)`;
+      t.append(b, sp); z.append(fischBild(art), t); extra.append(z);
+    }
+    zeile(`🗺️ Neue Karte: ${ARENEN.wrack.emoji} ${ARENEN.wrack.name} – ${ARENEN.wrack.spezial}`);
+    k('⬅ Zurück', () => { papageiSeite = -1; papageiZeigen(); }, 'gross');
     return;
   }
   const S = PAPAGEI_SEITEN[papageiSeite];
@@ -8602,6 +8741,10 @@ function papageiZeigen() {
     const t = document.createElement('div'); const b = document.createElement('b'); b.textContent = `${A.emoji} ${A.name}`;
     const p = document.createElement('span'); p.textContent = ` – ${A.info} (${A.angriff}, ${A.hp} Leben)`;
     t.append(b, p); z.append(fischBild(art), t); extra.append(z);
+  }
+  if (S.raenge) for (let i = 0; i < RAENGE.length; i++) {
+    const R = RAENGE[i], b = (RANG_BELOHNUNG[i] || []).map(([sl, id]) => `${SLOT_LISTE[sl][id].emoji} ${SLOT_LISTE[sl][id].name}`).join(', ');
+    zeile(`${R.emoji} ${R.name} – Fische ${Math.round(R.schwer * 100)}% stark, Münzen ×${R.lohn}${b ? `  🎁 ${b}` : ''}`);
   }
   if (S.kaviar) { const z = document.createElement('div'); z.className = 'fischZeile'; z.textContent = '🛡️/💥/🥏 Boss erwischt ➜ 🟠🟠🟠 fallen raus ➜ drüberlaufen ➜ 🧺 zum goldenen Korb tragen ➜ ✅'; extra.append(z); }
   if (S.wellen) {
