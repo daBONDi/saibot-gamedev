@@ -5330,7 +5330,7 @@ function sprungStarten(e, z) {
 }
 // ---------- 📦 Start-Box: Landeplatz aussuchen und rausschießen ----------
 const BOX_MIN = 110, BOX_MAX = 560, BOX_ZEIT = 5;   // so nah / weit kann man fliegen, so lange darf man aussuchen
-const BOX_SCHWEBE = 70;   // so hoch über dem Boden schwebt die Stahlbox (da stehst du drauf)
+const BOX_SCHWEBE = 130;   // so hoch über dem Boden schwebt die Stahlbox (da stehst du drauf)
 function boxErlaubt() { return modus === 'match' && spielArt !== 'kabeljau' && !!ARENEN[karte] && !ARENEN[karte].nurKabeljau; }
 function lokalGesteuert(e) { return e.spieler || (!istGast() && !e.mensch && !e.puppe && !e.fisch); }
 function boxRein(e, start = false) {
@@ -5383,8 +5383,9 @@ function boxLos(e) {
   e.inBox = null;
   const d = Math.hypot(B.zx - B.x, B.zy - B.y);
   const h0 = bodenHoehe(B.x, B.y) + e.z;
-  e.superSprung = { sx: B.x, sy: B.y, h0, zx: B.zx, zy: B.zy, h1: bodenHoehe(B.zx, B.zy), t: 0, dauer: 0.75 + d / 1300, vorT: 0, box: true };
+  e.superSprung = { sx: B.x, sy: B.y, h0, zx: B.zx, zy: B.zy, h1: bodenHoehe(B.zx, B.zy), t: 0, dauer: 0.35 + d / 950, vorT: 0, box: true };
   e.sprungBlob = false; e.spawnT = 0;
+  e.winkel = Math.atan2(B.zy - B.y, B.zx - B.x); e.pitch = -Math.atan2(h0 - bodenHoehe(B.zx, B.zy), Math.max(1, d)) * 0.8;   // schaut zum Landeplatz runter
   spritzer(B.x, B.y, h0, e.team, 20, 260);
   if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 600) ton('sprung');
 }
@@ -5410,34 +5411,35 @@ function boxMarkerZeigen() {   // Landeplatz-Anzeige (nur für dich): Ring, Lich
   ud.punkte.forEach((k, i) => {
     const f = (i + 1) / 15 + ((zeit * 0.6) % (1 / 15));
     const h0 = bodenHoehe(B.x, B.y) + BOX_SCHWEBE;
-    k.position.set(B.x + (B.zx - B.x) * f, h0 + (h1 - h0) * f + Math.sin(f * Math.PI) * SPRUNG_HOEHE * 0.8, B.y + (B.zy - B.y) * f);
+    k.position.set(B.x + (B.zx - B.x) * f, h0 + (h1 - h0) * f + Math.sin(f * Math.PI) * 12, B.y + (B.zy - B.y) * f);   // fast gerade schräg runter
   });
 }
 // 🛸 Die fliegende Stahlbox: schwebt unter dir, solange du drauf stehst – danach fliegt sie weg
 const stahlBoxen = new Map();   // Klecks -> { g, weg }
-function baueStahlBox(team) {
+function baueStahlBox(team) {   // kleiner Stahlwürfel (20 × 20 × 20), oben eine Trittplatte, unten 4 Düsen
   const g = new THREE.Group(), ud = g.userData;
-  const stahl = mat('#9aa3b8', { metalness: 0.85, roughness: 0.3 }), dunkel = mat('#3a3f55', { metalness: 0.7, roughness: 0.4 });
+  const stahl = mat('#c9d1e0', { metalness: 0.45, roughness: 0.35 }), dunkel = mat('#5a6078', { metalness: 0.4, roughness: 0.45 });
   const licht = mat(TEAMS[team].col, { emissive: TEAMS[team].col, emissiveIntensity: 1.2 });
-  g.add(klotz(stahl, 30, 16, 30, 0, -8, 0), klotz(dunkel, 32, 1.6, 32, 0, -0.8, 0));         // Stahlkörper + Trittplatte oben
-  for (let i = -3; i <= 3; i++) g.add(klotz(mat('#2b2f40'), 0.6, 0.4, 28, i * 4, 0.1, 0));    // Riffelblech
-  for (const [x, z] of [[-15, -15], [15, -15], [-15, 15], [15, 15]]) {
-    g.add(klotz(dunkel, 3, 17, 3, x, -8, z));                                              // Kanten
-    for (const y of [-3, -13]) g.add(kugel(MAT_METALL, 0.7, x * 1.03, y, z * 1.03));      // Nieten
+  g.add(klotz(stahl, 20, 20, 20, 0, -10, 0), klotz(dunkel, 21, 1.4, 21, 0, -0.7, 0));        // Würfel + Trittplatte
+  for (let i = -2; i <= 2; i++) g.add(klotz(mat('#2b2f40'), 0.6, 0.4, 19, i * 4, 0.1, 0));    // Riffelblech
+  for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) {
+    g.add(klotz(dunkel, 2.4, 21, 2.4, x, -10, z));                                        // Kanten
+    for (const y of [-4, -16]) g.add(kugel(MAT_METALL, 0.6, x * 1.03, y, z * 1.03));      // Nieten
   }
-  for (let i = 0; i < 8; i++) {                                                            // gelb-schwarze Warnstreifen
+  for (let i = 0; i < 5; i++) {                                                           // gelb-schwarze Warnstreifen
     const m = mat(i % 2 ? '#1b1b22' : '#ffd21f');
-    g.add(klotz(m, 3.75, 3, 0.5, -13 + i * 3.75, -10, 15.3), klotz(m, 3.75, 3, 0.5, -13 + i * 3.75, -10, -15.3));
+    for (const z of [-10.3, 10.3]) g.add(klotz(m, 3.6, 2.6, 0.5, -7.2 + i * 3.6, -15, z));
+    for (const x of [-10.3, 10.3]) g.add(klotz(m, 0.5, 2.6, 3.6, x, -15, -7.2 + i * 3.6));
   }
-  g.add(ringY(licht, 15.8, 0.7, 0, -4, 0));                                              // Leuchtband in Teamfarbe
+  g.add(ringY(licht, 10.6, 0.6, 0, -6, 0));                                              // Leuchtband in Teamfarbe
   ud.duesen = [];
-  for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) {                    // 4 Düsen unten
-    g.add(zylinder(dunkel, 3, 4, 4, x, -18, z));
-    const f = new THREE.Mesh(new THREE.ConeGeometry(3, 12, 10), new THREE.MeshBasicMaterial({ color: '#6fe3ff', transparent: true, opacity: 0.8, depthWrite: false }));
-    f.rotation.x = Math.PI; f.position.set(x, -26, z); g.add(f); ud.duesen.push(f);
+  for (const [x, z] of [[-5.5, -5.5], [5.5, -5.5], [-5.5, 5.5], [5.5, 5.5]]) {            // 4 Düsen unten
+    g.add(zylinder(dunkel, 2.2, 3, 3, x, -21.5, z));
+    const f = new THREE.Mesh(new THREE.ConeGeometry(2.4, 10, 10), new THREE.MeshBasicMaterial({ color: '#6fe3ff', transparent: true, opacity: 0.8, depthWrite: false }));
+    f.rotation.x = Math.PI; f.position.set(x, -28, z); g.add(f); ud.duesen.push(f);
   }
-  const antenne = zylinder(MAT_GRAU, 0.4, 0.4, 8, -12, -12 + 4, -12); g.add(antenne);
-  ud.lampe = kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 1, 14, -2, 14); g.add(ud.lampe);
+  g.add(zylinder(MAT_GRAU, 0.35, 0.35, 6, -8, -1, -8));                                  // kleine Antenne
+  ud.lampe = kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 0.9, 8.5, -2, 8.5); g.add(ud.lampe);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   scene.add(g);
   return g;
@@ -5479,12 +5481,12 @@ function sprungFliegen(e, dt) {
     return;
   }
   s.t += dt;
-  const f = Math.min(1, s.t / s.dauer), k = f * f * (3 - 2 * f);
+  const f = Math.min(1, s.t / s.dauer), k = s.box ? f : f * f * (3 - 2 * f);   // aus der Stahlbox: gerade schräg nach unten
   const warBlob = e.sprungBlob;
   e.sprungBlob = !s.box && f < SPRUNG_MENSCH;   // kurz vor dem Aufprall wieder ein Mensch (aus der Start-Box fliegt man als Mensch)
   if (warBlob && !e.sprungBlob) { spritzer(e.x, e.y, hAbs(e), e.team, 18, 220); if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('plopp'); }
   e.x = s.sx + (s.zx - s.sx) * k; e.y = s.sy + (s.zy - s.sy) * k;
-  const hoch = s.h0 + (s.h1 - s.h0) * f + Math.sin(f * Math.PI) * SPRUNG_HOEHE;
+  const hoch = s.h0 + (s.h1 - s.h0) * f + Math.sin(f * Math.PI) * (s.box ? 12 : SPRUNG_HOEHE);
   e.z = Math.max(0.01, hoch - bodenHoehe(e.x, e.y)); e.vx = e.vy = e.vz = 0;
   if (f >= 1) {   // gelandet!
     e.superSprung = null; e.sprungBlob = false; e.z = 0; e.landT = 0.25;
