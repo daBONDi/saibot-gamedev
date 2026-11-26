@@ -1465,7 +1465,17 @@ function wandMuster(muster, farbe) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
   return { t, glut };
 }
-for (const r of KARTEN.lobby) wandKlotz(r.x, r.y, r.w, r.h, 80, wandMat, kartenGruppe.lobby);
+// 🏟️ Lobby-Wände: dunkle Paneele mit Leuchtfugen (wie in einer modernen Halle)
+const lobbyWandMat = (() => {
+  const c = leinwand(128, 128), x = c.getContext('2d');
+  x.fillStyle = '#1c2140'; x.fillRect(0, 0, 128, 128);
+  x.fillStyle = '#252b52'; x.fillRect(4, 4, 56, 120); x.fillRect(68, 4, 56, 120);
+  x.fillStyle = '#6fe3ff'; x.fillRect(62, 0, 4, 128); x.fillStyle = '#a347ff'; x.fillRect(0, 100, 128, 3);
+  x.fillStyle = '#ffffff22'; for (let i = 0; i < 6; i++) x.fillRect(10 + (i % 2) * 64, 14 + i * 14, 40, 2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.45, metalness: 0.3, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.25 });
+})();
+for (const r of KARTEN.lobby) wandKlotz(r.x, r.y, r.w, r.h, 80, lobbyWandMat, kartenGruppe.lobby);
 for (const [id, a] of Object.entries(ARENEN)) {
   const th = a.thema, { t, glut } = wandMuster(th.wandMuster || th.muster, th.wand);
   const m = th.glas ? new THREE.MeshStandardMaterial({ map: t, transparent: true, opacity: 0.8, roughness: 0.05, metalness: 0.3 })
@@ -1499,7 +1509,7 @@ for (const id in ARENEN) for (let t = 0; t < 2; t++) {
   x.font = '28px system-ui'; x.fillStyle = '#ffffff'; x.fillText('Kleckse dich warm!', 256, 105);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   const sch = new THREE.Mesh(new THREE.PlaneGeometry(200, 50), new THREE.MeshBasicMaterial({ map: t }));
-  sch.position.set(800, 50, 300.5); kartenGruppe.lobby.add(sch);
+  sch.position.set(800, 40, 300.5); kartenGruppe.lobby.add(sch);
 })();
 // Karte wechseln: Wände, Farbfeld und Mini-Karte neu machen
 function karteLaden(name) {
@@ -1805,8 +1815,8 @@ const KULISSEN = {
     berge: [[3300, 300, '#4a5a7a', null, 0.5, 14]] },
   lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
     licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], stadt: [[0, Math.PI * 2, 1800, 70]] },
-  stadt: { oben: '#4a96ee', horizont: '#e3f0ff', sonne: '#fff3c8', wolken: 0.5, nebel: [1300, 4300], boden: 'wiese',
-    licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], berge: [[2700, 480, '#6f8aa8', '#ffffff', 1, 13]], stadt: [[0, Math.PI * 2, 1350, 110]], wald: 120 },
+  stadt: { oben: '#4a96ee', horizont: '#e3f0ff', sonne: '#fff3c8', wolken: 0.5, nebel: [1800, 5200], boden: 'asphalt',
+    licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], berge: [[3500, 520, '#6f8aa8', '#ffffff', 1, 13]], stadt: [[0, Math.PI * 2, 2300, 200], [0, Math.PI * 2, 2800, 260]] },
 };
 // ---- Himmel: ein Farbverlauf mit Sonne und ziehenden Wolken (wird immer ganz hinten gemalt) ----
 const himmelMat = new THREE.ShaderMaterial({
@@ -6492,6 +6502,7 @@ function fovSetzen(f) { if (Math.abs(kamera.fov - f) > 0.05) { kamera.fov = f; k
 function welt3D(dt) {
   bildZaehler++;
   boxMarkerZeigen(); stahlBoxenZeigen(dt);
+  if (karte === 'lobby') lobbyHalleAnimieren(dt);
   if (farbeGeaendert && bildZaehler % 3 === 0) { bodenAktualisieren(); farbeGeaendert = false; }   // nur jedes 3. Bild – spart viel Arbeit für die Grafikkarte
   for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
@@ -7784,6 +7795,305 @@ function sKlotz(m, w, h, d, x, y, z, hindernis) {   // Klotz in der Stadt (x/z =
   }
 })();
 
+// ================== 🏙️ DIE GROSSSTADT rund um den Platz ==================
+const STADT_STRASSEN = [   // {x, y, w, h} in Stadt-Koordinaten (x = links/rechts, y = vorne/hinten)
+  { x: -1600, y: 640, w: 3200, h: 120 }, { x: -1600, y: -760, w: 3200, h: 120 },    // Ringstraße oben/unten
+  { x: 700, y: -1350, w: 120, h: 2700 }, { x: -820, y: -1350, w: 120, h: 2700 },    // Ringstraße links/rechts
+  { x: -1600, y: 1060, w: 3200, h: 110 }, { x: -1600, y: -1170, w: 3200, h: 110 },  // äußere Straßen
+  { x: 1190, y: -1350, w: 110, h: 2700 }, { x: -1300, y: -1350, w: 110, h: 2700 },
+  { x: -55, y: 760, w: 110, h: 590 }, { x: -55, y: -1350, w: 110, h: 590 },         // Boulevards
+];
+const STADT_PLATZ = { x: 700, y: 640 };   // halbe Größe vom Platz
+const stadtAutos = [], stadtHaeuser = [], stadtParks = [];
+let stadtKarteBild = null, ampelMats = null;
+function zufallsZahl(seed) { return () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function inStrasse(x, y, rand = 0) { return STADT_STRASSEN.some(r => x > r.x - rand && x < r.x + r.w + rand && y > r.y - rand && y < r.y + r.h + rand); }
+function rechteckUeberStrasse(x0, y0, x1, y1, rand) { return STADT_STRASSEN.some(r => x1 > r.x - rand && x0 < r.x + r.w + rand && y1 > r.y - rand && y0 < r.y + r.h + rand); }
+function fassade(wand, licht, dunkel, art) {   // Fenster-Muster für Hochhäuser
+  const c = leinwand(64, 64), x = c.getContext('2d'), zr = zufallsZahl(art * 99 + 7);
+  x.fillStyle = wand; x.fillRect(0, 0, 64, 64);
+  for (const [px, py] of [[5, 7], [35, 7], [5, 38], [35, 38]]) {
+    x.fillStyle = zr() < 0.45 ? licht : dunkel; x.fillRect(px, py, 24, 20);
+    x.fillStyle = 'rgba(255,255,255,0.25)'; x.fillRect(px, py, 24, 3);
+    if (art === 1) { x.fillStyle = wand; x.fillRect(px + 11, py, 2, 20); }   // Sprossen
+  }
+  if (art === 0 || art === 3) { x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(0, 0, 64, 2); x.fillRect(0, 31, 64, 2); }
+  return c;
+}
+const FASSADEN = [fassade('#4d6a99', '#bfe6ff', '#22345c', 0), fassade('#b97f5a', '#ffe9a8', '#5a3424', 1), fassade('#8f96a8', '#fff4c2', '#353a4f', 2), fassade('#2f3b4e', '#7fe3ff', '#141b28', 3), fassade('#d9d2c2', '#ffe9a8', '#4a4f5f', 1)];
+const WERBUNG = [['🎨 KLECKS-KRIEG', 'Jetzt in der Arena!', '#a347ff'], ['⚡ ZWECKO', 'Schneller rollen!', '#ff5f1f'], ['💠 ALTRA', 'Hightech-Tinte', '#3b6fd8'],
+  ['🦺 U24', 'Robust & farbig', '#1f9d55'], ['🐟 Dr. Papagei', 'Helfer gesucht!', '#2fb84a'], ['🎙️ FARBCAST', 'Mit Tini & Brummi', '#ff5fa2']];
+function werbeTextur(w) {
+  const c = leinwand(256, 128), x = c.getContext('2d');
+  x.fillStyle = w[2]; x.fillRect(0, 0, 256, 128); x.fillStyle = 'rgba(255,255,255,0.15)'; for (let i = 0; i < 6; i++) { x.beginPath(); x.arc(30 + i * 45, 100 - (i % 2) * 60, 20 + i * 3, 0, 7); x.fill(); }
+  x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = 'bold 34px system-ui'; x.fillText(w[0], 128, 58); x.font = 'bold 20px system-ui'; x.fillText(w[1], 128, 96);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function baueAuto(farbe, art) {
+  const g = new THREE.Group(), lack = mat(farbe, { metalness: 0.4, roughness: 0.3 }), glas = mat('#1d2a44', { metalness: 0.6, roughness: 0.1 }), reifen = mat('#1b1b22', { roughness: 0.9 });
+  const vorn = mat('#fff6c8', { emissive: '#fff2b0', emissiveIntensity: 1 }), hinten = mat('#ff3b3b', { emissive: '#ff2020', emissiveIntensity: 0.8 });
+  if (art === 'bus') {
+    g.add(klotz(lack, 110, 30, 30, 0, 20, 0), klotz(glas, 104, 11, 30.6, 2, 26, 0), klotz(mat('#ffffff'), 110.5, 3, 30.5, 0, 12, 0), klotz(glas, 1, 18, 26, 55.2, 24, 0));
+    for (const x of [-38, 0, 38]) for (const z of [-14, 14]) g.add(zylinderZ(reifen, 6, 6, 4, x, 6, z));
+    g.add(kugel(vorn, 2.4, 55.5, 11, -10), kugel(vorn, 2.4, 55.5, 11, 10), klotz(hinten, 1, 4, 24, -55.3, 12, 0));
+    const sch = schild('🚌 Linie 7', 'Arena', '#1b1f3a', 30, 8); sch.position.set(55.6, 34, 0); sch.rotation.y = Math.PI / 2; g.add(sch);
+    g.userData.l = 112; g.userData.b = 32;
+  } else {
+    g.add(klotz(lack, 48, 10, 24, 0, 10, 0), klotz(lack, 28, 9, 22, -3, 19.5, 0), klotz(glas, 28.6, 6.5, 22.6, -3, 19.5, 0), klotz(lack, 22, 1.5, 21, -3, 24, 0));
+    g.add(klotz(mat('#2b2f40'), 49, 3, 24.6, 0, 5.5, 0));   // Stoßstangen
+    for (const x of [-15, 15]) for (const z of [-12, 12]) g.add(zylinderZ(reifen, 5, 5, 3, x, 5, z), zylinderZ(MAT_METALL, 2.4, 2.4, 3.3, x, 5, z));
+    g.add(kugel(vorn, 1.8, 24, 11, -8), kugel(vorn, 1.8, 24, 11, 8), klotz(hinten, 0.8, 2.4, 6, -24.2, 11, -8), klotz(hinten, 0.8, 2.4, 6, -24.2, 11, 8));
+    if (art === 'taxi') { const sch = schild('TAXI', '', '#ffd21f', 12, 4); sch.position.set(-3, 27.5, 0); sch.rotation.y = Math.PI / 2; g.add(sch, klotz(mat('#ffd21f'), 3, 4, 12, -3, 27.5, 0)); g.add(klotz(mat('#1b1b22'), 49, 2, 24.4, 0, 14, 0)); }
+    g.userData.l = 50; g.userData.b = 25;
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+const AUTO_RUNDEN = [{ hx: 760, hy: 700 }, { hx: 1245, hy: 1115 }];   // Mitte der Straßen-Rechtecke
+function autoPunkt(a) {   // Position + Richtung auf der Runde (im Uhrzeigersinn oder dagegen)
+  const L = AUTO_RUNDEN[a.runde], hx = L.hx + a.spur, hy = L.hy + a.spur, P = 4 * (hx + hy);
+  let s = ((a.s % P) + P) % P;
+  let x, y, dx, dy;
+  if (s < 2 * hx) { x = -hx + s; y = -hy; dx = 1; dy = 0; }
+  else if ((s -= 2 * hx) < 2 * hy) { x = hx; y = -hy + s; dx = 0; dy = 1; }
+  else if ((s -= 2 * hy) < 2 * hx) { x = hx - s; y = hy; dx = -1; dy = 0; }
+  else { s -= 2 * hx; x = -hx; y = hy - s; dx = 0; dy = -1; }
+  if (a.dir < 0) { dx = -dx; dy = -dy; }
+  return { x, y, w: Math.atan2(dy, dx) };
+}
+(function grossstadtBauen() {
+  const zr = zufallsZahl(4711);
+  // Boden: Gehwege, Straßen, Mittellinien, Zebrastreifen
+  const PX = 0.5, GB = 3200, GT = 2700, c = leinwand(GB * PX, GT * PX), b = c.getContext('2d');
+  const X = v => (v + GB / 2) * PX, Y = v => (v + GT / 2) * PX;
+  b.fillStyle = '#bdb9b0'; b.fillRect(0, 0, c.width, c.height);
+  b.strokeStyle = '#aeaaa1'; b.lineWidth = 1;
+  for (let i = 0; i < c.width; i += 10) { b.beginPath(); b.moveTo(i, 0); b.lineTo(i, c.height); b.stroke(); }
+  for (let i = 0; i < c.height; i += 10) { b.beginPath(); b.moveTo(0, i); b.lineTo(c.width, i); b.stroke(); }
+  for (const r of STADT_STRASSEN) { b.fillStyle = '#8a867e'; b.fillRect(X(r.x) - 4, Y(r.y) - 4, r.w * PX + 8, r.h * PX + 8); }
+  for (const r of STADT_STRASSEN) { b.fillStyle = '#3a3d46'; b.fillRect(X(r.x), Y(r.y), r.w * PX, r.h * PX); }
+  b.strokeStyle = '#f4f4f4'; b.lineWidth = 2; b.setLineDash([12, 10]);
+  for (const r of STADT_STRASSEN) { b.beginPath(); if (r.w > r.h) { b.moveTo(X(r.x), Y(r.y + r.h / 2)); b.lineTo(X(r.x + r.w), Y(r.y + r.h / 2)); } else { b.moveTo(X(r.x + r.w / 2), Y(r.y)); b.lineTo(X(r.x + r.w / 2), Y(r.y + r.h)); } b.stroke(); }
+  b.setLineDash([]);
+  const quer = STADT_STRASSEN.filter(r => r.w > r.h), laengs = STADT_STRASSEN.filter(r => r.h > r.w);
+  b.fillStyle = '#f4f4f4';
+  for (const h of quer) for (const v of laengs) {
+    if (v.x + v.w < h.x || v.x > h.x + h.w || h.y + h.h < v.y || h.y > v.y + v.h) continue;
+    b.fillStyle = '#3a3d46'; b.fillRect(X(v.x), Y(h.y), v.w * PX, h.h * PX); b.fillStyle = '#f4f4f4';   // Kreuzung ohne Linien
+    for (const [y0, y1] of [[h.y - 34, h.y - 8], [h.y + h.h + 8, h.y + h.h + 34]]) if (inStrasse(v.x + v.w / 2, (y0 + y1) / 2)) for (let x = v.x + 6; x < v.x + v.w - 6; x += 14) b.fillRect(X(x), Y(y0), 7 * PX, (y1 - y0) * PX);
+    for (const [x0, x1] of [[v.x - 34, v.x - 8], [v.x + v.w + 8, v.x + v.w + 34]]) if (inStrasse((x0 + x1) / 2, h.y + h.h / 2)) for (let y = h.y + 6; y < h.y + h.h - 6; y += 14) b.fillRect(X(x0), Y(y), (x1 - x0) * PX, 7 * PX);
+  }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const geo = new THREE.PlaneGeometry(GB, GT); geo.rotateX(-Math.PI / 2);
+  const boden = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 })); boden.position.y = 0.15; boden.receiveShadow = true; stadtGruppe.add(boden);
+  // Hochhäuser und Parks
+  const dachMat = mat('#4a4f5f', { roughness: 0.8 }), laeden = ['#e63946', '#3b6fd8', '#2a9d8f', '#ff9f1c', '#a347ff', '#ff5fa2'];
+  let werbNr = 0;
+  for (let gx = -1515; gx <= 1515; gx += 168) for (let gy = -1265; gy <= 1265; gy += 168) {
+    const w = 118 + zr() * 30, d = 118 + zr() * 30, cx = gx + (zr() - 0.5) * 10, cz = gy + (zr() - 0.5) * 10;
+    if (Math.abs(cx) < STADT_PLATZ.x + w / 2 + 14 && Math.abs(cz) < STADT_PLATZ.y + d / 2 + 14) continue;
+    if (rechteckUeberStrasse(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, 22)) continue;
+    if (Math.abs(cx) + w / 2 > STADT_GRENZE.x + 40 || Math.abs(cz) + d / 2 > STADT_GRENZE.y + 40) continue;
+    if (zr() < 0.13) {   // 🌳 kleiner Park
+      const pg = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), mat('#5fae4a', { roughness: 1 })); pg.position.set(cx, 0.4, cz); pg.receiveShadow = true; stadtGruppe.add(pg);
+      for (const [ox, oz] of [[-w / 4, -d / 4], [w / 4, d / 5], [-w / 5, d / 4]]) {
+        stadtGruppe.add(zylinder(mat('#7d5128'), 4, 6, 34, cx + ox, 17, cz + oz), kugel(mat('#3f9b4b', { roughness: 0.9 }), 22, cx + ox, 48, cz + oz), kugel(mat('#56b862', { roughness: 0.9 }), 14, cx + ox + 8, 62, cz + oz - 5));
+        stadtHindernisse.push({ x: cx + ox, y: cz + oz, kreis: 10 });
+      }
+      stadtParks.push({ x: cx - w / 2, y: cz - d / 2, w, h: d });
+      continue;
+    }
+    const rand = Math.max(Math.abs(cx) / STADT_GRENZE.x, Math.abs(cz) / STADT_GRENZE.y);
+    const h = 110 + zr() * zr() * 380 + rand * 160, art = Math.floor(zr() * FASSADEN.length);
+    const t = new THREE.CanvasTexture(FASSADEN[art]); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, Math.round(w / 34)), Math.max(2, Math.round(h / 34)));
+    const haus = klotz(new THREE.MeshStandardMaterial({ map: t, roughness: 0.55, metalness: art === 0 || art === 3 ? 0.35 : 0.05 }), w, h, d, cx, h / 2, cz);
+    haus.receiveShadow = true; stadtGruppe.add(haus);
+    stadtGruppe.add(klotz(dachMat, w + 3, 5, d + 3, cx, h + 2.5, cz));                                   // Dachkante
+    const lf = laeden[Math.floor(zr() * laeden.length)];
+    stadtGruppe.add(klotz(mat('#2b2f40'), w + 4, 36, d + 4, cx, 18, cz), klotz(mat('#ffe9a8', { emissive: '#ffd98a', emissiveIntensity: 0.35 }), w + 4.6, 20, d + 4.6, cx, 18, cz));   // Erdgeschoss mit Schaufenstern
+    stadtGruppe.add(klotz(mat(lf), w + 6, 5, d + 6, cx, 33, cz));                                        // Markise in Ladenfarbe
+    if (zr() < 0.6) stadtGruppe.add(klotz(dachMat, w * 0.35, 18, d * 0.35, cx - w * 0.15, h + 14, cz + d * 0.1));   // Aufbau auf dem Dach
+    if (h > 330) {   // Antenne mit rotem Blinklicht
+      stadtGruppe.add(zylinder(MAT_GRAU, 1.2, 1.6, 50, cx + w * 0.2, h + 30, cz - d * 0.2), kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1.2 }), 2.4, cx + w * 0.2, h + 56, cz - d * 0.2));
+    } else if (zr() < 0.5) {   // Wassertank
+      stadtGruppe.add(zylinder(mat('#8a5a2e'), 10, 10, 18, cx + w * 0.22, h + 20, cz - d * 0.2), zylinder(MAT_GRAU, 1, 1, 12, cx + w * 0.22, h + 6, cz - d * 0.2));
+    }
+    if (h > 200 && zr() < 0.45) {   // Werbetafel an der Seite, die zum Platz zeigt
+      const wb = new THREE.Mesh(new THREE.PlaneGeometry(100, 50), new THREE.MeshBasicMaterial({ map: werbeTextur(WERBUNG[werbNr++ % WERBUNG.length]) }));
+      const zumPlatz = Math.abs(cx) / STADT_PLATZ.x > Math.abs(cz) / STADT_PLATZ.y;
+      if (zumPlatz) { wb.rotation.y = cx > 0 ? -Math.PI / 2 : Math.PI / 2; wb.position.set(cx - Math.sign(cx) * (w / 2 + 1.5), h * 0.65, cz); }
+      else { wb.rotation.y = cz > 0 ? Math.PI : 0; wb.position.set(cx, h * 0.65, cz - Math.sign(cz) * (d / 2 + 1.5)); }
+      stadtGruppe.add(wb);
+    }
+    stadtHindernisse.push({ x: cx - w / 2 - 3, y: cz - d / 2 - 3, w: w + 6, h: d + 6 });
+    stadtHaeuser.push({ x: cx - w / 2, y: cz - d / 2, w, h: d });
+  }
+  // Laternen am Straßenrand (Instanzen = schnell)
+  const lampen = [];
+  for (const r of STADT_STRASSEN) {
+    const lang = r.w > r.h, L = lang ? r.w : r.h;
+    for (let u = 60; u < L; u += 210) for (const seite of [-1, 1]) {
+      const x = lang ? r.x + u : (seite < 0 ? r.x - 12 : r.x + r.w + 12), y = lang ? (seite < 0 ? r.y - 12 : r.y + r.h + 12) : r.y + u;
+      if (inStrasse(x, y, 4) || Math.abs(x) > STADT_GRENZE.x || Math.abs(y) > STADT_GRENZE.y) continue;
+      if (stadtHindernisse.some(h => !h.kreis && x > h.x - 6 && x < h.x + h.w + 6 && y > h.y - 6 && y < h.y + h.h + 6)) continue;
+      lampen.push([x, y]); stadtHindernisse.push({ x, y, kreis: 4 });
+    }
+  }
+  const pfahl = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.4, 2, 64, 6), MAT_GRAU, lampen.length);
+  const kopf = new THREE.InstancedMesh(new THREE.SphereGeometry(4.5, 10, 8), mat('#fff4c2', { emissive: '#ffd166', emissiveIntensity: 0.9 }), lampen.length);
+  const m4 = new THREE.Matrix4();
+  lampen.forEach(([x, y], i) => { m4.makeTranslation(x, 32, y); pfahl.setMatrixAt(i, m4); m4.makeTranslation(x, 66, y); kopf.setMatrixAt(i, m4); });
+  stadtGruppe.add(pfahl, kopf);
+  // Ampeln an den Kreuzungen um den Platz
+  ampelMats = ['#ff3b3b', '#ffd21f', '#5be37d'].map(f => mat(f, { emissive: f, emissiveIntensity: 0.1 }));
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+    const x = sx * (STADT_PLATZ.x + 136), y = sy * (STADT_PLATZ.y + 136);
+    stadtGruppe.add(zylinder(MAT_GRAU, 1.6, 1.6, 60, x, 30, y), klotz(mat('#1b1b22'), 8, 26, 8, x, 66, y));
+    ampelMats.forEach((m, i) => stadtGruppe.add(kugel(m, 2.6, x, 75 - i * 8.5, y)));
+    stadtHindernisse.push({ x, y, kreis: 5 });
+  }
+  // Autos und ein Bus
+  const farben = ['#e63946', '#3b6fd8', '#f4f4f4', '#1b1b22', '#2a9d8f', '#ff9f1c', '#8f96a8'];
+  const plan = [[0, 1, 30, 'auto'], [0, 1, 30, 'taxi'], [0, 1, 30, 'auto'], [0, 1, 30, 'bus'], [0, -1, -30, 'auto'], [0, -1, -30, 'taxi'], [0, -1, -30, 'auto'],
+                [1, 1, 27, 'auto'], [1, 1, 27, 'auto'], [1, -1, -27, 'taxi'], [1, -1, -27, 'auto']];
+  plan.forEach(([runde, dir, spur, art], i) => {
+    const L = AUTO_RUNDEN[runde], P = 4 * (L.hx + spur + L.hy + spur), gleiche = plan.filter(q => q[0] === runde && q[1] === dir).length, nr = plan.filter((q, k) => k < i && q[0] === runde && q[1] === dir).length;
+    const a = { runde, dir, spur, art, s: P * nr / gleiche + zr() * 60, v: 0, max: art === 'bus' ? 95 : 120 + zr() * 30, gruppe: baueAuto(art === 'taxi' ? '#ffd21f' : art === 'bus' ? '#ff9f1c' : farben[i % farben.length], art), hupT: 0, x: 0, y: 0, w: 0 };
+    a.l = a.gruppe.userData.l; a.b = a.gruppe.userData.b;
+    Object.assign(a, autoPunkt(a)); stadtGruppe.add(a.gruppe); stadtAutos.push(a);
+  });
+  // Mini-Karte (einmal malen)
+  const k = leinwand(320, 270), kx = k.getContext('2d'), s2 = 320 / 3200;
+  kx.fillStyle = '#9a968d'; kx.fillRect(0, 0, 320, 270);
+  kx.fillStyle = '#3a3d46'; for (const r of STADT_STRASSEN) kx.fillRect((r.x + 1600) * s2, (r.y + 1350) * s2, r.w * s2, r.h * s2);
+  kx.fillStyle = '#e4ddcd'; kx.fillRect((1600 - STADT_PLATZ.x) * s2, (1350 - STADT_PLATZ.y) * s2, STADT_PLATZ.x * 2 * s2, STADT_PLATZ.y * 2 * s2);
+  kx.fillStyle = '#5a6078'; for (const h of stadtHaeuser) kx.fillRect((h.x + 1600) * s2, (h.y + 1350) * s2, h.w * s2, h.h * s2);
+  kx.fillStyle = '#5fae4a'; for (const h of stadtParks) kx.fillRect((h.x + 1600) * s2, (h.y + 1350) * s2, h.w * s2, h.h * s2);
+  stadtKarteBild = k;
+})();
+function autosUpdate(dt) {
+  const leute = [stadtSp, ...npcs];
+  for (const a of stadtAutos) {
+    const c = Math.cos(a.w), sn = Math.sin(a.w);
+    let frei = true, mensch = false;
+    for (const p of leute) {   // steht jemand vor dem Auto? Dann bremsen!
+      const dx = p.x - a.x, dy = p.y - a.y, vor = dx * c + dy * sn, quer = -dx * sn + dy * c;
+      if (vor > 0 && vor < a.l / 2 + 55 && Math.abs(quer) < a.b / 2 + 16) { frei = false; if (p === stadtSp) mensch = true; }
+    }
+    for (const o of stadtAutos) {
+      if (o === a || o.runde !== a.runde || o.dir !== a.dir) continue;
+      const dx = o.x - a.x, dy = o.y - a.y, vor = dx * c + dy * sn, quer = -dx * sn + dy * c;
+      if (vor > 0 && vor < (a.l + o.l) / 2 + 22 && Math.abs(quer) < 20) frei = false;
+    }
+    a.v += ((frei ? a.max : 0) - a.v) * Math.min(1, dt * (frei ? 1.5 : 8));
+    a.s += a.v * dt * a.dir;
+    Object.assign(a, autoPunkt(a));
+    a.gruppe.position.set(a.x, 0, a.y); a.gruppe.rotation.y = -a.w;
+    a.hupT -= dt;
+    if (mensch && a.v < 5 && a.hupT <= 0) { a.hupT = 3.5; if (Math.hypot(a.x - stadtSp.x, a.y - stadtSp.y) < 260) { ton('tuten', 0.25); meldung('🚗 Tuut! Ein Auto wartet auf dich!'); } }
+  }
+  if (ampelMats) { const ph = Math.floor(zeit / 3) % 3; ampelMats.forEach((m, i) => { m.emissiveIntensity = i === (2 - ph) ? 1.6 : 0.08; }); }
+}
+function arenaLEDMalen() {   // großer Bildschirm an der Arena-Halle
+  const L = arenaLED; if (!L.cv) return;
+  const x = L.cv.getContext('2d'), t = zeit;
+  const g = x.createLinearGradient(0, 0, 512, 0); g.addColorStop(0, TEAMS[0].col); g.addColorStop(1, TEAMS[1].col);
+  x.fillStyle = '#0b0b1a'; x.fillRect(0, 0, 512, 160);
+  for (let i = 0; i < 10; i++) { x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.globalAlpha = 0.5; x.beginPath(); x.arc((i * 61 + t * 60) % 600 - 40, 80 + Math.sin(t * 2 + i) * 50, 18 + (i % 3) * 8, 0, 7); x.fill(); }
+  x.globalAlpha = 1; x.textAlign = 'center';
+  const [a1, a2] = aktuelleArenen();
+  if (Math.floor(t / 4) % 2) { x.font = 'bold 58px system-ui'; x.fillStyle = '#fff'; x.fillText('FARBSCHLACHT', 256, 78); x.font = 'bold 30px system-ui'; x.fillStyle = '#ffd166'; x.fillText('● LIVE – jetzt mitmachen!', 256, 126); }
+  else { x.font = 'bold 30px system-ui'; x.fillStyle = '#ffd166'; x.fillText('HEUTE IN DER ARENA:', 256, 50); x.font = 'bold 40px system-ui'; x.fillStyle = '#fff'; x.fillText(`${ARENEN[a1].emoji} ${ARENEN[a1].name}`, 256, 98); x.fillText(`${ARENEN[a2].emoji} ${ARENEN[a2].name}`, 256, 142); }
+  x.fillStyle = g; x.fillRect(0, 152, 512, 8);
+  L.tex.needsUpdate = true;
+}
+// ================== 🏟️ LOBBY = moderne Arena-Halle: Tribünen mit Fans, Riesenbildschirm, Scheinwerfer, LED-Banden ==================
+const lobbyHalle = { fans: null, koepfe: null, daten: [], bande: null, strahlen: [], wuerfel: null, bild: 0 };
+(function lobbyHalleBauen() {
+  const g = kartenGruppe.lobby, R = { x0: 500, x1: 1100, z0: 300, z1: 700 }, cx = 800, cz = 500;
+  const sitz = mat('#2b3156', { roughness: 0.7 }), stufe = mat('#3a4170', { roughness: 0.6 }), stahl = mat('#9aa3b8', { metalness: 0.7, roughness: 0.3 });
+  // Tribünen auf allen 4 Seiten (steigen nach außen an)
+  const reihen = 8, tiefe = 26, plaetze = [];
+  for (let i = 0; i < reihen; i++) {
+    const oben = 80 + i * 17;
+    for (const seite of ['n', 's', 'w', 'o']) {
+      const ns = seite === 'n' || seite === 's', laenge = ns ? (R.x1 - R.x0) + 2 * (i + 1) * tiefe : (R.z1 - R.z0) + 2 * (i + 1) * tiefe;
+      const px = seite === 'w' ? R.x0 - tiefe / 2 - i * tiefe : seite === 'o' ? R.x1 + tiefe / 2 + i * tiefe : cx;
+      const pz = seite === 'n' ? R.z0 - tiefe / 2 - i * tiefe : seite === 's' ? R.z1 + tiefe / 2 + i * tiefe : cz;
+      g.add(klotz(i % 2 ? sitz : stufe, ns ? laenge : tiefe, oben, ns ? tiefe : laenge, px, oben / 2, pz));
+      for (let u = -laenge / 2 + 16; u < laenge / 2 - 10; u += 21) {   // Plätze für Fans
+        if (Math.random() < 0.18) continue;
+        plaetze.push(ns ? [px + u, oben, pz] : [px, oben, pz + u]);
+      }
+    }
+  }
+  // Fans (Instanzen: Körper + Köpfe), springen und jubeln
+  const farben = ['#ff8a1f', '#a347ff', '#ff5fa2', '#3b6fd8', '#2a9d8f', '#ffd21f', '#f4f4f4', '#e63946'], haut = ['#ffdbac', '#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
+  const fans = new THREE.InstancedMesh(new THREE.BoxGeometry(10, 15, 8), new THREE.MeshLambertMaterial(), plaetze.length);
+  const koepfe = new THREE.InstancedMesh(new THREE.SphereGeometry(5, 8, 6), new THREE.MeshLambertMaterial(), plaetze.length);
+  const q = new THREE.Object3D(), col = new THREE.Color();
+  plaetze.forEach(([x, y, z], i) => {
+    const d = { x, y, z, phase: Math.random() * 7, hopp: Math.random() < 0.35 };
+    lobbyHalle.daten.push(d);
+    q.position.set(x, y + 7.5, z); q.lookAt(cx, y + 7.5, cz); q.updateMatrix(); fans.setMatrixAt(i, q.matrix);
+    q.position.y = y + 20; q.updateMatrix(); koepfe.setMatrixAt(i, q.matrix);
+    fans.setColorAt(i, col.set(farben[(Math.random() * farben.length) | 0])); koepfe.setColorAt(i, col.set(haut[(Math.random() * haut.length) | 0]));
+  });
+  g.add(fans, koepfe); lobbyHalle.fans = fans; lobbyHalle.koepfe = koepfe;
+  // Glas-Geländer vor der ersten Reihe + LED-Bande (läuft)
+  const bc = leinwand(1024, 32), bx = bc.getContext('2d');
+  bx.fillStyle = '#0b0b1a'; bx.fillRect(0, 0, 1024, 32); bx.font = 'bold 24px system-ui'; bx.textBaseline = 'middle';
+  for (let i = 0; i < 4; i++) { bx.fillStyle = i % 2 ? '#ff8a1f' : '#a347ff'; bx.fillText('★ KLECKS-KRIEG ARENA ★ FARBSCHLACHT LIVE ', i * 256 - 8, 17); }
+  const bt = new THREE.CanvasTexture(bc); bt.colorSpace = THREE.SRGBColorSpace; bt.wrapS = THREE.RepeatWrapping; lobbyHalle.bande = bt;
+  const bandeMat = new THREE.MeshBasicMaterial({ map: bt });
+  for (const [x, z, l, dreh] of [[cx, R.z0 + 0.7, 600, 0], [cx, R.z1 - 0.7, 600, Math.PI], [R.x0 + 0.7, cz, 400, Math.PI / 2], [R.x1 - 0.7, cz, 400, -Math.PI / 2]]) {
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(l, 11), bandeMat); b.position.set(x, 73, z); b.rotation.y = dreh; g.add(b);
+    const gl = new THREE.Mesh(new THREE.PlaneGeometry(l, 12), new THREE.MeshStandardMaterial({ color: '#bfe6ff', transparent: true, opacity: 0.25, roughness: 0.05, side: THREE.DoubleSide }));
+    gl.position.set(x - (dreh === Math.PI / 2 ? 6 : dreh === -Math.PI / 2 ? -6 : 0), 86, z - (dreh === 0 ? 6 : dreh === Math.PI ? -6 : 0)); gl.rotation.y = dreh; g.add(gl);
+  }
+  // Dach: Ring mit Öffnung in der Mitte, Stahlträger und LED-Ring
+  const dach = new THREE.Mesh(new THREE.RingGeometry(430, 880, 48, 1), mat('#1b1f3a', { side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4 }));
+  dach.rotation.x = Math.PI / 2; dach.position.set(cx, 300, cz); g.add(dach);
+  const ledRing = new THREE.Mesh(new THREE.TorusGeometry(430, 4, 8, 64), mat('#6fe3ff', { emissive: '#6fe3ff', emissiveIntensity: 1.2 })); ledRing.rotation.x = Math.PI / 2; ledRing.position.set(cx, 298, cz); g.add(ledRing);
+  for (let i = 0; i < 4; i++) { const t = klotz(stahl, 880, 8, 8, cx, 296, cz); t.rotation.y = i * Math.PI / 4; g.add(t); }   // Träger über der Mitte
+  // Riesen-Würfel-Bildschirm in der Mitte
+  const wc = leinwand(512, 256), wx = wc.getContext('2d');
+  const wg = wx.createLinearGradient(0, 0, 512, 256); wg.addColorStop(0, '#2a1b5c'); wg.addColorStop(1, '#0b0b1a'); wx.fillStyle = wg; wx.fillRect(0, 0, 512, 256);
+  for (let i = 0; i < 12; i++) { wx.fillStyle = i % 2 ? '#ff8a1f' : '#a347ff'; wx.globalAlpha = 0.6; wx.beginPath(); wx.arc((i * 97) % 512, (i * 61) % 256, 14 + (i % 4) * 8, 0, 7); wx.fill(); }
+  wx.globalAlpha = 1; wx.textAlign = 'center'; wx.fillStyle = '#fff'; wx.font = 'bold 56px system-ui'; wx.fillText('🎨 LOBBY', 256, 104);
+  wx.font = 'bold 26px system-ui'; wx.fillStyle = '#ffd166'; wx.fillText('Enter = Start · K = Arena · F = Farben', 256, 160); wx.fillStyle = '#c9c3ff'; wx.fillText('Kleckse dich warm!', 256, 206);
+  const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
+  const wuerfel = new THREE.Group(); wuerfel.position.set(cx, 215, cz); g.add(wuerfel); lobbyHalle.wuerfel = wuerfel;
+  wuerfel.add(klotz(mat('#151a33', { metalness: 0.5 }), 150, 80, 150, 0, 0, 0));
+  for (let i = 0; i < 4; i++) { const sc = new THREE.Mesh(new THREE.PlaneGeometry(144, 72), new THREE.MeshBasicMaterial({ map: wt })); sc.rotation.y = i * Math.PI / 2; sc.position.set(Math.sin(i * Math.PI / 2) * 75.5, 0, Math.cos(i * Math.PI / 2) * 75.5); wuerfel.add(sc); }
+  wuerfel.add(klotz(mat('#ff8a1f', { emissive: '#ff8a1f', emissiveIntensity: 1 }), 154, 3, 154, 0, 41, 0), klotz(mat('#a347ff', { emissive: '#a347ff', emissiveIntensity: 1 }), 154, 3, 154, 0, -41, 0));
+  for (const [a, b2] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) wuerfel.add(zylinder(stahl, 1, 1, 80, a * 60, 80, b2 * 60));   // Seile zum Dach
+  // Scheinwerfer: farbige Lichtkegel vom Dach
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2, farbe = i % 2 ? '#ff8a1f' : '#a347ff';
+    const kegel = new THREE.Mesh(new THREE.ConeGeometry(40, 300, 16, 1, true), new THREE.MeshBasicMaterial({ color: farbe, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    kegel.geometry.translate(0, -150, 0);
+    const halter = new THREE.Group(); halter.position.set(cx + Math.cos(a) * 420, 292, cz + Math.sin(a) * 420); halter.add(kegel); g.add(halter);
+    halter.add(zylinder(mat('#2b2f40'), 7, 9, 12, 0, 0, 0)); lobbyHalle.strahlen.push({ halter, a, i });
+  }
+})();
+function lobbyHalleAnimieren(dt) {
+  const L = lobbyHalle; if (!L.fans) return;
+  L.bande.offset.x -= dt * 0.06;
+  L.wuerfel.rotation.y += dt * 0.25;
+  for (const s of L.strahlen) {   // Scheinwerfer schwenken über das Spielfeld
+    const ziel = Math.atan2(500 - s.halter.position.z, 800 - s.halter.position.x);
+    s.halter.rotation.set(0, -ziel, 0); s.halter.rotateZ(0.55 + Math.sin(zeit * 0.7 + s.i) * 0.25);
+  }
+  if ((L.bild = (L.bild + 1) % 2)) return;   // Fans nur jedes 2. Bild bewegen
+  const q = new THREE.Object3D();
+  L.daten.forEach((d, i) => {
+    const h = d.hopp ? Math.max(0, Math.sin(zeit * 6 + d.phase)) * 6 : Math.sin(zeit * 2 + d.phase) * 0.8;
+    q.position.set(d.x, d.y + 7.5 + h, d.z); q.lookAt(800, d.y + 7.5 + h, 500); q.updateMatrix(); L.fans.setMatrixAt(i, q.matrix);
+    q.position.y = d.y + 20 + h; q.updateMatrix(); L.koepfe.setMatrixAt(i, q.matrix);
+  });
+  L.fans.instanceMatrix.needsUpdate = true; L.koepfe.instanceMatrix.needsUpdate = true;
+}
 // ---------- Du in der Stadt ----------
 const stadtSp = { x: 0, y: 150, z: 0, vx: 0, vy: 0, vz: 0, winkel: -Math.PI / 2, pitch: -0.1, rueck: 0, letzterTreffer: 9, rollt: false,
   tinte: 100, ladung: 0, landT: 0, lauf: 0, nr: 0, schwingT: 0, schwingSeite: 1, bonus: { ...BONUS_LEER }, gruppe: null, waffe: 'spritzer' };
@@ -7799,6 +8109,10 @@ function stadtFigurBauen() {
 }
 function stadtKollidiert(x, y, r) {
   if (Math.abs(x) > STADT_GRENZE.x - r || Math.abs(y) > STADT_GRENZE.y - r) return true;
+  for (const a of stadtAutos) {   // 🚗 Autos sind auch im Weg
+    const c = Math.cos(a.w), sn = Math.sin(a.w), dx = x - a.x, dy = y - a.y;
+    if (Math.abs(dx * c + dy * sn) < a.l / 2 + r && Math.abs(-dx * sn + dy * c) < a.b / 2 + r) return true;
+  }
   for (const h of stadtHindernisse) {
     if (h.kreis) { if (Math.hypot(x - h.x, y - h.y) < h.kreis + r) return true; continue; }
     const cx = Math.max(h.x, Math.min(x, h.x + h.w)), cy = Math.max(h.y, Math.min(y, h.y + h.h));
@@ -7808,10 +8122,10 @@ function stadtKollidiert(x, y, r) {
 }
 // ---------- Andere Kinder laufen in der Stadt herum ----------
 const npcs = [];
-for (let i = 0; i < 7; i++) {
+for (let i = 0; i < 14; i++) {
   const team = i % 2, n = { x: 0, y: 0, z: 0, vx: 0, vy: 0, winkel: Math.random() * 7, pitch: 0, rueck: 0, letzterTreffer: 9, rollt: false,
     tinte: 100, ladung: 0, landT: 0, lauf: Math.random() * 5, nr: i + 2, schwingT: 0, schwingSeite: 1, ziel: null, warte: Math.random() * 2 };
-  do { n.x = (Math.random() - 0.5) * 1100; n.y = (Math.random() - 0.5) * 700; } while (stadtKollidiert(n.x, n.y, 16));
+  do { n.x = (Math.random() - 0.5) * (i < 7 ? 1200 : 2900); n.y = (Math.random() - 0.5) * (i < 7 ? 1000 : 2500); } while (stadtKollidiert(n.x, n.y, 16));
   n.waffe = zufall(WAFFEN);
   n.mat = mat(TEAMS[team].col, { roughness: 0.35 });
   n.koerper = baueJunge(n.mat, team, zufallsAussehen(),
@@ -7824,7 +8138,7 @@ function npcUpdate(n, dt) {
   if (n.warte > 0) { n.warte -= dt; n.vx *= 0.85; n.vy *= 0.85; return; }
   if (!n.ziel) {
     for (let i = 0; i < 20 && !n.ziel; i++) {
-      const z = { x: (Math.random() - 0.5) * 1150, y: (Math.random() - 0.5) * 800 };
+      const nah = Math.random() < 0.6, z = { x: n.x + (Math.random() - 0.5) * (nah ? 600 : 1600), y: n.y + (Math.random() - 0.5) * (nah ? 500 : 1400) };
       if (!stadtKollidiert(z.x, z.y, 20)) n.ziel = z;
     }
     if (!n.ziel) { n.warte = 1; return; }
@@ -9262,6 +9576,7 @@ function stadtUpdate(dt) {
   }
   p.landT = Math.max(0, p.landT - dt);
   for (const n of npcs) npcUpdate(n, dt);
+  autosUpdate(dt);
   for (const m of meldungen) m.t -= dt;
   meldungen = meldungen.filter(m => m.t > 0);
   stadtZiel = null;
@@ -9284,6 +9599,8 @@ function stadtZeigen(dt) {
   const f = (Math.sin(zeit * 0.8) + 1) / 2;
   brunnenMat.color.set(TEAMS[0].col).lerp(new THREE.Color(TEAMS[1].col), f); brunnenMat.emissive.copy(brunnenMat.color);
   brunnenWasser.position.y = 14 + Math.sin(zeit * 3) * 0.5;
+  if ((arenaLED.bild = (arenaLED.bild + 1) % 4) === 0) arenaLEDMalen();
+  arenaLED.strahlen.forEach((st, i) => { st.rotation.x = Math.sin(zeit * 0.5 + i) * 0.25; st.rotation.z = Math.cos(zeit * 0.4 + i * 2) * 0.25; });
   // Kamera
   const wx = STADT.x + p.x, wz = STADT.z + p.y;
   const fx = Math.cos(p.winkel) * Math.cos(p.pitch), fy = Math.sin(p.pitch), fz = Math.sin(p.winkel) * Math.cos(p.pitch);
@@ -9312,7 +9629,19 @@ function stadtHud(cw, ch) {
   ctx.font = 'bold 18px system-ui';
   meldungen.forEach((m, i) => { ctx.globalAlpha = Math.min(1, m.t); ctx.fillStyle = '#fff'; ctx.fillText(m.text, cw / 2, 40 + i * 26); });
   ctx.globalAlpha = 1;
-  ctx.font = '14px system-ui'; ctx.fillStyle = '#ffffffcc';
+  if (stadtKarteBild) {   // 🗺️ Mini-Karte der Großstadt
+    const mw = Math.min(240, cw * 0.22), mh = mw * 270 / 320, mx = cw - mw - 14, my = 14, sk = mw / 3200;
+    ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(mx - 6, my - 6, mw + 12, mh + 30, 10); ctx.fill();
+    ctx.drawImage(stadtKarteBild, mx, my, mw, mh);
+    const P = (x, y) => [mx + (x + 1600) * sk, my + (y + 1350) * sk];
+    for (const z of STADT_ZIELE) { const [px, py] = P(z.x, z.y); ctx.fillStyle = z.arena ? '#a347ff' : z.papagei ? '#2fb84a' : '#ffd166'; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, 7); ctx.fill(); }
+    for (const a of stadtAutos) { const [px, py] = P(a.x, a.y); ctx.fillStyle = '#ff6060'; ctx.fillRect(px - 1.5, py - 1.5, 3, 3); }
+    const [sx, sy] = P(stadtSp.x, stadtSp.y);
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(stadtSp.winkel); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1b1f3a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-3, 0); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.textAlign = 'center'; ctx.font = 'bold 12px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText('🟣 Arena  🟡 Läden  🟢 Dr. Papagei', mx + mw / 2, my + mh + 17);
+  }
+  ctx.font = '14px system-ui'; ctx.fillStyle = '#ffffffcc'; ctx.textAlign = 'center';
   ctx.fillText('WASD laufen · Shift rennen · Leertaste springen · Maus umschauen · V Kamera · Esc Menü', cw / 2, ch - 18);
 }
 
