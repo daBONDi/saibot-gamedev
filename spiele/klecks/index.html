@@ -2155,6 +2155,21 @@ function schuhBauen(g, id, haut) {
     for (const y of [-2.4, -3.6, -4.8]) g.add(ringY(band, 2.85, 0.3, 0, y, 0));
     return;
   }
+  if (id === 'einsatzstiefel') {   // hohe schwarze Feuerwehr-Stiefel mit Stahlkappe und Leuchtstreifen
+    const sm = mat(s.farbe, { roughness: 0.5 });
+    g.add(zylinder(sm, 3.2, 3.3, 7, 0, -3.3, 0), klotz(sm, 7.2, 3, 5, 1.4, -5.7, 0), kugel(mat('#3a3a44', { metalness: 0.6, roughness: 0.3 }), 2.6, 4.8, -5.7, 0, 1.1, 0.65, 1));
+    g.add(klotz(mat('#ffb627', { roughness: 0.8 }), 8, 1.2, 5.3, 1.4, -7.1, 0), ringY(mat('#e8ff3a', { emissive: '#c8e000', emissiveIntensity: 0.35 }), 3.3, 0.45, 0, -1.4, 0));
+    g.add(klotz(MAT_SCHWARZ, 2.2, 1.4, 1, -1.5, 0.3, 3.2), klotz(MAT_SCHWARZ, 2.2, 1.4, 1, -1.5, 0.3, -3.2));   // Zieh-Laschen
+    return;
+  }
+  if (id === 'fischflossen') {   // goldene Flossen-Schuhe mit Schuppen
+    const gm = mat(s.farbe, { metalness: 0.7, roughness: 0.25, emissive: '#ff8a1f', emissiveIntensity: 0.15 });
+    g.add(klotz(gm, 7, 2.8, 4.6, 1.3, -5.8, 0), kugel(gm, 2.3, 4.6, -5.8, 0, 1, 0.65, 1), klotz(mat('#ff8a1f'), 7.6, 0.8, 4.8, 1.3, -7, 0));
+    for (let i = 0; i < 4; i++) g.add(kugel(mat('#ffe08a', { metalness: 0.7, roughness: 0.2 }), 0.8, 3.2 - i * 1.4, -4.4, (i % 2 - 0.5) * 1.6, 1, 0.5, 1));
+    const fl = klotz(mat('#ff8a1f', { side: THREE.DoubleSide, transparent: true, opacity: 0.85 }), 6, 0.5, 6.5, 7.5, -7, 0); g.add(fl);
+    for (const z of [-2, 0, 2]) g.add(klotz(mat('#ffd166'), 5, 0.6, 0.4, 7.5, -6.8, z));
+    return;
+  }
   const sm = mat(s.farbe, { roughness: 0.6 });
   if (s.modell === 'stiefel') { g.add(zylinder(sm, 3.1, 3.1, 6, 0, -3.4, 0), klotz(sm, 7, 3, 4.8, 1.3, -5.7, 0), kugel(sm, 2.4, 4.6, -5.7, 0, 1, 0.6, 1), klotz(MAT_GUMMI, 7.8, 0.9, 5, 1.3, -7, 0), ringY(mat(FIRMEN.u24.farbe2), 3.1, 0.5, 0, -0.6, 0)); return; }
   if (id === 'stiefel' || id === 'cowboy') {
@@ -2211,6 +2226,32 @@ function haareBauen(kopf, frisur, haar) {
   }
 }
 
+// Kleine Bilder für die Einsatzkleidung (einmal gemalt, dann wiederverwendet)
+let _einsatzSchrift = null, _einsatzWappen = null, _fischBild = null;
+function einsatzSchriftTex() {
+  if (_einsatzSchrift) return _einsatzSchrift;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 84; const x = c.getContext('2d');
+  x.fillStyle = '#e8ff3a'; x.beginPath(); x.roundRect(2, 2, 252, 80, 10); x.fill();
+  x.fillStyle = '#1f2944'; x.font = 'bold 30px system-ui'; x.textAlign = 'center'; x.fillText('FISCHEREI', 128, 38); x.font = 'bold 26px system-ui'; x.fillText('🐟 WACHE 🐟', 128, 72);
+  _einsatzSchrift = new THREE.CanvasTexture(c); _einsatzSchrift.colorSpace = THREE.SRGBColorSpace; return _einsatzSchrift;
+}
+function einsatzWappenTex() {
+  if (_einsatzWappen) return _einsatzWappen;
+  const c = document.createElement('canvas'); c.width = c.height = 96; const x = c.getContext('2d');
+  x.fillStyle = '#c8102e'; x.beginPath(); x.arc(48, 48, 46, 0, 7); x.fill(); x.strokeStyle = '#ffd166'; x.lineWidth = 6; x.stroke();
+  x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(44, 48, 22, 12, 0, 0, 7); x.fill();
+  x.beginPath(); x.moveTo(64, 48); x.lineTo(80, 34); x.lineTo(80, 62); x.closePath(); x.fill();
+  x.fillStyle = '#c8102e'; x.beginPath(); x.arc(32, 45, 3.5, 0, 7); x.fill();
+  _einsatzWappen = new THREE.CanvasTexture(c); _einsatzWappen.colorSpace = THREE.SRGBColorSpace; return _einsatzWappen;
+}
+function fischBildTex() {
+  if (_fischBild) return _fischBild;
+  const c = document.createElement('canvas'); c.width = 128; c.height = 82; const x = c.getContext('2d');
+  x.fillStyle = '#f3e7cf'; x.beginPath(); x.ellipse(56, 41, 40, 22, 0, 0, 7); x.fill();
+  x.beginPath(); x.moveTo(92, 41); x.lineTo(122, 16); x.lineTo(122, 66); x.closePath(); x.fill();
+  x.fillStyle = '#1f4e79'; x.beginPath(); x.arc(32, 36, 5, 0, 7); x.fill();
+  _fischBild = new THREE.CanvasTexture(c); _fischBild.colorSpace = THREE.SRGBColorSpace; return _fischBild;
+}
 function hutBauen(kopf, id) {
   const h = KOEPFE[id], dreh = [];
   if (!h || id === 'keine') return dreh;
@@ -2293,6 +2334,39 @@ function hutBauen(kopf, id) {
     const m = mat(h.farbe), me = mat('#c9cfe6', { metalness: 0.8, roughness: 0.25 });
     kopf.add(ringY(m, 7.7, 1.2, 0, 4, 0), klotz(me, 1, 2.6, 5, 7.9, 4, 0), kugel(MAT_SCHWARZ, 0.5, 8.5, 4, 0));
     for (const z of [-1.2, 1.2]) { const t = klotz(m, 1, 9, 1.8, -9.6, 0.5, z); t.rotation.x = z * 0.35; t.rotation.z = -0.5; kopf.add(t); }
+  } else if (id === 'einsatzhelm') {   // ⛑️ Feuerwehr-Helm: glänzend, Kamm, goldenes Visier, Nackenschutz, Leuchtstreifen, Fisch-Wappen
+    const hm = mat(h.farbe, { metalness: 0.3, roughness: 0.18 });
+    const kuppel = new THREE.Mesh(new THREE.SphereGeometry(9, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hm); kuppel.position.y = 0.6; kuppel.scale.set(1.08, 1.05, 1); kopf.add(kuppel);
+    kopf.add(klotz(hm, 15, 1.6, 1.2, -0.5, 9.4, 0));                                                     // Kamm oben
+    kopf.add(ringY(mat('#e8ff3a', { emissive: '#c8e000', emissiveIntensity: 0.35 }), 9.15, 0.6, 0, 2.6, 0), ringY(mat('#e9eef5', { emissive: '#9aa3b8', emissiveIntensity: 0.4, metalness: 0.6 }), 9.25, 0.4, 0, 3.6, 0));
+    kopf.add(ringY(mat('#2b2f4a'), 9.4, 0.6, 0, 0.6, 0));                                                // Rand
+    const visier = new THREE.Mesh(new THREE.SphereGeometry(9.6, 20, 8, -0.95, 1.9, Math.PI * 0.4, Math.PI * 0.2),
+      new THREE.MeshStandardMaterial({ color: '#ffcc55', metalness: 0.9, roughness: 0.1, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+    visier.rotation.y = Math.PI / 2; visier.position.y = 2.2; kopf.add(visier);                          // goldenes Visier (hochgeklappt über den Augen)
+    const nacken = new THREE.Mesh(new THREE.CylinderGeometry(8.6, 9.6, 6, 16, 1, true, Math.PI * 0.6, Math.PI * 0.8), mat('#2b2f4a', { side: THREE.DoubleSide, roughness: 0.9 }));
+    nacken.position.set(-0.5, -2.2, 0); kopf.add(nacken);                                                // Nackenschutz hinten
+    const wappen = new THREE.Mesh(new THREE.CircleGeometry(2.2, 16), new THREE.MeshBasicMaterial({ map: einsatzWappenTex() }));
+    wappen.rotation.y = Math.PI / 2; wappen.position.set(9.4, 6, 0); wappen.rotation.z = 0; kopf.add(wappen);
+    kopf.add(zylinderX(MAT_SCHWARZ, 1.4, 1.4, 2, -9, 5.5, 0), kugel(mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 1 }), 0.9, -10.1, 5.5, 0));   // Helmlampe hinten
+  } else if (id === 'fischhut') {   // ein ganzer Kabeljau als Hut
+    const fm = mat('#7f9c7c', { roughness: 0.45 }), bm = mat('#e8ecd8');
+    kopf.add(kugel(fm, 6, -1, 9.5, 0, 1.7, 0.75, 0.85), kugel(bm, 5, 0, 8.2, 0, 1.5, 0.45, 0.7));
+    for (const z of [-1, 1]) kopf.add(kugel(MAT_WEISS, 1.8, 8, 10.5, z * 2.6), kugel(MAT_SCHWARZ, 0.9, 9.3, 10.8, z * 2.8));
+    for (const s2 of [-1, 1]) { const f = klotz(fm, 5, 4, 0.6, -13, 9.5 + s2 * 2, 0); f.rotation.z = s2 * 0.5; kopf.add(f); }
+    kopf.add(klotz(mat('#ff8a1f'), 6, 3, 0.5, -1, 14.5, 0), zylinder(mat('#c9b27a'), 0.3, 0.2, 4, 9.5, 6.5, 0));
+  } else if (id === 'kapitaensmuetze') {
+    const m = mat('#ffffff', { roughness: 0.7 }), d = mat('#1b2440');
+    kopf.add(zylinder(d, 8.2, 8, 2.6, 0, 4.8, 0), zylinder(m, 9.2, 8.2, 3.2, 0.6, 7.6, 0));
+    const schirm = zylinder(MAT_SCHWARZ, 5, 5, 0.6, 7.5, 4, 0); schirm.scale.z = 1.1; kopf.add(schirm);
+    kopf.add(klotz(MAT_GOLD, 0.4, 0.5, 8, 8.4, 5, 0), kugel(MAT_GOLD, 1.5, 8.6, 6.8, 0, 0.5, 1, 1));   // Goldkordel + Anker-Abzeichen
+  } else if (id === 'papageikrone') {   // goldene Krone mit Fischen und orangen Kaviar-Edelsteinen
+    kopf.add(zylinder(MAT_GOLD, 6.6, 7, 3.6, 0, 7.4, 0));
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2, zacke = new THREE.Mesh(new THREE.ConeGeometry(1.2, i % 2 ? 3 : 5, 6), MAT_GOLD);
+      zacke.position.set(Math.cos(a) * 6, i % 2 ? 10.7 : 11.7, Math.sin(a) * 6); kopf.add(zacke);
+      kopf.add(kugel(mat('#ff8a1f', { emissive: '#ff6a00', emissiveIntensity: 0.6, roughness: 0.1 }), 0.8, Math.cos(a) * 7, 7.4, Math.sin(a) * 7));
+    }
+    kopf.add(kugel(mat('#7f9c7c', { metalness: 0.5, roughness: 0.3 }), 1.6, 0, 13.5, 0, 1.8, 0.8, 0.7));   // kleiner Fisch obendrauf
   } else if (id === 'astronaut') {
     kopf.add(new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), glasRohrMat), ringY(MAT_WEISS, 8, 2, 0, -8, 0));
     kopf.add(zylinder(MAT_GRAU, 0.5, 0.5, 5, -3, 12, 3), kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 1, -3, 14.8, 3));
@@ -2304,7 +2378,9 @@ function baueJunge(m, team, aussehen, an) {
   const k = new THREE.Group();
   const hemd = HEMDEN[an.hemd] || HEMDEN.tshirt;
   const haut = mat(aussehen.haut, { roughness: 0.6 }), haar = mat(aussehen.haar, { roughness: 0.8 });
-  const hemdM = mat(hemd.farbe, { roughness: 0.75 }), hose = mat('#3d5a99', { roughness: 0.85 });
+  const hemdM = mat(hemd.farbe, { roughness: 0.75 }), hose = mat(hemd.einsatz ? '#1f2944' : '#3d5a99', { roughness: 0.85 });
+  const reflexGelb = hemd.einsatz ? mat('#e8ff3a', { emissive: '#c8e000', emissiveIntensity: 0.35, roughness: 0.5 }) : null;
+  const reflexSilber = hemd.einsatz ? mat('#e9eef5', { emissive: '#9aa3b8', emissiveIntensity: 0.4, metalness: 0.6, roughness: 0.2 }) : null;
   const dunkel = mat(TEAMS[team].dunkel, { roughness: 0.5 });
   const lang = hemd.aermel === 'lang', ohne = hemd.aermel === 'keine';
   // Beine (Jeans) mit Knien und Schuhen
@@ -2314,6 +2390,7 @@ function baueJunge(m, team, aussehen, an) {
     huefte.add(zylinder(hose, 3.1, 2.8, 7.5, 0, -3.6, 0));
     const knie = new THREE.Group(); knie.position.y = -7;
     knie.add(kugel(hose, 2.8, 0, 0, 0), zylinder(hose, 2.8, 2.6, 5.5, 0, -2.8, 0));
+    if (reflexGelb) knie.add(ringY(reflexGelb, 2.85, 0.45, 0, -1.6, 0), ringY(reflexSilber, 2.85, 0.35, 0, -2.5, 0), ringY(reflexGelb, 2.85, 0.45, 0, -3.4, 0));   // Leuchtstreifen an der Hose
     schuhBauen(knie, an.schuhe, haut);
     huefte.add(knie); k.add(huefte); beine.push({ huefte, knie });
   }
@@ -2348,6 +2425,37 @@ function baueJunge(m, team, aussehen, an) {
   if (hemd.jacke) {
     ober.add(klotz(MAT_WEISS, 0.6, 12, 3.4, 6.45, 8.2, 0), klotz(MAT_METALL, 0.5, 12, 0.5, 6.7, 8.2, -1.9), klotz(MAT_METALL, 0.5, 12, 0.5, 6.7, 8.2, 1.9));
     ober.add(klotz(hemdM, 2, 3, 3, 5.6, 14.6, -2.8), klotz(hemdM, 2, 3, 3, 5.6, 14.6, 2.8));
+  }
+  if (hemd.einsatz) {   // 🧑‍🚒 Einsatzjacke wie bei der Feuerwehr: lang, Leuchtstreifen gelb-silber-gelb, Kragen, Taschen, Rückenschild
+    ober.add(zylinder(hemdM, 7.2, 7.4, 6, 0, 0.6, 0));                                           // Jacke geht bis über die Hüfte
+    for (const y of [-0.8, 7.2]) ober.add(ringY(reflexGelb, 6.95 - y * 0.02, 0.55, 0, y - 0.9, 0), ringY(reflexSilber, 6.95 - y * 0.02, 0.45, 0, y, 0), ringY(reflexGelb, 6.95 - y * 0.02, 0.55, 0, y + 0.9, 0));
+    ober.add(zylinder(hemdM, 3.6, 3.3, 2.4, 0, 15.2, 0), ringY(reflexGelb, 3.6, 0.35, 0, 16.3, 0));   // hoher Kragen
+    ober.add(klotz(MAT_SCHWARZ, 0.5, 14, 0.7, 7.15, 7.5, 0));                                    // Reißverschluss-Leiste
+    for (const y of [2, 5, 8.5, 12]) ober.add(klotz(MAT_METALL, 0.4, 0.8, 1.6, 7.35, y, 0));      // Druckknöpfe
+    for (const z of [-1, 1]) {                                                                    // Brust- und Seitentaschen mit Klappen
+      ober.add(klotz(hemdM, 0.9, 3.2, 3.2, 6.9, 11.6, z * 3.6), klotz(mat('#1a2238'), 1.1, 0.9, 3.4, 7, 13.1, z * 3.6));
+      ober.add(klotz(hemdM, 1.2, 3.8, 3.8, 7.1, 1.8, z * 4.2), klotz(mat('#1a2238'), 1.4, 1, 4, 7.3, 3.7, z * 4.2));
+    }
+    const funk = new THREE.Group(); funk.position.set(6.9, 11.2, 3.6); ober.add(funk);           // Funkgerät an der Brust
+    funk.add(klotz(MAT_SCHWARZ, 1.4, 3, 1.8, 0.5, 0.4, 0), zylinder(MAT_SCHWARZ, 0.25, 0.25, 2.6, 0.5, 3, 0.5), kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1 }), 0.3, 1.25, 1.4, 0));
+    const schildRueck = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.6), new THREE.MeshBasicMaterial({ map: einsatzSchriftTex(), transparent: true }));
+    schildRueck.rotation.y = -Math.PI / 2; schildRueck.position.set(-7.6, 1.7, 0); ober.add(schildRueck);   // hinten unter dem Tinten-Rucksack
+    const wappen = new THREE.Mesh(new THREE.CircleGeometry(1.5, 16), new THREE.MeshBasicMaterial({ map: einsatzWappenTex() }));
+    wappen.rotation.y = Math.PI / 2; wappen.position.set(7.0, 11.6, -3.6); ober.add(wappen);       // Wappen mit Fisch
+  }
+  if (hemd.fischBild) {   // Fischerpulli: großer Fisch vorne drauf
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(7, 4.5), new THREE.MeshBasicMaterial({ map: fischBildTex(), transparent: true }));
+    f.rotation.y = Math.PI / 2; f.position.set(6.75, 8.5, 0); ober.add(f);
+    ober.add(ringY(mat('#f3e7cf'), 3.2, 1, 0, 14.9, 0));
+  }
+  if (hemd.papagei) for (let i = 0; i < 6; i++) {   // Papageien-Hemd: kleine rote Papageien
+    const a = i * 1.05 + 0.4, y = 4 + (i * 5 % 9);
+    ober.add(kugel(mat('#e63946'), 1, Math.cos(a) * 6.6, y, Math.sin(a) * 6.6, 1, 1.4, 1), kugel(mat('#ffd166'), 0.45, Math.cos(a) * 6.9, y + 1.2, Math.sin(a) * 6.9));
+  }
+  if (hemd.kapitaen) {   // Kapitänsjacke: goldene Knöpfe, Streifen und Schulterklappen
+    for (const z of [-2.2, 2.2]) for (const y of [4, 7, 10]) ober.add(kugel(MAT_GOLD, 0.55, 6.75, y, z));
+    for (const z of [-7.4, 7.4]) ober.add(klotz(MAT_GOLD, 4, 0.6, 2.6, 0, 16.9, z), klotz(hemdM, 4.4, 0.4, 2.8, 0, 16.5, z));
+    ober.add(klotz(MAT_GOLD, 0.3, 0.5, 2.5, 6.75, 12.4, -3.6));
   }
   if (hemd.punkte) for (let i = 0; i < 18; i++) {   // Sterne
     const a = i * 2.1, y = 3 + (i * 5 % 11), f = i % 3 ? '#ffffff' : '#ffd166';
@@ -2397,11 +2505,13 @@ function baueJunge(m, team, aussehen, an) {
   for (const s of [-1, 1]) {
     const schulter = new THREE.Group(); schulter.position.set(0, 14, s * 7.8); schulter.rotation.y = s * 0.5;
     if (lang) schulter.add(zylinder(hemdM, 2.6, 2.4, 6, 0, -3, 0));
+    if (reflexGelb) schulter.add(ringY(reflexGelb, 2.55, 0.4, 0, -4.2, 0), ringY(reflexSilber, 2.55, 0.32, 0, -4.95, 0));
     else if (ohne) schulter.add(zylinder(haut, 2.3, 2.1, 6, 0, -3, 0));
     else schulter.add(zylinder(hemdM, 2.9, 2.7, 3.4, 0, -1.6, 0), zylinder(haut, 2.1, 2, 3.4, 0, -4.4, 0));
     const ellbogen = new THREE.Group(); ellbogen.position.y = -6;
     const arm = lang ? hemdM : haut;
-    ellbogen.add(kugel(arm, 2.1, 0, 0, 0), zylinder(arm, 2.1, 1.9, 5, 0, -2.5, 0), zylinder(m, 2.25, 2.25, 1.6, 0, -4.4, 0), kugel(haut, 2.3, 0, -6, 0));
+    ellbogen.add(kugel(arm, 2.1, 0, 0, 0), zylinder(arm, 2.1, 1.9, 5, 0, -2.5, 0), zylinder(m, 2.25, 2.25, 1.6, 0, -4.4, 0), kugel(hemd.einsatz ? mat('#c9a15a', { roughness: 0.9 }) : haut, 2.3, 0, -6, 0));   // bei der Feuerwehr-Jacke: Lederhandschuhe
+    if (reflexGelb) ellbogen.add(ringY(reflexGelb, 2.05, 0.4, 0, -2.4, 0), ringY(reflexSilber, 2.05, 0.32, 0, -3.1, 0));
     schulter.add(ellbogen);
     ober.add(schulter); arme.push({ schulter, ellbogen });
   }
@@ -3062,7 +3172,8 @@ function baueHaendeWaffe(art, aussehen, an) {
     const ziel = typVon(art) === 'bogen' && nr === 1 ? haendeWaffe.userData.kerbe : haendeWaffe;   // Bogen: die Zieh-Hand geht mit der Sehne mit
     const hemd = HEMDEN[an.hemd] || HEMDEN.tshirt, haut = mat(aussehen.haut, { roughness: 0.6 });
     const aermel = zylinderX(hemd.aermel === 'lang' ? mat(hemd.farbe) : haut, 2.5, 3, 16, hx - 8.5, hy - 2.2, hz); aermel.rotation.z = -Math.PI / 2 + 0.25;
-    ziel.add(kugel(haut, 3, hx, hy, hz), ringX(teamMat[tm], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);   // Hand + Schweißband
+    ziel.add(kugel(hemd.einsatz ? mat('#c9a15a', { roughness: 0.9 }) : haut, 3, hx, hy, hz), ringX(teamMat[tm], 2.7, 1, hx - 2.4, hy - 0.6, hz), aermel);
+    if (hemd.einsatz) ziel.add(ringX(mat('#e8ff3a', { emissive: '#c8e000', emissiveIntensity: 0.35 }), 2.85, 0.7, hx - 7, hy - 1.8, hz));   // Leuchtstreifen am Ärmel   // Hand + Schweißband
   });
   haendeWaffe.traverse(o => { o.castShadow = false; });
   vmHalter.add(haendeWaffe);
