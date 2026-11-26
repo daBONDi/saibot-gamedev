@@ -7367,7 +7367,7 @@ function feierHud(cw, ch) {
     // Werte: erst auf 15 %, kurze Pause, dann das Endergebnis
     const wert = p => t < AW.tanzEnde ? 0 : t < AW.auf15 ? Math.min(p, 15) * weich((t - AW.tanzEnde) / (AW.auf15 - AW.tanzEnde)) : t < AW.pauseEnde ? Math.min(p, 15) : Math.min(p, 15) + (p - Math.min(p, 15)) * weich((t - AW.pauseEnde) / (AW.ende - AW.pauseEnde));
     const maxH = ch * 0.52, unten = ch * 0.86, sb = Math.min(170, cw * 0.14), urteil = t > AW.ende;
-    for (const [team, p, xm, text] of [[mein, pM, cw * 0.42, 'DEIN TEAM'], [geg, pG, cw * 0.74, 'GEGNER']]) {
+    for (const [team, p, xm, text] of [[mein, pM, cw * 0.5, 'DEIN TEAM'], [geg, pG, cw * 0.78, 'GEGNER']]) {
       const w = wert(p), hgt = Math.max(6, maxH * Math.min(1, w / 70)), gewinner = urteil && f.sieger === team;
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.roundRect(xm - sb / 2 - 8, unten - maxH - 8, sb + 16, maxH + 16, 16); ctx.fill();
       if (gewinner) { ctx.save(); ctx.shadowColor = TEAMS[team].hell; ctx.shadowBlur = 40 + Math.sin(t * 8) * 15; }
@@ -7379,7 +7379,7 @@ function feierHud(cw, ch) {
       textMitRand(`${TEAMS[team].emoji} ${text}`, xm, unten + 34, Math.min(26, cw / 32), TEAMS[team].hell);
       if (gewinner) textMitRand('👑', xm, unten - hgt - 70 - Math.abs(Math.sin(t * 4)) * 8, 50);
     }
-    if (t > AW.auf15 && t < AW.pauseEnde) textMitRand('🥁 Und …', cw * 0.58, ch * 0.16, Math.min(48, cw / 18), '#fff');
+    if (t > AW.auf15 && t < AW.pauseEnde) textMitRand('🥁 Und …', cw * 0.62, ch * 0.16, Math.min(48, cw / 18), '#fff');
     // 🎙️ Tini oder Brummi auf deiner Seite
     const mod = f.moderator, s0 = Math.min(ch * 0.0034, cw * 0.0024), mx = cw * 0.15, my = ch * 0.92;
     const gewonnen = f.sieger === f.mein, verloren = f.sieger >= 0 && !gewonnen;
@@ -7395,7 +7395,7 @@ function feierHud(cw, ch) {
     else if (gewonnen) { ctx.translate(0, -Math.abs(Math.sin(t * 5)) * 16); p = { mund: 0.7, winken: 1, nicken: Math.sin(t * 5) * 2 }; }
     else if (verloren) {   // fällt hin und weint
       const k = Math.min(1, (t - AW.ende) / 0.45);
-      ctx.rotate(-k * 1.45); ctx.translate(-k * 40, 0);
+      ctx.translate(k * 10, -k * ch * 0.05); ctx.rotate(k * 1.45); ctx.scale(1 - k * 0.25, 1 - k * 0.25);   // kippt nach rechts um
       p = { traurig: k > 0.6, nicken: Math.sin(t * 12) * (k > 0.6 ? 1.5 : 0) };
     } else p = { mund: 0.3, winken: 1 };   // unentschieden
     ctx.scale(s0, s0); ctx.translate(-60, -140);
@@ -7403,11 +7403,11 @@ function feierHud(cw, ch) {
     if (mod === 'tini') tiniZeichnen(ctx, p); else brummiZeichnen(ctx, p);
     ctx.restore();
     ctx.textAlign = 'center';
-    if (t < AW.tanzEnde && t > 0.6) textMitRand(mod === 'tini' ? '🎧 Tini: „Mal sehen, wer gewonnen hat!“' : '🦭 Brummi: „Jetzt wird\'s spannend!“', cw * 0.58, ch * 0.16, Math.min(28, cw / 34), '#fff');
+    if (t < AW.tanzEnde && t > 0.6) textMitRand(mod === 'tini' ? '🎧 Tini: „Mal sehen, wer gewonnen hat!“' : '🦭 Brummi: „Jetzt wird\'s spannend!“', cw * 0.62, ch * 0.16, Math.min(28, cw / 34), '#fff');
     if (urteil) {
       const k = weich((t - AW.ende) * 3), gr = Math.min(80, cw / 10) * (0.6 + 0.4 * k);
       const text = f.sieger < 0 ? '🤝 UNENTSCHIEDEN!' : gewonnen ? '🏆 GEWONNEN!' : '😭 VERLOREN …';
-      textMitRand(text, cw * 0.58, ch * 0.16, gr, f.sieger < 0 ? '#ffffff' : gewonnen ? '#ffd166' : '#9fb8ff');
+      textMitRand(text, cw * 0.62, ch * 0.16, gr, f.sieger < 0 ? '#ffffff' : gewonnen ? '#ffd166' : '#9fb8ff');
     }
     if (t < AW.hell) { ctx.fillStyle = `rgba(0,0,0,${1 - t / AW.hell})`; ctx.fillRect(0, 0, cw, ch); }   // aus dem Dunkeln auftauchen
   } else if (name === 'sieger' || name === 'verlierer') {
