@@ -7264,13 +7264,17 @@ const kroneMvp = new THREE.Group(); kroneMvp.visible = false; scene.add(kroneMvp
 })();
 
 let feier = null;
-const FEIER_PHASEN = [['auswertung', 5.2], ['sieger', 5.5], ['verlierer', 5], ['mvp', 5.5]];
+const FEIER_PHASEN = [['daswars', 2.4], ['auswertung', 11], ['sieger', 5.5], ['verlierer', 5], ['mvp', 5.5]];
+// Zeitplan der Auswertung (Sekunden): aufhellen, tanzen, auf 15 % zählen, Spannungspause, Endergebnis, Urteil
+const AW = { hell: 0.8, tanzEnde: 3.2, auf15: 4.6, pauseEnde: 5.8, ende: 7.6 };
 function feierStarten(pO, pL) {
   const sieger = pO === pL ? -1 : pO > pL ? 0 : 1;
   // Bester Spieler: Färben zählt doppelt!
   let mvp = null, best = -1;
   for (const e of kleckse) { const w = (e.punkte || 0) * 2 + (e.ko || 0) * 100; e.mvpWert = w; if (w > best) { best = w; mvp = e; } }
-  feier = { pO, pL, sieger, mvp, phase: 0, t: 0, weiter: false };
+  const richtung = new THREE.Vector3(); kamera.getWorldDirection(richtung);
+  feier = { pO, pL, sieger, mvp, phase: 0, t: 0, weiter: false, mein: spieler.team, moderator: Math.random() < 0.5 ? 'tini' : 'brummi',
+    kamStart: { pos: kamera.position.toArray(), ziel: kamera.position.clone().addScaledVector(richtung, 100).toArray() } };
   for (const e of kleckse) {
     Object.assign(e, { saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null, sprungBlob: false, tot: false, todT: 0, spawnT: 0, taucht: false, tauchAnim: 0, schild: 0, gigaT: 0, panzerT: 0, kugelT: 0, laserT: 0, werferT: 0, trifT: 0, wirbelBis: 0, tanaDashBis: 0, schwingT: 0, laden: false, ladung: 0, rueck: 0 });
     e.emote = null; e.koerper.rotation.z = 0;
@@ -7294,7 +7298,8 @@ function feierPhaseStarten() {
   kroneMvp.visible = false;
   const fahnenTeam = f.phase === 2 ? 1 - Math.max(0, f.sieger) : Math.max(0, f.sieger);
   buehneFahnen.forEach((fa, i) => fa.material.color.set(f.sieger < 0 ? TEAMS[i % 2].col : i % 2 ? TEAMS[fahnenTeam].col : TEAMS[fahnenTeam].hell));
-  if (name === 'auswertung') { for (const e of kleckse) e.emote = null; ton('wirbel'); }
+  if (name === 'daswars') { ton('pfiff'); }
+  else if (name === 'auswertung') { for (const e of kleckse) e.emote = null; f.zaehlTon = 0; f.urteil = false; f.wirbel = false; }
   else if (name === 'sieger') { feierAufstellen(kleckse.filter(e => e.team === (f.sieger < 0 ? 0 : f.sieger)), f.sieger < 0 ? 'sieg' : 'sieg'); ton('sieg'); }
   else if (name === 'verlierer') { feierAufstellen(kleckse.filter(e => e.team === (f.sieger < 0 ? 1 : 1 - f.sieger)), f.sieger < 0 ? 'sieg' : 'nieder'); ton(f.sieger < 0 ? 'sieg' : 'niederlage'); }
   else if (name === 'mvp') {
@@ -7315,9 +7320,14 @@ function feierUpdate(dt) {
   }
   // Konfetti bei den Siegern und beim Besten
   if ((name === 'sieger' || name === 'mvp') && Math.random() < dt * 14) spritzer(BUEHNE.x + (Math.random() - 0.5) * 380, BUEHNE.y + (Math.random() - 0.5) * 100, 230, Math.random() < 0.5 ? 0 : 1, 3, 90);
-  if (name === 'auswertung' && f.t > 3.4 && !f.verkuendet) { f.verkuendet = true; ton('fanfare'); }
+  if (name === 'auswertung') {
+    if (f.t > AW.hell && f.t < AW.auf15 && Math.floor(f.t * 4) !== f.zaehlTon) { f.zaehlTon = Math.floor(f.t * 4); if (f.t > AW.tanzEnde) ton('klick', 0.6); }
+    if (f.t > AW.auf15 && !f.wirbel) { f.wirbel = true; ton('wirbel'); }
+    if (f.t > AW.ende && !f.urteil) { f.urteil = true; const gew = f.sieger === f.mein; ton(f.sieger < 0 ? 'fanfare' : gew ? 'vollJubel' : 'vollTraurig'); }
+  }
   // Kamera
-  if (name === 'auswertung') { const k = weich(f.t / dauer); kameraOverride = { pos: [W / 2 + Math.sin(f.t * 0.2) * 200, 1500 + k * 300, H / 2 + 900 - k * 300], ziel: [W / 2, 0, H / 2] }; }
+  if (name === 'daswars') kameraOverride = f.kamStart;   // bleibt stehen, wo du warst
+  else if (name === 'auswertung') kameraOverride = { pos: [W / 2 + Math.sin(f.t * 0.15) * 30, 2050 - f.t * 12, H / 2 + 1], ziel: [W / 2, 0, H / 2] };   // 🦅 Vogelsicht
   else if (name === 'mvp') { const k = weich(f.t / 1.5); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.5) * 30, 80 - k * 25, BUEHNE.y + 260 - k * 190], ziel: [BUEHNE.x, BUEHNE.h + 34, BUEHNE.y - 40] }; }
   else { const k = weich(f.t / 1.2); kameraOverride = { pos: [BUEHNE.x + Math.sin(f.t * 0.4) * 60, 95 - k * 35, BUEHNE.y + 380 - k * 175], ziel: [BUEHNE.x, BUEHNE.h + 26, BUEHNE.y + 20] }; }
   if (f.mvp && kroneMvp.visible) { const m = f.mvp; kroneMvp.position.set(m.x, hAbs(m) + 46 + Math.sin(zeit * 3) * 2, m.y); kroneMvp.rotation.y += dt * 2; }
@@ -7339,22 +7349,67 @@ function feierHud(cw, ch) {
   const [name] = FEIER_PHASEN[f.phase], t = f.t;
   ctx.textAlign = 'center';
   const balkenH = ch * 0.08; ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, cw, balkenH); ctx.fillRect(0, ch - balkenH, cw, balkenH);
+  if (name === 'daswars') {   // 🏁 Streifen „DAS WAR'S!!!“, dann wird es dunkel
+    const k = Math.min(1, t / 0.35), h = Math.min(170, ch * 0.24);
+    ctx.save(); ctx.translate(cw / 2, ch / 2); ctx.rotate(-0.08);
+    const bx = (1 - k) * -cw * 1.4;
+    ctx.fillStyle = '#1b1f3a'; ctx.fillRect(bx - cw, -h / 2 - 10, cw * 2, h + 20);
+    for (let i = 0; i < 12; i++) { ctx.fillStyle = TEAMS[i % 2].col; ctx.fillRect(bx - cw + i * cw / 6, -h / 2, cw / 12, h); }
+    ctx.fillStyle = '#1b1f3acc'; ctx.fillRect(bx - cw, -h / 2, cw * 2, h);
+    ctx.restore();
+    if (t > 0.25) { const z = 1 + Math.max(0, 0.4 - (t - 0.25)) * 1.5; textMitRand("DAS WAR'S!!!", cw / 2, ch / 2 + Math.min(70, cw / 11) * 0.35, Math.min(110, cw / 8) * z, '#ffd166'); }
+    if (t > 1.4) { ctx.fillStyle = `rgba(0,0,0,${Math.min(1, (t - 1.4) / 0.9)})`; ctx.fillRect(0, 0, cw, ch); }
+    return;
+  }
   if (name === 'auswertung') {
-    textMitRand('📊 AUSWERTUNG', cw / 2, ch * 0.2, Math.min(64, cw / 12), '#ffd166');
-    const g = weich((t - 1) / 2.3), bw = Math.min(560, cw * 0.7), x0 = cw / 2 - bw / 2, y0 = ch * 0.42;
-    for (let k = 0; k < 2; k++) {
-      const wert = (k ? f.pL : f.pO) * g, y = y0 + k * 70;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(x0, y, bw, 50, 12); ctx.fill();
-      ctx.fillStyle = TEAMS[k].col; ctx.beginPath(); ctx.roundRect(x0, y, Math.max(12, bw * wert / 100 * 1.6), 50, 12); ctx.fill();
-      ctx.textAlign = 'left'; textMitRand(`${TEAMS[k].emoji} ${TEAMS[k].name}`, x0 + 14, y + 36, 24);
-      ctx.textAlign = 'right'; textMitRand(`${wert.toFixed(1)}%`, x0 + bw - 14, y + 36, 28, t > 3.3 ? '#ffd166' : '#ffffff');
+    const mein = f.mein, geg = 1 - mein, pM = mein === 0 ? f.pO : f.pL, pG = mein === 0 ? f.pL : f.pO;
+    ctx.fillStyle = 'rgba(10,8,30,0.35)'; ctx.fillRect(0, 0, cw, ch);
+    // Werte: erst auf 15 %, kurze Pause, dann das Endergebnis
+    const wert = p => t < AW.tanzEnde ? 0 : t < AW.auf15 ? Math.min(p, 15) * weich((t - AW.tanzEnde) / (AW.auf15 - AW.tanzEnde)) : t < AW.pauseEnde ? Math.min(p, 15) : Math.min(p, 15) + (p - Math.min(p, 15)) * weich((t - AW.pauseEnde) / (AW.ende - AW.pauseEnde));
+    const maxH = ch * 0.52, unten = ch * 0.86, sb = Math.min(170, cw * 0.14), urteil = t > AW.ende;
+    for (const [team, p, xm, text] of [[mein, pM, cw * 0.42, 'DEIN TEAM'], [geg, pG, cw * 0.74, 'GEGNER']]) {
+      const w = wert(p), hgt = Math.max(6, maxH * Math.min(1, w / 70)), gewinner = urteil && f.sieger === team;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.roundRect(xm - sb / 2 - 8, unten - maxH - 8, sb + 16, maxH + 16, 16); ctx.fill();
+      if (gewinner) { ctx.save(); ctx.shadowColor = TEAMS[team].hell; ctx.shadowBlur = 40 + Math.sin(t * 8) * 15; }
+      const gr = ctx.createLinearGradient(0, unten - hgt, 0, unten); gr.addColorStop(0, TEAMS[team].hell); gr.addColorStop(1, TEAMS[team].col);
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.roundRect(xm - sb / 2, unten - hgt, sb, hgt, 12); ctx.fill();
+      if (gewinner) ctx.restore();
+      ctx.textAlign = 'center';
+      textMitRand(`${w.toFixed(1)}%`, xm, unten - hgt - 18, Math.min(54, cw / 16) * (gewinner ? 1.15 : 1), gewinner ? '#ffd166' : '#fff');
+      textMitRand(`${TEAMS[team].emoji} ${text}`, xm, unten + 34, Math.min(26, cw / 32), TEAMS[team].hell);
+      if (gewinner) textMitRand('👑', xm, unten - hgt - 70 - Math.abs(Math.sin(t * 4)) * 8, 50);
     }
+    if (t > AW.auf15 && t < AW.pauseEnde) textMitRand('🥁 Und …', cw * 0.58, ch * 0.16, Math.min(48, cw / 18), '#fff');
+    // 🎙️ Tini oder Brummi auf deiner Seite
+    const mod = f.moderator, s0 = Math.min(ch * 0.0034, cw * 0.0024), mx = cw * 0.15, my = ch * 0.92;
+    const gewonnen = f.sieger === f.mein, verloren = f.sieger >= 0 && !gewonnen;
+    ctx.save(); ctx.translate(mx, my);
+    const ein = Math.min(1, Math.max(0, (t - 0.3) / 0.5));
+    ctx.translate((1 - ein) * -cw * 0.3, 0);
+    let p = { mund: 0, winken: 0, nicken: 0 };
+    if (t < AW.tanzEnde) {   // 💃 tanzen
+      const tz = t * 7;
+      ctx.translate(Math.sin(tz * 0.5) * 18, -Math.abs(Math.sin(tz)) * 22); ctx.rotate(Math.sin(tz * 0.5) * 0.18);
+      p = { mund: 0.6, winken: Math.sin(tz * 0.5) > 0 ? 1 : 0, nicken: Math.sin(tz) * 3 };
+    } else if (!urteil) { p = { mund: 0, nicken: Math.sin(t * 9) * 1.5 }; ctx.translate(Math.sin(t * 30) * 1.5, 0); }   // zittert vor Spannung
+    else if (gewonnen) { ctx.translate(0, -Math.abs(Math.sin(t * 5)) * 16); p = { mund: 0.7, winken: 1, nicken: Math.sin(t * 5) * 2 }; }
+    else if (verloren) {   // fällt hin und weint
+      const k = Math.min(1, (t - AW.ende) / 0.45);
+      ctx.rotate(-k * 1.45); ctx.translate(-k * 40, 0);
+      p = { traurig: k > 0.6, nicken: Math.sin(t * 12) * (k > 0.6 ? 1.5 : 0) };
+    } else p = { mund: 0.3, winken: 1 };   // unentschieden
+    ctx.scale(s0, s0); ctx.translate(-60, -140);
+    if (urteil && gewonnen) fahneZeichnen(ctx, 112, 112, TEAMS[f.mein].col, TEAMS[f.mein].emoji);
+    if (mod === 'tini') tiniZeichnen(ctx, p); else brummiZeichnen(ctx, p);
+    ctx.restore();
     ctx.textAlign = 'center';
-    if (t > 3.4) {
-      const k = weich((t - 3.4) * 3), gr = Math.min(70, cw / 11) * (0.6 + 0.4 * k);
-      const text = f.sieger < 0 ? '🤝 UNENTSCHIEDEN!' : `🏆 ${TEAMS[f.sieger].name.toUpperCase()} GEWINNT!`;
-      textMitRand(text, cw / 2, ch * 0.78, gr, f.sieger < 0 ? '#ffffff' : TEAMS[f.sieger].hell);
+    if (t < AW.tanzEnde && t > 0.6) textMitRand(mod === 'tini' ? '🎧 Tini: „Mal sehen, wer gewonnen hat!“' : '🦭 Brummi: „Jetzt wird\'s spannend!“', cw * 0.58, ch * 0.16, Math.min(28, cw / 34), '#fff');
+    if (urteil) {
+      const k = weich((t - AW.ende) * 3), gr = Math.min(80, cw / 10) * (0.6 + 0.4 * k);
+      const text = f.sieger < 0 ? '🤝 UNENTSCHIEDEN!' : gewonnen ? '🏆 GEWONNEN!' : '😭 VERLOREN …';
+      textMitRand(text, cw * 0.58, ch * 0.16, gr, f.sieger < 0 ? '#ffffff' : gewonnen ? '#ffd166' : '#9fb8ff');
     }
+    if (t < AW.hell) { ctx.fillStyle = `rgba(0,0,0,${1 - t / AW.hell})`; ctx.fillRect(0, 0, cw, ch); }   // aus dem Dunkeln auftauchen
   } else if (name === 'sieger' || name === 'verlierer') {
     const team = name === 'sieger' ? Math.max(0, f.sieger) : (f.sieger < 0 ? 1 : 1 - f.sieger), gewinnt = name === 'sieger' || f.sieger < 0;
     textMitRand(gewinnt ? `🏆 ${TEAMS[team].name}: Sieger-Tanz!` : `😵 ${TEAMS[team].name}: Verlierer-Tanz …`, cw / 2, ch * 0.16, Math.min(46, cw / 16), TEAMS[team].hell);
@@ -9028,11 +9083,33 @@ function tiniZeichnen(x, p = {}) {
     else { kreis(px, 70, 4.5, '#1b1f3a'); kreis(px + 1.5, 68.5, 1.4, '#fff'); }
   }
   kreis(44, 80, 5, '#ff9ab0', 1, 0.6); kreis(76, 80, 5, '#ff9ab0', 1, 0.6);
-  if ((p.mund || 0) > 0.08) { x.fillStyle = '#8a1c34'; x.beginPath(); x.ellipse(60, 84, 6.5, 1.5 + p.mund * 5.5, 0, 0, 7); x.fill(); kreis(60, 86 + p.mund * 2.5, 3, '#ff7a9a', 1, 0.6); }
+  if (p.traurig) {   // 😭 weint: Mund nach unten, Tränen kullern
+    x.fillStyle = '#8a1c34'; x.beginPath(); x.ellipse(60, 88, 7, 4 + Math.abs(Math.sin(performance.now() / 150)) * 3, 0, Math.PI, 0); x.fill();
+    fcTraenen(x, [49, 71], 74);
+  } else if ((p.mund || 0) > 0.08) { x.fillStyle = '#8a1c34'; x.beginPath(); x.ellipse(60, 84, 6.5, 1.5 + p.mund * 5.5, 0, 0, 7); x.fill(); kreis(60, 86 + p.mund * 2.5, 3, '#ff7a9a', 1, 0.6); }
   else { x.strokeStyle = '#1b1f3a'; x.lineWidth = 2.5; x.beginPath(); x.arc(60, 82, 8, 0.2, Math.PI - 0.2); x.stroke(); }
   x.strokeStyle = '#2b2f4a'; x.lineWidth = 6; x.beginPath(); x.arc(60, 62, 36, Math.PI * 1.05, Math.PI * 1.95); x.stroke();
   kreis(25, 70, 10, '#2b2f4a'); kreis(95, 70, 10, '#2b2f4a'); kreis(25, 70, 6, TEAMS[0].col); kreis(95, 70, 6, TEAMS[0].col);
   x.restore();
+}
+function fcTraenen(x, augen, y0) {   // Tränen fallen aus den Augen
+  const t = performance.now() / 1000;
+  x.fillStyle = '#6fd3ff';
+  for (const ax of augen) for (let i = 0; i < 3; i++) {
+    const f = (t * 1.3 + i / 3 + ax * 0.01) % 1;
+    x.globalAlpha = 1 - f; x.beginPath(); x.ellipse(ax + (ax < 60 ? -1 : 1) * f * 10, y0 + f * 40, 2.6, 4, 0, 0, 7); x.fill();
+  }
+  x.globalAlpha = 1;
+}
+function fahneZeichnen(x, px, py, farbe, emoji) {   // Fahne an einer Stange (weht im Wind)
+  const t = performance.now() / 1000;
+  x.strokeStyle = '#8a6a48'; x.lineWidth = 5; x.lineCap = 'round'; x.beginPath(); x.moveTo(px, py); x.lineTo(px, py - 150); x.stroke();
+  x.fillStyle = '#ffd166'; x.beginPath(); x.arc(px, py - 152, 6, 0, 7); x.fill();
+  x.fillStyle = farbe; x.beginPath(); x.moveTo(px, py - 145);
+  for (let i = 0; i <= 10; i++) x.lineTo(px + i * 9, py - 145 + Math.sin(t * 6 - i * 0.6) * 6 * (i / 10));
+  for (let i = 10; i >= 0; i--) x.lineTo(px + i * 9, py - 85 + Math.sin(t * 6 - i * 0.6) * 6 * (i / 10));
+  x.closePath(); x.fill(); x.strokeStyle = '#1b1f3a'; x.lineWidth = 2; x.stroke();
+  x.font = '30px system-ui'; x.textAlign = 'center'; x.fillText(emoji, px + 45, py - 103 + Math.sin(t * 6 - 3) * 3);
 }
 function brummiZeichnen(x, p = {}) {
   const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
@@ -9046,7 +9123,8 @@ function brummiZeichnen(x, p = {}) {
   x.fillStyle = '#ff9f1c'; x.beginPath(); x.ellipse(60, 32, 34, 12, 0, Math.PI, 0); x.fill(); x.fillRect(58, 20, 46, 6);
   x.fillStyle = '#1b1f3a'; x.fillRect(32, 54, 24, 14); x.fillRect(64, 54, 24, 14); x.fillRect(54, 58, 12, 3);
   x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillRect(35, 56, 6, 4); x.fillRect(67, 56, 6, 4);
-  if ((p.mund || 0) > 0.08) { x.fillStyle = '#5a1c24'; x.beginPath(); x.ellipse(60, 99, 9, 2 + p.mund * 7, 0, 0, 7); x.fill(); }
+  if (p.traurig) { x.fillStyle = '#5a1c24'; x.beginPath(); x.ellipse(60, 104, 9, 5 + Math.abs(Math.sin(performance.now() / 160)) * 3, 0, Math.PI, 0); x.fill(); fcTraenen(x, [42, 78], 68); }
+  else if ((p.mund || 0) > 0.08) { x.fillStyle = '#5a1c24'; x.beginPath(); x.ellipse(60, 99, 9, 2 + p.mund * 7, 0, 0, 7); x.fill(); }
   kreis(48, 84 - (p.mund || 0) * 2, 14, '#c9a890'); kreis(72, 84 - (p.mund || 0) * 2, 14, '#c9a890');
   x.fillStyle = '#2b1d14'; for (let i = 0; i < 3; i++) for (const s of [-1, 1]) { x.beginPath(); x.arc(60 + s * (8 + i * 5), 82 + i * 3, 1.2, 0, 7); x.fill(); }
   kreis(60, 74, 5, '#2b1d14');
