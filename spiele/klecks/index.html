@@ -4456,7 +4456,7 @@ function spritzer(x, y, h, team, anzahl, kraft = 150) {
   }
 }
 function trifftKoerper(e, x, y, h, extra = 4) {
-  const unten = hAbs(e), oben = unten + (e.taucht ? 10 : 50);
+  const unten = hAbs(e), oben = unten + (e.taucht ? 10 : e.koerperHoehe || 50);
   return h >= unten - 4 && h <= oben && Math.hypot(e.x - x, e.y - y) < e.r + extra;
 }
 // Wie steil muss ein Bot zielen, damit der Tropfen in Entfernung d auf Höhe zielH ankommt?
@@ -5583,7 +5583,7 @@ function erwischt(e, wer) {
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
   if (wer) wer.ko++;
-  if (e.fisch) { e.totZeit = 0; const A = FISCH_ARTEN[e.fisch]; if (A.boss && !A.keinKaviar) kaviarFallenLassen(e); else if (e.goldfisch) kaviarFallenLassen(e, 1); }   // 🟠 Bossfische (und Goldfische) lassen Kaviar fallen
+  if (e.fisch) { e.totZeit = 0; const A = FISCH_ARTEN[e.fisch]; if (A.boss && !A.keinKaviar) kaviarFallenLassen(e); else if (e.goldfisch) kaviarFallenLassen(e, 1); if (A.boss && wer && !wer.fisch) wer.bossKo = (wer.bossKo || 0) + 1; e.puste = null; e.ramm = null; }   // 🟠 Bossfische (und Goldfische) lassen Kaviar fallen
   if (spielArt === 'kabeljau' && !e.fisch) { e.wiederT = 1e9; e.rettung = true; e.rettungHP = 0; if (e.traegt) { e.traegt.traeger = null; e.traegt = null; } }   // 🫧 wird zur Rettungsblase
   koMeldung(e, wer);
   if (wer && !wer.spieler && !wer.mensch && !replay && Math.random() < 0.25) rufen(wer, Math.random() < 0.7 ? 'erwischt' : 'xd');   // Bots freuen sich
@@ -7610,7 +7610,13 @@ const FISCH_ARTEN = {
               info: 'BOSS! Bleibt auf Abstand und spuckt dicke Tintenkugeln. Wo ein roter Kreis erscheint, landet gleich eine – lauf weg!' },
   flunder:  { name: 'Springflunder',   emoji: '🥏', hp: 260, tempo: 0.7,  r: 18, groesse: 1.2,  nah: 0,  schaden: 95, cd: 4.5, spur: 14, farbe: '#a7865e', bauch: '#f3e2c4', angriff: 'Plattmacher-Sprung', boss: true,
               info: 'BOSS! Platt wie ein Pfannkuchen, mit Sprungfedern. Springt hoch und landet genau da, wo du stehst – renn aus dem roten Kreis!' },
-  riese:    { name: 'Riesenkabeljau',  emoji: '👑', hp: 3000, tempo: 0.45, r: 28, groesse: 3.6, nah: 0,  schaden: 110, cd: 5, spur: 45, farbe: '#6f8f6c', bauch: '#e8ecd8', angriff: 'Riesen-Stampfer', boss: true, keinKaviar: true, stampfR: 150,
+  stelze:   { name: 'Stelzen-Dorsch',  emoji: '🗼', hp: 240, tempo: 0.55, r: 16, groesse: 1.1,  nah: 0,  schaden: 35, cd: 2.6, spur: 10, farbe: '#8a7fa8', bauch: '#ece6f5', angriff: 'Tintenregen von oben', boss: true, koerperHoehe: 95,
+              info: 'BOSS! Stakst auf langen Stelzen herum und lässt von oben 3 Tintentropfen auf dich regnen. Achte auf die roten Kreise!' },
+  ramme:    { name: 'Ramm-Barsch',     emoji: '🚜', hp: 300, tempo: 0.8,  r: 18, groesse: 1.25, nah: 0,  schaden: 80, cd: 4.2, spur: 14, farbe: '#b0773e', bauch: '#f3e2c4', angriff: 'Baggerschaufel-Rammen', boss: true,
+              info: 'BOSS! Hat eine Baggerschaufel vorne dran. Zeigt ein roter Streifen auf dich, rast er gleich los – spring zur Seite! Danach ist er kurz benommen.' },
+  kugelfisch: { name: 'Puste-Kugelfisch', emoji: '🎈', hp: 180, tempo: 1.05, r: 16, groesse: 1.0, nah: 0, schaden: 100, cd: 0, spur: 10, farbe: '#d9b44a', bauch: '#fff3c8', angriff: 'Riesen-Platzer', boss: true, platzR: 130,
+              info: 'BOSS! Rennt zu dir und bläst sich auf. Erwisch ihn, bevor er PLATZT – sonst gibt es eine Riesen-Explosion und keinen Kaviar!' },
+  riese:    { name: 'Riesenkabeljau',  emoji: '👑', hp: 3000, tempo: 0.45, r: 28, groesse: 3.6, nah: 0,  schaden: 110, cd: 5, spur: 45, farbe: '#6f8f6c', bauch: '#e8ecd8', angriff: 'Riesen-Stampfer', boss: true, keinKaviar: true, stampfR: 150, koerperHoehe: 110,
               info: 'DER ENDBOSS! Riesig, mit Krone. Stampft alles platt und spuckt 3 Tintenkugeln auf einmal. Nur in der Extra-Welle!' },
 };
 FISCH_ARTEN.dicker.stampfR = 75;
@@ -7620,6 +7626,7 @@ const WELLEN = [
   { zeit: 80, quote: 11, spawn: 1.7, boss: 7,  max: 18, dicker: 0.2 },
   { zeit: 70, quote: 0,  spawn: 3.2, boss: 999, max: 8, dicker: 0, extra: true },   // 👑 Extra-Welle mit dem Riesenkabeljau
 ];
+const BOSS_LISTE = ['panzer', 'spucker', 'flunder', 'stelze', 'ramme', 'kugelfisch'];
 const KORB = { x: BASIS[0].x + 300, y: H / 2, r: 62 };
 const KABELJAU_KARTE = 'insel';
 let kab = null, kaviarKugeln = [], kabMeshes = [];
@@ -7643,6 +7650,29 @@ function baueFisch(art) {
       const f = new THREE.Group(); f.position.set(x, 4, z); g.add(f); ud.beine.push(f);
       for (let i = 0; i < 4; i++) f.add(ringY(MAT_METALL, 2, 0.5, 0, -i * 1.1, 0));
     }
+  } else if (art === 'kugelfisch') {   // 🎈 rund, mit Stacheln – bläst sich auf
+    k.add(kugel(haut, 12, 0, 13, 0), kugel(bauch, 10, 2.5, 10, 0, 1, 0.8, 1));
+    const stachel = mat('#8a6a1e', { roughness: 0.5 });
+    for (let i = 0; i < 26; i++) {
+      const t = Math.acos(1 - 2 * (i + 0.5) / 26), p = i * 2.4, dx = Math.sin(t) * Math.cos(p), dy = Math.cos(t), dz = Math.sin(t) * Math.sin(p);
+      if (dx > 0.75) continue;   // vorne am Gesicht keine Stacheln
+      const c = new THREE.Mesh(new THREE.ConeGeometry(1.3, 5, 5), stachel); c.position.set(dx * 12.5, 13 + dy * 12.5, dz * 12.5);
+      c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy, dz)); k.add(c);
+    }
+    for (const [x, y, z] of [[-4, 21, 6], [3, 23, -4], [-8, 17, -7], [-2, 6, 9]]) k.add(kugel(mat('#a88a2e'), 2, x, y, z, 1, 0.6, 1));   // Flecken
+    const weiss = mat('#ffffff'), schw = mat('#111111');
+    for (const s of [-1, 1]) k.add(kugel(weiss, 4, 9.5, 17, s * 5), kugel(schw, 2.1, 12.4, 17.6, s * 5.4), kugel(weiss, 0.7, 13.4, 18.6, s * 5.6));
+    const maul = new THREE.Group(); maul.position.set(12, 10, 0); k.add(maul); ud.maul = maul;
+    maul.add(kugel(mat('#e07a5f'), 2.6, 0, 0, 0, 0.7, 0.8, 1.1), kugel(mat('#5a2a1a'), 1.4, 1.2, 0, 0));
+    for (const s of [-1, 1]) { const f = klotz(tinte, 5, 1, 4, 2, 11, s * 11); f.rotation.x = s * 0.6; k.add(f); }
+    const schwanz = new THREE.Group(); schwanz.position.set(-12, 13, 0); k.add(schwanz); ud.schwanz = schwanz;
+    for (const s of [-1, 1]) { const f = klotz(tinte, 7, 6, 1, -3, s * 2.5, 0); f.rotation.z = s * 0.5; schwanz.add(f); }
+    ud.beine = [];
+    for (const s of [-1, 1]) {
+      const b = new THREE.Group(); b.position.set(0, 3, s * 5); g.add(b); ud.beine.push(b);
+      b.add(zylinder(haut, 1.3, 1.1, 4, 0, -1.5, 0), klotz(mat('#6a5a28'), 4, 1.4, 3, 1, -3.4, 0));
+    }
+    ud.zuendschnur = kugel(mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 0 }), 2.2, -2, 26, 0); k.add(ud.zuendschnur);   // leuchtet, wenn er gleich platzt
   } else {
     const dick = art === 'dicker' ? 1.3 : art === 'riese' ? 1.15 : 1;
     k.add(kugel(haut, 10, 0, 12, 0, 1.6, 0.85 * dick, 0.75 * dick));                     // Körper
@@ -7674,6 +7704,35 @@ function baueFisch(art) {
       krone.add(zylinder(MAT_GOLD, 5.5, 6, 3, 0, 0, 0));
       for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; krone.add(kegelSpitze(MAT_GOLD, Math.cos(a) * 5, 3.2, Math.sin(a) * 5)); krone.add(kugel(mat(i % 2 ? '#e63946' : '#3b6fd8', { emissive: i % 2 ? '#e63946' : '#3b6fd8', emissiveIntensity: 0.4 }), 0.9, Math.cos(a) * 5.8, 0, Math.sin(a) * 5.8)); }
     }
+    if (art === 'stelze') {   // 🗼 auf langen Stelzen, mit Gießkannen-Rohr unter dem Bauch
+      k.position.y = 42;
+      ud.beine.forEach(b => { b.visible = false; });
+      ud.beine = [];
+      const metall = mat('#9aa3b8', { metalness: 0.7, roughness: 0.3 }), streifen = mat('#ffd21f');
+      for (const s of [-1, 1]) {
+        const b = new THREE.Group(); b.position.set(0, 50, s * 5); g.add(b); ud.beine.push(b);
+        b.add(zylinder(metall, 1.4, 1.2, 48, 0, -24, 0), zylinder(streifen, 1.5, 1.5, 4, 0, -14, 0), zylinder(streifen, 1.45, 1.45, 4, 0, -34, 0));
+        b.add(kugel(MAT_GRAU, 2.2, 0, -1, 0), klotz(mat('#3a3a44'), 6, 1.6, 4, 1, -48.5, 0));   // Gelenk oben, Fuß unten
+      }
+      k.add(zylinder(MAT_GRAU, 1.6, 3, 6, 2, 3, 0), ringY(tinte, 3.1, 0.6, 2, 0.2, 0));   // Brause unten
+      k.add(zylinder(glasRohrMat, 4.5, 4.5, 8, -4, 24, 0), zylinder(tinte, 3.9, 3.9, 6.5, -4, 23.5, 0));
+      const fahne = new THREE.Group(); fahne.position.set(-8, 22, 0); k.add(fahne);
+      fahne.add(zylinder(MAT_GRAU, 0.4, 0.4, 16, 0, 8, 0), klotz(mat('#d62839'), 6, 4, 0.4, 3, 14, 0));
+    }
+    if (art === 'ramme') {    // 🚜 Baggerschaufel vorne + gelber Bauhelm
+      const gelb = mat('#ffb627', { roughness: 0.5, metalness: 0.3 }), schw = mat('#1b1b22');
+      const schaufel = new THREE.Group(); schaufel.position.set(23, 9, 0); k.add(schaufel); ud.schaufel = schaufel;
+      const blatt = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 30, 12, 1, true, Math.PI * 0.75, Math.PI * 0.5), mat('#ffb627', { side: THREE.DoubleSide, roughness: 0.5, metalness: 0.3 }));
+      blatt.rotation.x = Math.PI / 2; blatt.position.x = -4; schaufel.add(blatt);
+      for (let i = 0; i < 5; i++) schaufel.add(klotz(i % 2 ? schw : gelb, 1, 2.2, 6, 3.8, -6.5, -12 + i * 6));   // Warnstreifen an der Kante
+      for (let i = 0; i < 5; i++) { const z = new THREE.Mesh(new THREE.ConeGeometry(1, 3, 4), MAT_METALL); z.rotation.z = -Math.PI / 2; z.position.set(5.5, -7.5, -12 + i * 6); schaufel.add(z); }   // Zähne
+      for (const s of [-1, 1]) schaufel.add(zylinderX(MAT_GRAU, 1, 1, 12, -10, 2, s * 8));   // Arme zum Fisch
+      const helm = new THREE.Mesh(new THREE.SphereGeometry(7.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), gelb); helm.position.set(4, 18.5, 0); k.add(helm);
+      k.add(zylinder(gelb, 8.5, 8.5, 0.8, 5, 18.6, 0), kugel(mat('#ff8a1f', { emissive: '#ff6a00', emissiveIntensity: 0.8 }), 1.6, 4, 26.5, 0));   // Rand + Warnlicht
+      ud.warnlicht = k.children[k.children.length - 1];
+      ud.sterne = new THREE.Group(); ud.sterne.position.set(4, 32, 0); ud.sterne.visible = false; k.add(ud.sterne);   // benommen
+      for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2; ud.sterne.add(kugel(mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 1 }), 1.5, Math.cos(a) * 8, 0, Math.sin(a) * 8)); }
+    }
     if (art === 'spucker') {  // Spuck-Rohr vor dem Mund + Tintentank auf dem Rücken
       k.add(zylinderX(MAT_GRAU, 3, 4.5, 9, 20, 11, 0), ringX(tinte, 4.6, 0.8, 24.5, 11, 0));
       k.add(zylinder(glasRohrMat, 5, 5, 10, -4, 24, 0), zylinder(tinte, 4.3, 4.3, 8, -4, 23.5, 0), ringY(MAT_METALL, 5.2, 0.6, -4, 29, 0));
@@ -7681,7 +7740,7 @@ function baueFisch(art) {
   }
   g.scale.setScalar(A.groesse);
   if (A.boss) {   // Lebensbalken über dem Boss
-    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : 38); g.add(bar); ud.bar = bar;
+    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : 38); g.add(bar); ud.bar = bar;
     bar.add(new THREE.Mesh(new THREE.PlaneGeometry(34, 4.5), new THREE.MeshBasicMaterial({ color: '#1b1f3a', depthTest: false })));
     ud.barFill = new THREE.Mesh(new THREE.PlaneGeometry(32, 3), new THREE.MeshBasicMaterial({ color: '#ff4d4d', depthTest: false }));
     ud.barFill.position.z = 0.1; bar.add(ud.barFill);
@@ -7695,7 +7754,7 @@ function neuerFisch(art, x, y) {
   const A = FISCH_ARTEN[art], leer = () => new THREE.Group();
   const e = {
     team: 1, nr: 9, spieler: false, name: A.name, mensch: null, lebenNr: 0, set: 'spritzer', waffe: 'spritzer', fisch: art,
-    x, y, z: 0, vx: 0, vy: 0, vz: 0, r: A.r, hp: A.hp, maxHp: A.hp, tinte: 100, winkel: Math.PI, pitch: 0,
+    x, y, z: 0, vx: 0, vy: 0, vz: 0, r: A.r, hp: Math.round(A.hp * (kab ? kab.schwer : 1)), maxHp: Math.round(A.hp * (kab ? kab.schwer : 1)), tinte: 100, winkel: Math.PI, pitch: 0, koerperHoehe: A.koerperHoehe,
     tot: false, wiederT: 99, schussCd: 0, bombeCd: 99, taucht: false, willTauchen: false, schiesst: false, saugerT: 0, saugMenge: 0, markiertBis: 0, superSprung: null,
     ladung: 0, laden: false, rollT: 0, rollt: false, schwingT: 0, schwingSeite: 1, haltT: 0, vorherSchiesst: false, schild: 0, slam: false, ulti: 0, rueck: 0,
     letzterTreffer: 9, ko: 0, tode: 0, punkte: 0, spawnT: 0.45, landT: 0, todT: 0, tauchAnim: 0, lauf: 0, vmPhase: 0,
@@ -7718,10 +7777,60 @@ function warnRing(x, y, r, t) {
   ring.add(innen); ring.position.set(x, bodenHoehe(x, y) + 1.2, y); scene.add(ring);
   strahlen.push({ mesh: ring, t });
 }
+// Roter Warnstreifen (für den Ramm-Barsch): hier rast er gleich lang!
+function warnLinie(x, y, a, len, breite, t) {
+  const geo = new THREE.PlaneGeometry(len, breite); geo.rotateX(-Math.PI / 2); geo.translate(len / 2, 0, 0);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: '#ff3b3b', transparent: true, opacity: 0.35, depthWrite: false }));
+  m.position.set(x, bodenHoehe(x, y) + 1.3, y); m.rotation.y = -a; scene.add(m);
+  strahlen.push({ mesh: m, t });
+}
+function nahBeimSpieler(f, d = 700) { return Math.hypot(f.x - spieler.x, f.y - spieler.y) < d; }
+// 🚜 Ramm-Barsch: zielen ➜ losrasen ➜ benommen
+function rammeKi(f, dt, A) {
+  const R = f.ramm; R.t -= dt;
+  if (R.phase === 'zielen') {
+    f.winkel = R.a; bewege(f, 0, 0, dt);
+    if (R.t <= 0) { R.phase = 'los'; R.t = 0.7; R.getroffen = new Set(); if (nahBeimSpieler(f)) ton('boing'); }
+  } else if (R.phase === 'los') {
+    const sp = 760 * dt, nx = f.x + Math.cos(R.a) * sp, ny = f.y + Math.sin(R.a) * sp;
+    if (kollidiert(nx, ny, f.r, bodenHoehe(f.x, f.y) + 2) || inLava(nx, ny) || nx < 20 || ny < 20 || nx > W - 20 || ny > H - 20) {   // BUMM – gegen die Wand!
+      R.phase = 'dusel'; R.t = 1.6; wackeln = Math.max(wackeln, nahBeimSpieler(f, 500) ? 0.35 : 0); spritzer(f.x, f.y, 20, 1, 18, 240);
+      if (nahBeimSpieler(f)) ton('ramm');
+    } else {
+      f.x = nx; f.y = ny; f.vx = Math.cos(R.a) * 760; f.vy = Math.sin(R.a) * 760;
+      klecks(f.x, f.y, 26, 1, f, false);
+      for (const e of kleckse) {
+        if (e.team !== 0 || e.tot || R.getroffen.has(e) || Math.hypot(e.x - f.x, e.y - f.y) > f.r + e.r + 12 || Math.abs(hAbs(e) - hAbs(f)) > 30) continue;
+        R.getroffen.add(e); treffen(e, A.schaden, f);
+        e.vx += Math.cos(R.a + (Math.random() < 0.5 ? 1.2 : -1.2)) * 420; e.vy += Math.sin(R.a + (Math.random() < 0.5 ? 1.2 : -1.2)) * 420;
+      }
+      if (R.t <= 0) { R.phase = 'dusel'; R.t = 1.1; }
+    }
+  } else {   // 💫 benommen – jetzt ist er leicht zu treffen!
+    f.vx *= 0.8; f.vy *= 0.8; bewege(f, 0, 0, dt);
+    if (R.t <= 0) { f.ramm = null; f.angriffCd = A.cd; }
+  }
+}
+// 🎈 Puste-Kugelfisch: aufblasen ➜ PLATZEN
+function kugelfischPlatzen(f) {
+  const A = FISCH_ARTEN.kugelfisch;
+  explodieren(f.x, f.y, A.platzR, A.schaden, 1, f, false);
+  spritzer(f.x, f.y, 25, 1, 40, 340); wackeln = Math.max(wackeln, nahBeimSpieler(f, 500) ? 0.5 : 0);
+  f.geplatzt = true; f.tot = true; f.totZeit = 0.55; f.hp = 0;   // weg ist er – ohne Kaviar!
+  if (nahBeimSpieler(f, 900)) { ton('ausbruch'); meldung('🎈💥 Ein Puste-Kugelfisch ist geplatzt!'); }
+}
 function fischKi(f, dt) {
   const A = FISCH_ARTEN[f.fisch];
   f.angriffCd -= dt; f.spurT -= dt; f.beissT = Math.max(0, f.beissT - dt);
   if (f.spurT <= 0) { f.spurT = 0.3; if (f.z <= 1 && !istWand(f.x, f.y)) klecks(f.x, f.y, A.spur, 1, f, false); }   // Fische hinterlassen ihre Tinte
+  if (f.ramm) { rammeKi(f, dt, A); return; }
+  if (f.puste != null) {   // bläst sich auf …
+    f.puste += dt; bewege(f, 0, 0, dt);
+    const vorher = Math.floor((f.puste - dt) / 0.4), jetzt = Math.floor(f.puste / 0.4);
+    if (jetzt !== vorher && nahBeimSpieler(f, 600)) ton('piep');
+    if (f.puste >= 2.4) kugelfischPlatzen(f);
+    return;
+  }
   if (f.sprung) {   // 🥏 Springflunder fliegt
     const s = f.sprung; s.t += dt; const k = Math.min(1, s.t / s.dauer);
     f.x = s.sx + (s.zx - s.sx) * k; f.y = s.sy + (s.zy - s.sy) * k; f.z = Math.sin(k * Math.PI) * 230; f.vx = f.vy = f.vz = 0;
@@ -7743,7 +7852,28 @@ function fischKi(f, dt) {
   f.winkel = drehe(f.winkel, a, dt * (A.boss ? 3 : 6));
   let vor = 1;
   if (f.fisch === 'riese') { if (riesenKi(f, dt, ziel, zd, a)) return; }
-  else if (f.fisch === 'spucker') {
+  else if (f.fisch === 'stelze') {   // 🗼 hält Abstand und lässt Tinte von oben regnen
+    vor = zd < 200 ? -1 : zd > 420 ? 1 : 0;
+    if (f.angriffCd <= 0 && zd < 700) {
+      f.angriffCd = A.cd; f.beissT = 0.4;
+      for (let i = 0; i < 3; i++) {
+        const tx = Math.max(20, Math.min(W - 20, ziel.x + ziel.vx * 0.6 + (i ? (Math.random() - 0.5) * 120 : 0))), ty = Math.max(20, Math.min(H - 20, ziel.y + ziel.vy * 0.6 + (i ? (Math.random() - 0.5) * 120 : 0)));
+        bombeWerfen(f, tx, ty, { ulti: true, max: 900, dauer: 1.0 + i * 0.15, hoehe: 140, r: 42, schaden: A.schaden });
+        warnRing(tx, ty, 42, 1.0 + i * 0.15);
+      }
+      if (nahBeimSpieler(f)) ton('wurf');
+    }
+  } else if (f.fisch === 'ramme') {   // 🚜 zielt und rast los
+    if (f.angriffCd <= 0 && zd > 80 && zd < 520 && sicht(f.x, f.y, ziel.x, ziel.y)) {
+      const len = Math.min(620, zd + 140);
+      f.ramm = { phase: 'zielen', t: 1.0, a }; f.winkel = a;
+      warnLinie(f.x, f.y, a, len, 44, 1.0);
+      if (nahBeimSpieler(f)) ton('alarm');
+      return;
+    }
+  } else if (f.fisch === 'kugelfisch') {   // 🎈 rennt hin und bläst sich auf
+    if (zd < 95 + ziel.r) { f.puste = 0; warnRing(f.x, f.y, A.platzR, 2.4); if (nahBeimSpieler(f)) meldung('🎈 Ein Puste-Kugelfisch bläst sich auf – schnell erwischen oder weg da!'); return; }
+  } else if (f.fisch === 'spucker') {
     vor = zd < 220 ? -1 : zd > 380 ? 1 : 0;
     if (f.angriffCd <= 0 && zd < 650 && sicht(f.x, f.y, ziel.x, ziel.y)) {
       f.angriffCd = A.cd; f.beissT = 0.4;
@@ -7799,6 +7929,18 @@ function fischZeigen(e, dt) {
   if (ud.beine) ud.beine.forEach((b, i) => { b.rotation.z = v > 10 ? Math.sin(e.lauf * 2 + i * Math.PI) * 0.7 : 0; b.scale.y = e.sprung ? 1.6 : 1; });
   if (ud.maul) ud.maul.rotation.z = -(e.beissT > 0 ? 0.8 : 0.1 + Math.sin(zeit * 3) * 0.05);
   if (ud.koerper) ud.koerper.rotation.z = e.angriffT > 0 ? 0.35 : e.sprung ? -0.3 : 0;   // holt aus
+  if (e.fisch === 'kugelfisch') {   // 🎈 aufblasen und rot blinken
+    const p = e.puste != null ? Math.min(1, e.puste / 2.4) : 0;
+    ud.koerper.scale.setScalar(1 + p * 0.9 + (p > 0 ? Math.sin(zeit * (10 + p * 30)) * 0.04 : 0));
+    ud.zuendschnur.material.emissiveIntensity = p > 0 && Math.sin(zeit * (8 + p * 30)) > 0 ? 2 : 0;
+  }
+  if (e.fisch === 'ramme') {
+    const R = e.ramm;
+    ud.sterne.visible = !!(R && R.phase === 'dusel'); ud.sterne.rotation.y += dt * 6;
+    ud.warnlicht.material.emissiveIntensity = R && R.phase !== 'dusel' && Math.sin(zeit * 25) > 0 ? 2 : 0.4;
+    ud.schaufel.rotation.z = R && R.phase === 'zielen' ? 0.3 : 0;
+    if (R && R.phase === 'dusel') ud.koerper.rotation.x = Math.sin(zeit * 9) * 0.15; else ud.koerper.rotation.x = 0;
+  }
   ud.mat.emissive.setHex(e.letzterTreffer < 0.1 ? 0x666666 : e.goldfisch ? 0x8a6200 : 0x000000);   // blinkt bei Treffern (Goldfische leuchten)
   if (ud.bar) {
     ud.barFill.scale.x = Math.max(0.01, e.hp / e.maxHp); ud.barFill.position.x = -16 * (1 - ud.barFill.scale.x);
@@ -7958,7 +8100,7 @@ function kabeljauUpdate(dt) {
   if (WL.extra && kab.riese && kab.riese.tot) { kab.riesenSieg = true; kabeljauEnde(true, '👑 RIESENKABELJAU BESIEGT! Alle Wellen geschafft!'); return; }
   if (!rausch && !WL.extra && kab.bossT <= 0 && fische.filter(f => FISCH_ARTEN[f.fisch].boss).length < 3 + kab.welle) {
     kab.bossT = WL.boss * (0.8 + Math.random() * 0.4);
-    fischSpawnen(zufallAus(['panzer', 'spucker', 'flunder']));
+    fischSpawnen(zufallAus(BOSS_LISTE));
   }
   const team = kleckse.filter(e => !e.fisch);
   if (team.length && team.every(e => e.tot)) {
