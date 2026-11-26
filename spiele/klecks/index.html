@@ -1731,7 +1731,8 @@ let leuchtturmLicht = null;
     const spitze = new THREE.Mesh(new THREE.ConeGeometry(7.2, 14, 7), holz2); spitze.position.set(cx + 34, top + 76, cz); spitze.rotation.z = -0.5; g.add(spitze);
     // Schatzkiste und Fässer auf dem Deck
     const kiste = new THREE.Group(); kiste.position.set(deck.x + deck.w - 40, top, deck.y + 40); kiste.rotation.y = 0.4; g.add(kiste);
-    kiste.add(klotz(holz, 22, 12, 14, 0, 6, 0), klotz(MAT_GOLD, 23, 1.5, 15, 0, 9, 0), klotz(MAT_GOLD, 3, 4, 1, 0, 8, 7.3));
+    const gold = mat('#ffc93c', { metalness: 0.85, roughness: 0.25 });
+    kiste.add(klotz(holz, 22, 12, 14, 0, 6, 0), klotz(gold, 23, 1.5, 15, 0, 9, 0), klotz(gold, 3, 4, 1, 0, 8, 7.3));
     const deckel = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 22, 10, 1, false, 0, Math.PI), holz); deckel.rotation.z = Math.PI / 2; deckel.position.set(0, 12, 0); kiste.add(deckel);
     for (let i = 0; i < 6; i++) kiste.add(kugel(mat('#ffd166', { emissive: '#ffb000', emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.2 }), 2, -7 + i * 2.8, 12.5, Math.sin(i) * 3));   // Goldmünzen
     for (const [x, z] of [[deck.x + 30, deck.y + deck.h - 35], [deck.x + 48, deck.y + deck.h - 30]]) g.add(zylinder(holz, 7, 6.5, 16, x, top + 8, z), ringY(eisen, 7.1, 0.7, x, top + 4, z), ringY(eisen, 7.1, 0.7, x, top + 12, z));
