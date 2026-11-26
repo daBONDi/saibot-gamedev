@@ -7754,9 +7754,9 @@ function sKlotz(m, w, h, d, x, y, z, hindernis) {   // Klotz in der Stadt (x/z =
   // großer LED-Bildschirm vorne (wird in stadtZeigen animiert)
   arenaLED.cv = leinwand(512, 160); arenaLED.tex = new THREE.CanvasTexture(arenaLED.cv); arenaLED.tex.colorSpace = THREE.SRGBColorSpace;
   const led = new THREE.Mesh(new THREE.PlaneGeometry(300, 94), new THREE.MeshBasicMaterial({ map: arenaLED.tex }));
-  led.position.set(0, 10 + HH + 42, vorne - 6); led.rotation.y = Math.PI; stadtGruppe.add(led);
-  sKlotz(dunkelS, 312, 104, 6, 0, 10 + HH + 42, vorne - 2);
-  for (const x of [-140, 140]) sKlotz(stahl, 6, 60, 6, x, 10 + HH + 10, vorne - 2);
+  led.position.set(0, 10 + HH + 105, vorne - 6); led.rotation.y = Math.PI; stadtGruppe.add(led);
+  sKlotz(dunkelS, 312, 104, 6, 0, 10 + HH + 105, vorne - 2);
+  for (const x of [-140, 140]) sKlotz(stahl, 6, 110, 6, x, 10 + HH + 20, vorne - 2);
   // Eingang: leuchtendes Tor, Treppe, Schild
   const leucht = mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 0.8 });
   sKlotz(mat('#0d0f1f'), 110, 80, 6, 0, 50, vorne - 3);
@@ -8043,7 +8043,8 @@ const lobbyHalle = { fans: null, koepfe: null, daten: [], bande: null, strahlen:
   // Glas-Geländer vor der ersten Reihe + LED-Bande (läuft)
   const bc = leinwand(1024, 32), bx = bc.getContext('2d');
   bx.fillStyle = '#0b0b1a'; bx.fillRect(0, 0, 1024, 32); bx.font = 'bold 24px system-ui'; bx.textBaseline = 'middle';
-  for (let i = 0; i < 4; i++) { bx.fillStyle = i % 2 ? '#ff8a1f' : '#a347ff'; bx.fillText('★ KLECKS-KRIEG ARENA ★ FARBSCHLACHT LIVE ', i * 256 - 8, 17); }
+  const bandText = '★ KLECKS-KRIEG ARENA   ★ FARBSCHLACHT LIVE   ', bw = bx.measureText(bandText).width;
+  for (let i = 0, px = 0; px < 1024; i++, px += bw) { bx.fillStyle = i % 2 ? '#ff8a1f' : '#a347ff'; bx.fillText(bandText, px, 17); }
   const bt = new THREE.CanvasTexture(bc); bt.colorSpace = THREE.SRGBColorSpace; bt.wrapS = THREE.RepeatWrapping; lobbyHalle.bande = bt;
   const bandeMat = new THREE.MeshBasicMaterial({ map: bt });
   for (const [x, z, l, dreh] of [[cx, R.z0 + 0.7, 600, 0], [cx, R.z1 - 0.7, 600, Math.PI], [R.x0 + 0.7, cz, 400, Math.PI / 2], [R.x1 - 0.7, cz, 400, -Math.PI / 2]]) {
