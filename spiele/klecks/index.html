@@ -650,7 +650,16 @@ const ARENEN = {
             { art: 'meer', x: 1250, y: 0, w: 350, h: 230 }, { art: 'meer', x: 1250, y: 770, w: 350, h: 230 }],
     waende: spiegel([[460, 280, 60, 60, false], [460, 660, 60, 60, false], [760, 430, 90, 140, false], [1060, 250, 70, 60, false], [1060, 690, 70, 60, false]]),
     thema: { boden: '#ecd9a4', linie: '#dcc78f', wand: '#8a6a48', himmel: '#a8e6ff', draussen: '#2a8fc8', muster: 'sand', wandMuster: 'gras' } },
+  // 🚢 Auch nur für den Kabeljau Run: ein gestrandetes Schiffswrack in einer Bucht – aufs Deck kann man raufklettern!
+  wrack: { name: 'Schiffswrack-Bucht', emoji: '🚢', wandH: 50, nurKabeljau: true, spezial: '🚢 Kletter aufs Wrack – von oben siehst du alles!',
+    zonen: [{ art: 'meer', x: 0, y: 0, w: 200, h: 140 }, { art: 'meer', x: 0, y: 860, w: 200, h: 140 },
+            { art: 'meer', x: 520, y: 0, w: 640, h: 70 }, { art: 'meer', x: 560, y: 860, w: 380, h: 140 },
+            { art: 'meer', x: 1300, y: 0, w: 300, h: 330 }, { art: 'meer', x: 1300, y: 670, w: 300, h: 330 }],
+    waende: spiegel([[430, 250, 60, 60, false], [430, 690, 60, 60, false], [560, 170, 240, 28, false], [1180, 180, 70, 70, false], [1180, 750, 70, 70, false], [620, 720, 50, 50, false], [1000, 150, 60, 60, false]]),
+    thema: { boden: '#e3cf98', linie: '#d1bb80', wand: '#7a5a3a', himmel: '#ffd6b0', draussen: '#2a7fb8', muster: 'sand', wandMuster: 'gras' } },
 };
+const KABELJAU_KARTEN = ['insel', 'wrack'];
+function meerKarte(k = karte) { return !!(ARENEN[k] && ARENEN[k].nurKabeljau); }
 const REVIER_ARENEN = Object.keys(ARENEN).filter(id => !ARENEN[id].nurKabeljau);   // die Arenen für die Farbschlacht
 // Lava-Stellen jeder Arena (dort kann man nicht malen – und es tut weh!)
 for (const a of Object.values(ARENEN)) a.lava = (a.zonen || []).filter(z => z.art === 'lava' || z.art === 'meer');   // Meer wirkt wie Lava: reinfallen = erwischt
@@ -677,6 +686,7 @@ const STUFEN_DATEN = {
   wueste:    [[700, 330, 200, 70, 70, null, false], [770, 230, 60, 100, 70, 's', false], [700, 600, 200, 70, 70, null, false], [770, 670, 60, 100, 70, 'n', false]],
   vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
   bahnhof:   [[600, 120, 140, 300, 28], [640, 420, 70, 70, 28, 'n'], [600, 580, 140, 300, 28], [640, 510, 70, 70, 28, 's']],   // Bahnsteige mit Rampen zum Übergang
+  wrack:     [[760, 380, 340, 240, 42, null, false], [690, 460, 70, 80, 42, 'o', false]],   // 🚢 das Deck vom Wrack + eine Planke als Rampe
 };
 // Kletterblöcke: diese Wände werden zu Blöcken, die man anmalen und hochschwimmen kann  [x, y, b, t, höhe, spiegeln]
 const KLETTER_BLOECKE = {
@@ -687,6 +697,7 @@ const KLETTER_BLOECKE = {
   wueste:    [[700, 400, 200, 200, 100, false], [520, 470, 60, 60, 60]],
   vulkan:    [[300, 180, 60, 60, 60], [300, 760, 60, 60, 60], [600, 420, 40, 160, 70]],
   bahnhof:   [[400, 140, 60, 160, 60], [400, 700, 60, 160, 60]],   // Kofferstapel zum Hochklettern
+  wrack:     [[1180, 180, 70, 70, 55, false], [1180, 750, 70, 70, 55, false]],   // Felsen zum Hochklettern
 };
 const RAMPE_SPIEGEL = { w: 'o', o: 'w', n: 'n', s: 's' };
 const gleich = (r, x, y, w, h) => Math.abs(r.x - x) < 0.5 && Math.abs(r.y - y) < 0.5 && Math.abs(r.w - w) < 0.5 && Math.abs(r.h - h) < 0.5;
@@ -1688,6 +1699,68 @@ function palme(g, x, z, y0 = 0, hoch = 90, neig = 0.25, dreh = 0) {
   for (let i = 0; i < 14; i++) { const x = 300 + ((i * 397) % (W - 600)), z = ((i * 233) % 2) ? 125 + (i % 3) * 8 : H - 125 - (i % 3) * 8; g.add(kugel(mat(i % 2 ? '#ff9a7a' : '#ffe0c8'), 4, x, 1, z, 1, 0.4, 1)); }
 })();
 
+// 🚢 Schiffswrack-Bucht: Reling, abgebrochener Mast, Kanonen, Schatzkiste, Wrack-Rippen im Wasser und ein Leuchtturm
+let leuchtturmLicht = null;
+(function wrackDeko() {
+  const g = kartenGruppe.wrack; if (!g) return;
+  const A = ARENEN.wrack, deck = A.stufen.find(s => s.hoehe === 42 && !s.rampe);
+  const holz = mat('#7a5a3a', { roughness: 0.9 }), holz2 = mat('#5a3f28', { roughness: 0.9 }), eisen = mat('#3a3a44', { metalness: 0.6, roughness: 0.4 });
+  if (deck) {
+    const cx = deck.x + deck.w / 2, cz = deck.y + deck.h / 2, top = deck.hoehe;
+    for (const z of [deck.y + 3, deck.y + deck.h - 3]) {   // Reling an beiden Längsseiten
+      for (let x = deck.x + 10; x < deck.x + deck.w; x += 38) g.add(zylinder(holz2, 1.4, 1.6, 12, x, top + 6, z));
+      g.add(klotz(holz, deck.w - 10, 2.2, 2.6, cx, top + 12, z));
+      for (const x of [deck.x + deck.w * 0.3, deck.x + deck.w * 0.7]) {   // Kanonen zeigen aufs Meer
+        const k = new THREE.Group(); k.position.set(x, top, z); g.add(k);
+        k.add(klotz(holz2, 12, 5, 10, 0, 2.5, 0), zylinderZ(eisen, 2.6, 3.4, 16, 0, 7, (z < cz ? -1 : 1) * 6));
+        for (const sx of [-5, 5]) k.add(zylinderZ(holz, 3, 3, 1.5, sx, 3, 0));
+      }
+    }
+    // abgebrochener Hauptmast mit Ausguck-Resten
+    g.add(zylinder(holz2, 7, 8.5, 70, cx + 30, top + 35, cz), ringY(eisen, 8.3, 1, cx + 30, top + 12, cz), ringY(eisen, 7.6, 1, cx + 30, top + 50, cz));
+    const spitze = new THREE.Mesh(new THREE.ConeGeometry(7.2, 14, 7), holz2); spitze.position.set(cx + 34, top + 76, cz); spitze.rotation.z = -0.5; g.add(spitze);
+    // Schatzkiste und Fässer auf dem Deck
+    const kiste = new THREE.Group(); kiste.position.set(deck.x + deck.w - 40, top, deck.y + 40); kiste.rotation.y = 0.4; g.add(kiste);
+    kiste.add(klotz(holz, 22, 12, 14, 0, 6, 0), klotz(MAT_GOLD, 23, 1.5, 15, 0, 9, 0), klotz(MAT_GOLD, 3, 4, 1, 0, 8, 7.3));
+    const deckel = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 22, 10, 1, false, 0, Math.PI), holz); deckel.rotation.z = Math.PI / 2; deckel.position.set(0, 12, 0); kiste.add(deckel);
+    for (let i = 0; i < 6; i++) kiste.add(kugel(mat('#ffd166', { emissive: '#ffb000', emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.2 }), 2, -7 + i * 2.8, 12.5, Math.sin(i) * 3));   // Goldmünzen
+    for (const [x, z] of [[deck.x + 30, deck.y + deck.h - 35], [deck.x + 48, deck.y + deck.h - 30]]) g.add(zylinder(holz, 7, 6.5, 16, x, top + 8, z), ringY(eisen, 7.1, 0.7, x, top + 4, z), ringY(eisen, 7.1, 0.7, x, top + 12, z));
+    // Planke (Rampe) mit Querleisten
+    const r = A.stufen.find(s => s.rampe === 'o');
+    if (r) for (let i = 1; i < 6; i++) { const x = r.x + r.w * i / 6, l = klotz(holz2, 2, 1.2, r.h - 6, x, r.hoehe * i / 6 + 0.8, r.y + r.h / 2); g.add(l); }
+  }
+  // umgefallener Mast im Sand (das ist die lange Wand) mit zerrissenem Segel
+  const mw = A.waende.find(w => w.w > 300);
+  if (mw) {
+    const mast = zylinderX(holz2, 24, 26, mw.w + 30, mw.x + mw.w / 2, 25, mw.y + mw.h / 2); g.add(mast);
+    const segel = klotz(mat('#efe6d0', { side: THREE.DoubleSide, roughness: 1 }), mw.w * 0.7, 1, 70, mw.x + mw.w * 0.55, 4, mw.y + mw.h + 34); segel.rotation.x = 0.15; g.add(segel);
+    for (let i = 0; i < 3; i++) g.add(klotz(mat('#c8102e'), mw.w * 0.7, 1.2, 6, mw.x + mw.w * 0.55, 4.6, mw.y + mw.h + 12 + i * 20));
+  }
+  // Wrack-Rippen ragen aus der Lagune
+  const lagune = A.zonen.find(z => z.art === 'meer' && z.y > H / 2 && z.x > 200 && z.x < W / 2);
+  if (lagune) for (let i = 0; i < 6; i++) {
+    const rippe = new THREE.Mesh(new THREE.TorusGeometry(42, 3.5, 6, 14, Math.PI * 0.85), holz2);
+    rippe.position.set(lagune.x + 70 + i * (lagune.w - 140) / 5, -6, lagune.y + lagune.h * 0.6); rippe.rotation.z = 0.25; g.add(rippe);
+  }
+  // Anker im Sand
+  const anker = new THREE.Group(); anker.position.set(W * 0.36, 0, H * 0.22); anker.rotation.set(0.3, 0.8, 0.6); g.add(anker);
+  const oese = new THREE.Mesh(new THREE.TorusGeometry(5, 1.6, 6, 14), eisen); oese.position.y = 42;
+  anker.add(zylinder(eisen, 2.2, 2.2, 40, 0, 20, 0), oese, zylinderX(eisen, 1.8, 1.8, 22, 0, 32, 0));
+  const bogen = new THREE.Mesh(new THREE.TorusGeometry(15, 2.2, 6, 14, Math.PI), eisen); bogen.rotation.z = Math.PI; bogen.position.y = 12; anker.add(bogen);
+  // 🗼 Leuchtturm draußen auf einem Felsen
+  const lt = new THREE.Group(); lt.position.set(W + 320, 0, -260); g.add(lt);
+  lt.add(zylinder(mat('#6f6a64', { roughness: 1 }), 90, 120, 40, 0, 0, 0));
+  for (let i = 0; i < 6; i++) lt.add(zylinder(mat(i % 2 ? '#ffffff' : '#d62839', { roughness: 0.6 }), 26 - i * 1.6, 27.6 - i * 1.6, 34, 0, 36 + i * 34, 0));
+  lt.add(zylinder(eisen, 26, 26, 4, 0, 240, 0), zylinder(mat('#fff4c2', { emissive: '#ffe066', emissiveIntensity: 1.6 }), 12, 12, 22, 0, 254, 0));
+  const dachL = new THREE.Mesh(new THREE.ConeGeometry(18, 22, 12), mat('#d62839')); dachL.position.y = 276; lt.add(dachL);
+  leuchtturmLicht = new THREE.Group(); leuchtturmLicht.position.y = 254; lt.add(leuchtturmLicht);
+  const strahl = new THREE.Mesh(new THREE.ConeGeometry(60, 700, 16, 1, true), new THREE.MeshBasicMaterial({ color: '#fff4c2', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+  strahl.rotation.z = Math.PI / 2; strahl.position.x = 350; leuchtturmLicht.add(strahl);
+  // Muscheln, Seesterne und Möwen-Federn am Strand
+  for (let i = 0; i < 16; i++) { const x = 300 + ((i * 397) % (W - 700)), z = ((i * 233) % 2) ? 115 + (i % 3) * 9 : H - 115 - (i % 3) * 9; g.add(kugel(mat(i % 3 ? '#ff9a7a' : '#ffe0c8'), 4, x, 1, z, 1, 0.4, 1)); }
+  for (const [x, z, d] of [[-150, 260, 0.4], [-150, H - 260, -0.5]]) { g.add(zylinder(mat('#f3e3b4', { roughness: 0.9 }), 70, 85, 8, x, -1, z)); palme(g, x, z, 3, 100, 0.35, d); }
+})();
+
 // ================== 🌄 KULISSE: Himmel, Berge, Städte, Wälder, Wetter ==================
 // Jede Arena hat ihren eigenen Hintergrund. Alles weit draußen wirft keine Schatten (spart Rechenzeit).
 const KULISSEN = {
@@ -1715,6 +1788,9 @@ const KULISSEN = {
   insel: { oben: '#1f8fe8', horizont: '#d6f3ff', sonne: '#fff6c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wasser',
     licht: ['#fffbe8', '#6f9fc0', 1.7, '#fff6d8'],
     berge: [[3300, 260, '#3f9a55', null, 0.45, 13]] },
+  wrack: { oben: '#3a4f9a', horizont: '#ffc28a', sonne: '#ffb060', wolken: 0.6, wolkenFarbe: '#ffd8c0', nebel: [1300, 4300], boden: 'wasser',
+    licht: ['#ffe2c8', '#6a6fa0', 1.6, '#ffd0a0'],
+    berge: [[3300, 300, '#4a5a7a', null, 0.5, 14]] },
   lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
     licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], stadt: [[0, Math.PI * 2, 1800, 70]] },
   stadt: { oben: '#4a96ee', horizont: '#e3f0ff', sonne: '#fff3c8', wolken: 0.5, nebel: [1300, 4300], boden: 'wiese',
@@ -4027,7 +4103,7 @@ function koMeldung(e, wer) {
     splatListe.push({ text: `💥 ${e.name} erwischt!`, team: e.team, start: performance.now() / 1000 }); if (splatListe.length > 3) splatListe.shift();
     ton('ko'); return;
   }
-  if (e.spieler) { meldung(!wer && inLava(e.x, e.y) ? (karte === 'insel' ? '🌊 Platsch! Du bist ins Meer gefallen!' : '🌋 Autsch! Die Lava hat dich erwischt!') : !wer && imGleis(e.x, e.y, 30) ? '🚂 Tuuut! Der Zug hat dich umgerammt!' : `💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
+  if (e.spieler) { meldung(!wer && inLava(e.x, e.y) ? (meerKarte() ? '🌊 Platsch! Du bist ins Meer gefallen!' : '🌋 Autsch! Die Lava hat dich erwischt!') : !wer && imGleis(e.x, e.y, 30) ? '🚂 Tuuut! Der Zug hat dich umgerammt!' : `💥 ${wer ? wer.name : 'Jemand'} hat dich erwischt!`); ton('erwischt'); }
   else if (!wer && imGleis(e.x, e.y, 30)) meldung(`🚂 ${e.name} wurde vom Zug umgerammt!`);
   else if (wer && wer.spieler) { meldung(`🎯 Du hast ${e.name} erwischt!`); ton('ko'); }
   else if (wer) meldung(`${wer.name} ➜ ${e.name}`);
@@ -5584,7 +5660,7 @@ function lavaNah(x, y, r) {
 function lavaPruefen(e, dt) {
   if (e.tot || e.z > 0 || modus !== 'match' || !inLava(e.x, e.y)) return;
   e.lavaT = (e.lavaT || 0) - dt;
-  if (e.lavaT <= 0) { e.lavaT = 0.25; spritzer(e.x, e.y, 2, e.team, 4, 120); if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 300) ton(karte === 'insel' ? 'platsch' : 'zisch'); }
+  if (e.lavaT <= 0) { e.lavaT = 0.25; spritzer(e.x, e.y, 2, e.team, 4, 120); if (Math.hypot(e.x - spieler.x, e.y - spieler.y) < 300) ton(meerKarte() ? 'platsch' : 'zisch'); }
   treffen(e, 160 * dt, null);
   if (!e.tot && !e.mensch && !e.spieler) {   // Bots springen sofort wieder raus
     const z = lavaListe().find(l => e.x > l.x && e.x < l.x + l.w && e.y > l.y && e.y < l.y + l.h);
@@ -6191,7 +6267,8 @@ function welt3D(dt) {
   if (farbeGeaendert && bildZaehler % 3 === 0) { bodenAktualisieren(); farbeGeaendert = false; }   // nur jedes 3. Bild – spart viel Arbeit für die Grafikkarte
   for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
-  if (karte === 'insel') for (const t of wasserTexturen) { t.offset.x += dt * 0.02; t.offset.y = Math.sin(zeit * 0.5) * 0.05; }   // Wellen bewegen sich
+  if (leuchtturmLicht && karte === 'wrack') leuchtturmLicht.rotation.y += dt * 0.9;   // 🗼 das Licht vom Leuchtturm dreht sich
+  if (meerKarte()) for (const t of wasserTexturen) { t.offset.x += dt * 0.02; t.offset.y = Math.sin(zeit * 0.5) * 0.05; }   // Wellen bewegen sich
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
   zugUpdate(dt);
@@ -7832,9 +7909,9 @@ function fischSpawnen(art, gold = false) {
   const A = FISCH_ARTEN[art];
   for (let v = 0; v < 40; v++) {
     const flut = kab && kab.ereignis === 'flut';
-    const x = flut ? FLUT_X - 40 + Math.random() * 120 : karte === 'insel' ? W * 0.5 + Math.random() * (W * 0.5 - 30) : W - 50 - Math.random() * 170, y = 40 + Math.random() * (H - 80);
+    const x = flut ? FLUT_X - 40 + Math.random() * 120 : meerKarte() ? W * 0.5 + Math.random() * (W * 0.5 - 30) : W - 50 - Math.random() * 170, y = 40 + Math.random() * (H - 80);
     if (istWand(x, y) || kollidiert(x, y, A.r, bodenHoehe(x, y)) || inLava(x, y)) continue;
-    if (karte === 'insel' && !flut && !lavaNah(x, y, 70) && x < W - 90) continue;   // 🏝️ Fische kommen am Strand aus dem Meer
+    if (meerKarte() && !flut && !lavaNah(x, y, 70) && x < W - 90) continue;   // 🏝️ Fische kommen am Strand aus dem Meer
     const f = neuerFisch(art, x, y); kleckse.push(f);
     if (gold) { f.goldfisch = true; f.name = 'Gold-Knirps'; f.gruppe.userData.mat.color.set('#ffd166'); }
     spritzer(x, y, 5, 1, 16, 260);   // Platsch – aus dem Wasser gesprungen!
