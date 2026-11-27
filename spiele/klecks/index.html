@@ -678,7 +678,7 @@ ARENEN.piraten = { name: 'Pirateninsel', emoji: '🏴‍☠️', wandH: 50, nurK
           { art: 'meer', x: 520, y: 0, w: 560, h: 110 }, { art: 'meer', x: 520, y: 890, w: 560, h: 110 },
           { art: 'meer', x: 1080, y: 290, w: 90, h: 170 }, { art: 'meer', x: 1080, y: 540, w: 90, h: 170 },   // Kanal – in der Mitte führt der Holzsteg drüber
           { art: 'meer', x: 1300, y: 0, w: 300, h: 250 }, { art: 'meer', x: 1300, y: 750, w: 300, h: 250 }],
-  waende: spiegel([[450, 250, 60, 60, false], [450, 690, 60, 60, false], [330, 160, 160, 24, false], [330, 816, 160, 24, false],
+  waende: spiegel([[450, 250, 60, 60, false], [450, 690, 60, 60, false], [640, 230, 50, 50, false], [640, 720, 50, 50, false], [330, 160, 160, 24, false], [330, 816, 160, 24, false],
                    [1200, 190, 50, 50, false], [1200, 760, 50, 50, false], [910, 440, 60, 120, false]]),
   thema: { boden: '#e6d2a0', linie: '#d6c08a', wand: '#6b4a2e', himmel: '#ffc8a0', draussen: '#2a7fb8', muster: 'sand', wandMuster: 'gras' } };
 const KABELJAU_KARTEN = ['insel', 'wrack', 'piraten'];
@@ -1933,7 +1933,7 @@ const piratenFackeln = [];
   const gold = mat('#ffc93c', { metalness: 0.85, roughness: 0.25, emissive: '#ffb000', emissiveIntensity: 0.25 }), knochen = mat('#e8e0cc', { roughness: 0.8 }), loch = mat('#14100c');
   const flagge = new THREE.MeshStandardMaterial({ map: piratenFlaggeTex(), side: THREE.DoubleSide, roughness: 0.9 });
   // 🌴 Palmen auf den Felsen
-  for (const r of A.waende) if (r.w === r.h && r.w < 90 * KS) palme(g, r.x + r.w / 2, r.y + r.h / 2, A.wandH, 85, 0.3, r.y * 0.01);
+  for (const r of A.waende) if (r.w === r.h && r.w < 90 * KS && r.x < W * 0.7) palme(g, r.x + r.w / 2, r.y + r.h / 2, A.wandH, 85, 0.3, r.y * 0.01);
   // 🪵 Palisaden (die langen schmalen Wände)
   for (const r of A.waende) if (r.w > r.h * 3) for (let x = r.x + 6; x < r.x + r.w; x += 12) {
     g.add(zylinder(holz2, 5.5, 6, 58, x, 29, r.y + r.h / 2));
@@ -1948,12 +1948,15 @@ const piratenFackeln = [];
   const blk = A.stufen.find(s => s.hoehe === 100);
   if (blk) {
     const cx = blk.x + blk.w / 2, cz = blk.y + blk.h / 2, k = new THREE.Group(); k.position.set(cx, 0, cz); g.add(k);
+    blk.unsichtbar = true;   // den eckigen Kletterblock verstecken – man sieht nur den Schädel
     const fels = mat('#d9d0bc', { roughness: 0.85 });
-    k.add(kugel(fels, 60, -4, 58, 0, 1.05, 0.82, 1.5));                                   // Schädel
-    k.add(klotz(fels, 70, 34, 130, 14, 18, 0));                                         // Kiefer
-    for (const z of [-34, 34]) k.add(kugel(loch, 20, 50, 66, z, 0.6, 1, 0.9));          // Augenhöhlen
-    const nase = new THREE.Mesh(new THREE.ConeGeometry(11, 20, 3), loch); nase.position.set(56, 42, 0); nase.rotation.z = Math.PI; k.add(nase);
-    for (let i = 0; i < 7; i++) k.add(klotz(knochen, 6, 14, 12, 50, 22, -42 + i * 14));  // Zähne
+    k.add(kugel(fels, 60, 0, 48, 0, 0.98, 1.0, 1.75));                                   // runder Schädel (oben flach genug zum Draufstehen)
+    k.add(kugel(fels, 50, 0, 98, 0, 0.85, 0.18, 1.5));                                   // flache Schädeldecke
+    k.add(klotz(fels, 64, 30, 120, 16, 15, 0));                                          // Kiefer
+    for (const z of [-36, 36]) k.add(kugel(loch, 19, 50, 62, z, 0.55, 1, 0.9));          // Augenhöhlen
+    const nase = new THREE.Mesh(new THREE.ConeGeometry(11, 20, 3), loch); nase.position.set(56, 38, 0); nase.rotation.z = Math.PI; k.add(nase);
+    for (let i = 0; i < 7; i++) k.add(klotz(knochen, 6, 14, 12, 49, 22, -42 + i * 14));  // Zähne
+    for (const z of [-1, 1]) { const kn = zylinder(knochen, 5, 5, 150, 30, 6, z * 30); kn.rotation.x = Math.PI / 2; kn.rotation.z = z * 0.5; k.add(kn); k.add(kugel(knochen, 8, 30 + z * 34, 6, 30 + z * 68), kugel(knochen, 8, 30 - z * 34, 6, -30 - z * 68)); }   // gekreuzte Knochen
     for (let i = 0; i < 5; i++) k.add(kugel(mat('#7a8a5a', { roughness: 1 }), 8 + i * 2, -30 + i * 12, 100 - i * 4, -60 + i * 28, 1, 0.3, 1));   // Moos oben drauf
   }
   // 🏴‍☠️ Fahne + Schatzkisten + Kanone + Fackeln auf der Anhöhe
@@ -2395,6 +2398,7 @@ function stufenZuruecksetzen(id) {
     const g = kartenGruppe[id];
     const rampenSeite = mat(a.thema.wand, { roughness: 0.8, side: THREE.DoubleSide });
     for (const s of a.stufen) {
+      const vorher = g.children.length;
       const ecken = [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]];
       g.add(viereck(ecken.map(([x, y]) => [x, stufeHoehe(s, x, y) + 0.2, y]), ecken.map(([x, y]) => [x / W, 1 - y / H]), oben));
       for (let f = 0; f < 4; f++) {
@@ -2412,6 +2416,7 @@ function stufenZuruecksetzen(id) {
         }
         g.add(viereck([[x1, 0, y1], [x2, 0, y2], [x2, h2, y2], [x1, h1, y1]], [[0, 0], [1, 0], [1, 1], [0, 1]], m));
       }
+      if (s.unsichtbar) for (let i = vorher; i < g.children.length; i++) g.children[i].visible = false;   // z. B. im Totenkopf versteckt
     }
   }
 })();
