@@ -1525,6 +1525,49 @@ function karteLaden(name) {
   bodenMalen(th); himmelSetzen(th, name);
   sonneAuf(W / 2, H / 2);
   stufenZuruecksetzen(name);   // Kletterwände wieder sauber
+  if (meerKarte(name)) meerNebelBauen(name);
+}
+// 🌫️ Leichter Nebel, der übers Meer zieht (nur übers Wasser, nicht über die Insel)
+const meerNebel = {};   // pro Karte: { schichten: [...] }
+const NEBEL_RAND = 1500;
+function meerNebelBauen(name) {
+  if (meerNebel[name]) return;
+  const B = W + NEBEL_RAND * 2, T = H + NEBEL_RAND * 2, N = 256, M = Math.round(N * T / B);
+  // 1. Maske: wo ist Meer? (draußen ist überall Meer, drinnen die Meer-Zonen)
+  const maske = document.createElement('canvas'); maske.width = N; maske.height = M;
+  const mx = maske.getContext('2d'), bild = mx.createImageData(N, M);
+  for (let j = 0; j < M; j++) for (let i = 0; i < N; i++) {
+    const x = (i + 0.5) / N * B - NEBEL_RAND, y = (j + 0.5) / M * T - NEBEL_RAND;
+    const meer = x < 0 || y < 0 || x > W || y > H || inLava(x, y);
+    bild.data[(j * N + i) * 4 + 3] = meer ? 255 : 0; bild.data[(j * N + i) * 4] = bild.data[(j * N + i) * 4 + 1] = bild.data[(j * N + i) * 4 + 2] = 255;
+  }
+  mx.putImageData(bild, 0, 0);
+  const c = document.createElement('canvas'); c.width = N; c.height = M; const x = c.getContext('2d');
+  x.filter = 'blur(5px)'; x.drawImage(maske, 0, 0); x.filter = 'none';
+  // 2. Wolkige Schwaden: nur da, wo Meer ist
+  const wolke = document.createElement('canvas'); wolke.width = N; wolke.height = M; const w = wolke.getContext('2d');
+  let seed = 7; const zz = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let n = 0; n < 140; n++) {
+    const px = zz() * N, py = zz() * M, r = 8 + zz() * 26, a = 0.25 + zz() * 0.5;
+    const g = w.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    w.fillStyle = g; w.beginPath(); w.arc(px, py, r, 0, 7); w.fill();
+  }
+  x.globalCompositeOperation = 'destination-in'; x.drawImage(wolke, 0, 0);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const farbe = (KULISSEN[name] && KULISSEN[name].meerNebel) || '#ffffff';
+  const schichten = [];
+  [[4, 0.5], [13, 0.38], [26, 0.24]].forEach(([hoehe, deck], i) => {
+    const geo = new THREE.PlaneGeometry(B, T); geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, color: farbe, transparent: true, opacity: deck, depthWrite: false }));
+    m.position.set(W / 2, hoehe, H / 2); m.renderOrder = 5 + i; m.userData.phase = i * 2.1;
+    kartenGruppe[name].add(m); schichten.push(m);
+  });
+  meerNebel[name] = { schichten, farbe };
+}
+function meerNebelUpdate() {   // die Schwaden ziehen langsam hin und her
+  const n = meerNebel[karte]; if (!n) return;
+  const t = performance.now() / 1000;
+  n.schichten.forEach((m, i) => { m.position.x = W / 2 + Math.sin(t * 0.05 + m.userData.phase) * 70; m.position.z = H / 2 + Math.cos(t * 0.04 + m.userData.phase) * 50; });
 }
 function himmelSetzen(th, id) {
   const k = (typeof KULISSEN !== 'undefined' && KULISSEN[id]) || null;
@@ -1532,6 +1575,7 @@ function himmelSetzen(th, id) {
   const u = himmelMat.uniforms;
   u.oben.value.set(k.oben); u.horizont.value.set(k.horizont); u.sonneFarbe.value.set(k.sonne); u.wolken.value = k.wolken;
   u.wolkenFarbe.value.set(k.wolkenFarbe || '#ffffff');
+  u.sonneDir.value.set(...(k.sonneDir || [-0.4, 0.5, -0.5]));   // am Abend steht die Sonne tief
   scene.background.set(k.horizont); scene.fog.color.set(k.horizont);
   [nebelNah, nebelFern] = k.nebel; scene.fog.near = nebelNah; scene.fog.far = nebelFern;
   if (!bodenBilder[k.boden]) bodenBilder[k.boden] = bodenBild(k.boden);
@@ -1567,6 +1611,17 @@ const SIGNAL_MATS = [0, 1].map(() => mat('#5a1010', { emissive: '#ff2020', emiss
 function farbenSetzen(nr) {
   farbNr = nr;
   for (let t = 0; t < 2; t++) Object.assign(TEAMS[t], FARB_PAARE[nr][t]);
+  farbenAnwenden();
+}
+// 🐟 Kabeljau Run: die Fische haben IMMER dieselbe Farbe, dein Team bekommt eine zufällige (aber nie eine grüne)
+const FISCH_FARBE = { name: 'Kabeljau', emoji: '🐟', col: '#3fe07a', hell: '#9af5b8', dunkel: '#178a45' };
+const KAB_SPIELER_FARBEN = FARB_PAARE.flat().filter(f => !['Grün', 'Limette', 'Mint', 'Türkis', 'Petrol'].includes(f.name));
+function kabFarbenSetzen() {
+  Object.assign(TEAMS[0], zufallAus(KAB_SPIELER_FARBEN));
+  Object.assign(TEAMS[1], FISCH_FARBE);
+  farbenAnwenden();
+}
+function farbenAnwenden() {
   teamMat.forEach((m, t) => m.color.set(TEAMS[t].col));
   basisRingMat.forEach((m, t) => m.color.set(TEAMS[t].dunkel));
   turmMats.forEach((m, i) => m.color.set(TEAMS[i % 2].col));
@@ -1807,10 +1862,12 @@ const KULISSEN = {
   bahnhof: { oben: '#3f8fe0', horizont: '#dcecff', sonne: '#fff3c8', wolken: 0.5, nebel: [1300, 4300], boden: 'wiese',
     licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'],
     berge: [[3350, 420, '#7a90a8', '#ffffff', 0.9, 12]], stadt: [[-0.9, 2.2, 2400, 90], [2.2, 5.3, 2700, 60]] },
-  insel: { oben: '#1f8fe8', horizont: '#d6f3ff', sonne: '#fff6c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wasser',
-    licht: ['#fffbe8', '#6f9fc0', 1.7, '#fff6d8'],
+  insel: { oben: '#2b2f78', horizont: '#ff9e6e', sonne: '#ff7a3a', wolken: 0.55, wolkenFarbe: '#ffb79a', nebel: [1000, 3800], boden: 'wasser',   // 🌇 Abendstimmung
+    sonneDir: [-0.55, 0.09, -0.6], meerNebel: '#ffd2c0',
+    licht: ['#ffd9c0', '#5a5f9a', 1.35, '#ffb27a'],
     berge: [[3300, 260, '#3f9a55', null, 0.45, 13]] },
-  wrack: { oben: '#3a4f9a', horizont: '#ffc28a', sonne: '#ffb060', wolken: 0.6, wolkenFarbe: '#ffd8c0', nebel: [1300, 4300], boden: 'wasser',
+  wrack: { oben: '#3a3f8a', horizont: '#ffb07a', sonne: '#ff9a50', wolken: 0.6, wolkenFarbe: '#ffd0b0', nebel: [1000, 3800], boden: 'wasser',
+    sonneDir: [0.5, 0.07, -0.65], meerNebel: '#ffd8c8',
     licht: ['#ffe2c8', '#6a6fa0', 1.6, '#ffd0a0'],
     berge: [[3300, 300, '#4a5a7a', null, 0.5, 14]] },
   lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
@@ -6507,6 +6564,7 @@ function welt3D(dt) {
   for (const f of foerderTexturen) f.t.offset.x -= f.richtung * dt * 3;
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (leuchtturmLicht && karte === 'wrack') leuchtturmLicht.rotation.y += dt * 0.9;   // 🗼 das Licht vom Leuchtturm dreht sich
+  if (meerKarte()) meerNebelUpdate();
   if (meerKarte()) for (const t of wasserTexturen) { t.offset.x += dt * 0.02; t.offset.y = Math.sin(zeit * 0.5) * 0.05; }   // Wellen bewegen sich
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
@@ -8709,7 +8767,7 @@ function kabeljauAufraeumen() {
 function kabeljauStarten() {
   if (mp.peer) mpBeenden();
   const auf = matchAufstellung().filter(a => a.team === 0).map(a => ({ ...a, an: { ...ARBEITS_KLEIDUNG } }));   // 🧑‍🚒 alle in Einsatzkleidung
-  farbenSetzen(Math.floor(Math.random() * FARB_PAARE.length));
+  kabFarbenSetzen();
   weltLeeren(true); meldungen = [];
   spielArt = 'kabeljau'; modus = 'match'; karteLaden(kabeljauKarte());
   klecks(BASIS[0].x, BASIS[0].y, 110, 0, null);
@@ -8739,6 +8797,7 @@ function fischSpawnen(art, gold = false) {
     if (meerKarte() && !flut && !lavaNah(x, y, 70) && x < W - 90) continue;   // 🏝️ Fische kommen am Strand aus dem Meer
     const f = neuerFisch(art, x, y); kleckse.push(f);
     if (gold) { f.goldfisch = true; f.name = 'Gold-Knirps'; f.gruppe.userData.mat.color.set('#ffd166'); }
+    if (kab && kab.ereignis === 'nacht') fischGluehen(f);
     spritzer(x, y, 5, 1, 16, 260);   // Platsch – aus dem Wasser gesprungen!
     if (A.boss) { meldung(`⚠️ ${A.emoji} Ein ${A.name} kommt!`); ton('alarm'); }
     return f;
@@ -8885,7 +8944,63 @@ const EREIGNISSE = {
   flut:   { name: 'FLUT!', emoji: '🌊', text: 'Das Wasser steigt – rechts ist alles überflutet. Bleib aus dem Wasser raus, das tut weh!' },
   nebel:  { name: 'NEBEL!', emoji: '🌫️', text: 'Dichter Nebel! Man sieht die Fische erst ganz spät – und es kommen mehr.' },
   rausch: { name: 'GOLDFISCH-RAUSCH!', emoji: '✨', text: 'Ein riesiger Schwarm Knirpse! Die goldenen Knirpse lassen Kaviar fallen. Keine Bosse!' },
+  nacht:  { name: 'NACHT!', emoji: '🌙', text: 'Stockdunkel! Nur eure Helmlampen leuchten – und die Fische glühen in ihrer Farbe.' },
 };
+// --- 🌙 Nacht: dunkler Himmel, Mond, Helmlampen ---
+function nachtStarten() {
+  const u = himmelMat.uniforms;
+  kab.nachtAlt = { oben: u.oben.value.clone(), horizont: u.horizont.value.clone(), sonne: u.sonneFarbe.value.clone(), sonneDir: u.sonneDir.value.clone(), wolken: u.wolken.value,
+    wolkenFarbe: u.wolkenFarbe.value.clone(), hg: scene.background.clone(), nebel: scene.fog.color.clone(), nah: nebelNah, fern: nebelFern,
+    hInt: himmelLicht ? himmelLicht.intensity : 1, sInt: sonne.intensity, sFarbe: sonne.color.clone(), draussen: draussen.material.color.clone() };
+  u.oben.value.set('#03050f'); u.horizont.value.set('#18204a'); u.sonneFarbe.value.set('#e8eeff'); u.sonneDir.value.set(0.4, 0.35, -0.6);   // 🌕 Mond statt Sonne
+  u.wolken.value = 0.35; u.wolkenFarbe.value.set('#262c4a');
+  scene.background.set('#121833'); scene.fog.color.set('#121833');
+  nebelNah = 120; nebelFern = 1300;
+  if (himmelLicht) himmelLicht.intensity = kab.nachtAlt.hInt * 0.22;
+  sonne.intensity = 0.3; sonne.color.set('#8fa8ff');
+  draussen.material.color.set('#3a4570');
+  const n = meerNebel[karte]; if (n) n.schichten.forEach(m => m.material.color.set('#55608f'));
+  // 🔦 echte Lampe für dich + Lichtkegel für alle aus deinem Team
+  kab.lampe = new THREE.SpotLight('#fff1d0', 4, 900, 0.42, 0.55, 0);
+  scene.add(kab.lampe, kab.lampe.target);
+  kab.kegel = [];
+  const geo = new THREE.ConeGeometry(55, 230, 20, 1, true); geo.translate(0, -115, 0); geo.rotateZ(Math.PI / 2);
+  for (const e of kleckse) if (!e.fisch) {
+    const k = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: '#fff3c8', transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    scene.add(k); kab.kegel.push({ e, k }); kabMeshes.push(k);
+  }
+  for (const f of kleckse) if (f.fisch) fischGluehen(f);
+}
+function fischGluehen(f) {   // nachts leuchten die Fische in der Fischfarbe
+  const m = f.gruppe && f.gruppe.userData.mat; if (!m) return;
+  m.emissive.set(f.goldfisch ? '#ffd166' : TEAMS[1].col); m.emissiveIntensity = 0.45;
+}
+function nachtBeenden() {
+  const a = kab.nachtAlt, u = himmelMat.uniforms;
+  u.oben.value.copy(a.oben); u.horizont.value.copy(a.horizont); u.sonneFarbe.value.copy(a.sonne); u.sonneDir.value.copy(a.sonneDir);
+  u.wolken.value = a.wolken; u.wolkenFarbe.value.copy(a.wolkenFarbe);
+  scene.background.copy(a.hg); scene.fog.color.copy(a.nebel); nebelNah = a.nah; nebelFern = a.fern;
+  if (himmelLicht) himmelLicht.intensity = a.hInt;
+  sonne.intensity = a.sInt; sonne.color.copy(a.sFarbe); draussen.material.color.copy(a.draussen);
+  const n = meerNebel[karte]; if (n) n.schichten.forEach(m => m.material.color.set(n.farbe));
+  if (kab.lampe) { scene.remove(kab.lampe, kab.lampe.target); kab.lampe.dispose(); kab.lampe = null; }
+  for (const { k } of kab.kegel || []) { wegUndEntsorgen(k); kabMeshes = kabMeshes.filter(m => m !== k); }
+  kab.kegel = null; kab.nachtAlt = null;
+  for (const f of kleckse) if (f.fisch && f.gruppe && f.gruppe.userData.mat) f.gruppe.userData.mat.emissive.set('#000000');
+}
+function nachtUpdate() {   // Lampen zeigen dahin, wo man hinschaut
+  if (!kab || !kab.lampe) return;
+  const p = spieler, h = hAbs(p) + 40, c = Math.cos(p.winkel), sn = Math.sin(p.winkel), cp = Math.cos(p.pitch - 0.25), sp = Math.sin(p.pitch - 0.25);
+  kab.lampe.position.set(p.x, h, p.y);
+  kab.lampe.target.position.set(p.x + c * cp * 300, h + sp * 300, p.y + sn * cp * 300);
+  kab.lampe.intensity = p.tot ? 0 : 4;
+  for (const { e, k } of kab.kegel) {
+    k.visible = !e.tot && !e.rettung && !e.sprungBlob && !(e.spieler && ichSicht);
+    if (!k.visible) continue;
+    k.position.set(e.x, hAbs(e) + 40, e.y);
+    k.rotation.set(0, -e.winkel, (e.pitch || 0) - 0.25);
+  }
+}
 // --- 🫧 Rettungsblase ---
 function baueRettungsblase(team) {
   const g = new THREE.Group(), ud = g.userData;
@@ -8984,19 +9099,22 @@ function ereignisStarten(art) {
     const wasser = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#2a7fb8', transparent: true, opacity: 0.78, roughness: 0.1, metalness: 0.2 }));
     wasser.position.set(FLUT_X + (W - FLUT_X + 600) / 2, 13, H / 2); scene.add(wasser); kab.wasser = wasser; kabMeshes.push(wasser);
   }
-  if (art === 'nebel') { kab.nebelAlt = [scene.fog.near, scene.fog.far]; scene.fog.near = 40; scene.fog.far = 420; }
+  if (art === 'nebel') { kab.nebelAlt = [nebelNah, nebelFern]; nebelNah = 40; nebelFern = 420; }   // (der Nebel gleitet jedes Bild zu nebelNah/nebelFern)
+  if (art === 'nacht') nachtStarten();
   const E = EREIGNISSE[art];
   highlightAnzeige.push({ emoji: E.emoji, titel: E.name, text: E.text, start: performance.now() / 1000 + 1.2 });
   ton('alarm');
 }
 function ereignisBeenden() {
   if (kab.wasser) { wegUndEntsorgen(kab.wasser); kabMeshes = kabMeshes.filter(m => m !== kab.wasser); kab.wasser = null; }
-  if (kab.nebelAlt) { [scene.fog.near, scene.fog.far] = kab.nebelAlt; kab.nebelAlt = null; }
+  if (kab.nebelAlt) { [nebelNah, nebelFern] = kab.nebelAlt; kab.nebelAlt = null; }
+  if (kab.nachtAlt) nachtBeenden();
   kab.ereignis = null;
 }
 function imFlutWasser(x, y) { return kab && kab.ereignis === 'flut' && x > FLUT_X && bodenHoehe(x, y) < 12; }
 // --- Gemeinsames pro Bild ---
 function kabeljauTeil2(dt) {
+  nachtUpdate();
   for (const e of kleckse) {
     if (e.fisch) continue;
     if (e.rettung) rettungsUpdate(e, dt);
