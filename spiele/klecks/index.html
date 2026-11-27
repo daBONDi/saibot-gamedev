@@ -6895,6 +6895,7 @@ let sturmVorher = false, zoomStufe = 0;
 function fovSetzen(f) { if (Math.abs(kamera.fov - f) > 0.05) { kamera.fov = f; kamera.updateProjectionMatrix(); } }
 function welt3D(dt) {
   bildZaehler++;
+  stadtGruppe.visible = !(ARENEN[karte] && ARENEN[karte].nurStory);   // auf dem Mond / im Labor keine Stadt am Horizont
   boxMarkerZeigen(); stahlBoxenZeigen(dt);
   if (karte === 'lobby') lobbyHalleAnimieren(dt);
   if (farbeGeaendert && bildZaehler % 3 === 0) { bodenAktualisieren(); farbeGeaendert = false; }   // nur jedes 3. Bild – spart viel Arbeit für die Grafikkarte
@@ -11554,6 +11555,7 @@ function stadtUpdate(dt) {
   for (const z of STADT_ZIELE) if (Math.hypot(p.x - z.x, p.y - z.y) < z.r) stadtZiel = z;
 }
 function stadtZeigen(dt) {
+  stadtGruppe.visible = true;
   fovSetzen(75); zoomStufe = 0;
   vmHalter.visible = false;
   const p = stadtSp, g = p.gruppe, v = Math.hypot(p.vx, p.vy);
