@@ -4118,7 +4118,7 @@ function rufBlasenUpdate() {
     const lang = b.lang || 2.2, bw = b.breit || 64, bh = b.hoch || 24;
     if (k > lang || !kleckse.includes(b.e)) { scene.remove(b.sprite); b.sprite.material.map.dispose(); b.sprite.material.dispose(); rufBlasen.splice(i, 1); continue; }
     const pop = k < 0.15 ? k / 0.15 * 1.15 : k < 0.25 ? 1.15 - (k - 0.15) * 1.5 : 1;
-    b.sprite.position.set(b.e.x, hAbs(b.e) + (b.e.imHeli ? 57 : 72) + k * (b.e.imHeli ? 1 : 4), b.e.y); b.sprite.scale.set(bw * pop, bh * pop, 1);
+    b.sprite.position.set(b.e.x, hAbs(b.e) + (b.e.imHeli ? 64 : 72) + k * (b.e.imHeli ? 1 : 4), b.e.y); b.sprite.scale.set(bw * pop, bh * pop, 1);
     b.sprite.material.opacity = k > lang - 0.4 ? (lang - k) / 0.4 : 1;
     b.sprite.visible = !(b.e.spieler && ichSicht && !kameraOverride);
   }
@@ -6639,7 +6639,7 @@ function welt3D(dt) {
       e.flugKlecks.scale.set(w, 1 / w, 1 / w); e.flugKlecks.position.y = 10;
     }
     e.blobPx = e.x; e.blobPy = e.y; e.blobPz = hAbs(e);
-    if (e.schildName) e.schildName.visible = !e.taucht && !e.tot;
+    if (e.schildName) e.schildName.visible = !e.taucht && !e.tot && !e.imHeli;   // im Hubschrauber keine Namen (stören nur)
     saugerZeigen(e);
     if (e.schnorchel.visible) e.schnorchel.position.y = Math.sin(zeit * 6 + e.nr) * 1.5;
     if (e.klecksForm.visible) {   // Pfütze: Augen gucken heraus, blinzeln, Wellen beim Rutschen
@@ -8970,6 +8970,7 @@ function kabeljauMinikarte(mx, my, mw, mh) {
 // Zeitplan: Rundflug um die Insel ➜ (Kamera teleportiert) im Hubschrauber machen sich alle bereit ➜ Ankunft ➜ Supersprung
 const KAB_INTRO = { rund: 5.5, anflug: 12, sprung: [12.8, 13.2, 13.6], ich: 14.1, flug: 1.5, kopf: 15.9, ende: 17.7 };
 const HELI_SCHWEBE = 230;   // so hoch schwebt der Hubschrauber über der Insel
+const HELI_GROESSE = 1.6;   // der Hubschrauber ist größer gebaut, damit im Laderaum Platz ist
 const HELI_RUND = { a0: -0.35, a1: Math.PI + 0.35, h: 430 };   // Rundflug: von rechts übers Meer einmal halb um die Insel
 // Was die zwei im Hubschrauber quatschen (A, B, A, B)
 const HELI_PLAUDEREI = [
@@ -9022,6 +9023,7 @@ function baueHeli() {
 const HELI_PLAETZE = [[-52, -14], [-52, 14], [-22, -14], [-22, 14]];   // wo ihr im Laderaum steht (hinten/vorne, links/rechts)
 function heliPunkt(lx, lz) {   // Punkt im Hubschrauber ➜ Punkt auf der Karte
   const c = Math.cos(heli.w), sn = Math.sin(heli.w), p = heli.g.position;
+  lx *= HELI_GROESSE; lz *= HELI_GROESSE;
   return { x: p.x + lx * c - lz * sn, y: p.z + lx * sn + lz * c };
 }
 function heliBahn(t) {   // wo der Hubschrauber zur Zeit t ist (Rundflug ➜ Anflug zum Schwebepunkt)
@@ -9037,7 +9039,7 @@ function heliBahn(t) {   // wo der Hubschrauber zur Zeit t ist (Rundflug ➜ Anf
 function kabIntroStarten() {
   if (heli) { wegUndEntsorgen(heli.g); heli = null; }
   heli = { g: baueHeli(), t: 0, bx: BASIS[0].x + 260, by: H / 2, bh: HELI_SCHWEBE, w: 0, rotorT: 0, kipp: 0, roll: 0, plauderei: zufallAus(HELI_PLAUDEREI), plauderNr: 0 };
-  heli.g.rotation.order = 'YZX';   // erst drehen, dann Nase hoch/runter, dann zur Seite neigen
+  heli.g.rotation.order = 'YZX'; heli.g.scale.setScalar(HELI_GROESSE);   // erst drehen, dann Nase hoch/runter, dann zur Seite neigen
   const p0 = heliBahn(0), p1 = heliBahn(0.05); heli.w = Math.atan2(p1.y - p0.y, p1.x - p0.x);
   const bots = kleckse.filter(e => !e.spieler);
   // Wer macht was im Hubschrauber? Du ziehst Handschuhe an, einer zieht die Hose hoch, zwei quatschen
@@ -9062,7 +9064,7 @@ function heliUpdate(dt) {
     let dw = Math.atan2(Math.sin(wZiel - h.w), Math.cos(wZiel - h.w));
     h.w += dw * Math.min(1, dt * 3);
     kippZiel = -Math.min(0.25, tempo / 2400);         // Nase runter, wenn er schnell fliegt
-    rollZiel = h.t < I.rund ? -0.22 : -dw * 2;          // in der Kurve zur Seite neigen
+    rollZiel = h.t < I.rund ? -0.14 : -dw * 2;          // in der Kurve zur Seite neigen
   } else if (h.t < I.kopf) {                           // schweben
     x = h.bx; y = h.by; hh = h.bh + Math.sin(h.t * 2) * 4;
   } else {                                             // Abflug: nach vorne und nach oben weg
@@ -9105,8 +9107,8 @@ function plauderBlase(e, text) {   // Sprechblase ohne Ruf-Ton und ohne Meldung
   while (c.measureText(text).width > 350 && gr > 14) { gr--; c.font = `bold ${gr}px system-ui`; }
   c.textAlign = 'center'; c.fillStyle = '#1b1f3a'; c.fillText(text, 192, 39 + gr * 0.35);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
-  sprite.scale.set(64, 16, 1); sprite.renderOrder = 998; scene.add(sprite);
-  rufBlasen.push({ e, sprite, start: performance.now() / 1000, breit: 64, hoch: 16, lang: 2.6 });
+  sprite.scale.set(92, 23, 1); sprite.renderOrder = 998; scene.add(sprite);
+  rufBlasen.push({ e, sprite, start: performance.now() / 1000, breit: 92, hoch: 23, lang: 2.6 });
   ton('papageiPlapper', 0.35);
 }
 function heliSprung(e) {   // raus aus der Tür – per Supersprung auf die Insel!
@@ -9151,12 +9153,12 @@ function kabIntroUpdate(dt) {
   const g = heli ? heli.g.position : new THREE.Vector3(BASIS[0].x, 200, H / 2);
   if (t < I.rund) {              // 1. Rundflug: Kamera fliegt neben dem Hubschrauber her, unten die Insel
     const f = weich(t / I.rund);
-    kameraOverride = heliKamera(-150 + f * 120, 120 - f * 40, -330 + f * 60, -10, 20, 0);
+    kameraOverride = heliKamera(-170 + f * 140, 70 - f * 20, 260 - f * 40, -40, 10, -300);   // von außen, dahinter die Insel
   } else if (t < I.anflug) {     // 2. ✨ Teleport in den Hubschrauber: alle machen sich bereit
     const f = (t - I.rund) / (I.anflug - I.rund);
     kameraOverride = f < 0.55
-      ? heliKamera(20 - f * 10, 46, -24, -48, 22, 4)          // Blick nach hinten in den Laderaum
-      : heliKamera(-8, 40, 30 - (f - 0.55) * 20, -40, 24, -10);   // von der Seite auf die zwei Quatscher
+      ? heliKamera(22 - f * 10, 44, -18, -50, 20, 4)          // Blick nach hinten in den Laderaum
+      : heliKamera(-50 - (f - 0.55) * 20, 40, 78, -52, 24, -6);   // von draußen durch die offene Tür auf die zwei Quatscher   // von der Seite auf die zwei Quatscher
   } else if (t < I.ich) {        // 3. Blick in die offene Tür – die anderen springen raus
     const f = weich((t - I.anflug) / (I.ich - I.anflug)), c = Math.cos(heli.w), sn = Math.sin(heli.w);
     const seite = [-sn, c];
@@ -9198,7 +9200,7 @@ function kabIntroHud(cw, ch) {
     const k = t - I.rund;
     if (k < 0.35) { ctx.fillStyle = `rgba(255,255,255,${1 - k / 0.35})`; ctx.fillRect(0, 0, cw, ch); }   // ✨ Teleport-Blitz
     ctx.globalAlpha = Math.min(1, k * 2, (I.anflug - t) * 2);
-    textMitRand('🧤 Macht euch bereit …', cw / 2, ch * 0.1 + 40, Math.min(34, cw / 20), '#ffffff');
+    textMitRand('🧤 Macht euch bereit …', cw / 2, ch * 0.9 - 30, Math.min(30, cw / 22), '#ffffff');
     ctx.globalAlpha = 1;
   } else if (t < I.kopf) {
     const a = Math.min(1, (t - I.anflug) * 3); ctx.globalAlpha = a;
