@@ -9721,6 +9721,10 @@ function wiederbeleben(e, wer) {
   if (wer) { wer.rettungen = (wer.rettungen || 0) + 1; meldung(`🛟 ${wer.spieler ? 'Du hast' : wer.name + ' hat'} ${e.spieler ? 'dich' : e.name} gerettet!`); }
   else meldung(`🛟 ${e.spieler ? 'Du bist' : e.name + ' ist'} wieder da!`);
 }
+function ringSchieben(e, nx, ny) {   // 🛟 Ring bewegen: an Wänden entlangrutschen, und wer feststeckt, darf raus
+  const frei = (x, y) => x > 15 && y > 15 && x < W - 15 && y < H - 15 && (!kollidiert(x, y, 12, bodenHoehe(e.x, e.y) + 5) || kollidiert(e.x, e.y, 12, bodenHoehe(e.x, e.y) + 5));
+  if (frei(nx, ny)) { e.x = nx; e.y = ny; } else if (frei(nx, e.y)) e.x = nx; else if (frei(e.x, ny)) e.y = ny;
+}
 function rettungsUpdate(e, dt) {   // erwischte Spieler schweben als Blase – du kannst sie mit WASD langsam bewegen
   if (!e.rettungsMesh) e.rettungsMesh = baueRettungsblase(e.team);
   if (e.spieler) {
@@ -9728,13 +9732,13 @@ function rettungsUpdate(e, dt) {   // erwischte Spieler schweben als Blase – d
     const c = Math.cos(e.winkel), s = Math.sin(e.winkel);
     let dx = c * vor - s * seit, dy = s * vor + c * seit; const l = Math.hypot(dx, dy) || 1;
     const nx = e.x + dx / l * 70 * dt, ny = e.y + dy / l * 70 * dt;
-    if (!kollidiert(nx, ny, 14, bodenHoehe(e.x, e.y) + 5) && nx > 15 && ny > 15 && nx < W - 15 && ny < H - 15) { e.x = nx; e.y = ny; }
+    ringSchieben(e, nx, ny);
   } else if (!e.mensch) {   // 🤖 Bot-Ringe robben langsam zum nächsten Freund (damit der sie retten kann)
     let ziel = null, zd = 1e9;
     for (const o of kleckse) if (o.team === e.team && !o.tot && !o.imHeli && o !== e) { const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < zd) { zd = d; ziel = o; } }
     if (ziel && zd > 70) {
       const a = Math.atan2(ziel.y - e.y, ziel.x - e.x), nx = e.x + Math.cos(a) * 40 * dt, ny = e.y + Math.sin(a) * 40 * dt;
-      if (!kollidiert(nx, ny, 14, bodenHoehe(e.x, e.y) + 5) && !inLava(nx, ny)) { e.x = nx; e.y = ny; }
+      if (!inLava(nx, ny)) ringSchieben(e, nx, ny);
       e.winkel = drehe(e.winkel, a, dt * 3);
     }
   }
