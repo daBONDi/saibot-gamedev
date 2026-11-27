@@ -8947,7 +8947,7 @@ const HELI_SCHWEBE = 230;   // so hoch schwebt der Hubschrauber über der Insel
 let heli = null;            // { g, t, ax, ay, ah, bx, by, bh, w, abflugX, abflugY, rotorT }
 function baueHeli() {
   const g = new THREE.Group(), ud = g.userData;
-  const rumpf = mat('#1f2944', { roughness: 0.4, metalness: 0.3 }), dunkel = mat('#151b30', { roughness: 0.6 }), gelb = mat('#e8ff3a', { roughness: 0.4, emissive: '#e8ff3a', emissiveIntensity: 0.15 });
+  const rumpf = mat('#2f5bb0', { roughness: 0.4, metalness: 0.2 }), dunkel = mat('#151b30', { roughness: 0.6 }), gelb = mat('#e8ff3a', { roughness: 0.4, emissive: '#e8ff3a', emissiveIntensity: 0.15 });
   const rot = mat('#c8102e', { roughness: 0.4 }), glas = new THREE.MeshStandardMaterial({ color: '#9fd8ff', transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.3, depthWrite: false });
   // Laderaum: Boden, Dach, Rückwand – die Seiten sind offen (da springt ihr raus!)
   g.add(klotz(dunkel, 124, 6, 72, -10, -3, 0), klotz(rumpf, 134, 10, 74, -10, 66, 0), klotz(rumpf, 8, 66, 74, -72, 33, 0));
