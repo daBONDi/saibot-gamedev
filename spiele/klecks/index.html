@@ -705,7 +705,7 @@ ARENEN.piraten = { name: 'Pirateninsel', emoji: '🏴‍☠️', wandH: 50, nurK
 ARENEN.labor = { name: 'Geheimlabor', emoji: '🧪', wandH: 60, nurStory: true, spezial: '🧪 Dr. Papageis geheimes Labor unter der Fischerei',
   zonen: [{ art: 'band', x: 600, y: 240, w: 200, h: 44, dx: 110 }, { art: 'band', x: 800, y: 716, w: 200, h: 44, dx: -110 }],
   waende: spiegel([[280, 180, 40, 220], [280, 600, 40, 220], [500, 110, 160, 36], [500, 854, 160, 36], [560, 440, 40, 120], [440, 350, 60, 60], [440, 590, 60, 60]]),
-  thema: { boden: '#c9d2e3', linie: '#b3bdd2', wand: '#4a5068', himmel: '#1a1830', draussen: '#2a2f45', muster: 'fliesen' } };
+  thema: { boden: '#c9d2e3', linie: '#b3bdd2', wand: '#4a5068', himmel: '#1a1830', draussen: '#2a2f45', muster: 'fliesen', wandUnsichtbar: true } };
 const KABELJAU_KARTEN = ['insel', 'wrack', 'piraten'];
 function meerKarte(k = karte) { return !!(ARENEN[k] && ARENEN[k].nurKabeljau); }
 const REVIER_ARENEN = Object.keys(ARENEN).filter(id => !ARENEN[id].nurKabeljau && !ARENEN[id].nurStory);   // die Arenen für die Farbschlacht
@@ -1582,7 +1582,9 @@ for (const [id, a] of Object.entries(ARENEN)) {
                     : new THREE.MeshStandardMaterial({ map: t, roughness: th.muster === 'fliesen' ? 0.45 : 0.8, metalness: th.muster === 'fliesen' ? 0.3 : 0,
                         emissiveMap: glut, emissive: glut ? '#ff5a10' : '#000000', emissiveIntensity: glut ? 1.2 : 0 });
   const kante = new THREE.MeshStandardMaterial({ color: new THREE.Color(th.wand).multiplyScalar(th.muster === 'stein' ? 1.6 : 0.65), roughness: 0.6, transparent: !!th.glas, opacity: th.glas ? 0.9 : 1 });
+  const vorher = kartenGruppe[id].children.length;
   for (const r of a.waende) wandKlotz(r.x, r.y, r.w, r.h, a.wandH, m, kartenGruppe[id], kante);
+  if (th.wandUnsichtbar) for (let i = vorher; i < kartenGruppe[id].children.length; i++) kartenGruppe[id].children[i].visible = false;   // z. B. im Labor: man sieht nur die Deko (Aquarien, Computer …)
 }
 const randGruppe = new THREE.Group(); scene.add(randGruppe);   // Mauer rund um die Arena (auf der Insel unsichtbar – da ist Meer!)
 wandKlotz(-24, -24, W + 48, 24, 50, randMat, randGruppe); wandKlotz(-24, H, W + 48, 24, 50, randMat, randGruppe);
@@ -2054,19 +2056,19 @@ const laborBlinker = [];
       g.add(klotz(wasser, r.w - 4, 52, r.h - 4, cx, 30, cz), klotz(glas, r.w + 1, 62, r.h + 1, cx, 31, cz), klotz(dunkel, r.w + 4, 6, r.h + 4, cx, 63, cz));
       for (let i = 0; i < 4; i++) { const f = kugel(mat(['#7f9c7c', '#a9c2a4', '#5f7d60'][i % 3], { roughness: 0.5 }), 6, cx, 18 + (i % 2) * 22, r.y + 20 + i * (r.h - 40) / 3, 1, 0.7, 1.6); g.add(f); laborBlinker.push({ fisch: f, phase: i }); }
     } else if (r.w > r.h * 3) {   // 💻 lange Wände = Computer-Tische mit Bildschirmen
-      g.add(klotz(metall, r.w, 30, r.h, cx, 15, cz));
+      g.add(klotz(metall, r.w, 44, r.h, cx, 22, cz), klotz(dunkel, r.w + 2, 3, r.h + 2, cx, 45, cz));
       const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
       x.fillStyle = '#062a12'; x.fillRect(0, 0, 256, 128); x.fillStyle = '#3dff7a'; x.font = 'bold 20px monospace';
       x.fillText('FORMEL: SUPER-FARBE', 10, 30); x.fillText('Extraktion: 87 %', 10, 62); x.fillText('Ziel: DER MOND  🌙', 10, 94); x.fillText('Krah-Krah-123', 10, 120);
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-      for (const dx of [-r.w * 0.28, r.w * 0.28]) { const sc = new THREE.Mesh(new THREE.PlaneGeometry(48, 24), new THREE.MeshBasicMaterial({ map: t })); sc.position.set(cx + dx, 50, cz + (r.y < H / 2 ? r.h / 2 + 0.5 : -r.h / 2 - 0.5)); if (r.y > H / 2) sc.rotation.y = Math.PI; g.add(sc, klotz(dunkel, 52, 28, 3, cx + dx, 50, cz)); }
+      for (const dx of [-r.w * 0.28, r.w * 0.28]) { const sc = new THREE.Mesh(new THREE.PlaneGeometry(48, 24), new THREE.MeshBasicMaterial({ map: t })); sc.position.set(cx + dx, 60, cz + (r.y < H / 2 ? 1.6 : -1.6)); if (r.y > H / 2) sc.rotation.y = Math.PI; g.add(sc, klotz(dunkel, 52, 28, 3, cx + dx, 60, cz)); }
     } else {   // ⚗️ Blöcke = Maschinen mit blinkendem Warnlicht
       g.add(klotz(metall, r.w, 62, r.h, cx, 31, cz));
       const l = kugel(mat('#ff2a2a', { emissive: '#ff2020', emissiveIntensity: 1 }), 5, cx, 68, cz); g.add(l); laborBlinker.push({ licht: l, phase: cx * 0.01 });
     }
   }
   // 🧪 Die Glasröhre auf dem Podest (darin ist im Moment … niemand?) + Gedanken-Lese-Helm
-  const pod = A.stufen.find(s => s.hoehe === 40 && !s.rampe);
+  const pod = A.stufen.find(s => s.hoehe === 40 && !s.rampe && s.x > W * 0.3 && s.x < W * 0.7);   // das Podest in der Mitte (nicht die Startplattform)
   if (pod) {
     const cx = pod.x + pod.w / 2, cz = pod.y + pod.h / 2, top = pod.hoehe;
     const roehre = new THREE.Group(); roehre.position.set(cx, top, cz); g.add(roehre); laborRoehre = roehre;
