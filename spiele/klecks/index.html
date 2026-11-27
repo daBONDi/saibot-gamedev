@@ -1614,7 +1614,7 @@ function farbenSetzen(nr) {
   farbenAnwenden();
 }
 // 🐟 Kabeljau Run: die Fische haben IMMER dieselbe Farbe, dein Team bekommt eine zufällige (aber nie eine grüne)
-const FISCH_FARBE = { name: 'Kabeljau', emoji: '🐟', col: '#3fe07a', hell: '#9af5b8', dunkel: '#178a45' };
+const FISCH_FARBE = { name: 'Kabeljau', emoji: '🐟', col: '#1a7a34', hell: '#4fae62', dunkel: '#0c4a1e' };   // dunkelgrün
 const KAB_SPIELER_FARBEN = FARB_PAARE.flat().filter(f => !['Grün', 'Limette', 'Mint', 'Türkis', 'Petrol'].includes(f.name));
 function kabFarbenSetzen() {
   Object.assign(TEAMS[0], zufallAus(KAB_SPIELER_FARBEN));
@@ -4115,10 +4115,11 @@ function rufBlasenUpdate() {
   const jetzt = performance.now() / 1000;
   for (let i = rufBlasen.length - 1; i >= 0; i--) {
     const b = rufBlasen[i], k = jetzt - b.start;
-    if (k > 2.2 || !kleckse.includes(b.e)) { scene.remove(b.sprite); b.sprite.material.map.dispose(); b.sprite.material.dispose(); rufBlasen.splice(i, 1); continue; }
+    const lang = b.lang || 2.2, bw = b.breit || 64, bh = b.hoch || 24;
+    if (k > lang || !kleckse.includes(b.e)) { scene.remove(b.sprite); b.sprite.material.map.dispose(); b.sprite.material.dispose(); rufBlasen.splice(i, 1); continue; }
     const pop = k < 0.15 ? k / 0.15 * 1.15 : k < 0.25 ? 1.15 - (k - 0.15) * 1.5 : 1;
-    b.sprite.position.set(b.e.x, hAbs(b.e) + 72 + k * 4, b.e.y); b.sprite.scale.set(64 * pop, 24 * pop, 1);
-    b.sprite.material.opacity = k > 1.8 ? (2.2 - k) / 0.4 : 1;
+    b.sprite.position.set(b.e.x, hAbs(b.e) + (b.e.imHeli ? 57 : 72) + k * (b.e.imHeli ? 1 : 4), b.e.y); b.sprite.scale.set(bw * pop, bh * pop, 1);
+    b.sprite.material.opacity = k > lang - 0.4 ? (lang - k) / 0.4 : 1;
     b.sprite.visible = !(b.e.spieler && ichSicht && !kameraOverride);
   }
   rufPings = rufPings.filter(p => jetzt - p.start < 3);
@@ -6789,7 +6790,7 @@ function hud() {
   ctx.clearRect(0, 0, cw, ch);
   if (zustand === 'stadt') { stadtHud(cw, ch); return; }
   if (!spieler || zustand === 'menu') return;
-  if (zustand === 'intro') { if (spielArt === 'kabeljau') kabIntroHud(cw, ch); else introHud(cw, ch); return; }
+  if (zustand === 'intro') { if (spielArt === 'kabeljau') { rufBlasenUpdate(); kabIntroHud(cw, ch); } else introHud(cw, ch); return; }
   if (zustand === 'feier') { feierHud(cw, ch); return; }
   if (zustand === 'replay') { replayHud(cw, ch); return; }
   if (sandsturm()) {   // Sand vor den Augen
@@ -7252,6 +7253,30 @@ function posieren(e, dt) {
       else { P.arme = [[0.35, 1.5], [3.0, 0.1]]; P.wrz = 1.6; P.hoch = Math.abs(Math.sin(t * 3)) * 4; P.kopf = 0.35; P.einhand = true; if (mal(0.25)) spritzer(e.x, e.y, hAbs(e) + 80, e.team, 3, 120); }
       break;
     }
+    // ---------- 🚁 Im Hubschrauber: bereit machen (ohne Waffe) ----------
+    case 'hose': {   // 👖 Hose hochziehen: in die Knie, Hosenbund packen, hochziehen und hüpfen
+      P.ohne = true; P.kopf = -0.45;
+      const q = (t % 1.5) / 1.5;
+      if (q < 0.45) { const f = weich(q / 0.45); P.knie = [-0.8 * f, -0.8 * f]; P.huefte = [0.4 * f, 0.4 * f]; P.ober = -0.35 * f; P.oberY = -3 * f; P.arme = [[0.25, 1.1 + f * 0.3], [0.25, 1.1 + f * 0.3]]; }
+      else { const f = (q - 0.45) / 0.55, j = Math.sin(Math.min(1, f * 1.6) * Math.PI); P.hoch = j * 6; P.ober = -0.35 * (1 - f); P.arme = [[0.25 + j * 0.35, 1.4 - j * 0.5], [0.25 + j * 0.35, 1.4 - j * 0.5]]; P.kopf = -0.45 + j * 0.25; }
+      P.oberDreh = Math.sin(t * 2.1) * 0.15;
+      break;
+    }
+    case 'handschuh': {   // 🧤 Handschuh anziehen: rechte Hand zieht an der linken, dann Finger wackeln
+      P.ohne = true; P.oberDreh = 0.3;
+      const q = t % 3.2;
+      if (q < 2.2) { const z = Math.sin(t * 9); P.arme = [[1.25, 1.0], [1.0 + z * 0.22, 1.35 - z * 0.25]]; P.kopf = -0.4; P.kopfY = 0.25; P.ober = -0.1 + z * 0.03; }
+      else { P.arme = [[1.9 + Math.sin(t * 22) * 0.12, 0.5], [0.2, 0.3]]; P.kopf = 0.1; P.kopfY = 0.15; P.hoch = Math.abs(Math.sin(t * 6)) * 1.5; }   // fertig – passt!
+      break;
+    }
+    case 'quatschen': {   // 💬 abwechselnd reden (mit Händen fuchteln) und zuhören (nicken) – manchmal lachen beide
+      P.ohne = true;
+      const redet = Math.floor((t + 0.0) / 1.3) % 2 === (em.rolle || 0), lacht = t % 6.5 > 5.6;
+      if (lacht) { P.ober = 0.22; P.kopf = 0.35; P.hoch = Math.abs(Math.sin(t * 18)) * 2.5; P.arme = [[0.5, 1.3], [0.5, 1.3]]; }
+      else if (redet) { P.arme = [[0.6 + Math.sin(t * 5) * 0.25, 0.8], [1.3 + Math.sin(t * 7.5) * 0.35, 1.0 + Math.sin(t * 6) * 0.3]]; P.kopf = Math.sin(t * 6) * 0.1; P.kopfY = Math.sin(t * 2.7) * 0.2; P.hoch = Math.abs(Math.sin(t * 7)) * 1.2; }
+      else { P.arme = [[0.12, 0.3], [0.12, 0.3]]; P.kopf = Math.max(0, Math.sin(t * 5)) * 0.18; P.oberDreh = 0.08; }
+      break;
+    }
     case 'winken':   // fürs Intro: Hallo!
       P.arme = [[2.8, 0.3 + Math.sin(t * 10) * 0.45], [1.1, 0.45]]; P.wrz = 0.3; P.hoch = Math.abs(Math.sin(t * 4)) * 3; P.kopf = 0.15; P.einhand = true;
       break;
@@ -7280,14 +7305,14 @@ function posieren(e, dt) {
   }
   ud.beine.forEach((bn, i) => { bn.huefte.rotation.z = P.huefte[i]; bn.knie.rotation.z = P.knie[i]; });
   ud.arme.forEach((arm, i) => { arm.schulter.rotation.z = P.arme[i][0]; arm.ellbogen.rotation.z = P.arme[i][1]; });
-  ud.ober.position.y = 14; ud.ober.rotation.set(0, 0, P.ober);
+  ud.ober.position.y = 14; ud.ober.rotation.set(0, P.oberDreh || 0, P.ober);
   ud.kopf.rotation.z = P.kopf; ud.kopf.rotation.y = P.kopfY;
   ud.augen.scale.y = ((zeit + e.nr * 0.77) % 3.3) < 0.12 ? 0.1 : 1;
   if (ud.umhang) ud.umhang.rotation.z = -0.4 + Math.sin(zeit * 8 + e.nr) * 0.1;
   const [hx, hy] = P.waffe || handPos(P.arme[1][0], P.arme[1][1]);
   // Hält nur die rechte Hand die Waffe? Dann sitzt sie an der Seite der Hand (Schulter z = 7.8, Arm leicht nach innen gedreht)
   const hz = P.einhand && !P.waffe ? 7.8 - 0.479 * hx / 0.878 : 0;
-  w.visible = true; w.position.set(hx, hy, hz); w.rotation.set(P.wrx, P.einhand ? -0.2 : 0, P.wrz);
+  w.visible = !P.ohne; w.position.set(hx, hy, hz); w.rotation.set(P.wrx, P.einhand ? -0.2 : 0, P.wrz);
   if (e.werferModell) e.werferModell.visible = false;
   animiereWaffe(w.userData, e, dt, 0);
   e.koerper.rotation.z = P.salto;   // Salto: um die Bauchmitte (20 über dem Boden) drehen, nicht um die Füße
@@ -8942,8 +8967,17 @@ function kabeljauMinikarte(mx, my, mw, mh) {
 }
 
 // ================== 🚁 KABELJAU RUN – Intro: Der Hubschrauber bringt euch, ihr springt per Supersprung raus ==================
-const KAB_INTRO = { anflug: 3.6, sprung: [4.5, 4.9, 5.3], ich: 5.8, flug: 1.5, kopf: 7.6, ende: 9.4 };
+// Zeitplan: Rundflug um die Insel ➜ (Kamera teleportiert) im Hubschrauber machen sich alle bereit ➜ Ankunft ➜ Supersprung
+const KAB_INTRO = { rund: 5.5, anflug: 12, sprung: [12.8, 13.2, 13.6], ich: 14.1, flug: 1.5, kopf: 15.9, ende: 17.7 };
 const HELI_SCHWEBE = 230;   // so hoch schwebt der Hubschrauber über der Insel
+const HELI_RUND = { a0: -0.35, a1: Math.PI + 0.35, h: 430 };   // Rundflug: von rechts übers Meer einmal halb um die Insel
+// Was die zwei im Hubschrauber quatschen (A, B, A, B)
+const HELI_PLAUDEREI = [
+  ['Hast du den Riesenkabeljau gesehen?', 'Ja! Der war SOOO groß! 😱', 'Ich hab Angst vor der Flunder …', 'Pff! Die mach ich platt! 💪'],
+  ['Was gibt\'s heute zum Abendessen?', 'Hoffentlich KEIN Fisch! 😂', 'Dr. Papagei kocht Fischstäbchen …', 'Oh nein … 🙈'],
+  ['Wer sammelt mehr Kaviar? Wetten?', 'Ich natürlich! 😎', 'Das sagst du jedes Mal!', 'Und jedes Mal stimmt\'s! 😂'],
+  ['Mir ist ein bisschen schlecht …', 'Nicht runtergucken! 😅', 'Zu spät … 😵', 'Gleich springen wir eh raus!'],
+];
 let heli = null;            // { g, t, ax, ay, ah, bx, by, bh, w, abflugX, abflugY, rotorT }
 function baueHeli() {
   const g = new THREE.Group(), ud = g.userData;
@@ -8985,42 +9019,60 @@ function baueHeli() {
   scene.add(g);
   return g;
 }
-const HELI_PLAETZE = [[-52, -14], [-52, 14], [-22, -14], [-22, 14]];   // wo ihr im Laderaum steht (vorne/hinten, links/rechts)
+const HELI_PLAETZE = [[-52, -14], [-52, 14], [-22, -14], [-22, 14]];   // wo ihr im Laderaum steht (hinten/vorne, links/rechts)
 function heliPunkt(lx, lz) {   // Punkt im Hubschrauber ➜ Punkt auf der Karte
   const c = Math.cos(heli.w), sn = Math.sin(heli.w), p = heli.g.position;
   return { x: p.x + lx * c - lz * sn, y: p.z + lx * sn + lz * c };
 }
+function heliBahn(t) {   // wo der Hubschrauber zur Zeit t ist (Rundflug ➜ Anflug zum Schwebepunkt)
+  const cx = W / 2, cy = H / 2, rx = W / 2 + 700, ry = H / 2 + 600, R = HELI_RUND;
+  if (t < KAB_INTRO.rund) {
+    const a = R.a0 + (R.a1 - R.a0) * (t / KAB_INTRO.rund);
+    return { x: cx + Math.cos(a) * rx, y: cy - Math.sin(a) * ry, h: R.h + Math.sin(t * 0.8) * 25 };
+  }
+  const e = { x: cx + Math.cos(R.a1) * rx, y: cy - Math.sin(R.a1) * ry, h: R.h };
+  const f = Math.min(1, (t - KAB_INTRO.rund) / (KAB_INTRO.anflug - KAB_INTRO.rund)), k = f * (2 - f) * 0.6 + f * 0.4;   // wird zum Schluss langsamer
+  return { x: e.x + (heli.bx - e.x) * k, y: e.y + (heli.by - e.y) * k, h: e.h + (heli.bh - e.h) * k };
+}
 function kabIntroStarten() {
   if (heli) { wegUndEntsorgen(heli.g); heli = null; }
-  const bx = BASIS[0].x + 260, by = H / 2;
-  heli = { g: baueHeli(), t: 0, ax: W + 1700, ay: H / 2 + 650, ah: 560, bx, by, bh: HELI_SCHWEBE, w: Math.PI, rotorT: 0 };
-  heli.w = Math.atan2(by - heli.ay, bx - heli.ax);
-  kleckse.forEach((e, i) => {
+  heli = { g: baueHeli(), t: 0, bx: BASIS[0].x + 260, by: H / 2, bh: HELI_SCHWEBE, w: 0, rotorT: 0, kipp: 0, roll: 0, plauderei: zufallAus(HELI_PLAUDEREI), plauderNr: 0 };
+  heli.g.rotation.order = 'YZX';   // erst drehen, dann Nase hoch/runter, dann zur Seite neigen
+  const p0 = heliBahn(0), p1 = heliBahn(0.05); heli.w = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+  const bots = kleckse.filter(e => !e.spieler);
+  // Wer macht was im Hubschrauber? Du ziehst Handschuhe an, einer zieht die Hose hoch, zwei quatschen
+  const rollen = [[spieler, 3, 'handschuh', 0], [bots[0], 2, 'hose', 0], [bots[1], 0, 'quatschen', Math.PI / 2], [bots[2], 1, 'quatschen', -Math.PI / 2]];
+  rollen.forEach(([e, platz, art, blick], i) => {
+    if (!e) return;
     e.landX = e.x + 70 + (i % 2) * 50; e.landY = e.y;   // da landet man später
-    e.heliPlatz = HELI_PLAETZE[(e.spieler ? 3 : [0, 1, 2][kleckse.filter(k => !k.spieler).indexOf(e)]) ?? i % 4];
-    e.imHeli = true; e.vx = e.vy = e.vz = 0;
+    e.heliPlatz = HELI_PLAETZE[platz]; e.heliBlick = blick; e.heliRolle = art;
+    e.imHeli = true; e.vx = e.vy = e.vz = 0; e.emote = null;
   });
   heliUpdate(0);
 }
 function heliUpdate(dt) {
   if (!heli) return;
-  const h = heli, g = h.g;
+  const h = heli, g = h.g, I = KAB_INTRO;
   h.t += dt; h.rotorT += dt;
-  let x, y, hh, kipp = 0;
-  if (h.t < KAB_INTRO.anflug) {                     // Anflug übers Meer, wird langsamer
-    const f = h.t / KAB_INTRO.anflug, k = 1 - (1 - f) * (1 - f);
-    x = h.ax + (h.bx - h.ax) * k; y = h.ay + (h.by - h.ay) * k; hh = h.ah + (h.bh - h.ah) * k;
-    kipp = -0.22 * (1 - f) + 0.12 * Math.max(0, (f - 0.8) / 0.2);   // Nase runter beim Fliegen, zum Bremsen hoch
-    h.w += (Math.atan2(h.by - h.ay, h.bx - h.ax) - h.w) * Math.min(1, dt * 2);
-  } else if (h.t < KAB_INTRO.kopf) {                // schweben
+  let x, y, hh, kippZiel = 0, rollZiel = 0;
+  if (h.t < I.anflug) {                                // Rundflug und Anflug
+    const p = heliBahn(h.t), q = heliBahn(h.t + 0.05);
+    x = p.x; y = p.y; hh = p.h;
+    const wZiel = Math.atan2(q.y - p.y, q.x - p.x), tempo = Math.hypot(q.x - p.x, q.y - p.y) / 0.05;
+    let dw = Math.atan2(Math.sin(wZiel - h.w), Math.cos(wZiel - h.w));
+    h.w += dw * Math.min(1, dt * 3);
+    kippZiel = -Math.min(0.25, tempo / 2400);         // Nase runter, wenn er schnell fliegt
+    rollZiel = h.t < I.rund ? -0.22 : -dw * 2;          // in der Kurve zur Seite neigen
+  } else if (h.t < I.kopf) {                           // schweben
     x = h.bx; y = h.by; hh = h.bh + Math.sin(h.t * 2) * 4;
-    h.w += (Math.PI - h.w) * Math.min(1, dt * 1.5);   // dreht sich, damit die Türen zur Insel zeigen
-  } else {                                          // Abflug: nach vorne und nach oben weg
-    const s = h.t - KAB_INTRO.kopf;
-    x = h.bx + Math.cos(h.w) * 90 * s * s; y = h.by + Math.sin(h.w) * 90 * s * s; hh = h.bh + 60 * s + 25 * s * s; kipp = -Math.min(0.3, s * 0.2);
+  } else {                                             // Abflug: nach vorne und nach oben weg
+    const s = h.t - I.kopf;
+    x = h.bx + Math.cos(h.w) * 90 * s * s; y = h.by + Math.sin(h.w) * 90 * s * s; hh = h.bh + 60 * s + 25 * s * s; kippZiel = -Math.min(0.3, s * 0.2);
   }
+  h.kipp += (kippZiel - h.kipp) * Math.min(1, dt * 2); h.roll += (rollZiel - h.roll) * Math.min(1, dt * 2);
   g.position.set(x, hh, y);
-  g.rotation.set(0, -h.w, kipp);
+  g.rotation.set(h.roll, -h.w, h.kipp);
+  g.updateMatrixWorld(true);
   g.userData.rotor.rotation.y += dt * 32; g.userData.heck.rotation.z += dt * 45;
   g.userData.blink.emissiveIntensity = (h.t * 1.5) % 1 < 0.25 ? 2 : 0.1;
   if (g.userData.pilot.userData.vogel) g.userData.pilot.userData.vogel.rotation.y = Math.sin(h.t * 1.3) * 0.3;
@@ -9033,13 +9085,34 @@ function heliUpdate(dt) {
   // Wer noch drin ist, fliegt mit
   for (const e of kleckse) if (e.imHeli) {
     const q = heliPunkt(e.heliPlatz[0], e.heliPlatz[1]);
-    e.x = q.x; e.y = q.y; e.z = hh + 0.5 - bodenHoehe(q.x, q.y); e.winkel = h.w + Math.PI / 2; e.pitch = 0;
+    e.x = q.x; e.y = q.y; e.z = hh + 0.5 - bodenHoehe(q.x, q.y); e.winkel = h.w + (e.heliBlick || 0); e.pitch = 0;
   }
-  if (h.t > 16) { wegUndEntsorgen(g); heli = null; }
+  if (h.t > I.kopf + 8) { wegUndEntsorgen(g); heli = null; }
+}
+function heliKamera(lx, ly, lz, zx, zy, zz) {   // Kamera an einer Stelle IM Hubschrauber (wackelt mit)
+  const g = heli.g, a = new THREE.Vector3(lx, ly, lz), b = new THREE.Vector3(zx, zy, zz);
+  g.localToWorld(a); g.localToWorld(b);
+  return { pos: a.toArray(), ziel: b.toArray() };
+}
+function plauderBlase(e, text) {   // Sprechblase ohne Ruf-Ton und ohne Meldung
+  for (let i = rufBlasen.length - 1; i >= 0; i--) if (rufBlasen[i].e === e) { scene.remove(rufBlasen[i].sprite); rufBlasen[i].sprite.material.map.dispose(); rufBlasen[i].sprite.material.dispose(); rufBlasen.splice(i, 1); }
+  const cv = document.createElement('canvas'); cv.width = 384; cv.height = 96;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#ffffff'; c.strokeStyle = TEAMS[e.team].col; c.lineWidth = 6;
+  c.beginPath(); c.roundRect(6, 6, 372, 66, 20); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(176, 70); c.lineTo(192, 92); c.lineTo(208, 70); c.closePath(); c.fill();
+  let gr = 28; c.font = `bold ${gr}px system-ui`;
+  while (c.measureText(text).width > 350 && gr > 14) { gr--; c.font = `bold ${gr}px system-ui`; }
+  c.textAlign = 'center'; c.fillStyle = '#1b1f3a'; c.fillText(text, 192, 39 + gr * 0.35);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+  sprite.scale.set(64, 16, 1); sprite.renderOrder = 998; scene.add(sprite);
+  rufBlasen.push({ e, sprite, start: performance.now() / 1000, breit: 64, hoch: 16, lang: 2.6 });
+  ton('papageiPlapper', 0.35);
 }
 function heliSprung(e) {   // raus aus der Tür – per Supersprung auf die Insel!
   if (!e.imHeli) return;
-  e.imHeli = false;
+  e.imHeli = false; e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0;
+  if (e.waffenModell) e.waffenModell.visible = true;
   const f = freieStelle(e.landX, e.landY, e.r || 12, bodenHoehe(e.landX, e.landY));
   e.superSprung = { sx: e.x, sy: e.y, h0: hAbs(e), zx: f.x, zy: f.y, h1: bodenHoehe(f.x, f.y), t: 0, dauer: KAB_INTRO.flug, vorT: 0, bogen: 110 };
   e.sprungBlob = true;
@@ -9054,24 +9127,45 @@ function kabIntroUpdate(dt) {
   introT += dt; zeit += dt;
   const t = introT, p = spieler, I = KAB_INTRO;
   heliUpdate(dt);
-  const bots = kleckse.filter(e => !e.spieler);
+  const bots = kleckse.filter(e => !e.spieler), drin = kleckse.filter(e => e.imHeli);
+  const quatscher = drin.filter(e => e.heliRolle === 'quatschen');
+  // Im Hubschrauber: bereit machen (ohne Waffen!)
+  if (vorher < I.rund && t >= I.rund) {
+    ton('wusch');
+    quatscher.forEach((e, i) => { e.emote = { art: 'quatschen', t0: zeit, rolle: i }; });
+    for (const e of drin) if (e.heliRolle !== 'quatschen') e.emote = { art: e.heliRolle, t0: zeit, versatz: e.nr * 0.3 };
+  }
+  if (t >= I.rund && t < I.anflug) {
+    const k = t - I.rund, kv = vorher - I.rund;
+    const hose = drin.find(e => e.heliRolle === 'hose');
+    if (hose && kv < 0.5 && k >= 0.5) plauderBlase(hose, 'Uff … die Hose rutscht! 👖');
+    [1.3, 2.6, 3.9, 5.2].forEach((ts, i) => { if (kv < ts && k >= ts && quatscher[i % 2]) plauderBlase(quatscher[i % 2], heli.plauderei[i]); });
+  }
+  if (vorher < I.anflug && t >= I.anflug) {   // angekommen: alle zur Tür, Waffen schnappen
+    meldung('🦜 Dr. Papagei: „Wir sind da! Raus mit euch – SUPERSPRUNG!“'); ton('papageiPlapper');
+    for (const e of drin) { e.emote = null; e.heliBlick = Math.PI / 2; e.koerper.rotation.z = 0; e.koerper.position.x = 0; if (e.waffenModell) e.waffenModell.visible = true; }
+  }
   I.sprung.forEach((ts, i) => { if (vorher < ts && t >= ts && bots[i]) heliSprung(bots[i]); });
   if (vorher < I.ich && t >= I.ich) heliSprung(p);
-  if (vorher < I.anflug && t >= I.anflug) { meldung('🦜 Dr. Papagei: „Wir sind da! Raus mit euch – SUPERSPRUNG!“'); ton('papageiPlapper'); }
   for (const e of kleckse) if (e.superSprung) { sprungFliegen(e, dt); if (!e.superSprung) e.winkel = 0; }
   const g = heli ? heli.g.position : new THREE.Vector3(BASIS[0].x, 200, H / 2);
-  if (t < I.anflug) {            // 1. Der Hubschrauber kommt übers Meer geflogen
-    const f = weich(t / I.anflug);
-    kameraOverride = { pos: [g.x + 120 - f * 60, g.y + 40 + f * 30, g.z + 330 - f * 60], ziel: [g.x - 30, g.y + 30, g.z] };
-  } else if (t < I.ich) {        // 2. Blick in die offene Tür – die anderen springen raus
+  if (t < I.rund) {              // 1. Rundflug: Kamera fliegt neben dem Hubschrauber her, unten die Insel
+    const f = weich(t / I.rund);
+    kameraOverride = heliKamera(-150 + f * 120, 120 - f * 40, -330 + f * 60, -10, 20, 0);
+  } else if (t < I.anflug) {     // 2. ✨ Teleport in den Hubschrauber: alle machen sich bereit
+    const f = (t - I.rund) / (I.anflug - I.rund);
+    kameraOverride = f < 0.55
+      ? heliKamera(20 - f * 10, 46, -24, -48, 22, 4)          // Blick nach hinten in den Laderaum
+      : heliKamera(-8, 40, 30 - (f - 0.55) * 20, -40, 24, -10);   // von der Seite auf die zwei Quatscher
+  } else if (t < I.ich) {        // 3. Blick in die offene Tür – die anderen springen raus
     const f = weich((t - I.anflug) / (I.ich - I.anflug)), c = Math.cos(heli.w), sn = Math.sin(heli.w);
-    const seite = [-sn, c];        // links aus der Tür raus (zur Kamera)
+    const seite = [-sn, c];
     kameraOverride = { pos: [g.x + seite[0] * (170 + f * 60) + c * (60 - f * 40), g.y + 25 - f * 40, g.z + seite[1] * (170 + f * 60) + sn * (60 - f * 40)], ziel: [g.x - c * 30, g.y + 10 - f * 60, g.z - sn * 30] };
-  } else if (t < I.kopf) {       // 3. Hinter dir her, während du runterfliegst
+  } else if (t < I.kopf) {       // 4. Hinter dir her, während du runterfliegst
     const h = hAbs(p);
     kameraOverride = { pos: [p.x + 150, h + 110, p.y + 170], ziel: [p.x - 20, h - 10, p.y] };
     if (t + dt >= I.kopf) heli.kamStart = kameraOverride.pos.slice();
-  } else {                       // 4. Kamera fliegt in deinen Kopf
+  } else {                       // 5. Kamera fliegt in deinen Kopf
     const f = weich((t - I.kopf) / (I.ende - I.kopf - 0.1)), von = heli && heli.kamStart || [p.x + 150, 110, p.y + 170];
     const auge = [p.x, hAbs(p) + AUGE, p.y], blick = [p.x + Math.cos(p.winkel) * 100, hAbs(p) + AUGE, p.y + Math.sin(p.winkel) * 100];
     kameraOverride = { pos: mischen(von, auge, f), ziel: mischen([p.x, hAbs(p), p.y], blick, f) };
@@ -9083,6 +9177,7 @@ function kabIntroFertig() {   // auch beim Überspringen: alle sind sicher gelan
     if (e.imHeli) { e.imHeli = false; const f = freieStelle(e.landX, e.landY, e.r || 12, bodenHoehe(e.landX, e.landY)); e.x = f.x; e.y = f.y; }
     if (e.superSprung) { e.x = e.superSprung.zx; e.y = e.superSprung.zy; e.superSprung = null; }
     e.sprungBlob = false; e.z = 0; e.vx = e.vy = e.vz = 0; e.winkel = 0; e.pitch = 0;
+    e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0; if (e.waffenModell) e.waffenModell.visible = true;
   }
   if (heli && heli.t < KAB_INTRO.kopf) heli.t = KAB_INTRO.kopf;   // Hubschrauber fliegt weg
   const rang = kab ? kab.rang : 0;
@@ -9093,11 +9188,17 @@ function kabIntroHud(cw, ch) {
   const balken = ch * 0.1 * weich(Math.min(t, I.ende - t) * 3);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, balken); ctx.fillRect(0, ch - balken, cw, balken);
   ctx.textAlign = 'center';
-  if (t < I.anflug) {
-    const a = Math.min(1, t * 2, (I.anflug - t) * 2); ctx.globalAlpha = Math.max(0, a);
+  if (t < I.rund) {
+    const a = Math.min(1, t * 2, (I.rund - t) * 2); ctx.globalAlpha = Math.max(0, a);
     textMitRand('🐟 KABELJAU RUN 🐟', cw / 2, ch * 0.3, Math.min(64, cw / 12), '#ffd166');
     textMitRand(`🚁 Die Fischerei-Wache fliegt zur ${ARENEN[karte].emoji} ${ARENEN[karte].name}`, cw / 2, ch * 0.3 + 50, 22, '#ffffff');
-    if (kab) textMitRand(`${RAENGE[kab.rang].emoji} ${RAENGE[kab.rang].name}`, cw / 2, ch * 0.3 + 84, 18, '#9af5b8');
+    if (kab) textMitRand(`${RAENGE[kab.rang].emoji} ${RAENGE[kab.rang].name}`, cw / 2, ch * 0.3 + 84, 18, '#ffd166');
+    ctx.globalAlpha = 1;
+  } else if (t < I.anflug) {
+    const k = t - I.rund;
+    if (k < 0.35) { ctx.fillStyle = `rgba(255,255,255,${1 - k / 0.35})`; ctx.fillRect(0, 0, cw, ch); }   // ✨ Teleport-Blitz
+    ctx.globalAlpha = Math.min(1, k * 2, (I.anflug - t) * 2);
+    textMitRand('🧤 Macht euch bereit …', cw / 2, ch * 0.1 + 40, Math.min(34, cw / 20), '#ffffff');
     ctx.globalAlpha = 1;
   } else if (t < I.kopf) {
     const a = Math.min(1, (t - I.anflug) * 3); ctx.globalAlpha = a;
