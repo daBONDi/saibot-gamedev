@@ -4464,6 +4464,7 @@ function introTeamWinken(team) {
   for (const e of kleckse) e.emote = e.team === team ? { art: 'winken', t0: zeit, versatz: e.nr * 0.6 } : null;
 }
 function introUpdate(dt) {
+  if (spielArt === 'kabeljau') { kabIntroUpdate(dt); return; }   // 🚁 Kabeljau Run hat sein eigenes Intro
   const vorher = introT;
   introT += dt; zeit += dt;
   const t = introT, p = spieler, [t1, t2, t3, t4] = INTRO_TEIL;
@@ -4491,6 +4492,7 @@ function introEnde() {
   kameraOverride = null; introSkip = false;
   for (const e of kleckse) { e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0; }
   zustand = 'spiel'; startCountdown = 3; letzteSek = 99; ton('piep');
+  if (spielArt === 'kabeljau') kabIntroFertig();
   for (const e of kleckse) if (!e.tot && lokalGesteuert(e)) boxRein(e, true);   // 📦 alle starten in ihrer Start-Box
 }
 
@@ -5616,7 +5618,7 @@ function sprungFliegen(e, dt) {
   e.sprungBlob = !s.box && f < SPRUNG_MENSCH;   // kurz vor dem Aufprall wieder ein Mensch (aus der Start-Box fliegt man als Mensch)
   if (warBlob && !e.sprungBlob) { spritzer(e.x, e.y, hAbs(e), e.team, 18, 220); if (e.spieler || Math.hypot(e.x - spieler.x, e.y - spieler.y) < 500) ton('plopp'); }
   e.x = s.sx + (s.zx - s.sx) * k; e.y = s.sy + (s.zy - s.sy) * k;
-  const hoch = s.h0 + (s.h1 - s.h0) * f + Math.sin(f * Math.PI) * (s.box ? 12 : SPRUNG_HOEHE);
+  const hoch = s.h0 + (s.h1 - s.h0) * f + Math.sin(f * Math.PI) * (s.bogen !== undefined ? s.bogen : s.box ? 12 : SPRUNG_HOEHE);
   e.z = Math.max(0.01, hoch - bodenHoehe(e.x, e.y)); e.vx = e.vy = e.vz = 0;
   if (f >= 1) {   // gelandet!
     e.superSprung = null; e.sprungBlob = false; e.z = 0; e.landT = 0.25;
@@ -6565,6 +6567,7 @@ function welt3D(dt) {
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (leuchtturmLicht && karte === 'wrack') leuchtturmLicht.rotation.y += dt * 0.9;   // 🗼 das Licht vom Leuchtturm dreht sich
   if (meerKarte()) meerNebelUpdate();
+  if (heli && zustand !== 'intro') heliUpdate(dt);   // 🚁 fliegt nach dem Absetzen weg
   if (meerKarte()) for (const t of wasserTexturen) { t.offset.x += dt * 0.02; t.offset.y = Math.sin(zeit * 0.5) * 0.05; }   // Wellen bewegen sich
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
   vulkanUpdate(dt);
@@ -6786,7 +6789,7 @@ function hud() {
   ctx.clearRect(0, 0, cw, ch);
   if (zustand === 'stadt') { stadtHud(cw, ch); return; }
   if (!spieler || zustand === 'menu') return;
-  if (zustand === 'intro') { introHud(cw, ch); return; }
+  if (zustand === 'intro') { if (spielArt === 'kabeljau') kabIntroHud(cw, ch); else introHud(cw, ch); return; }
   if (zustand === 'feier') { feierHud(cw, ch); return; }
   if (zustand === 'replay') { replayHud(cw, ch); return; }
   if (sandsturm()) {   // Sand vor den Augen
@@ -8761,6 +8764,8 @@ function kabeljauAufraeumen() {
   for (const e of kleckse) if (e.rettungsMesh) { wegUndEntsorgen(e.rettungsMesh); e.rettungsMesh = null; }
   for (const m of kabMeshes) wegUndEntsorgen(m);
   for (const k of kaviarKugeln) wegUndEntsorgen(k.mesh);
+  if (heli) { wegUndEntsorgen(heli.g); heli = null; }
+  for (const e of kleckse) e.imHeli = false;
   kabMeshes = []; kaviarKugeln = []; kab = null; spielArt = 'revier';
 }
 // ----- Start, Wellen, Ende -----
@@ -8782,10 +8787,10 @@ function kabeljauStarten() {
   for (const e of kleckse) e.spezialRest = SPEZIAL_ANZAHL;
   leihwaffenVerteilen();
   nurZeigen(null);
-  zustand = 'spiel'; startCountdown = 3;
+  zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;   // 🚁 erst kommt der Hubschrauber
+  kabIntroStarten();
   audioStart(); musikModusSetzen('spiel', spielSong('farbhafen')); ton('fanfare');
   zielRing.material.color.set(TEAMS[spieler.team].col);
-  highlightAnzeige.push({ emoji: '🌊', titel: 'WELLE 1', text: `Sammle ${wQuote(WELLEN[0])} Kaviarkugeln von den Bossfischen! (${RAENGE[rang].emoji} ${RAENGE[rang].name} · ${ARENEN[karte].emoji} ${ARENEN[karte].name})`, start: performance.now() / 1000 + 2.5 });
   mausFangen();
 }
 function fischSpawnen(art, gold = false) {
@@ -8934,6 +8939,172 @@ function kabeljauMinikarte(mx, my, mw, mh) {
   ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(kx, ky, 6, 0, 7); ctx.fill(); ctx.strokeStyle = '#1b1f3a'; ctx.lineWidth = 2; ctx.stroke();
   for (const k of kaviarKugeln) if (!k.traeger) { ctx.fillStyle = '#ff8a1f'; ctx.beginPath(); ctx.arc(mx + k.x / W * mw, my + k.y / H * mh, 3.5, 0, 7); ctx.fill(); }
   for (const f of kleckse) if (f.fisch && !f.tot && FISCH_ARTEN[f.fisch].boss) { ctx.fillStyle = '#ff3b3b'; ctx.fillRect(mx + f.x / W * mw - 3, my + f.y / H * mh - 3, 6, 6); }
+}
+
+// ================== 🚁 KABELJAU RUN – Intro: Der Hubschrauber bringt euch, ihr springt per Supersprung raus ==================
+const KAB_INTRO = { anflug: 3.6, sprung: [4.5, 4.9, 5.3], ich: 5.8, flug: 1.5, kopf: 7.6, ende: 9.4 };
+const HELI_SCHWEBE = 230;   // so hoch schwebt der Hubschrauber über der Insel
+let heli = null;            // { g, t, ax, ay, ah, bx, by, bh, w, abflugX, abflugY, rotorT }
+function baueHeli() {
+  const g = new THREE.Group(), ud = g.userData;
+  const rumpf = mat('#1f2944', { roughness: 0.4, metalness: 0.3 }), dunkel = mat('#151b30', { roughness: 0.6 }), gelb = mat('#e8ff3a', { roughness: 0.4, emissive: '#e8ff3a', emissiveIntensity: 0.15 });
+  const rot = mat('#c8102e', { roughness: 0.4 }), glas = new THREE.MeshStandardMaterial({ color: '#9fd8ff', transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.3, depthWrite: false });
+  // Laderaum: Boden, Dach, Rückwand – die Seiten sind offen (da springt ihr raus!)
+  g.add(klotz(dunkel, 124, 6, 72, -10, -3, 0), klotz(rumpf, 134, 10, 74, -10, 66, 0), klotz(rumpf, 8, 66, 74, -72, 33, 0));
+  for (const z of [-35, 35]) {
+    g.add(klotz(rumpf, 7, 66, 4, 24, 33, z), klotz(rumpf, 7, 66, 4, -68, 33, z));        // Türrahmen
+    g.add(klotz(gelb, 134, 5, 1.5, -10, 58, z * 1.07), klotz(gelb, 124, 4, 1.5, -10, 2, z * 1.07));   // Reflexstreifen
+    g.add(klotz(rot, 134, 2, 1.5, -10, 53, z * 1.07));
+    g.add(klotz(MAT_METALL, 70, 1.5, 1.5, -22, 50, z * 0.93));                            // Haltegriff an der Decke
+  }
+  // Cockpit vorne mit Glaskuppel – Dr. Papagei fliegt!
+  g.add(kugel(rumpf, 34, 52, 16, 0, 1.25, 0.7, 1.03), kugel(glas, 30, 58, 36, 0, 1.15, 0.85, 1.05));
+  g.add(klotz(gelb, 2, 4, 66, 92, 20, 0));
+  const pilot = baueDrPapagei(); pilot.scale.setScalar(0.75); pilot.position.set(58, 2, 0); g.add(pilot); ud.pilot = pilot;
+  // Suchscheinwerfer unter der Nase
+  g.add(kugel(MAT_METALL, 5, 82, -6, 0), kugel(mat('#fffbe0', { emissive: '#fffbe0', emissiveIntensity: 1.2 }), 3.5, 86, -7, 0));
+  // Motor, Mast und Hauptrotor
+  g.add(klotz(rumpf, 66, 16, 46, -22, 79, 0), zylinder(MAT_GRAU, 4, 5, 12, -10, 92, 0));
+  for (const z of [-23.2, 23.2]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshStandardMaterial({ map: einsatzWappenTex(), transparent: true })); w.position.set(-22, 79, z); if (z < 0) w.rotation.y = Math.PI; g.add(w); }
+  const rotor = new THREE.Group(); rotor.position.set(-10, 99, 0); g.add(rotor); ud.rotor = rotor;
+  rotor.add(kugel(MAT_GRAU, 6, 0, 0, 0, 1, 0.6, 1));
+  for (let i = 0; i < 4; i++) { const b = new THREE.Group(); b.rotation.y = i * Math.PI / 2; b.add(klotz(dunkel, 130, 1.6, 9, 67, 0, 0), klotz(gelb, 8, 1.8, 9.2, 128, 0, 0)); rotor.add(b); }
+  const scheibe = new THREE.Mesh(new THREE.CircleGeometry(134, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#c9cfe6', transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }));
+  scheibe.position.set(-10, 99, 0); g.add(scheibe);
+  // Heckausleger, Flossen und Heckrotor
+  g.add(zylinderX(rumpf, 9, 4, 130, -137, 50, 0), klotz(rumpf, 28, 36, 3, -198, 64, 0), klotz(rumpf, 16, 3, 44, -184, 50, 0));
+  for (const z of [-7.5, 7.5]) { const sch = new THREE.Mesh(new THREE.PlaneGeometry(48, 16), new THREE.MeshBasicMaterial({ map: einsatzSchriftTex() })); sch.position.set(-120, 52, z); if (z < 0) sch.rotation.y = Math.PI; g.add(sch); }
+  const heck = new THREE.Group(); heck.position.set(-200, 66, 5); g.add(heck); ud.heck = heck;
+  heck.add(klotz(MAT_GRAU, 3, 36, 1, 0, 0, 0), klotz(MAT_GRAU, 36, 3, 1, 0, 0, 0), kugel(MAT_GRAU, 2.5, 0, 0, 1));
+  // Kufen
+  for (const z of [-30, 30]) g.add(zylinderX(MAT_GRAU, 2.2, 2.2, 150, -10, -24, z), klotz(MAT_GRAU, 3, 20, 3, 28, -13, z), klotz(MAT_GRAU, 3, 20, 3, -48, -13, z));
+  // Blinklichter
+  ud.blink = mat('#ff2020', { emissive: '#ff2020', emissiveIntensity: 1 });
+  g.add(kugel(ud.blink, 3, -198, 84, 0), kugel(ud.blink, 2.5, -10, -7, 0));
+  g.add(kugel(mat('#20ff60', { emissive: '#20ff60' }), 2, 20, 2, 37), kugel(mat('#ff3030', { emissive: '#ff3030' }), 2, 20, 2, -37));
+  scene.add(g);
+  return g;
+}
+const HELI_PLAETZE = [[-52, -14], [-52, 14], [-22, -14], [-22, 14]];   // wo ihr im Laderaum steht (vorne/hinten, links/rechts)
+function heliPunkt(lx, lz) {   // Punkt im Hubschrauber ➜ Punkt auf der Karte
+  const c = Math.cos(heli.w), sn = Math.sin(heli.w), p = heli.g.position;
+  return { x: p.x + lx * c - lz * sn, y: p.z + lx * sn + lz * c };
+}
+function kabIntroStarten() {
+  if (heli) { wegUndEntsorgen(heli.g); heli = null; }
+  const bx = BASIS[0].x + 260, by = H / 2;
+  heli = { g: baueHeli(), t: 0, ax: W + 1700, ay: H / 2 + 650, ah: 560, bx, by, bh: HELI_SCHWEBE, w: Math.PI, rotorT: 0 };
+  heli.w = Math.atan2(by - heli.ay, bx - heli.ax);
+  kleckse.forEach((e, i) => {
+    e.landX = e.x + 70 + (i % 2) * 50; e.landY = e.y;   // da landet man später
+    e.heliPlatz = HELI_PLAETZE[(e.spieler ? 3 : [0, 1, 2][kleckse.filter(k => !k.spieler).indexOf(e)]) ?? i % 4];
+    e.imHeli = true; e.vx = e.vy = e.vz = 0;
+  });
+  heliUpdate(0);
+}
+function heliUpdate(dt) {
+  if (!heli) return;
+  const h = heli, g = h.g;
+  h.t += dt; h.rotorT += dt;
+  let x, y, hh, kipp = 0;
+  if (h.t < KAB_INTRO.anflug) {                     // Anflug übers Meer, wird langsamer
+    const f = h.t / KAB_INTRO.anflug, k = 1 - (1 - f) * (1 - f);
+    x = h.ax + (h.bx - h.ax) * k; y = h.ay + (h.by - h.ay) * k; hh = h.ah + (h.bh - h.ah) * k;
+    kipp = -0.22 * (1 - f) + 0.12 * Math.max(0, (f - 0.8) / 0.2);   // Nase runter beim Fliegen, zum Bremsen hoch
+    h.w += (Math.atan2(h.by - h.ay, h.bx - h.ax) - h.w) * Math.min(1, dt * 2);
+  } else if (h.t < KAB_INTRO.kopf) {                // schweben
+    x = h.bx; y = h.by; hh = h.bh + Math.sin(h.t * 2) * 4;
+    h.w += (Math.PI - h.w) * Math.min(1, dt * 1.5);   // dreht sich, damit die Türen zur Insel zeigen
+  } else {                                          // Abflug: nach vorne und nach oben weg
+    const s = h.t - KAB_INTRO.kopf;
+    x = h.bx + Math.cos(h.w) * 90 * s * s; y = h.by + Math.sin(h.w) * 90 * s * s; hh = h.bh + 60 * s + 25 * s * s; kipp = -Math.min(0.3, s * 0.2);
+  }
+  g.position.set(x, hh, y);
+  g.rotation.set(0, -h.w, kipp);
+  g.userData.rotor.rotation.y += dt * 32; g.userData.heck.rotation.z += dt * 45;
+  g.userData.blink.emissiveIntensity = (h.t * 1.5) % 1 < 0.25 ? 2 : 0.1;
+  if (g.userData.pilot.userData.vogel) g.userData.pilot.userData.vogel.rotation.y = Math.sin(h.t * 1.3) * 0.3;
+  // 🔊 Rotor: wapp-wapp-wapp (leiser, je weiter weg)
+  if (h.rotorT > 0.09 && audioStart()) {
+    h.rotorT = 0;
+    const d = kamera.position.distanceTo(g.position), laut = Math.min(0.5, 120 / Math.max(80, d)) * (zustand === 'intro' ? 1 : 0.6);
+    if (laut > 0.02) krach(160, 0.07, laut, ac.currentTime, sfxGain, 'lowpass');
+  }
+  // Wer noch drin ist, fliegt mit
+  for (const e of kleckse) if (e.imHeli) {
+    const q = heliPunkt(e.heliPlatz[0], e.heliPlatz[1]);
+    e.x = q.x; e.y = q.y; e.z = hh + 0.5 - bodenHoehe(q.x, q.y); e.winkel = h.w + Math.PI / 2; e.pitch = 0;
+  }
+  if (h.t > 16) { wegUndEntsorgen(g); heli = null; }
+}
+function heliSprung(e) {   // raus aus der Tür – per Supersprung auf die Insel!
+  if (!e.imHeli) return;
+  e.imHeli = false;
+  const f = freieStelle(e.landX, e.landY, e.r || 12, bodenHoehe(e.landX, e.landY));
+  e.superSprung = { sx: e.x, sy: e.y, h0: hAbs(e), zx: f.x, zy: f.y, h1: bodenHoehe(f.x, f.y), t: 0, dauer: KAB_INTRO.flug, vorT: 0, bogen: 110 };
+  e.sprungBlob = true;
+  spritzer(e.x, e.y, hAbs(e), e.team, 12, 180);
+  const rg = new THREE.RingGeometry(16, 22, 28); rg.rotateX(-Math.PI / 2);
+  const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: TEAMS[e.team].hell, transparent: true, depthWrite: false }));
+  ring.position.set(f.x, bodenHoehe(f.x, f.y) + 1.5, f.y); scene.add(ring); strahlen.push({ mesh: ring, t: KAB_INTRO.flug + 0.2 });
+  ton('sprung', e.spieler ? 1 : 0.6);
+}
+function kabIntroUpdate(dt) {
+  const vorher = introT;
+  introT += dt; zeit += dt;
+  const t = introT, p = spieler, I = KAB_INTRO;
+  heliUpdate(dt);
+  const bots = kleckse.filter(e => !e.spieler);
+  I.sprung.forEach((ts, i) => { if (vorher < ts && t >= ts && bots[i]) heliSprung(bots[i]); });
+  if (vorher < I.ich && t >= I.ich) heliSprung(p);
+  if (vorher < I.anflug && t >= I.anflug) { meldung('🦜 Dr. Papagei: „Wir sind da! Raus mit euch – SUPERSPRUNG!“'); ton('papageiPlapper'); }
+  for (const e of kleckse) if (e.superSprung) { sprungFliegen(e, dt); if (!e.superSprung) e.winkel = 0; }
+  const g = heli ? heli.g.position : new THREE.Vector3(BASIS[0].x, 200, H / 2);
+  if (t < I.anflug) {            // 1. Der Hubschrauber kommt übers Meer geflogen
+    const f = weich(t / I.anflug);
+    kameraOverride = { pos: [g.x + 120 - f * 60, g.y + 40 + f * 30, g.z + 330 - f * 60], ziel: [g.x - 30, g.y + 30, g.z] };
+  } else if (t < I.ich) {        // 2. Blick in die offene Tür – die anderen springen raus
+    const f = weich((t - I.anflug) / (I.ich - I.anflug)), c = Math.cos(heli.w), sn = Math.sin(heli.w);
+    const seite = [-sn, c];        // links aus der Tür raus (zur Kamera)
+    kameraOverride = { pos: [g.x + seite[0] * (170 + f * 60) + c * (60 - f * 40), g.y + 25 - f * 40, g.z + seite[1] * (170 + f * 60) + sn * (60 - f * 40)], ziel: [g.x - c * 30, g.y + 10 - f * 60, g.z - sn * 30] };
+  } else if (t < I.kopf) {       // 3. Hinter dir her, während du runterfliegst
+    const h = hAbs(p);
+    kameraOverride = { pos: [p.x + 150, h + 110, p.y + 170], ziel: [p.x - 20, h - 10, p.y] };
+    if (t + dt >= I.kopf) heli.kamStart = kameraOverride.pos.slice();
+  } else {                       // 4. Kamera fliegt in deinen Kopf
+    const f = weich((t - I.kopf) / (I.ende - I.kopf - 0.1)), von = heli && heli.kamStart || [p.x + 150, 110, p.y + 170];
+    const auge = [p.x, hAbs(p) + AUGE, p.y], blick = [p.x + Math.cos(p.winkel) * 100, hAbs(p) + AUGE, p.y + Math.sin(p.winkel) * 100];
+    kameraOverride = { pos: mischen(von, auge, f), ziel: mischen([p.x, hAbs(p), p.y], blick, f) };
+  }
+  if (t >= I.ende || introSkip) introEnde();
+}
+function kabIntroFertig() {   // auch beim Überspringen: alle sind sicher gelandet
+  for (const e of kleckse) {
+    if (e.imHeli) { e.imHeli = false; const f = freieStelle(e.landX, e.landY, e.r || 12, bodenHoehe(e.landX, e.landY)); e.x = f.x; e.y = f.y; }
+    if (e.superSprung) { e.x = e.superSprung.zx; e.y = e.superSprung.zy; e.superSprung = null; }
+    e.sprungBlob = false; e.z = 0; e.vx = e.vy = e.vz = 0; e.winkel = 0; e.pitch = 0;
+  }
+  if (heli && heli.t < KAB_INTRO.kopf) heli.t = KAB_INTRO.kopf;   // Hubschrauber fliegt weg
+  const rang = kab ? kab.rang : 0;
+  highlightAnzeige.push({ emoji: '🌊', titel: 'WELLE 1', text: `Sammle ${wQuote(WELLEN[0])} Kaviarkugeln von den Bossfischen! (${RAENGE[rang].emoji} ${RAENGE[rang].name} · ${ARENEN[karte].emoji} ${ARENEN[karte].name})`, start: performance.now() / 1000 + 0.3 });
+}
+function kabIntroHud(cw, ch) {
+  const t = introT, I = KAB_INTRO;
+  const balken = ch * 0.1 * weich(Math.min(t, I.ende - t) * 3);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, balken); ctx.fillRect(0, ch - balken, cw, balken);
+  ctx.textAlign = 'center';
+  if (t < I.anflug) {
+    const a = Math.min(1, t * 2, (I.anflug - t) * 2); ctx.globalAlpha = Math.max(0, a);
+    textMitRand('🐟 KABELJAU RUN 🐟', cw / 2, ch * 0.3, Math.min(64, cw / 12), '#ffd166');
+    textMitRand(`🚁 Die Fischerei-Wache fliegt zur ${ARENEN[karte].emoji} ${ARENEN[karte].name}`, cw / 2, ch * 0.3 + 50, 22, '#ffffff');
+    if (kab) textMitRand(`${RAENGE[kab.rang].emoji} ${RAENGE[kab.rang].name}`, cw / 2, ch * 0.3 + 84, 18, '#9af5b8');
+    ctx.globalAlpha = 1;
+  } else if (t < I.kopf) {
+    const a = Math.min(1, (t - I.anflug) * 3); ctx.globalAlpha = a;
+    textMitRand(t < I.ich ? '🚁 SUPERSPRUNG – LOS, LOS, LOS!' : '💨 Und jetzt DU!', cw / 2, ch * 0.2, Math.min(44, cw / 16), '#ffffff');
+    ctx.globalAlpha = 1;
+  }
+  ctx.font = '14px system-ui'; ctx.fillStyle = '#ffffffaa'; ctx.fillText('Leertaste / Klick = überspringen', cw / 2, ch - 12);
 }
 
 // ================== 🐟 KABELJAU RUN – Teil 2: Retten, Werfen, Leihwaffen, Ereignisse, Extra-Welle, Spezial 2× ==================
