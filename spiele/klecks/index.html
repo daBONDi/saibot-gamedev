@@ -46,6 +46,9 @@
   .fischZeile { display: flex; gap: 0.8rem; align-items: center; text-align: left; background: #ffffff12; border-radius: 0.8rem; padding: 0.3rem 0.6rem; margin: 0.3rem 0; font-size: 0.95rem; }
   .fischZeile canvas, #papageiBild { flex: none; position: static; inset: auto; width: 120px; height: 70px; }
   #papageiBild { width: 120px; height: 135px; }
+  #storyBild { flex: none; position: static; inset: auto; width: 120px; height: 135px; }
+  .storyLevel { display: flex; align-items: center; gap: 0.8rem; text-align: left; background: #ffffff14; border-radius: 12px; padding: 0.5rem 0.8rem; margin: 0.35rem 0; }
+  .storyLevel.zu { opacity: 0.45; } .storyLevel .em { font-size: 2rem; } .storyLevel .info { flex: 1; } .storyLevel small { display: block; opacity: 0.8; }
   #papageiKnoepfe { margin-top: 0.8rem; }
   #highlights h3 { margin: 0.8rem 0 0.3rem; color: #ffd166; }
   #highlights .highlight { background: #ffffff14; border-radius: 0.6rem; padding: 0.3rem 0.7rem; margin: 0.25rem auto; max-width: 34rem; font-size: 0.95rem; }
@@ -169,6 +172,22 @@
     <div class="fcBild"><canvas id="fc3d" width="1280" height="720"></canvas><canvas id="fcVideo" width="1280" height="720"></canvas></div>
     <div class="fcLeiste"><button class="klein" id="fcWeiter">⏭ Weiter</button><div class="fcFortschritt"><div id="fcBalken"></div></div><button class="klein" id="fcSkip">⏩ Überspringen</button></div>
     <p class="kleinText" style="margin:0.2rem 0 0">Leertaste = weiter · Esc = überspringen</p>
+  </div>
+</div>
+<div id="storySzene" class="overlay hidden">
+  <div class="box papageiBox">
+    <div class="papageiKopf"><canvas id="storyBild" width="160" height="180"></canvas>
+      <div><h1 id="storyName" style="font-size:1.6rem;margin:0"></h1><p class="sprechblase" id="storyText"></p></div></div>
+    <div id="storyKnoepfe" style="margin-top:0.6rem"></div>
+    <p class="kleinText" style="margin:0.3rem 0 0">Leertaste / Enter = weiter</p>
+  </div>
+</div>
+<div id="storyKarte" class="overlay hidden">
+  <div class="box papageiBox" style="max-width:720px">
+    <h1 style="margin:0">🔍 Wo ist Tini?</h1>
+    <p id="storyKapitel" class="kleinText" style="margin:0.2rem 0 0.6rem"></p>
+    <div id="storyLevels" style="overflow:auto;min-height:0"></div>
+    <button class="gross" id="storyZurueck" style="margin-top:0.6rem">🏙️ Zurück in die Stadt</button>
   </div>
 </div>
 <div id="papagei" class="overlay hidden">
@@ -560,7 +579,7 @@ function neuesKonto(name, haut, haar, frisur, figur = 'junge') {
     besitz: { waffe: ['spritzer'], hemd: ['tshirt'], schuhe: ['turnschuhe'], kopf: ['keine'] },
     an: { waffe: 'spritzer', hemd: 'tshirt', schuhe: 'turnschuhe', kopf: 'keine' },
     rekord: 0, runden: 0, siege: 0,
-    papageiJob: false, kabeljauRekord: 0, kabRang: 0, kabPunkte: 0, kabStats: { schichten: 0, siege: 0, kaviar: 0, rettungen: 0, bosse: 0, riesen: 0 }, abzeichen: [], kabKarte: 'auto' };
+    papageiJob: false, kabeljauRekord: 0, kabRang: 0, kabPunkte: 0, kabStats: { schichten: 0, siege: 0, kaviar: 0, rettungen: 0, bosse: 0, riesen: 0 }, abzeichen: [], kabKarte: 'auto', story: { intro: false, fertig: [] } };
 }
 // Falls gespeicherte Daten kaputt oder alt sind: alles Wichtige wieder richtig machen
 function kontoReparieren(k) {
@@ -577,6 +596,7 @@ function kontoReparieren(k) {
   for (const f of ['schichten', 'siege', 'kaviar', 'rettungen', 'bosse', 'riesen']) v.kabStats[f] = Math.max(0, Math.floor(Number(k.kabStats && k.kabStats[f]) || 0));
   v.abzeichen = Array.isArray(k.abzeichen) ? k.abzeichen.filter(a => typeof a === 'string').slice(0, 30) : [];
   v.kabKarte = ['auto', 'insel', 'wrack', 'piraten'].includes(k.kabKarte) ? k.kabKarte : 'auto';
+  v.story = { intro: !!(k.story && k.story.intro), fertig: Array.isArray(k.story && k.story.fertig) ? k.story.fertig.filter(a => typeof a === 'string').slice(0, 60) : [] };   // 🔍 Story-Modus
   for (const slot of Object.keys(SLOT_LISTE)) {
     const liste = SLOT_LISTE[slot];
     if (k.besitz && Array.isArray(k.besitz[slot])) for (const id of k.besitz[slot]) if (hat(liste, id) && !v.besitz[slot].includes(id)) v.besitz[slot].push(id);
@@ -7785,7 +7805,7 @@ function highlightsListe() {   // ⭐ Match-Highlights unter dem Ergebnis
 // ================== MENÜ, KONTO & SHOPS ==================
 const $ = id => document.getElementById(id);
 function nurZeigen(id) {
-  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl', 'papagei', 'farbcast']) $(o).classList.toggle('hidden', o !== id);
+  for (const o of ['konto', 'menu', 'shop', 'ende', 'pause', 'arenaWahl', 'papagei', 'farbcast', 'storySzene', 'storyKarte']) $(o).classList.toggle('hidden', o !== id);
   $('zurueck').classList.toggle('hidden', !['konto', 'menu', 'shop'].includes(id));
 }
 function knopf(inhalt, beiKlick, klasse) {   // Knopf bauen (Text immer mit textContent – sicher!)
@@ -10683,8 +10703,8 @@ function papageiTaste() {   // Leertaste / Enter / E: erst fertig sprechen lasse
 }
 function papageiZu() { papageiFertig(); papageiRedet = false; shopVonStadt = true; stadtBetreten(); }
 // Dr. Papagei als Bild (für das Gesprächsfenster)
-function papageiPortraet() {
-  const c = $('papageiBild'), x = c.getContext('2d'); x.clearRect(0, 0, 160, 180);
+function papageiPortraet(c = $('papageiBild')) {
+  const x = c.getContext('2d'); x.clearRect(0, 0, 160, 180);
   const kreis = (px, py, r, f, sx = 1, sy = 1) => { x.save(); x.translate(px, py); x.scale(sx, sy); x.fillStyle = f; x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill(); x.restore(); };
   x.fillStyle = '#e63946'; x.fillRect(42, 150, 12, 30); x.fillStyle = '#3b6fd8'; x.fillRect(54, 150, 12, 30); x.fillStyle = '#ffd21f'; x.fillRect(66, 150, 12, 30);   // Schwanz
   kreis(80, 125, 40, '#2fb84a', 1, 1.15);                     // Körper
