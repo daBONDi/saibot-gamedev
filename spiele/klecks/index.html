@@ -9691,7 +9691,7 @@ function baueRettungsblase(team) {   // 🛟 eigentlich ein Rettungsring (Name b
     au.add(kugel(mat('#ffffff', { roughness: 0.2 }), 3.4, 0, 0, 0));
     const pu = new THREE.Group(); au.add(pu); ud.pupillen.push(pu);
     pu.add(kugel(mat('#111111'), 1.8, 2.3, 0.3, 0), kugel(mat('#ffffff'), 0.6, 3.6, 1.1, -0.4));
-    const lid = kugel(mat(TEAMS[team].col, { roughness: 0.5 }), 3.6, 0, 0, 0, 1, 0.15, 1); lid.position.y = 3.2; au.add(lid); ud.lider.push(lid);
+    const lid = kugel(mat(TEAMS[team].hell, { roughness: 0.5 }), 3.6, 0, 0, 0); lid.visible = false; au.add(lid); ud.lider.push(lid);   // Augenlid (nur beim Blinzeln zu sehen)
     const braue = klotz(mat('#1b1f3a'), 0.8, 0.8, 3.6, 1.6, 4.4, 0); braue.rotation.x = z * 0.45; au.add(braue);   // traurige Augenbrauen
   }
   const rg = new THREE.RingGeometry(21, 25, 32, 1, 0, Math.PI * 2);
@@ -9760,7 +9760,7 @@ function rettungsUpdate(e, dt) {   // erwischte Spieler schweben als Blase – d
   const blick = bewegt > 0.3 ? 0 : Math.sin(zeit * 0.9 + e.nr) * 0.6;
   ud.pupillen.forEach(pu => { pu.rotation.y = blick; pu.rotation.z = bewegt > 0.3 ? 0.1 : -0.25; });
   const zu = ((zeit + e.nr * 0.9) % 3.4) < 0.14;
-  ud.lider.forEach(l => { l.scale.y = zu ? 1 : 0.15; l.position.y = zu ? 0 : 3.2; });
+  ud.lider.forEach(l => { l.visible = zu; });
   ud.augen.position.y = 4.5 + ruck * 1.2 * bewegt;
   const f = Math.min(1, (e.rettungHP || 0) / RETTUNG_HP);
   ud.ring.geometry.dispose(); ud.ring.geometry = new THREE.RingGeometry(21, 25, 32, 1, 0, Math.max(0.01, Math.PI * 2 * f));
