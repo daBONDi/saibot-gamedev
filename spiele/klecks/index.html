@@ -701,9 +701,14 @@ ARENEN.piraten = { name: 'Pirateninsel', emoji: '🏴‍☠️', wandH: 50, nurK
   waende: spiegel([[450, 250, 60, 60, false], [450, 690, 60, 60, false], [640, 230, 50, 50, false], [640, 720, 50, 50, false], [330, 160, 160, 24, false], [330, 816, 160, 24, false],
                    [1200, 190, 50, 50, false], [1200, 760, 50, 50, false], [910, 440, 60, 120, false]]),
   thema: { boden: '#e6d2a0', linie: '#d6c08a', wand: '#6b4a2e', himmel: '#ffc8a0', draussen: '#2a7fb8', muster: 'sand', wandMuster: 'gras' } };
+// 🧪 Dr. Papageis Geheimlabor (nur im Story-Modus): Aquarien, Computer, Förderbänder, in der Mitte die Glasröhre
+ARENEN.labor = { name: 'Geheimlabor', emoji: '🧪', wandH: 60, nurStory: true, spezial: '🧪 Dr. Papageis geheimes Labor unter der Fischerei',
+  zonen: [{ art: 'band', x: 600, y: 240, w: 200, h: 44, dx: 110 }, { art: 'band', x: 800, y: 716, w: 200, h: 44, dx: -110 }],
+  waende: spiegel([[280, 180, 40, 220], [280, 600, 40, 220], [500, 110, 160, 36], [500, 854, 160, 36], [560, 440, 40, 120], [440, 350, 60, 60], [440, 590, 60, 60]]),
+  thema: { boden: '#c9d2e3', linie: '#b3bdd2', wand: '#4a5068', himmel: '#1a1830', draussen: '#2a2f45', muster: 'fliesen' } };
 const KABELJAU_KARTEN = ['insel', 'wrack', 'piraten'];
 function meerKarte(k = karte) { return !!(ARENEN[k] && ARENEN[k].nurKabeljau); }
-const REVIER_ARENEN = Object.keys(ARENEN).filter(id => !ARENEN[id].nurKabeljau);   // die Arenen für die Farbschlacht
+const REVIER_ARENEN = Object.keys(ARENEN).filter(id => !ARENEN[id].nurKabeljau && !ARENEN[id].nurStory);   // die Arenen für die Farbschlacht
 // Lava-Stellen jeder Arena (dort kann man nicht malen – und es tut weh!)
 for (const a of Object.values(ARENEN)) a.lava = (a.zonen || []).filter(z => z.art === 'lava' || z.art === 'meer');   // Meer wirkt wie Lava: reinfallen = erwischt
 const KEINE_LAVA = [];
@@ -730,6 +735,7 @@ const STUFEN_DATEN = {
   vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
   bahnhof:   [[600, 120, 140, 300, 28], [640, 420, 70, 70, 28, 'n'], [600, 580, 140, 300, 28], [640, 510, 70, 70, 28, 's']],   // Bahnsteige mit Rampen zum Übergang
   wrack:     [[760, 380, 340, 240, 42, null, false], [690, 460, 70, 80, 42, 'o', false]],   // 🚢 das Deck vom Wrack + eine Planke als Rampe
+  labor:     [[700, 420, 200, 160, 40, null, false], [770, 350, 60, 70, 40, 's', false], [770, 580, 60, 70, 40, 'n', false]],   // 🧪 Podest mit der Glasröhre
   piraten:   [[690, 410, 220, 180, 45, null, false], [620, 470, 70, 60, 45, 'o', false], [770, 340, 60, 70, 45, 's', false], [770, 590, 60, 70, 45, 'n', false]],   // 💀 Totenkopf-Felsen (Anhöhe)
   insel:     [[700, 420, 200, 160, 40, null, false], [770, 350, 60, 70, 40, 's', false], [770, 580, 60, 70, 40, 'n', false], [630, 470, 70, 60, 40, 'o', false], [900, 470, 70, 60, 40, 'w', false]],   // 🏝️ Anhöhe in der Mitte für den Kaviar-Behälter
 };
@@ -1613,7 +1619,7 @@ function karteLaden(name) {
   zaehler[0] = flaeche; zaehler[1] = zaehler[2] = 0;
   fctx.clearRect(0, 0, W, H); farbeGeaendert = true;
   for (const k in kartenGruppe) kartenGruppe[k].visible = k === name;
-  randGruppe.visible = !(ARENEN[name] && ARENEN[name].nurKabeljau);
+  randGruppe.visible = !(ARENEN[name] && (ARENEN[name].nurKabeljau || ARENEN[name].nurStory));
   const th = ARENEN[name] ? ARENEN[name].thema : STANDARD_THEMA;
   WAND_H = ARENEN[name] ? ARENEN[name].wandH : 80;
   bodenMalen(th); himmelSetzen(th, name);
@@ -2033,6 +2039,61 @@ const piratenFackeln = [];
   // kleine Felsen im Meer
   for (const [x, z, s] of [[-200, 300, 1], [-180, H - 280, 1.3], [W + 220, 160, 1.1], [W + 240, H - 200, 0.9]]) g.add(kugel(mat('#5a5048', { roughness: 1 }), 40 * s, x, 4, z, 1.2, 0.6, 1));
 })();
+// 🧪 Labor-Deko: Aquarien, Computer, Gedanken-Helm, Glasröhre, Warnlichter – und draußen die FEDERRAKETE
+let laborRakete = null, laborRoehre = null;
+const laborBlinker = [];
+(function laborDeko() {
+  const g = kartenGruppe.labor; if (!g) return;
+  const A = ARENEN.labor;
+  const metall = mat('#9aa3b8', { metalness: 0.75, roughness: 0.3 }), dunkel = mat('#2b2f45', { metalness: 0.5, roughness: 0.4 });
+  const glas = new THREE.MeshStandardMaterial({ color: '#bfe8ff', transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.2, depthWrite: false });
+  const wasser = new THREE.MeshStandardMaterial({ color: '#2a8fc8', transparent: true, opacity: 0.45, roughness: 0.1, emissive: '#0a4a7a', emissiveIntensity: 0.4, depthWrite: false });
+  for (const r of A.waende) {
+    const cx = r.x + r.w / 2, cz = r.y + r.h / 2;
+    if (r.h > r.w * 3) {   // 🐟 hohe schmale Wände = Aquarien mit Kabeljaus
+      g.add(klotz(wasser, r.w - 4, 52, r.h - 4, cx, 30, cz), klotz(glas, r.w + 1, 62, r.h + 1, cx, 31, cz), klotz(dunkel, r.w + 4, 6, r.h + 4, cx, 63, cz));
+      for (let i = 0; i < 4; i++) { const f = kugel(mat(['#7f9c7c', '#a9c2a4', '#5f7d60'][i % 3], { roughness: 0.5 }), 6, cx, 18 + (i % 2) * 22, r.y + 20 + i * (r.h - 40) / 3, 1, 0.7, 1.6); g.add(f); laborBlinker.push({ fisch: f, phase: i }); }
+    } else if (r.w > r.h * 3) {   // 💻 lange Wände = Computer-Tische mit Bildschirmen
+      g.add(klotz(metall, r.w, 30, r.h, cx, 15, cz));
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
+      x.fillStyle = '#062a12'; x.fillRect(0, 0, 256, 128); x.fillStyle = '#3dff7a'; x.font = 'bold 20px monospace';
+      x.fillText('FORMEL: SUPER-FARBE', 10, 30); x.fillText('Extraktion: 87 %', 10, 62); x.fillText('Ziel: DER MOND  🌙', 10, 94); x.fillText('Krah-Krah-123', 10, 120);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      for (const dx of [-r.w * 0.28, r.w * 0.28]) { const sc = new THREE.Mesh(new THREE.PlaneGeometry(48, 24), new THREE.MeshBasicMaterial({ map: t })); sc.position.set(cx + dx, 50, cz + (r.y < H / 2 ? r.h / 2 + 0.5 : -r.h / 2 - 0.5)); if (r.y > H / 2) sc.rotation.y = Math.PI; g.add(sc, klotz(dunkel, 52, 28, 3, cx + dx, 50, cz)); }
+    } else {   // ⚗️ Blöcke = Maschinen mit blinkendem Warnlicht
+      g.add(klotz(metall, r.w, 62, r.h, cx, 31, cz));
+      const l = kugel(mat('#ff2a2a', { emissive: '#ff2020', emissiveIntensity: 1 }), 5, cx, 68, cz); g.add(l); laborBlinker.push({ licht: l, phase: cx * 0.01 });
+    }
+  }
+  // 🧪 Die Glasröhre auf dem Podest (darin ist im Moment … niemand?) + Gedanken-Lese-Helm
+  const pod = A.stufen.find(s => s.hoehe === 40 && !s.rampe);
+  if (pod) {
+    const cx = pod.x + pod.w / 2, cz = pod.y + pod.h / 2, top = pod.hoehe;
+    const roehre = new THREE.Group(); roehre.position.set(cx, top, cz); g.add(roehre); laborRoehre = roehre;
+    roehre.add(zylinder(metall, 26, 28, 8, 0, 4, 0), zylinder(metall, 26, 26, 8, 0, 92, 0), new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 80, 24, 1, true), glas).translateY(48));
+    roehre.add(new THREE.Mesh(new THREE.CylinderGeometry(21, 21, 76, 24), new THREE.MeshStandardMaterial({ color: '#9affc8', transparent: true, opacity: 0.18, emissive: '#3aff9a', emissiveIntensity: 0.5, depthWrite: false })).translateY(46));
+    for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; roehre.add(zylinder(dunkel, 2.5, 2.5, 90, Math.cos(a) * 30, 45, Math.sin(a) * 30)); }
+    const helm = new THREE.Group(); helm.position.set(cx + 70, top, cz - 50); g.add(helm);   // 🧠 Gedanken-Lese-Helm auf einem Ständer
+    helm.add(zylinder(metall, 3, 4, 40, 0, 20, 0), new THREE.Mesh(new THREE.SphereGeometry(13, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), metall).translateY(44));
+    for (const z of [-1, 1]) { helm.add(zylinder(dunkel, 0.8, 0.8, 16, z * 6, 62, 0)); const l = kugel(mat('#3fd0ff', { emissive: '#3fd0ff', emissiveIntensity: 1.5 }), 2.4, z * 6, 71, 0); helm.add(l); laborBlinker.push({ licht: l, phase: z }); }
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; helm.add(kugel(mat(i % 2 ? '#ff5fa2' : '#ffd166', { emissive: i % 2 ? '#ff5fa2' : '#ffd166', emissiveIntensity: 1 }), 1.6, Math.cos(a) * 12, 46, Math.sin(a) * 12)); }
+  }
+  // 🚀 Draußen im Silo: die FEDERRAKETE (rot-grün wie ein Papagei, mit Federn als Flossen)
+  const rak = new THREE.Group(); rak.position.set(W + 320, 0, H / 2); g.add(rak); laborRakete = rak;
+  const gruen = mat('#2fb84a', { roughness: 0.4, metalness: 0.2 }), rot = mat('#e63946', { roughness: 0.4, metalness: 0.2 }), gelb = mat('#ffd21f', { roughness: 0.4 });
+  rak.add(zylinder(gruen, 48, 52, 260, 0, 160, 0), zylinder(rot, 49, 49, 30, 0, 230, 0), zylinder(rot, 53, 53, 20, 0, 40, 0));
+  const spitze = new THREE.Mesh(new THREE.ConeGeometry(48, 110, 24), gelb); spitze.position.y = 345; rak.add(spitze);
+  for (let i = 0; i < 3; i++) rak.add(kugel(mat('#bfe8ff', { emissive: '#5fb0ff', emissiveIntensity: 0.6, roughness: 0.1 }), 11, Math.cos(i * 2.1) * 47, 260, Math.sin(i * 2.1) * 47, 0.5, 1, 1));   // Bullaugen
+  for (let i = 0; i < 4; i++) {   // 🪶 Federn als Flossen
+    const fe = new THREE.Group(); fe.rotation.y = i * Math.PI / 2; rak.add(fe);
+    for (let j = 0; j < 3; j++) { const f = kugel([rot, gelb, mat('#3b6fd8')][j], 30, 70 + j * 6, 60 + j * 22, 0, 1.2, 0.35, 0.12); f.rotation.z = 0.5; fe.add(f); }
+  }
+  rak.add(zylinder(dunkel, 40, 30, 30, 0, 15, 0));
+  for (const [x, z] of [[-90, -90], [90, -90], [-90, 90], [90, 90]]) rak.add(klotz(metall, 6, 300, 6, x, 150, z));   // Startgerüst
+  for (let y = 40; y < 300; y += 60) for (const z of [-90, 90]) rak.add(klotz(metall, 186, 3, 3, 0, y, z));
+  // Rohre über dem Labor
+  for (const z of [H * 0.15, H * 0.85]) g.add(zylinderX(metall, 5, 5, W, W / 2, 110, z));
+})();
 const KULISSEN = {
   farbhafen: { oben: '#2f86e0', horizont: '#cdeaff', sonne: '#fff3c0', wolken: 0.55, nebel: [1300, 4300], boden: 'wasser',
     licht: ['#ffffff', '#7f8fb0', 1.6, '#ffffff'],
@@ -2067,6 +2128,8 @@ const KULISSEN = {
     sonneDir: [-0.3, 0.08, 0.7], meerNebel: '#ffc8b8',
     licht: ['#ffd0b8', '#5a4f8a', 1.35, '#ff9a6a'],
     berge: [[3200, 340, '#3a3550', null, 0.6, 15], [3600, 520, '#4a4060', null, 0.8, 16]] },
+  labor: { oben: '#07071a', horizont: '#2a2050', sonne: '#c8d4ff', wolken: 0.3, wolkenFarbe: '#3a3060', nebel: [900, 3200], boden: 'asphalt',   // 🌙 Nacht über der Fischerei
+    sonneDir: [0.4, 0.35, -0.6], licht: ['#d0d8ff', '#3a3a60', 1.15, '#b0c0ff'], berge: [[3200, 300, '#1e1c30', null, 0.5, 17]] },
   lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
     licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], stadt: [[0, Math.PI * 2, 1800, 70]] },
   stadt: { oben: '#4a96ee', horizont: '#e3f0ff', sonne: '#fff3c8', wolken: 0.5, nebel: [1800, 5200], boden: 'asphalt',
@@ -6788,6 +6851,10 @@ function welt3D(dt) {
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (leuchtturmLicht && karte === 'wrack') leuchtturmLicht.rotation.y += dt * 0.9;   // 🗼 das Licht vom Leuchtturm dreht sich
   if (meerKarte()) meerNebelUpdate();
+  if (karte === 'labor') for (const b of laborBlinker) {   // 🧪 Warnlichter blinken, Fische schwimmen im Aquarium
+    if (b.licht) b.licht.material.emissiveIntensity = Math.sin(zeit * 6 + b.phase) > 0 ? 2.2 : 0.2;
+    if (b.fisch) b.fisch.position.y = 20 + (b.phase % 2) * 20 + Math.sin(zeit * 1.5 + b.phase) * 5;
+  }
   if (karte === 'piraten') {   // ⛵ Piratenschiff schaukelt, 🔥 Fackeln flackern
     if (piratenSchiff) { piratenSchiff.position.y = Math.sin(zeit * 0.9) * 5; piratenSchiff.rotation.x = Math.sin(zeit * 0.7) * 0.04; piratenSchiff.rotation.z = Math.sin(zeit * 0.5) * 0.02; }
     piratenFackeln.forEach((f, i) => { const k = 1 + Math.sin(zeit * 13 + i * 2) * 0.15 + Math.sin(zeit * 21 + i) * 0.1; f.scale.set(3.2 * 0.8 * k, 3.2 * 1.5 * k, 3.2 * 0.8 * k); });
@@ -10567,9 +10634,51 @@ const STORY_LEVELS = [
            ['brummi', '„EIGENTUM VON DR. PAPAGEI – FISCHEREI-LABOR“. Und da steckt eine ROTE FEDER drin! 🪶'],
            ['brummi', 'Die roten Federn … die Vogel-Fußspuren … die Kabeljau-Falle … die Fischerei … DR. PAPAGEI WAR ES DIE GANZE ZEIT!'],
            ['papagei', '… Krah. Na gut. Ihr habt mich erwischt. Kommt doch in meine Fischerei. Dann … erkläre ich euch ALLES. Krah krah krah …'],
-           ['brummi', 'Das klingt nach einer Falle … Aber wir müssen Tini retten! 🎬 ENDE VON KAPITEL 2 – Kapitel 3 „Das geheime Labor“ kommt bald!']] },
+           ['brummi', 'Das klingt nach einer Falle … Aber wir müssen Tini retten! 🎬 ENDE VON KAPITEL 2 – weiter in Kapitel 3: „Das geheime Labor“!']] },
+  // ===== KAPITEL 3: Das geheime Labor =====
+  { id: 'k3l1', kap: 3, name: 'Einschleichen', emoji: '📹', karte: 'labor', art: 'schleichen', song: 'gewitter', lohn: 300,
+    text: 'Schleich dich bis zur Tür 🚪 ganz rechts! Wenn eine Kamera dich zu lange sieht, geht der Alarm los. Tauch in deiner Farbe ab (Shift) – dann bist du unsichtbar!',
+    kameras: [[480, 300, 0.6, 0.9, 0.7], [800, 160, 1.57, 0.8, 0.9], [800, 840, -1.57, 0.8, 0.8], [1080, 500, 3.14, 1.0, 0.6], [1260, 280, 2.4, 0.7, 1.1], [1260, 720, -2.4, 0.7, 1.0]],
+    ziel: [1530, 500],
+    vor: [['brummi', 'Das ist die Fischerei. Dr. Papagei hat uns „eingeladen“ … aber ich trau ihm kein bisschen!'],
+          ['brummi', 'Wir schleichen durch den Hintereingang ins Labor. Da hängen Überwachungs-Kameras! Wenn sie dich zu lange sehen, geht der ALARM los.'],
+          ['brummi', 'Trick: Mal den Boden an und tauch in deiner Farbe ab (Shift). Dann kann dich keine Kamera sehen! Die Tür ist ganz rechts. 🚪']],
+    nach: [['brummi', 'Wir sind drin! Wow … überall Aquarien voller Kabeljaus, Computer, ein komischer Helm …'],
+           ['brummi', 'Und da draußen, durchs Fenster … eine RIESIGE RAKETE! Mit FEDERN dran! 🚀🪶'],
+           ['papagei', 'KRAH KRAH! Willkommen in meinem Labor! Ich wusste, dass ihr durch den Hintereingang kommt. Meine Labor-Kabeljaus freuen sich schon auf euch!']] },
+  { id: 'k3l2', kap: 3, name: 'Die Labor-Kabeljaus', emoji: '🐟', karte: 'labor', art: 'fischjagd', song: 'kabeljauSturm', lohn: 300, ziel: 12,
+    text: 'Dr. Papagei lässt seine Labor-Kabeljaus los! Erwische 12 von ihnen.',
+    fisch: { t: 2.2, max: 7, arten: ['knirps', 'knirps', 'kabeljau', 'kabeljau', 'dicker', 'spucker'] },
+    vor: [['papagei', 'Meine Kabeljaus! LOS! Schnappt sie euch!'], ['brummi', 'Da kommen sie aus den Aquarien! Kämpf dich durch!']],
+    nach: [['brummi', 'Puh! Schau, auf dem Computer steht: „Formel-Extraktion: 87 %. Ziel: DER MOND.“ Der Mond?!'],
+           ['brummi', 'Und hier: „Für 100 % fehlen die PASSWORT-ZETTEL für den Gedanken-Helm.“ Die müssen irgendwo im Labor liegen. Wenn WIR sie zuerst finden, kann er die Formel nicht fertig auslesen!']] },
+  { id: 'k3l3', kap: 3, name: 'Die Passwort-Zettel', emoji: '🔑', karte: 'labor', art: 'sammeln', song: 'gewitter', lohn: 320, zeit: 100,
+    text: 'Finde die 4 Passwort-Zettel, bevor Dr. Papagei sie holt! Du hast 100 Sekunden. Achtung, Förderbänder!',
+    items: [[200, 120, '🔑', 'Passwort-Zettel 1: „KRAH“'], [1400, 120, '🔑', 'Passwort-Zettel 2: „KRAH“'], [200, 880, '🔑', 'Passwort-Zettel 3: „1-2“'], [1400, 880, '🔑', 'Passwort-Zettel 4: „3“']],
+    fisch: { t: 4, max: 5, arten: ['knirps', 'kabeljau', 'spucker'] },
+    vor: [['brummi', 'Schnell, die 4 Passwort-Zettel liegen in den Ecken vom Labor! Hol sie, bevor Dr. Papagei es tut!']],
+    nach: [['brummi', 'Alle 4 Zettel! Das Passwort heißt … „KRAH-KRAH-1-2-3“. Super geheim. 🙄'],
+           ['brummi', 'Damit kriegen wir auch die Tür zum Hauptraum auf. Ich glaube, da ist Tini!'],
+           ['papagei', 'Krah … ihr seid schlauer, als ich dachte. Na gut. Kommt rein in den Hauptraum. Die Tür ist offen. Krah krah …']] },
+  { id: 'k3l4', kap: 3, name: 'Die Falle', emoji: '🪤', karte: 'labor', art: 'ueberleben', song: 'finale', lohn: 340, zeit: 70, leben: 3,
+    text: 'Die Tür war eine FALLE! Überlebe 70 Sekunden gegen alle Kabeljaus aus dem Labor. Höchstens 3-mal erwischt werden!',
+    fisch: { t: 1.3, max: 10, arten: ['knirps', 'knirps', 'kabeljau', 'dicker', 'spucker', 'kugelfisch', 'flunder'] },
+    vor: [['papagei', 'KRAH KRAH KRAH! Hereingefallen! Die Tür ist jetzt ZU! Und ich mache ALLE Aquarien auf!'], ['brummi', 'Oh nein! Halte durch, ich versuche, die Tür von außen aufzuhacken!']],
+    nach: [['brummi', 'Tür ist offen! Du hast durchgehalten! Jetzt aber schnell in den Hauptraum!'],
+           ['papagei', 'Grrr! Na schön. Dann kämpft gegen meine drei STÄRKSTEN Experimente!']] },
+  { id: 'k3l5', kap: 3, name: 'BOSS: Die Labor-Experimente', emoji: '🧬', karte: 'labor', art: 'boss', song: 'kabeljauSturm', lohn: 500,
+    text: 'BOSSKAMPF! Drei Labor-Experimente auf einmal: Panzerdorsch, Ramm-Barsch und Wirbel-Wels! Besiege alle drei.',
+    boss: { arten: ['panzer', 'ramme', 'wels'], hp: 650, helfer: { t: 8, max: 3, arten: ['knirps'] } },
+    vor: [['papagei', 'Meine drei Super-Experimente! Panzerdorsch! Ramm-Barsch! Wirbel-Wels! ANGRIFF!'], ['brummi', 'Drei Bosse gleichzeitig?! Pass auf den Ramm-Barsch auf – und geh vom Wirbel-Wels weg, wenn er sich dreht!']],
+    nach: [['brummi', 'Alle drei besiegt! Und da … in der Glasröhre auf dem Podest … TINI!!!'],
+           ['tini', 'Brummi! Endlich! Schnell, lasst mich hier raus!'],
+           ['brummi', 'Ich öffne die Röhre … Moment. Tini … FLACKERT ja?! Das ist ein HOLOGRAMM! 😱'],
+           ['papagei', 'KRAH KRAH KRAH! REINGELEGT! Die echte Tini sitzt schon in meiner FEDERRAKETE! Und die Formel für die SUPER-FARBE habe ich auch!'],
+           ['papagei', 'Mit der Super-Farbe male ich den MOND an – in MEINEN Farben: Rot, Grün und Gelb! Dann bin ich der berühmteste Papagei des ganzen Universums!'],
+           ['papagei', '3 … 2 … 1 … FEDERRAKETE – START!!! 🚀 Tschüssiii, ihr Landratten! KRAH!'],
+           ['brummi', 'Die Rakete fliegt weg! Wir MÜSSEN hinterher – ins WELTALL! 🚀 ENDE VON KAPITEL 3 – Kapitel 4 „Duell im Weltraum“ kommt bald!']] },
 ];
-const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche', 2: 'Kapitel 2: Falsche Fährten' };
+const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche', 2: 'Kapitel 2: Falsche Fährten', 3: 'Kapitel 3: Das geheime Labor' };
 const STORY_INTRO = [
   ['brummi', 'Hey du! Gut, dass du da bist! Ich brauche ganz dringend deine Hilfe! 😰'],
   ['brummi', 'TINI IST VERSCHWUNDEN! Sie ist heute nicht zur Farbcast-Sendung gekommen. Das ist ihr noch NIE passiert!'],
@@ -10683,8 +10792,16 @@ function storyLevelStarten(L) {
   });
   if (L.art === 'kampf') for (const a of auf.filter(a => a.team === 1).slice(0, 3)) { const b = neuerKlecks(1, a.nr, aufZuExtra({ ...a, name: ['Kleckerich', 'Schmatz', 'Plörre'][a.nr] || a.name })); kleckse.push(b); }
   if (L.art === 'jagd') sto.drohne = drohneBauen(L);
+  if (L.art === 'schleichen') {
+    sto.kameras = L.kameras.map(([x, y, a0, spanne, tempo], i) => kameraBauen(x * KS, y * KS, a0, spanne, tempo, i));
+    const f = freieStelle(L.ziel[0] * KS, L.ziel[1] * KS, 14, 0); sto.ziel = { x: f.x, y: f.y, mesh: storyItemMesh('🚪') }; sto.entdeckt = 0;
+  }
   if (L.art === 'boss') {
-    const B = L.boss, f = neuerFisch(B.art, W - 360, H / 2); f.hp = f.maxHp = B.hp; f.name = FISCH_ARTEN[B.art].name; kleckse.push(f); sto.boss = f;
+    const B = L.boss, arten = B.arten || [B.art];
+    sto.bosse = arten.map((art, i) => {
+      const f = neuerFisch(art, W - 360 - (i % 2) * 120, H / 2 + (i - (arten.length - 1) / 2) * 220); f.hp = f.maxHp = B.hp; f.name = FISCH_ARTEN[art].name; kleckse.push(f); return f;
+    });
+    sto.boss = sto.bosse[0];
   }
   rest = L.zeit || 0; zeit = 0; pfiff10 = false; lobbySuche = null;
   matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null; aufnahme = { puffer: [], clips: [], tickT: 0 }; aufnahmeEv = [];
@@ -10699,7 +10816,46 @@ function storyAufraeumen() {
   if (!sto) return;
   for (const it of sto.items) if (it.mesh) wegUndEntsorgen(it.mesh);
   if (sto.drohne) wegUndEntsorgen(sto.drohne.mesh);
+  for (const k of sto.kameras || []) wegUndEntsorgen(k.mesh);
+  if (sto.ziel) wegUndEntsorgen(sto.ziel.mesh);
   sto = null;
+}
+// 📹 Überwachungs-Kameras: drehen sich hin und her; ein Lichtkegel auf dem Boden zeigt, wohin sie schauen
+const KAMERA_R = 290, KAMERA_W = 0.36;
+function kameraBauen(x, y, a0, spanne, tempo, i) {
+  const g = new THREE.Group(); g.position.set(x, bodenHoehe(x, y), y); scene.add(g);
+  const metall = mat('#9aa3b8', { metalness: 0.7, roughness: 0.3 });
+  g.add(zylinder(metall, 2.5, 3, 70, 0, 35, 0));
+  const kopf = new THREE.Group(); kopf.position.y = 72; g.add(kopf);
+  kopf.add(klotz(mat('#f2f4f8', { roughness: 0.4 }), 16, 9, 9, 6, 0, 0), zylinderX(mat('#1b1f3a'), 3.2, 3.2, 3, 15, 0, 0));
+  const lampe = kugel(mat('#ff2a2a', { emissive: '#ff2020', emissiveIntensity: 1 }), 1.4, 2, 5.5, 0); kopf.add(lampe);
+  const kegelMat = new THREE.MeshBasicMaterial({ color: '#fff27a', transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+  const kegel = new THREE.Mesh(new THREE.CircleGeometry(KAMERA_R, 24, -KAMERA_W, KAMERA_W * 2).rotateX(-Math.PI / 2), kegelMat); kegel.position.y = 1.5 - bodenHoehe(x, y) + bodenHoehe(x, y); g.add(kegel);
+  return { x, y, a0, spanne, tempo, phase: i * 1.7, a: a0, mesh: g, kopf, kegel, lampe };
+}
+function schleichUpdate(dt) {   // gibt true zurück, wenn der Alarm losging
+  let gesehen = false;
+  for (const k of sto.kameras) {
+    k.a = k.a0 + Math.sin(zeit * k.tempo + k.phase) * k.spanne;
+    k.kopf.rotation.y = -k.a; k.kegel.rotation.y = -k.a;
+    const dx = spieler.x - k.x, dy = spieler.y - k.y, d = Math.hypot(dx, dy);
+    let w = Math.atan2(dy, dx) - k.a; w = Math.atan2(Math.sin(w), Math.cos(w));
+    const sieht = !spieler.tot && d < KAMERA_R && Math.abs(w) < KAMERA_W && sicht(k.x, k.y, spieler.x, spieler.y) && !tauchtVersteckt(spieler);
+    k.kegel.material.color.set(sieht ? '#ff3b3b' : '#fff27a'); k.kegel.material.opacity = sieht ? 0.35 : 0.22;
+    k.lampe.material.emissiveIntensity = sieht ? (Math.sin(zeit * 20) > 0 ? 3 : 0.3) : 1;
+    if (sieht) gesehen = true;
+  }
+  if (sto.ziel) { sto.ziel.mesh.position.set(sto.ziel.x, bodenHoehe(sto.ziel.x, sto.ziel.y) + Math.sin(zeit * 3) * 3, sto.ziel.y); }
+  const vorher = sto.entdeckt;
+  sto.entdeckt = Math.max(0, Math.min(1, sto.entdeckt + (gesehen ? dt * 1.1 : -dt * 0.35)));
+  if (gesehen && vorher === 0) ton('piep');
+  if (gesehen && Math.floor(sto.entdeckt * 6) !== Math.floor(vorher * 6)) ton('piep');
+  if (sto.entdeckt >= 1) {
+    sto.ende = { ok: false, t: 2.8 }; ton('alarm');
+    highlightAnzeige.push({ emoji: '🚨', titel: 'ALARM!', text: 'Eine Kamera hat dich gesehen! Versteck dich in deiner Farbe (Shift) und probier es nochmal.', start: performance.now() / 1000 });
+    return true;
+  }
+  return false;
 }
 // 📦 Kurier-Drohne: fliegt vor dir weg, macht ab und zu Pause – triff sie!
 function drohneBauen(L) {
@@ -10795,7 +10951,12 @@ function storyUpdate(dt) {
     for (const p of puppen) if (p.tot && p.wiederT < 1e8) { p.wiederT = 1e9; ton('ding'); meldung(`🎯 Wach-Puppe erwischt! (${puppen.filter(q => q.tot).length}/${L.ziele.length})`); }
     geschafft = puppen.every(p => p.tot);
   } else if (L.art === 'kampf') geschafft = spieler.ko >= L.ziel;
-  else if (L.art === 'boss') geschafft = sto.boss && sto.boss.tot;
+  else if (L.art === 'boss') geschafft = sto.bosse ? sto.bosse.every(b => b.tot) : sto.boss && sto.boss.tot;
+  else if (L.art === 'fischjagd') geschafft = spieler.ko >= L.ziel;
+  else if (L.art === 'schleichen') {
+    if (schleichUpdate(dt)) return;
+    geschafft = !spieler.tot && Math.hypot(spieler.x - sto.ziel.x, spieler.y - sto.ziel.y) < 34;
+  }
   else if (L.art === 'jagd') { drohneUpdate(dt); geschafft = sto.drohne.hp <= 0; }
   else if (L.art === 'ueberleben') {
     geschafft = sto.t >= L.zeit;
@@ -10816,7 +10977,7 @@ function storyLevelEnde(ok) {
   weltLeeren(); kameraOverride = null;
   stadtBetreten();   // im Hintergrund wieder die Stadt
   if (ok) storySzene([...L.nach, ['brummi', `🪙 Du bekommst ${erstes ? L.lohn : Math.round(L.lohn / 4)} Münzen als Detektiv-Lohn!`]], storyKarteZeigen);
-  else storySzene([['brummi', 'Oh nein, die Zeit ist um! Aber gib nicht auf – Tini braucht uns! Versuch es gleich nochmal.']], storyKarteZeigen);
+  else storySzene([['brummi', L.art === 'schleichen' ? 'Oh nein, der Alarm! Wir mussten fliehen. Aber gib nicht auf – nächstes Mal tauchst du in deiner Farbe ab, wenn eine Kamera kommt!' : L.art === 'ueberleben' ? 'Oh nein, zu oft erwischt! Aber gib nicht auf – Tini braucht uns! Versuch es gleich nochmal.' : 'Oh nein, die Zeit ist um! Aber gib nicht auf – Tini braucht uns! Versuch es gleich nochmal.']], storyKarteZeigen);
 }
 function storyHud(cw, ch) {
   if (!sto) return;
@@ -10831,9 +10992,12 @@ function storyHud(cw, ch) {
   else if (L.art === 'kampf') { f = Math.min(1, spieler.ko / L.ziel); txt = `💥 Bande erwischt: ${spieler.ko} / ${L.ziel}`; }
   else if (L.art === 'jagd' && sto.drohne) { f = Math.max(0, sto.drohne.hp / sto.drohne.maxHp); txt = `📦 Drohne: ${Math.ceil(f * 100)} % – triff sie!`; }
   else if (L.art === 'ueberleben') { f = Math.min(1, sto.t / L.zeit); txt = `🧊 Durchhalten! ${'❤️'.repeat(Math.max(0, L.leben - spieler.tode))}${'🖤'.repeat(Math.min(L.leben, spieler.tode))}`; }
+  else if (L.art === 'fischjagd') { f = Math.min(1, spieler.ko / L.ziel); txt = `🐟 Labor-Kabeljaus erwischt: ${spieler.ko} / ${L.ziel}`; }
+  else if (L.art === 'schleichen') { f = Math.min(1, sto.entdeckt); txt = sto.entdeckt > 0.02 ? `🚨 ENTDECKT: ${Math.round(sto.entdeckt * 100)} % – versteck dich!` : '🤫 Unentdeckt – schleich zur Tür 🚪'; }
+  else if (L.art === 'boss' && sto.bosse && sto.bosse.length > 1) { const hp = sto.bosse.reduce((a, b) => a + Math.max(0, b.hp), 0), max = sto.bosse.reduce((a, b) => a + b.maxHp, 0); f = hp / max; txt = `🧬 Experimente übrig: ${sto.bosse.filter(b => !b.tot).length} / ${sto.bosse.length}`; }
   else if (L.art === 'boss' && sto.boss) { f = Math.max(0, sto.boss.hp / sto.boss.maxHp); txt = `👑 ${sto.boss.name}: ${Math.ceil(f * 100)} %`; }
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(bx, 44, bw, 18);
-  ctx.fillStyle = L.art === 'boss' || L.art === 'jagd' ? '#ff4d4d' : '#5be37d'; ctx.fillRect(bx, 44, bw * f, 18);
+  ctx.fillStyle = L.art === 'boss' || L.art === 'jagd' || L.art === 'schleichen' ? '#ff4d4d' : '#5be37d'; ctx.fillRect(bx, 44, bw * f, 18);
   ctx.textAlign = 'center'; ctx.font = 'bold 13px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(txt, cw / 2, 58);
   if (L.art === 'sammeln') {   // Pfeil-Hinweis zum nächsten Hinweis
     let n = null, nd = 1e9; for (const it of sto.items) { const d = Math.hypot(it.x - spieler.x, it.y - spieler.y); if (d < nd) { nd = d; n = it; } }
