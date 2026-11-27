@@ -8602,8 +8602,9 @@ function baueFisch(art) {
     }
   }
   g.scale.setScalar(A.groesse);
+  ud.basisY = k.position.y;
   if (A.boss) {   // Lebensbalken über dem Boss
-    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : 38); g.add(bar); ud.bar = bar;
+    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : art === 'rochen' ? 58 : 38); g.add(bar); ud.bar = bar;
     bar.add(new THREE.Mesh(new THREE.PlaneGeometry(34, 4.5), new THREE.MeshBasicMaterial({ color: '#1b1f3a', depthTest: false })));
     ud.barFill = new THREE.Mesh(new THREE.PlaneGeometry(32, 3), new THREE.MeshBasicMaterial({ color: '#ff4d4d', depthTest: false }));
     ud.barFill.position.z = 0.1; bar.add(ud.barFill);
@@ -8865,24 +8866,44 @@ function fischKi(f, dt) {
 function fischZeigen(e, dt) {
   const A = FISCH_ARTEN[e.fisch], g = e.gruppe, ud = g.userData;
   e.spawnT = Math.max(0, e.spawnT - dt); e.landT = Math.max(0, e.landT - dt);
-  if (e.tot) {   // erwischt: dreht sich, platzt und verschwindet
+  if (e.tot) {   // erwischt: hüpft hoch, dreht sich auf den Rücken, zappelt kurz und platzt
     const k = Math.min(1, e.totZeit / 0.6);
-    g.scale.setScalar(A.groesse * Math.max(0.01, 1 - k)); g.rotation.y += dt * 14; g.position.y = hAbs(e) + Math.sin(k * Math.PI) * 25;
+    if (ud.koerper) { const th = Math.min(Math.PI, k * 2.2 * Math.PI); ud.koerper.rotation.x = th; ud.koerper.rotation.z = Math.sin(zeit * 40) * 0.15 * (1 - k); ud.koerper.position.y = (ud.basisY || 0) + 12 * (1 - Math.cos(th)); }   // um die Bauchmitte drehen
+    if (ud.schwanz) ud.schwanz.rotation.y = Math.sin(zeit * 40) * 0.8;   // zappelt
+    const platz = k > 0.75 ? (k - 0.75) / 0.25 : 0;
+    g.scale.set(A.groesse * (1 + platz * 0.6), A.groesse * Math.max(0.01, 1 - platz), A.groesse * (1 + platz * 0.6));
+    g.position.y = hAbs(e) + Math.sin(Math.min(1, k * 1.4) * Math.PI) * 30;
     return;
   }
-  const v = Math.hypot(e.vx, e.vy);
+  const v = Math.hypot(e.vx, e.vy), laeuft = v > 10, ph = zeit + (e.x + e.y) * 0.01;
   e.lauf += v * dt * 0.12;
-  const hop = v > 10 && !e.sprung ? Math.abs(Math.sin(e.lauf)) * 4 : 0;
-  g.position.set(e.x, hAbs(e) + hop, e.y); g.rotation.y = -e.winkel; g.visible = true;
+  const hop = laeuft && !e.sprung && !e.rochenFlug ? Math.abs(Math.sin(e.lauf)) * 4 : 0;
+  // 🌊 Beim Auftauchen: in einem Bogen aus dem Wasser springen
+  const auftauch = e.spawnT > 0 ? 1 - e.spawnT / 0.45 : 1;
+  const sprungHoch = e.spawnT > 0 ? Math.sin(auftauch * Math.PI) * 28 : 0;
+  g.position.set(e.x, hAbs(e) + hop + sprungHoch, e.y); g.visible = true;
+  // Drehung: schaut in Laufrichtung; der Wirbel-Wels dreht sich als Kreisel
+  const kreisel = e.wirbel && e.wirbel.phase === 'dreh';
+  if (kreisel) g.rotation.y -= dt * 18; else g.rotation.y = -e.winkel + (laeuft ? Math.sin(e.lauf * 1.6) * 0.12 : Math.sin(ph * 0.8) * 0.06);   // watscheln
   let s = A.groesse;
-  if (e.spawnT > 0) s *= Math.min(1, (1 - e.spawnT / 0.45) * 1.3);
+  if (e.spawnT > 0) s *= Math.min(1, auftauch * 1.3);
   const q = e.landT > 0 ? Math.sin(e.landT / 0.3 * Math.PI) : 0;
-  const wackel = e.angriffT > 0 ? Math.sin(zeit * 45) * 0.08 : 0;
-  g.scale.set(s * (1 + q * 0.15), s * (1 - q * 0.25 + wackel), s * (1 + q * 0.15));
-  if (ud.schwanz) ud.schwanz.rotation.y = Math.sin(zeit * (v > 10 ? 14 : 4) + e.x * 0.01) * 0.5;
-  if (ud.beine) ud.beine.forEach((b, i) => { b.rotation.z = v > 10 ? Math.sin(e.lauf * 2 + i * Math.PI) * 0.7 : 0; b.scale.y = e.sprung ? 1.6 : 1; });
-  if (ud.maul) ud.maul.rotation.z = -(e.beissT > 0 ? 0.8 : 0.1 + Math.sin(zeit * 3) * 0.05);
-  if (ud.koerper) ud.koerper.rotation.z = e.angriffT > 0 ? 0.35 : e.sprung ? -0.3 : 0;   // holt aus
+  const wackel = e.angriffT > 0 || (e.wirbel && e.wirbel.phase === 'laden') ? Math.sin(zeit * 45) * 0.08 : 0;
+  const atmen = Math.sin(ph * 2.4) * 0.025;                       // atmet ein und aus
+  const getroffen = e.letzterTreffer < 0.15 ? 1 - e.letzterTreffer / 0.15 : 0;   // zuckt bei Treffern zusammen
+  g.scale.set(s * (1 + q * 0.15 + getroffen * 0.1), s * (1 - q * 0.25 + wackel + atmen - getroffen * 0.12), s * (1 + q * 0.15 + getroffen * 0.1));
+  if (ud.schwanz) ud.schwanz.rotation.y = Math.sin(zeit * (laeuft ? 14 : 4) + e.x * 0.01) * (laeuft ? 0.65 : 0.35) + (kreisel ? 0.6 : 0);
+  if (ud.beine) ud.beine.forEach((b, i) => { b.rotation.z = laeuft ? Math.sin(e.lauf * 2 + i * Math.PI) * 0.8 : 0; b.scale.y = e.sprung ? 1.6 : 1; });
+  if (ud.flossen) ud.flossen.forEach(f => { f.rotation.x = f.userData.s * (0.6 + Math.sin(zeit * (laeuft ? 16 : 5) + f.userData.s) * (laeuft ? 0.55 : 0.2)); });   // Brustflossen paddeln
+  if (ud.maul) ud.maul.rotation.z = -(e.beissT > 0 ? 0.8 : 0.1 + Math.max(0, Math.sin(ph * 1.7)) * 0.18);   // schnappt nach Luft
+  if (ud.koerper) {
+    ud.koerper.rotation.z = e.angriffT > 0 ? 0.35 : e.sprung ? -0.3 : e.spawnT > 0 ? -0.6 + auftauch * 0.6 : getroffen * -0.25;   // holt aus / taucht auf / wird zurückgeworfen
+    ud.koerper.rotation.x = laeuft ? Math.sin(e.lauf * 2) * 0.08 : 0;   // wackelt beim Laufen von Seite zu Seite
+    ud.koerper.position.x = e.beissT > 0 ? Math.sin(e.beissT / 0.25 * Math.PI) * 5 : 0;   // schnappt nach vorne
+  }
+  if (ud.barteln) ud.barteln.forEach((b, i) => { b.rotation.x = b.userData.z * (1.1 + Math.sin(zeit * (kreisel ? 20 : 3) + i) * (kreisel ? 0.5 : 0.15)); b.rotation.z = kreisel ? -1.5 : -0.8 + Math.sin(zeit * 2 + i) * 0.1; });
+  if (ud.fluegel) { const fl = e.rochenFlug && e.rochenFlug.phase === 'flug'; ud.fluegel.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * Math.sin(zeit * (fl ? 14 : 5)) * (fl ? 0.55 : 0.3); }); if (ud.koerper) ud.koerper.position.y = 34 + Math.sin(zeit * 2.5) * 4; }
+  if (ud.backen) { const p = e.beissT > 0 ? Math.sin(e.beissT / 0.7 * Math.PI) : 0; ud.backen.forEach(b => b.scale.setScalar(1 + p * 0.9 + Math.sin(ph * 3) * 0.05)); }
   if (e.fisch === 'kugelfisch') {   // 🎈 aufblasen und rot blinken
     const p = e.puste != null ? Math.min(1, e.puste / 2.4) : 0;
     ud.koerper.scale.setScalar(1 + p * 0.9 + (p > 0 ? Math.sin(zeit * (10 + p * 30)) * 0.04 : 0));
@@ -10273,7 +10294,7 @@ let papageiRedet = false;
 // ----- Das Gespräch mit Dr. Papagei (mit Tutorial) -----
 function fischBild(art, w = 120, h = 70) {   // kleines Bild von einem Fisch für das Tutorial
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
-  const A = FISCH_ARTEN[art], s = { knirps: 0.6, kabeljau: 0.85, dicker: 1.15, panzer: 0.9, spucker: 0.85, flunder: 0.9, riese: 1.15, stelze: 0.62, ramme: 0.72, kugelfisch: 0.85 }[art];
+  const A = FISCH_ARTEN[art], s = { knirps: 0.6, kabeljau: 0.85, dicker: 1.15, panzer: 0.9, spucker: 0.85, flunder: 0.9, riese: 1.15, stelze: 0.62, ramme: 0.72, kugelfisch: 0.85, wels: 0.75, rochen: 0.85, blase: 0.8 }[art];
   x.translate(w / 2, h / 2 + 4); x.scale(s, s);
   const tinte = TEAMS[1].col;
   if (art === 'kugelfisch') {   // rund mit Stacheln
@@ -10283,6 +10304,15 @@ function fischBild(art, w = 120, h = 70) {   // kleines Bild von einem Fisch fü
     for (const py of [-10]) for (const px of [8, 22]) { x.fillStyle = '#fff'; x.beginPath(); x.arc(px, py, 8, 0, 7); x.fill(); x.fillStyle = '#111'; x.beginPath(); x.arc(px + 2, py, 4, 0, 7); x.fill(); }
     x.fillStyle = '#e07a5f'; x.beginPath(); x.arc(28, 8, 5, 0, 7); x.fill();
     x.fillStyle = '#ff3b3b'; x.beginPath(); x.arc(-4, -34, 5, 0, 7); x.fill();
+    return c;
+  }
+  if (art === 'rochen') {   // flacher Rochen mit langem Schwanz und Bomben
+    x.fillStyle = A.farbe; x.beginPath(); x.moveTo(40, 0); x.quadraticCurveTo(0, -38, -30, 0); x.quadraticCurveTo(0, 38, 40, 0); x.fill();
+    x.strokeStyle = A.farbe; x.lineWidth = 4; x.beginPath(); x.moveTo(-28, 0); x.lineTo(-62, 4); x.stroke();
+    x.fillStyle = '#ffc93c'; x.beginPath(); x.moveTo(-62, 0); x.lineTo(-70, 4); x.lineTo(-62, 8); x.fill();
+    x.fillStyle = tinte; for (const py of [-14, 14]) { x.beginPath(); x.arc(4, py, 5, 0, 7); x.fill(); }
+    for (const px of [-6, 4, 14]) { x.beginPath(); x.arc(px, 22, 4.5, 0, 7); x.fill(); }
+    for (const py of [-5, 5]) { x.fillStyle = '#fff'; x.beginPath(); x.arc(28, py, 4.5, 0, 7); x.fill(); x.fillStyle = '#111'; x.beginPath(); x.arc(30, py, 2.2, 0, 7); x.fill(); }
     return c;
   }
   if (art === 'stelze') {   // lange Stelzen unter dem Fisch
@@ -10315,6 +10345,8 @@ function fischBild(art, w = 120, h = 70) {   // kleines Bild von einem Fisch fü
     x.fillStyle = '#ffb627'; x.beginPath(); x.arc(10, -20, 16, Math.PI, 0); x.fill(); x.fillRect(-10, -22, 40, 4);
     x.fillStyle = '#ff8a1f'; x.beginPath(); x.arc(10, -38, 4, 0, 7); x.fill();
   }
+  if (art === 'wels') { x.strokeStyle = '#2b2a22'; x.lineWidth = 2.5; for (const [ey, l] of [[4, 34], [10, 26], [-2, 22]]) { x.beginPath(); x.moveTo(40, 6); x.quadraticCurveTo(52, ey + 10, 44 + l * 0.6, ey + l * 0.7); x.stroke(); } x.fillStyle = '#ffd166'; for (const px of [-12, 0, 12]) { x.beginPath(); x.arc(px, -22, 3, 0, 7); x.fill(); } }
+  if (art === 'blase') { x.fillStyle = A.bauch; x.beginPath(); x.arc(30, 6, 10, 0, 7); x.fill(); x.strokeStyle = '#ff5fa2'; x.lineWidth = 3; x.beginPath(); x.arc(58, 4, 8, 0, 7); x.stroke(); x.strokeStyle = '#9fd8ff'; x.lineWidth = 2; for (const [px, py, rr] of [[70, -18, 9], [56, -30, 6], [80, -34, 4]]) { x.beginPath(); x.arc(px, py, rr, 0, 7); x.stroke(); } }
   if (art === 'spucker') { x.fillStyle = '#4a4f73'; x.fillRect(40, -4, 22, 10); x.fillStyle = tinte; x.fillRect(58, -6, 5, 14); x.fillStyle = '#9fd8ff'; x.fillRect(-14, -36, 14, 16); }
   return c;
 }
@@ -10325,6 +10357,7 @@ const PAPAGEI_SEITEN = [
   { titel: 'Die normalen Kabeljaus', fische: ['knirps', 'kabeljau', 'dicker'], text: () => 'Super! Dann zeig ich dir erst mal, wer da so rumschwimmt. Diese drei kommen ganz oft:' },
   { titel: 'Die Bossfische', fische: ['panzer', 'spucker', 'flunder'], text: () => 'Krah! Und dann gibt es noch die BOSSFISCHE. Die sind stark – aber nur sie haben Kaviar dabei!' },
   { titel: '🆕 Noch mehr Bossfische', fische: ['stelze', 'ramme', 'kugelfisch'], text: () => 'Krah! Und seit Neuestem tauchen noch DREI andere Bossfische auf. Die sind ganz schön gemein:' },
+  { titel: '🆕🆕 Brandneue Bossfische', fische: ['wels', 'rochen', 'blase'], text: () => 'Krah, krah! Und gerade eben wurden noch DREI neue gesichtet: einer dreht sich wie ein Kreisel, einer FLIEGT, und einer pustet Blasen, die dich verfolgen!' },
   { titel: '🟠 Kaviarkugeln', kaviar: true, text: () => 'Wenn du einen Bossfisch erwischst, lässt er 3 Kaviarkugeln fallen. Lauf drüber, dann trägst du eine. Bring sie zum STAHLBEHÄLTER ⚙️ oben auf der Anhöhe in der Mitte – oder halte E, ziel genau aufs Gitter (der Ring wird grün) und WIRF sie rein! Mit Kugel bist du etwas langsamer.' },
   { titel: '🫧 Retten', text: () => 'Krah, ganz wichtig: Wenn dich ein Fisch erwischt, wirst du zu einem RETTUNGSRING 🛟. Deine Freunde müssen den Ring mit Tinte anmalen – dann bist du wieder da! Als Ring kannst du mit WASD langsam schwimmen und sogar Kaviar einsammeln – abgeben kannst du ihn aber erst, wenn du gerettet bist. Sind alle gleichzeitig Blasen, ist die Schicht vorbei!' },
   { titel: '🎲 Leihwaffen & ⚡ Spezial', text: () => `In jeder Welle leihe ich dir eine ZUFÄLLIGE Waffe – lass dich überraschen! Dein Spezial (Q) musst du nicht aufladen, aber du hast es nur ${SPEZIAL_ANZAHL}-mal pro Schicht. Spar es für Notfälle!` },
@@ -10383,9 +10416,9 @@ function papageiZeigen() {
     return;
   }
   if (papageiSeite === -3) {   // 🆕 neue Bosse
-    papageiSagt('Krah! Pass auf, diese drei Bossfische sind neu in der Bucht! 🦜');
+    papageiSagt('Krah! Pass auf, diese Bossfische sind neu in der Bucht – die unteren drei sind GANZ neu! 🦜');
     titel('🆕 Neue Bossfische');
-    for (const art of ['stelze', 'ramme', 'kugelfisch']) {
+    for (const art of ['stelze', 'ramme', 'kugelfisch', 'wels', 'rochen', 'blase']) {
       const A = FISCH_ARTEN[art], z = document.createElement('div'); z.className = 'fischZeile';
       const t = document.createElement('div'); const b = document.createElement('b'); b.textContent = `${A.emoji} ${A.name}`;
       const sp = document.createElement('span'); sp.textContent = ` – ${A.info} (${A.angriff}, ${A.hp} Leben)`;
