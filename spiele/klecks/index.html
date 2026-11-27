@@ -18,7 +18,9 @@
   p { color: #c9c3ff; margin: 0.4rem 0; }
   .fcOverlay { background: #05040ee6; }
   .fcRahmen { width: min(96vw, calc((100vh - 5rem) * 16 / 9)); text-align: center; }
-  #fcVideo { position: static; inset: auto; width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border-radius: 12px; box-shadow: 0 0 40px #a347ff66; background: #000; }
+  .fcBild { position: relative; width: 100%; }
+  #fc3d { position: static; inset: auto; width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border-radius: 12px; box-shadow: 0 0 40px #a347ff66; background: #000; }
+  #fcVideo { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 12px; background: transparent; pointer-events: none; }
   .fcLeiste { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.4rem; }
   .fcFortschritt { flex: 1; height: 8px; background: #ffffff33; border-radius: 4px; overflow: hidden; }
   #fcBalken { height: 100%; width: 0; background: #ff3b3b; }
@@ -164,7 +166,7 @@
 
 <div id="farbcast" class="overlay hidden fcOverlay">
   <div class="fcRahmen">
-    <canvas id="fcVideo" width="1280" height="720"></canvas>
+    <div class="fcBild"><canvas id="fc3d" width="1280" height="720"></canvas><canvas id="fcVideo" width="1280" height="720"></canvas></div>
     <div class="fcLeiste"><button class="klein" id="fcWeiter">⏭ Weiter</button><div class="fcFortschritt"><div id="fcBalken"></div></div><button class="klein" id="fcSkip">⏩ Überspringen</button></div>
     <p class="kleinText" style="margin:0.2rem 0 0">Leertaste = weiter · Esc = überspringen</p>
   </div>
@@ -450,6 +452,7 @@ const HEMDEN = {
   hoodie:   { name: 'Kapuzenpulli',  emoji: '🟢', preis: 350, info: '❤️ Heilt 25% schneller', bonus: { heilen: 0.25 }, farbe: '#2a9d8f', kapuze: true, aermel: 'lang' },
   jacke:    { name: 'Lederjacke',    emoji: '🧥', preis: 500, info: '🛡️ 12% weniger Schaden', bonus: { schutz: 0.12 }, farbe: '#26272b', jacke: true, aermel: 'lang' },
   tanktop:  { name: 'Tanktop',       emoji: '🎽', preis: 120, info: '🏃 Laufen +5%', bonus: { tempo: 0.05 }, farbe: '#ff5fa2', aermel: 'keine' },
+  tiniPulli: { name: 'Tinis Pulli', emoji: '🎧', preis: 0, info: '', bonus: {}, farbe: '#a347ff', streifen: '#ff5fa2', aermel: 'lang', versteckt: true },   // nur für Tini im Farbcast
   pulli:    { name: 'Strickpulli',   emoji: '🧶', preis: 220, info: '❤️ Heilt 20% schneller', bonus: { heilen: 0.2 }, farbe: '#b5522b', streifen: '#f3e7cf', aermel: 'lang' },
   regenjacke: { name: 'Regenjacke',  emoji: '☔', preis: 280, info: '🌊 Abtauchen 10% schneller', bonus: { tauchen: 0.1 }, farbe: '#ffd21f', kapuze: true, tasche: '#c9a400', aermel: 'lang' },
   sterne:   { name: 'Sternenshirt',  emoji: '🌌', preis: 320, info: '⚡ Ulti +12%', bonus: { ulti: 0.12 }, farbe: '#1b1f5a', punkte: true, aermel: 'kurz' },
@@ -9705,7 +9708,14 @@ const FARBCAST_NEWS = [
 let farbcast = null;
 const FC_BILDER = {};
 function fcArenaBild(id) { return FC_BILDER[id] || (FC_BILDER[id] = arenaBild(id, 1024, 640)); }
-const FC_SHOTS = { totale: { x: 640, y: 360, z: 1 }, tini: { x: 395, y: 400, z: 1.85 }, brummi: { x: 885, y: 400, z: 1.85 } };
+// 🎥 Kameras im 3D-Studio: [Position], [Ziel]
+const FC_SHOTS = {
+  totale: { pos: [0, 62, 200], ziel: [0, 44, -10] },
+  tini:   { pos: [-22, 47, 82], ziel: [-40, 41, 0] },
+  brummi: { pos: [24, 55, 100], ziel: [42, 48, 0] },
+  schraeg: { pos: [-120, 70, 150], ziel: [10, 40, 0] },
+  clip:   { pos: [0, 60, 48], ziel: [0, 60, -70] },
+};
 function farbcastStarten() {
   const [a1, a2] = aktuelleArenen(), [n1, n2] = aktuelleArenen(rotationSlot() + 1), A1 = ARENEN[a1], A2 = ARENEN[a2], N1 = ARENEN[n1], N2 = ARENEN[n2];
   const news = [...FARBCAST_NEWS].sort(() => Math.random() - 0.5);
@@ -9721,22 +9731,21 @@ function farbcastStarten() {
     ['tini', `In ${restZeitText()} wechseln die Arenen. Dann sind ${N1.emoji} ${N1.name} und ${N2.emoji} ${N2.name} dran!`, [n1, n2], 'Danach'],
     ['brummi', `Das war's vom Farbcast! Bleibt farbig – tschüssiii! 👋`, null, null, true],
   ];
-  farbcast = { zeilen, nr: -1, phase: 'intro', t: 0, zeilenT: 0, getippt: 0, fertigT: 0, kam: { ...FC_SHOTS.totale }, shot: 'totale', zuletzt: performance.now(), plapperNr: 0,
+  farbcast = { zeilen, nr: -1, phase: 'intro', t: 0, zeilenT: 0, getippt: 0, fertigT: 0, shot: 'totale', zuletzt: performance.now(), plapperNr: 0,
     ticker: news.join('   ✦   '), blinzel: { tini: 2, brummi: 3.2 }, splats: [] };
   zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
   $('fcWeiter').textContent = '⏭ Weiter';
-  nurZeigen('farbcast'); ton('farbcastJingle');
+  nurZeigen('farbcast'); ton('farbcastJingle'); if (fc3) fcKonfetti();
   requestAnimationFrame(fcSchleife);
 }
 function fcZeileStarten() {
   const f = farbcast; f.nr++;
   const z = f.zeilen[f.nr];
-  if (!z) { f.phase = 'outro'; f.t = 0; ton('farbcastJingle'); return; }
+  if (!z) { f.phase = 'outro'; f.t = 0; ton('farbcastJingle'); if (fc3) fcKonfetti(); return; }
   f.phase = 'zeile'; f.zeilenT = 0; f.getippt = 0; f.fertigT = 0; f.plapperNr = 0;
   const [wer, , karten] = z;
-  const shot = karten ? 'clip' : f.nr === 0 ? 'totale' : Math.random() < 0.72 ? wer : 'totale';
-  f.shot = shot;
-  if (FC_SHOTS[shot]) Object.assign(f.kam, FC_SHOTS[shot]);   // harter Schnitt
+  const shot = karten ? 'clip' : f.nr === 0 ? 'totale' : Math.random() < 0.65 ? wer : Math.random() < 0.5 ? 'schraeg' : 'totale';
+  f.shot = shot;   // harter Schnitt
   if (f.nr === f.zeilen.length - 1) $('fcWeiter').textContent = '🏙️ In die Stadt!';
 }
 function farbcastWeiter() {
@@ -9765,9 +9774,8 @@ function fcSchleife(jetzt) {
     if (f.getippt >= text.length) { f.fertigT += dt; if (f.fertigT > 1.4 + text.length * 0.012) fcZeileStarten(); }
   }
   // Kamera: langsam ranfahren und leicht wackeln (wie eine echte Fernsehkamera)
-  if (FC_SHOTS[f.shot]) f.kam.z += dt * 0.02;
   for (const k of ['tini', 'brummi']) { f.blinzel[k] -= dt; if (f.blinzel[k] < -0.12) f.blinzel[k] = 2 + Math.random() * 3; }
-  fcZeichnen(f);
+  fc3dZeichnen(f, dt); fcZeichnen(f);
   const anteil = f.phase === 'intro' ? 0 : f.phase === 'outro' ? 1 : (f.nr + Math.min(1, f.getippt / Math.max(1, [...f.zeilen[f.nr][1]].length))) / f.zeilen.length;
   $('fcBalken').style.width = `${Math.round(anteil * 100)}%`;
   requestAnimationFrame(fcSchleife);
@@ -9778,114 +9786,222 @@ function fcMund(f, wer) {   // Mund geht auf und zu, solange getippt wird
   const z = f.zeilen[f.nr]; if (f.getippt >= [...z[1]].length) return 0;
   return Math.abs(Math.sin(f.t * 17)) * 0.8 + Math.abs(Math.sin(f.t * 7.3)) * 0.2;
 }
-function fcFigur(x, f, wer, cx, unten, s) {   // Moderator an Position zeichnen
-  x.save(); x.translate(cx - 60 * s, unten - 140 * s); x.scale(s, s);
-  const p = { mund: fcMund(f, wer), blinzel: f.blinzel[wer] < 0, nicken: fcSprecher(f) === wer ? Math.sin(f.t * 4) * 1.5 : Math.sin(f.t * 1.3 + (wer === 'tini' ? 0 : 2)) * 0.8,
-    winken: (f.phase === 'zeile' && (f.nr === 0 || f.nr === f.zeilen.length - 1) && fcSprecher(f) === wer) || f.phase === 'outro' ? 1 : 0 };
-  if (wer === 'tini') tiniZeichnen(x, p); else brummiZeichnen(x, p);
-  x.restore();
+// ================== 🎬 DAS 3D-FARBCAST-STUDIO ==================
+let fcR = null, fcSzene = null, fcKam = null, fc3 = null;
+function fcLogoTex(w, h, gross, klein) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#3a2f7a'); g.addColorStop(1, '#1a1440'); x.fillStyle = g; x.fillRect(0, 0, w, h);
+  x.textAlign = 'center'; x.fillStyle = '#fff'; x.font = `bold ${h * 0.42}px system-ui`; x.fillText(gross, w / 2, h * 0.55);
+  x.fillStyle = '#c9c3ff'; x.font = `bold ${h * 0.16}px system-ui`; x.fillText(klein, w / 2, h * 0.84);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
-function fcStudio(x, f) {   // das Studio (Weltkoordinaten 1280 × 720)
-  const t = f.t;
-  const wand = x.createLinearGradient(0, 0, 0, 720); wand.addColorStop(0, '#2a1b5c'); wand.addColorStop(1, '#0e0a26');
-  x.fillStyle = wand; x.fillRect(-400, -300, 2080, 1320);
-  x.save(); x.globalAlpha = 0.35; x.lineWidth = 6;   // Neon-Ringe an der Wand
-  for (let i = 0; i < 5; i++) { x.strokeStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.shadowColor = x.strokeStyle; x.shadowBlur = 25; x.beginPath(); x.arc(640, 250, 330 + i * 60, Math.PI * 1.05, Math.PI * 1.95); x.stroke(); }
-  x.restore();
+function fcBodenTex() {   // glänzender Studioboden mit Leuchtringen
+  const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
+  x.fillStyle = '#140e30'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 7; i++) { x.strokeStyle = i % 2 ? '#ff5fa2' : '#6f4bff'; x.globalAlpha = 0.5 - i * 0.05; x.lineWidth = 4; x.beginPath(); x.arc(256, 256, 60 + i * 30, 0, 7); x.stroke(); }
+  x.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function baueTini3D() {
+  const m = mat('#ff5fa2', { roughness: 0.4 });
+  const k = baueJunge(m, 0, { haut: '#ffdbac', haar: '#ff5fa2', frisur: 'zoepfe', figur: 'maedchen' }, { hemd: 'tiniPulli', schuhe: 'turnschuhe', kopf: 'keine' });
+  const ud = k.userData, kopf = ud.kopf;
+  // 🎧 Kopfhörer
+  const dunkel = mat('#2b2f4a', { roughness: 0.4, metalness: 0.3 }), pink = mat('#ff5fa2', { emissive: '#ff5fa2', emissiveIntensity: 0.3 });
+  const buegel = new THREE.Mesh(new THREE.TorusGeometry(8.4, 0.8, 8, 24, Math.PI), dunkel); buegel.rotation.y = Math.PI / 2; buegel.position.y = 0.5; kopf.add(buegel);
+  for (const z of [-1, 1]) kopf.add(zylinderZ(dunkel, 3.2, 3.2, 2.4, 0, 0, z * 8.2), zylinderZ(pink, 2.2, 2.2, 2.6, 0, 0, z * 8.4));
+  // Offener Mund zum Reden
+  ud.mundAuf = kugel(mat('#8a1c34'), 1.6, 7, -2.6, 0, 0.5, 1, 1.2); kopf.add(ud.mundAuf);
+  return k;
+}
+function baueBrummi3D() {
+  const g = new THREE.Group(), ud = g.userData;
+  const fell = mat('#8a6a58', { roughness: 0.8 }), fell2 = mat('#9a7a66', { roughness: 0.75 }), hell = mat('#c9a890', { roughness: 0.8 });
+  const schw = mat('#1b1f3a', { roughness: 0.2, metalness: 0.5 }), zahn = mat('#fffbe8', { roughness: 0.3 }), orange = mat('#ff9f1c', { roughness: 0.6 });
+  g.add(kugel(fell, 24, 0, 24, 0, 1, 1.05, 1.15), kugel(hell, 15, 10, 22, 0, 0.7, 1, 1));   // dicker Körper + heller Bauch
+  ud.flossen = [];
+  for (const z of [-1, 1]) {   // Flossen (die rechte winkt)
+    const fl = new THREE.Group(); fl.position.set(4, 34, z * 24); g.add(fl); ud.flossen.push(fl);
+    fl.add(kugel(fell, 6, 2, -9, z * 2, 0.7, 1.5, 0.45));
+  }
+  const kopf = new THREE.Group(); kopf.position.set(4, 52, 0); g.add(kopf); ud.kopf = kopf;
+  kopf.add(kugel(fell2, 16, 0, 0, 0, 1, 0.95, 1));
+  for (const z of [-1, 1]) {
+    kopf.add(kugel(hell, 7.5, 13, -6, z * 6, 0.9, 0.9, 1));                                   // dicke Backen
+    for (let i = 0; i < 3; i++) kopf.add(kugel(mat('#2b1d14'), 0.6, 19.6, -5 + i * 1.6, z * (4 + i * 2)));   // Barthaare
+    const s = new THREE.Mesh(new THREE.ConeGeometry(1.6, 13, 10), zahn); s.rotation.x = Math.PI; s.position.set(14, -16, z * 4.5); kopf.add(s);   // Stoßzähne
+    kopf.add(klotz(schw, 2, 6, 8.5, 15.5, 4, z * 5.8));                                       // 😎 Sonnenbrille
+    kopf.add(klotz(mat('#ffffff', { transparent: true, opacity: 0.45 }), 0.4, 1.6, 2.4, 16.6, 5.5, z * 4.4));
+  }
+  kopf.add(klotz(schw, 1.5, 1.4, 4, 15.6, 5, 0), kugel(mat('#2b1d14'), 2.6, 17, -1.5, 0));   // Brillensteg + Nase
+  ud.mund = kugel(mat('#5a1c24'), 3.5, 13, -12, 0, 0.6, 0.3, 1.3); kopf.add(ud.mund);
+  kopf.add(kugel(orange, 15.5, -1, 7, 0, 1.03, 0.55, 1.03), klotz(orange, 14, 1.6, 22, 14, 7.5, 0), kugel(mat('#ffffff'), 1.6, 0, 15.2, 0));   // 🧢 Kappe
+  return g;
+}
+function fcStudioBauen() {
+  fcSzene = new THREE.Scene(); fcSzene.background = new THREE.Color('#0a0620');
+  fcKam = new THREE.PerspectiveCamera(40, 16 / 9, 1, 3000);
+  fcSzene.add(new THREE.HemisphereLight('#b8a8ff', '#2a1050', 1.1));
+  const key = new THREE.DirectionalLight('#ffffff', 1.4); key.position.set(30, 120, 200); fcSzene.add(key);
+  const pinkL = new THREE.PointLight('#ff5fa2', 2.5, 260, 0); pinkL.position.set(-90, 70, 60); fcSzene.add(pinkL);
+  const orangeL = new THREE.PointLight('#ff9f1c', 2, 260, 0); orangeL.position.set(90, 70, 60); fcSzene.add(orangeL);
+  const S = { }; fc3 = S;
+  // Boden und runde Rückwand
+  const boden = new THREE.Mesh(new THREE.CircleGeometry(260, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: fcBodenTex(), emissiveMap: fcBodenTex(), emissive: '#ffffff', emissiveIntensity: 0.35, roughness: 0.15, metalness: 0.5 }));
+  fcSzene.add(boden);
+  const wand = new THREE.Mesh(new THREE.CylinderGeometry(230, 230, 220, 48, 1, true, Math.PI * 0.55, Math.PI * 0.9), new THREE.MeshStandardMaterial({ color: '#241650', roughness: 0.8, side: THREE.BackSide }));
+  wand.position.set(0, 110, 60); fcSzene.add(wand);
+  S.neon = [];
+  for (let i = 0; i < 5; i++) {   // Neon-Bögen
+    const n = new THREE.Mesh(new THREE.TorusGeometry(110 + i * 22, 1.3, 8, 64, Math.PI), new THREE.MeshBasicMaterial({ color: i % 2 ? '#ff5fa2' : '#8a5bff' }));
+    n.position.set(0, 20, -150); fcSzene.add(n); S.neon.push(n);
+  }
+  // Große Leinwand (Logo oder Arena) mit Leuchtrahmen
+  S.leinwandCv = document.createElement('canvas'); S.leinwandCv.width = 1024; S.leinwandCv.height = 576;
+  S.leinwandTex = new THREE.CanvasTexture(S.leinwandCv); S.leinwandTex.colorSpace = THREE.SRGBColorSpace;
+  const lw = new THREE.Mesh(new THREE.PlaneGeometry(150, 84.4), new THREE.MeshBasicMaterial({ map: S.leinwandTex }));
+  lw.position.set(0, 60, -70); fcSzene.add(lw);
+  fcSzene.add(klotz(mat('#0b0b1a', { emissive: '#a347ff', emissiveIntensity: 0.6 }), 158, 92, 3, 0, 60, -72));
   // Seitenbildschirme mit Equalizer
-  for (const sx of [120, 960]) {
-    x.fillStyle = '#0b0b1a'; x.beginPath(); x.roundRect(sx, 150, 200, 130, 10); x.fill();
-    for (let i = 0; i < 12; i++) { const h = 20 + Math.abs(Math.sin(t * 5 + i * 0.7 + sx)) * 85; x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.fillRect(sx + 12 + i * 15.5, 270 - h, 11, h); }
+  S.balken = [];
+  for (const sx of [-1, 1]) {
+    const gr = new THREE.Group(); gr.position.set(sx * 120, 52, -40); gr.rotation.y = -sx * 0.55; fcSzene.add(gr);
+    gr.add(klotz(mat('#0b0b1a', { emissive: '#3a2f7a', emissiveIntensity: 0.4 }), 64, 40, 2, 0, 0, -1.5));
+    for (let i = 0; i < 10; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1, 1), new THREE.MeshBasicMaterial({ color: i % 2 ? '#ff5fa2' : '#8a5bff' }));
+      b.geometry.translate(0, 0.5, 0); b.position.set(-26 + i * 5.8, -17, 0.5); gr.add(b); S.balken.push(b);
+    }
   }
-  // großer Bildschirm hinten: zeigt das Farbcast-Logo oder die Arena
-  x.save(); x.shadowColor = '#a347ff'; x.shadowBlur = 40; x.fillStyle = '#0b0b1a'; x.beginPath(); x.roundRect(390, 70, 500, 290, 14); x.fill(); x.restore();
-  x.save(); x.beginPath(); x.roundRect(400, 80, 480, 270, 10); x.clip();
-  const z = f.phase === 'zeile' && f.zeilen[f.nr];
-  const bildId = z && z[2] ? z[2][Math.floor(f.zeilenT / 3) % z[2].length] : null;
-  if (bildId) x.drawImage(fcArenaBild(bildId), 400 - Math.sin(t * 0.3) * 20, 70, 520, 325);
-  else {
-    for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.beginPath(); x.arc(640 + Math.cos(t * 0.6 + i) * 190, 215 + Math.sin(t * 0.8 + i * 2) * 90, 35 + 15 * Math.sin(t + i), 0, 7); x.fill(); }
-    x.fillStyle = '#fff'; x.font = 'bold 56px system-ui'; x.textAlign = 'center'; x.fillText('🎙️ FARBCAST', 640, 235);
+  // Moderationstisch mit Leuchtstreifen, Logo, Mikros und Tasse
+  const tischMat = mat('#3a2f7a', { roughness: 0.35, metalness: 0.3 });
+  fcSzene.add(klotz(tischMat, 170, 24, 26, 0, 12, 22), klotz(mat('#f2f0ff', { roughness: 0.2 }), 176, 2.5, 30, 0, 25, 22));
+  fcSzene.add(klotz(mat('#ff5fa2', { emissive: '#ff5fa2', emissiveIntensity: 1.5 }), 176, 1.2, 1, 0, 23.6, 37.2), klotz(mat('#ff5fa2', { emissive: '#ff5fa2', emissiveIntensity: 1.5 }), 176, 1.2, 1, 0, 1, 35.2));
+  const logo = new THREE.Mesh(new THREE.PlaneGeometry(100, 18), new THREE.MeshBasicMaterial({ map: fcLogoTex(600, 108, '🎙️ FARBCAST', 'DIE SHOW AUS DER STADT') })); logo.position.set(0, 12, 35.1); fcSzene.add(logo);
+  for (const mx of [-34, 50]) {
+    const st = zylinder(MAT_GRAU, 0.5, 0.5, 14, mx, 32, 16); st.rotation.x = -0.35; fcSzene.add(st);
+    fcSzene.add(kugel(mat('#2b2f4a', { metalness: 0.5, roughness: 0.3 }), 2.6, mx, 39.5, 13.5, 1, 1.3, 1), ringY(mat('#ff5fa2', { emissive: '#ff5fa2' }), 2.6, 0.5, mx, 37, 13.5));
   }
-  x.restore();
-  // Lichtgerüst mit Scheinwerfern
-  x.fillStyle = '#1b1b2e'; x.fillRect(-200, 20, 1680, 14);
-  for (let i = 0; i < 9; i++) {
-    const lx = 80 + i * 140, a = Math.sin(t * 0.7 + i) * 0.35;
-    x.save(); x.globalCompositeOperation = 'lighter';
-    const g = x.createLinearGradient(lx, 40, lx, 640); g.addColorStop(0, i % 2 ? '#ff8a1f44' : '#a347ff44'); g.addColorStop(1, '#00000000');
-    x.fillStyle = g; x.beginPath(); x.moveTo(lx - 8, 40); x.lineTo(lx + Math.sin(a) * 600 - 90, 680); x.lineTo(lx + Math.sin(a) * 600 + 90, 680); x.lineTo(lx + 8, 40); x.fill(); x.restore();
-    x.fillStyle = '#3a3a55'; x.beginPath(); x.roundRect(lx - 12, 26, 24, 22, 5); x.fill(); x.fillStyle = '#fff6c8'; x.beginPath(); x.arc(lx, 46, 7, 0, 7); x.fill();
+  fcSzene.add(zylinder(mat('#ffffff'), 2.6, 2.3, 6, 72, 29, 26), ringY(mat('#ff9f1c'), 2.5, 0.8, 72, 29, 26));   // Tasse
+  // Lichtgerüst mit Scheinwerfern und Lichtkegeln
+  fcSzene.add(klotz(mat('#1b1b2e'), 300, 5, 5, 0, 150, 10), klotz(mat('#1b1b2e'), 300, 5, 5, 0, 150, -60));
+  S.kegel = [];
+  for (let i = 0; i < 7; i++) {
+    const x = -150 + i * 50;
+    fcSzene.add(klotz(mat('#3a3a55'), 8, 8, 8, x, 144, 10), kugel(mat('#fff6c8', { emissive: '#fff6c8', emissiveIntensity: 2 }), 2.5, x, 140, 10));
+    const geo = new THREE.ConeGeometry(30, 150, 20, 1, true); geo.translate(0, -75, 0);
+    const k = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: i % 2 ? '#ff9f1c' : '#a347ff', transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    k.position.set(x, 140, 10); fcSzene.add(k); S.kegel.push(k);
   }
-  // Boden
-  const bd = x.createLinearGradient(0, 560, 0, 720); bd.addColorStop(0, '#221a48'); bd.addColorStop(1, '#0a0820');
-  x.fillStyle = bd; x.fillRect(-400, 560, 2080, 460);
-  // Moderatoren hinter dem Tisch
-  fcFigur(x, f, 'tini', 395, 590, 2.35); fcFigur(x, f, 'brummi', 885, 600, 2.5);
-  // Tisch mit Logo, Mikros und Tasse
-  const ts = x.createLinearGradient(0, 540, 0, 720); ts.addColorStop(0, '#3a2f7a'); ts.addColorStop(1, '#1a1440');
-  x.fillStyle = ts; x.beginPath(); x.moveTo(170, 545); x.lineTo(1110, 545); x.lineTo(1160, 730); x.lineTo(120, 730); x.closePath(); x.fill();
-  x.save(); x.shadowColor = '#ff5fa2'; x.shadowBlur = 18; x.fillStyle = '#ff5fa2'; x.fillRect(170, 540, 940, 7); x.restore();
-  x.fillStyle = '#fff'; x.font = 'bold 44px system-ui'; x.textAlign = 'center'; x.fillText('🎙️ FARBCAST', 640, 640);
-  x.fillStyle = '#c9c3ff'; x.font = 'bold 18px system-ui'; x.fillText('DIE SHOW AUS DER STADT', 640, 668);
-  for (const mx of [470, 800]) {
-    x.strokeStyle = '#555a7a'; x.lineWidth = 5; x.beginPath(); x.moveTo(mx, 545); x.lineTo(mx - 10, 470); x.stroke();
-    x.fillStyle = '#2b2f4a'; x.beginPath(); x.ellipse(mx - 12, 458, 13, 18, -0.3, 0, 7); x.fill();
-    x.fillStyle = '#9aa1bd'; for (let i = 0; i < 4; i++) x.fillRect(mx - 22, 446 + i * 6, 20, 2);
+  // Die zwei Moderatoren hinter dem Tisch (schauen zur Kamera)
+  S.tini = baueTini3D(); S.tini.position.set(-40, 0, 0); S.tini.rotation.y = -Math.PI / 2 + 0.25; fcSzene.add(S.tini);
+  S.brummi = baueBrummi3D(); S.brummi.scale.setScalar(0.78); S.brummi.position.set(42, 0, -4); S.brummi.rotation.y = -Math.PI / 2 - 0.25; fcSzene.add(S.brummi);
+  // Konfetti-Kleckse fürs Intro
+  S.konfetti = [];
+  for (let i = 0; i < 40; i++) {
+    const k = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 6), new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? '#ff5fa2' : i % 3 === 1 ? '#8a5bff' : '#ff9f1c' }));
+    k.userData.v = [(Math.random() - 0.5) * 120, 80 + Math.random() * 120, (Math.random() - 0.5) * 80]; k.visible = false; fcSzene.add(k); S.konfetti.push(k);
   }
-  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(1010, 505, 30, 38, 5); x.fill(); x.fillStyle = TEAMS[1].col; x.fillRect(1010, 515, 30, 10);
 }
-function fcClip(x, f) {   // Arena-Clip: Kamerafahrt über die Arena
-  const z = f.zeilen[f.nr], ids = z[2], idx = Math.floor(f.zeilenT / 3.2) % ids.length, id = ids[idx], tt = (f.zeilenT % 3.2) / 3.2;
-  x.fillStyle = '#000'; x.fillRect(0, 0, 1280, 720);
-  x.save(); x.translate(640, 380); x.rotate(-0.06 + tt * 0.08); const s = 1.35 + tt * 0.3; x.scale(s, s * 0.82);
-  x.drawImage(fcArenaBild(id), -512 + (idx ? -1 : 1) * (tt - 0.5) * 120, -320);
-  x.restore();
-  const vg = x.createRadialGradient(640, 360, 250, 640, 360, 800); vg.addColorStop(0, '#0000'); vg.addColorStop(1, '#000c'); x.fillStyle = vg; x.fillRect(0, 0, 1280, 720);
-  const A = ARENEN[id];
-  x.fillStyle = '#1b1f3add'; x.beginPath(); x.roundRect(40, 470, 700, 96, 14); x.fill();
-  x.fillStyle = TEAMS[idx % 2].col; x.fillRect(40, 470, 12, 96);
-  x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = 'bold 42px system-ui'; x.fillText(`${A.emoji} ${A.name}`, 72, 516);
-  x.fillStyle = '#ffd166'; x.font = 'bold 20px system-ui'; x.fillText(((z[3] ? z[3] + ': ' : '') + A.spezial).slice(0, 60), 72, 548);
-  x.fillStyle = '#ff3b3b'; x.font = 'bold 22px system-ui'; x.textAlign = 'right'; x.fillText('🎥 CLIP', 1240, 100);
-  // Bild-im-Bild: wer gerade spricht
-  const wer = z[0]; x.save(); x.beginPath(); x.arc(1150, 480, 85, 0, 7); x.fillStyle = '#2a1b5c'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#fff'; x.stroke(); x.clip();
-  fcFigur(x, f, wer, 1150, 610, 1.6); x.restore();
+function fcKonfetti() {   // Kleckse fliegen beim Intro/Outro aus der Mitte
+  for (const k of fc3.konfetti) { k.position.set((Math.random() - 0.5) * 40, 30, 30); k.userData.v = [(Math.random() - 0.5) * 160, 90 + Math.random() * 120, (Math.random() - 0.5) * 120]; k.visible = true; }
+}
+function fcLeinwand(f) {   // große Leinwand: Logo mit Klecksen oder Arena-Bild
+  const x = fc3.leinwandCv.getContext('2d'), t = f.t;
+  const z = f.phase === 'zeile' && f.zeilen[f.nr];
+  const bildId = z && z[2] ? z[2][Math.floor(f.zeilenT / 3.2) % z[2].length] : null;
+  if (bildId) {
+    const tt = (f.zeilenT % 3.2) / 3.2, s = 1.08 + tt * 0.12;
+    x.fillStyle = '#000'; x.fillRect(0, 0, 1024, 576);
+    x.save(); x.translate(512, 288); x.scale(s, s); x.drawImage(fcArenaBild(bildId), -512 + (tt - 0.5) * 40, -320); x.restore();
+    const A = ARENEN[bildId];
+    x.fillStyle = '#1b1f3add'; x.fillRect(0, 470, 1024, 106); x.fillStyle = '#ff5fa2'; x.fillRect(0, 470, 14, 106);
+    x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = 'bold 46px system-ui'; x.fillText(`${A.emoji} ${A.name}`, 34, 520);
+    x.fillStyle = '#ffd166'; x.font = 'bold 22px system-ui'; x.fillText(((z[3] ? z[3] + ': ' : '') + A.spezial).slice(0, 70), 34, 556);
+  } else {
+    const g = x.createRadialGradient(512, 288, 40, 512, 288, 600); g.addColorStop(0, '#3a1f7a'); g.addColorStop(1, '#0a0620'); x.fillStyle = g; x.fillRect(0, 0, 1024, 576);
+    for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#ff5fa2' : '#8a5bff'; x.beginPath(); x.arc(512 + Math.cos(t * 0.6 + i) * 360, 288 + Math.sin(t * 0.8 + i * 2) * 180, 50 + 20 * Math.sin(t + i), 0, 7); x.fill(); }
+    x.textAlign = 'center'; x.font = 'bold 110px system-ui'; x.lineWidth = 12; x.strokeStyle = '#1b1f3a'; x.strokeText('🎙️ FARBCAST', 512, 320); x.fillStyle = '#fff'; x.fillText('🎙️ FARBCAST', 512, 320);
+  }
+  fc3.leinwandTex.needsUpdate = true;
+}
+function fcFigurenBewegen(f, dt) {
+  const t = f.t, S = fc3, sprecher = fcSprecher(f);
+  const winkt = (wer) => (f.phase === 'zeile' && (f.nr === 0 || f.nr === f.zeilen.length - 1) && sprecher === wer) || f.phase === 'outro';
+  // 👧 Tini
+  const ud = S.tini.userData, mT = fcMund(f, 'tini'), redetT = sprecher === 'tini';
+  ud.mundAuf.scale.set(0.8, 0.3 + mT * 1.3, 1.6); ud.mundAuf.visible = mT > 0.05;
+  ud.augen.scale.y = f.blinzel.tini < 0 ? 0.1 : 1;
+  ud.kopf.rotation.z = (redetT ? Math.sin(t * 4) * 0.07 : Math.sin(t * 1.3) * 0.03) + 0.05;   // nicken
+  ud.kopf.rotation.y = redetT ? Math.sin(t * 1.7) * 0.15 : -0.35;   // hört zu: schaut zu Brummi
+  ud.ober.rotation.set(0, 0, Math.sin(t * 2) * 0.02);
+  const [li, re] = ud.arme;
+  li.schulter.rotation.z = 0.75 + (redetT ? Math.sin(t * 5) * 0.2 : 0); li.ellbogen.rotation.z = 1.0;
+  if (winkt('tini')) { re.schulter.rotation.z = 2.8; re.ellbogen.rotation.z = 0.3 + Math.sin(t * 10) * 0.45; }
+  else if (redetT) { re.schulter.rotation.z = 1.2 + Math.sin(t * 6.5) * 0.35; re.ellbogen.rotation.z = 1.0 + Math.sin(t * 5) * 0.3; }
+  else { re.schulter.rotation.z = 0.75; re.ellbogen.rotation.z = 1.0; }
+  S.tini.position.y = Math.abs(Math.sin(t * (redetT ? 6 : 2))) * (redetT ? 0.8 : 0.3);
+  // 🦭 Brummi
+  const ub = S.brummi.userData, mB = fcMund(f, 'brummi'), redetB = sprecher === 'brummi';
+  ub.mund.scale.set(0.6, 0.3 + mB * 1.4, 1.3);
+  ub.kopf.rotation.z = redetB ? Math.sin(t * 3.5) * 0.08 : Math.sin(t * 1.1) * 0.03;
+  ub.kopf.rotation.y = redetB ? Math.sin(t * 1.4) * 0.15 : 0.35;   // hört zu: schaut zu Tini
+  const flosse = ub.flossen[0];   // rechte Flosse (zur Kamera hin)
+  flosse.rotation.x = winkt('brummi') ? -2.2 + Math.sin(t * 9) * 0.4 : redetB ? -0.5 + Math.sin(t * 5) * 0.4 : Math.sin(t * 1.5) * 0.05;
+  ub.flossen[1].rotation.x = redetB ? 0.3 + Math.sin(t * 4) * 0.2 : 0;
+  S.brummi.rotation.z = Math.sin(t * 1.6) * 0.02;
+}
+function fc3dZeichnen(f, dt) {
+  if (!fcR) {   // erst beim ersten Farbcast bauen
+    fcR = new THREE.WebGLRenderer({ canvas: $('fc3d'), antialias: true }); fcR.setPixelRatio(1); fcR.setSize(1280, 720, false);
+    fcR.toneMapping = renderer.toneMapping; fcR.toneMappingExposure = renderer.toneMappingExposure;
+    fcStudioBauen();
+  }
+  const S = fc3, t = f.t;
+  fcLeinwand(f); fcFigurenBewegen(f, dt);
+  S.balken.forEach((b, i) => { b.scale.y = 4 + Math.abs(Math.sin(t * 5 + i * 0.7)) * 30; });
+  S.kegel.forEach((k, i) => { k.rotation.z = Math.sin(t * 0.7 + i) * 0.35; k.rotation.x = Math.cos(t * 0.5 + i) * 0.2; });
+  S.neon.forEach((n, i) => { n.material.color.set((Math.floor(t * 2) + i) % 2 ? '#ff5fa2' : '#8a5bff'); });
+  for (const k of S.konfetti) if (k.visible) { const v = k.userData.v; v[1] -= 160 * dt; k.position.x += v[0] * dt; k.position.y += v[1] * dt; k.position.z += v[2] * dt; if (k.position.y < 0) k.visible = false; }
+  // Kamera
+  let pos, ziel;
+  if (f.phase === 'intro') {   // Kranfahrt von oben runter ins Studio
+    const k = weich(Math.min(1, t / 2.4));
+    pos = mischen([60, 190, 330], FC_SHOTS.totale.pos, k); ziel = mischen([0, 60, -60], FC_SHOTS.totale.ziel, k);
+  } else if (f.phase === 'outro') {   // langsam nach oben wegfahren
+    const k = weich(Math.min(1, t / 2.4));
+    pos = mischen(FC_SHOTS.totale.pos, [0, 150, 300], k); ziel = FC_SHOTS.totale.ziel;
+  } else {
+    const sh = FC_SHOTS[f.shot] || FC_SHOTS.totale, ran = Math.min(1, f.zeilenT / 6) * (f.shot === 'clip' ? 0.35 : 0.12);   // langsam ranfahren
+    pos = mischen(sh.pos, sh.ziel, ran); ziel = sh.ziel;
+    if (f.shot === 'schraeg') pos = [pos[0] + f.zeilenT * 8, pos[1], pos[2]];   // Kamerafahrt zur Seite
+  }
+  fcKam.position.set(pos[0] + Math.sin(t * 0.5) * 1.2, pos[1] + Math.sin(t * 0.37) * 0.8, pos[2]);   // leicht wackeln wie echte Fernsehkamera
+  fcKam.lookAt(...ziel);
+  fcR.render(fcSzene, fcKam);
 }
 function fcText(x, text, maxB) {   // Text in Zeilen umbrechen
   const woerter = text.split(' '), zeilen = []; let z = '';
   for (const w of woerter) { const t = z ? z + ' ' + w : w; if (x.measureText(t).width > maxB && z) { zeilen.push(z); z = w; } else z = t; }
   if (z) zeilen.push(z); return zeilen;
 }
-function fcZeichnen(f) {
+function fcZeichnen(f) {   // Schrift über dem 3D-Bild (Logo, Bauchbinde, Untertitel, Laufband)
   const c = $('fcVideo'), x = c.getContext('2d'), t = f.t;
-  x.setTransform(1, 0, 0, 1, 0, 0); x.textAlign = 'center'; x.textBaseline = 'alphabetic';
-  if (f.phase === 'intro' || f.phase === 'outro') {   // ✨ Logo-Animation mit Farbklecksen
-    const g = x.createRadialGradient(640, 360, 50, 640, 360, 800); g.addColorStop(0, '#3a1f7a'); g.addColorStop(1, '#0a0620'); x.fillStyle = g; x.fillRect(0, 0, 1280, 720);
-    for (let i = 0; i < 26; i++) {
-      const k = Math.min(1, Math.max(0, (t - i * 0.05) * 3)), px = (i * 397) % 1280, py = (i * 233) % 720;
-      x.fillStyle = i % 2 ? TEAMS[0].col : TEAMS[1].col; x.globalAlpha = 0.85; x.beginPath(); x.arc(px, py, k * (30 + (i * 13) % 50), 0, 7); x.fill();
-    }
-    x.globalAlpha = 1;
-    const k = Math.min(1, t / 0.7), el = 1 + Math.sin(k * Math.PI * 2.5) * (1 - k) * 0.4;
-    x.save(); x.translate(640, 340); x.scale(k * el, k * el); x.rotate((1 - k) * -0.5);
-    x.font = 'bold 120px system-ui'; x.lineWidth = 14; x.strokeStyle = '#1b1f3a'; x.strokeText('🎙️ FARBCAST', 0, 0); x.fillStyle = '#fff'; x.fillText('🎙️ FARBCAST', 0, 0);
+  x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, 1280, 720); x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  if (f.phase === 'intro' || f.phase === 'outro') {   // ✨ Logo springt rein
+    const k = Math.min(1, Math.max(0, (t - 0.3) / 0.7)), el = 1 + Math.sin(k * Math.PI * 2.5) * (1 - k) * 0.4;
+    x.save(); x.translate(640, 300); x.scale(k * el, k * el); x.rotate((1 - k) * -0.5);
+    x.font = 'bold 110px system-ui'; x.lineWidth = 14; x.strokeStyle = '#1b1f3a'; x.strokeText('🎙️ FARBCAST', 0, 0); x.fillStyle = '#fff'; x.fillText('🎙️ FARBCAST', 0, 0);
     x.restore();
-    if (t > 0.8) { x.font = 'bold 34px system-ui'; x.fillStyle = '#ffd166'; x.fillText(f.phase === 'intro' ? 'mit Tini & Brummi – LIVE aus der Stadt!' : 'Bis zum nächsten Mal! Bleibt farbig! 👋', 640, 430); }
-    if (f.phase === 'outro') { fcFigur(x, f, 'tini', 250, 720, 2); fcFigur(x, f, 'brummi', 1030, 720, 2.1); }
+    if (t > 0.9) { x.font = 'bold 34px system-ui'; x.lineWidth = 8; x.strokeStyle = '#1b1f3a'; const txt = f.phase === 'intro' ? 'mit Tini & Brummi – LIVE aus der Stadt!' : 'Bis zum nächsten Mal! Bleibt farbig! 👋'; x.strokeText(txt, 640, 380); x.fillStyle = '#ffd166'; x.fillText(txt, 640, 380); }
     return;
   }
-  // Studio oder Clip
-  if (f.shot === 'clip') fcClip(x, f);
-  else {
-    const k = f.kam, wx = Math.sin(t * 0.5) * 6, wy = Math.sin(t * 0.37) * 4;
-    x.save(); x.translate(640, 360); x.scale(k.z, k.z); x.translate(-k.x + wx, -k.y + wy); fcStudio(x, f); x.restore();
-    if (f.shot !== 'totale' && f.zeilenT < 3) {   // Bauchbinde: wer spricht?
-      const n = f.shot === 'tini' ? ['🎧 TINI', 'Moderatorin'] : ['🦭 BRUMMI', 'Moderator & Walross'];
-      const ein = Math.min(1, f.zeilenT * 4) * Math.min(1, (3 - f.zeilenT) * 4);
-      x.save(); x.globalAlpha = ein; x.fillStyle = '#ff5fa2'; x.fillRect(60, 470, 300, 52); x.fillStyle = '#1b1f3a'; x.fillRect(60, 522, 300, 30);
-      x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = 'bold 32px system-ui'; x.fillText(n[0], 76, 508); x.font = 'bold 18px system-ui'; x.fillText(n[1], 76, 544); x.restore();
-    }
+  if (f.shot === 'clip') {
+    x.fillStyle = '#ff3b3b'; x.font = 'bold 22px system-ui'; x.textAlign = 'right'; x.fillText('🎥 CLIP', 1240, 100);
+  } else if (f.shot !== 'totale' && f.shot !== 'schraeg' && f.zeilenT < 3) {   // Bauchbinde: wer spricht?
+    const n = f.shot === 'tini' ? ['🎧 TINI', 'Moderatorin'] : ['🦭 BRUMMI', 'Moderator & Walross'];
+    const ein = Math.min(1, f.zeilenT * 4) * Math.min(1, (3 - f.zeilenT) * 4);
+    x.save(); x.globalAlpha = ein; x.fillStyle = '#ff5fa2'; x.fillRect(60, 470, 300, 52); x.fillStyle = '#1b1f3a'; x.fillRect(60, 522, 300, 30);
+    x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = 'bold 32px system-ui'; x.fillText(n[0], 76, 508); x.font = 'bold 18px system-ui'; x.fillText(n[1], 76, 544); x.restore();
   }
   // Senderlogo, LIVE, Uhrzeit
   x.textAlign = 'left'; x.font = 'bold 26px system-ui'; x.fillStyle = '#ffffffdd'; x.fillText('🎙️ FARBCAST', 28, 48);
@@ -10304,7 +10420,7 @@ function schleife(t) {
   if (zustand === 'stadt') stadtUpdate(dt);
   mpTick(dt);
   if (zustand === 'menu') vorschauZeigen(dt);           // Menü & Shops: dein Junge dreht sich auf dem Podest
-  else if (zustand === 'stadt' || zustand === 'wahl') stadtZeigen(zustand === 'stadt' ? dt : 0);
+  else if (zustand === 'stadt' || zustand === 'wahl') { if (!farbcast) stadtZeigen(zustand === 'stadt' ? dt : 0); }   // (beim Farbcast wird nur das Studio gezeichnet)
   else if (spieler) { vmHalter.visible = !spieler.inBox && !kameraOverride && !spieler.imHeli; welt3D(['spiel', 'lobby', 'intro', 'feier', 'replay'].includes(zustand) || onlinePause ? dt * (zustand === 'replay' ? replayTempo() : 1) : 0); }
   hud();
   requestAnimationFrame(schleife);
