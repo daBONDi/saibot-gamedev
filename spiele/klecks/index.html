@@ -8569,6 +8569,8 @@ const FISCH_ARTEN = {
               info: 'BOSS! Fliegt wie ein Flugzeug über dem Boden! Zeigt ein roter Streifen auf dich, saust er drüber und wirft eine ganze Reihe Tintenbomben ab. Schnell zur Seite!' },
   blase:    { name: 'Blasen-Barsch',   emoji: '🫧', hp: 200, tempo: 0.85, r: 16, groesse: 1.1, nah: 0, schaden: 45, cd: 4.2, spur: 10, farbe: '#c76a8a', bauch: '#fbe3ec', angriff: 'Jagd-Blasen', boss: true,
               info: 'BOSS! Pustet 3 dicke Blasen, die dich VERFOLGEN! Schieß die Blasen kaputt, bevor sie dich erwischen – oder renn schnell weg!' },
+  robomoewe: { name: 'Robo-Möwe', emoji: '🤖', hp: 1800, tempo: 0.95, r: 22, groesse: 1.4, nah: 0, schaden: 40, cd: 3.6, spur: 4, farbe: '#c9cfe6', bauch: '#f2f4f8', angriff: 'Feder-Pfeile & Bomben', boss: true, keinKaviar: true, koerperHoehe: 85,
+              info: 'STORY-BOSS! Eine riesige Roboter-Möwe. Fliegt Bomben-Teppiche und schießt Feder-Pfeile.' },
   riese:    { name: 'Riesenkabeljau',  emoji: '👑', hp: 3000, tempo: 0.45, r: 28, groesse: 3.6, nah: 0,  schaden: 110, cd: 5, spur: 45, farbe: '#6f8f6c', bauch: '#e8ecd8', angriff: 'Riesen-Stampfer', boss: true, keinKaviar: true, stampfR: 150, koerperHoehe: 110,
               info: 'DER ENDBOSS! Riesig, mit Krone. Stampft alles platt und spuckt 3 Tintenkugeln auf einmal. Nur in der Extra-Welle!' },
 };
@@ -8664,6 +8666,24 @@ function baueFisch(art) {
       const f = new THREE.Group(); f.position.set(x, 4, z); g.add(f); ud.beine.push(f);
       for (let i = 0; i < 4; i++) f.add(ringY(MAT_METALL, 2, 0.5, 0, -i * 1.1, 0));
     }
+  } else if (art === 'robomoewe') {   // 🤖 Roboter-Möwe (Story-Boss) – mit einer verdächtigen roten Feder …
+    k.position.y = 34;
+    const metall = mat('#c9cfe6', { metalness: 0.7, roughness: 0.3 }), weiss = mat('#f2f4f8', { metalness: 0.3, roughness: 0.4 }), dunkel = mat('#3a3f52', { metalness: 0.6, roughness: 0.4 });
+    k.add(kugel(weiss, 12, 0, 6, 0, 1.6, 0.9, 0.95), kugel(metall, 8, 14, 13, 0, 1, 0.95, 0.9));   // Körper + Kopf
+    const schnabel = new THREE.Mesh(new THREE.ConeGeometry(3.2, 13, 8), mat('#ffb627', { metalness: 0.6, roughness: 0.3 })); schnabel.rotation.z = -Math.PI / 2; schnabel.position.set(27, 12, 0); k.add(schnabel);
+    k.add(klotz(mat('#ff2a2a', { emissive: '#ff2020', emissiveIntensity: 1.6 }), 3, 2.6, 12, 20, 16, 0));   // rotes Visier
+    for (const z of [-1, 1]) k.add(klotz(dunkel, 6, 1.5, 1, 6, 4, z * 13.6), kugel(dunkel, 1, 0, 9, z * 11.5));   // Nieten + Platten
+    ud.fluegel = [];
+    for (const z of [-1, 1]) {
+      const fl = new THREE.Group(); fl.position.set(0, 10, z * 10); k.add(fl); ud.fluegel.push(fl);
+      for (let i = 0; i < 4; i++) { const f = klotz(i % 2 ? metall : weiss, 18 - i * 3, 1.2, 8, -2 - i * 2, 0, z * (6 + i * 7)); f.rotation.y = z * 0.15; fl.add(f); }
+    }
+    const schwanz = new THREE.Group(); schwanz.position.set(-18, 6, 0); k.add(schwanz); ud.schwanz = schwanz;
+    for (const z of [-3, 0, 3]) schwanz.add(klotz(metall, 12, 1, 3, -6, 0, z));
+    const feder = klotz(mat('#e63946'), 9, 1, 2.4, -14, 2, 2); feder.rotation.y = 0.4; schwanz.add(feder);   // 🪶 rote Feder!
+    k.add(zylinderX(dunkel, 3, 4, 8, -14, 2, 0), kugel(mat('#5fd3ff', { emissive: '#3fb8ff', emissiveIntensity: 1.5 }), 2.6, -19, 2, 0));   // Düse
+    for (let i = 0; i < 3; i++) k.add(kugel(tintenMaterial(1, 0.5), 2.4, -4 + i * 5, -4, 0));   // Bomben unter dem Bauch
+    ud.beine = [];
   } else if (art === 'rochen') {   // 🛩️ flacher Rochen, der über dem Boden fliegt
     k.position.y = 34;
     k.add(kugel(haut, 12, 0, 0, 0, 1.3, 0.28, 1), kugel(bauch, 11, 0, -1.5, 0, 1.2, 0.2, 0.9));
@@ -8789,7 +8809,7 @@ function baueFisch(art) {
   g.scale.setScalar(A.groesse);
   ud.basisY = k.position.y;
   if (A.boss) {   // Lebensbalken über dem Boss
-    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : art === 'rochen' ? 58 : 38); g.add(bar); ud.bar = bar;
+    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : art === 'rochen' ? 58 : art === 'robomoewe' ? 66 : 38); g.add(bar); ud.bar = bar;
     bar.add(new THREE.Mesh(new THREE.PlaneGeometry(34, 4.5), new THREE.MeshBasicMaterial({ color: '#1b1f3a', depthTest: false })));
     ud.barFill = new THREE.Mesh(new THREE.PlaneGeometry(32, 3), new THREE.MeshBasicMaterial({ color: '#ff4d4d', depthTest: false }));
     ud.barFill.position.z = 0.1; bar.add(ud.barFill);
@@ -8994,6 +9014,24 @@ function fischKi(f, dt) {
       warnRing(f.x, f.y, A.wirbelR, 0.9 + 2.2);
       if (nahBeimSpieler(f)) { ton('alarm'); meldung('🌀 Der Wirbel-Wels dreht gleich durch – weg da!'); }
       return;
+    }
+  } else if (f.fisch === 'robomoewe') {   // 🤖 abwechselnd Bomben-Überflug und Feder-Pfeile
+    vor = zd < 260 ? -1 : zd > 440 ? 1 : 0;
+    if (f.angriffCd <= 0 && zd < 620) {
+      f.moeweNr = (f.moeweNr || 0) + 1;
+      if (f.moeweNr % 2 && zd > 120) {
+        const len = Math.min(720, zd + 240);
+        f.rochenFlug = { phase: 'zielen', t: 0.9, a, len, bombeT: 0 }; f.winkel = a;
+        warnLinie(f.x, f.y, a, len, 80, 0.9 + len / 430); if (nahBeimSpieler(f)) ton('alarm');
+        return;
+      }
+      f.angriffCd = A.cd; f.beissT = 0.5;
+      for (let i = -2; i <= 2; i++) {   // 5 Feder-Pfeile im Fächer
+        const aa = a + i * 0.22, d = Math.min(zd, 420), tx = Math.max(20, Math.min(W - 20, f.x + Math.cos(aa) * d)), ty = Math.max(20, Math.min(H - 20, f.y + Math.sin(aa) * d));
+        bombeWerfen(f, tx, ty, { ulti: true, max: 900, dauer: 0.75, hoehe: 50, r: 34, schaden: 28 }); warnRing(tx, ty, 34, 0.75);
+      }
+      if (nahBeimSpieler(f)) ton('wurf');
+      if (f.hp < f.maxHp * 0.5 && sto && Math.random() < 0.5) for (let i = 0; i < 2; i++) kleckse.push(neuerFisch('knirps', f.x + (Math.random() - 0.5) * 80, f.y + (Math.random() - 0.5) * 80));   // ruft Hilfe
     }
   } else if (f.fisch === 'rochen') {   // 🛩️ hält Abstand, dann Bomben-Überflug
     vor = zd < 240 ? -1 : zd > 420 ? 1 : 0;
@@ -10487,9 +10525,51 @@ const STORY_LEVELS = [
            ['brummi', 'In der F…? F wie … Farbhafen? Freizeitpark? Oder … FISCHEREI?! 😨'],
            ['papagei', 'KRAH!!! Äh … Freizeitpark! Ganz bestimmt der Freizeitpark! Ich muss jetzt … dringend weg. Tschüss!'],
            ['brummi', 'Dr. Papagei benimmt sich komisch … Rote Federn, Vogel-Fußspuren … Ich glaube, wir müssen ihn im Auge behalten.'],
-           ['brummi', '🎬 ENDE VON KAPITEL 1 – Kapitel 2 kommt bald!']] },
+           ['brummi', '🎬 ENDE VON KAPITEL 1 – weiter geht\'s in Kapitel 2: „Falsche Fährten“!']] },
+  // ===== KAPITEL 2: Falsche Fährten =====
+  { id: 'k2l1', kap: 2, name: 'Die Kurier-Drohne', emoji: '📦', karte: 'wueste', art: 'jagd', song: 'wueste', lohn: 220, zeit: 120, drohneHP: 400,
+    text: 'Eine Drohne fliegt mit einem geheimen Paket davon! Verfolge sie und triff sie so lange, bis sie das Paket fallen lässt.',
+    vor: [['brummi', 'Dr. Papagei meinte, Tini ist im Freizeitpark … aber es gibt gar keinen Freizeitpark in der Stadt!'],
+          ['papagei', 'Krah! Äh … ich meinte den Freizeitpark … in der WÜSTE! Bei dem alten Tempel. Geht dahin!'],
+          ['brummi', 'Hier ist kein Freizeitpark … aber guck mal, da fliegt eine Drohne mit einem Paket! Schnell, hinterher!']],
+    nach: [['brummi', 'Das Paket! Da steht drauf: „Bestellung: 1 Raketen-Triebwerk, 500 Federn, 1 Gedanken-Lese-Helm. Lieferung an: Dr. P…“ – der Rest ist abgerissen.'],
+           ['brummi', '500 Federn? Ein Gedanken-Lese-Helm?! Wer braucht denn so was?'],
+           ['papagei', 'Krah! Dr. P… das kann jeder sein! Dr. Pinguin! Dr. Pudel! Dr. … Pommes! Vergesst das Paket!'],
+           ['papagei', 'Ich habe einen GANZ sicheren Tipp: Im Eispalast hat jemand Tini gesehen. Geht sofort hin!']] },
+  { id: 'k2l2', kap: 2, name: 'Eiskalte Falle', emoji: '🧊', karte: 'eispalast', art: 'ueberleben', song: 'eispalast', lohn: 240, zeit: 60, leben: 3,
+    text: 'Es ist eine FALLE! Überlebe 60 Sekunden gegen ganz viele Kabeljaus. Du darfst höchstens 3-mal erwischt werden. Achtung, rutschig!',
+    fisch: { t: 1.6, max: 9, arten: ['knirps', 'knirps', 'kabeljau', 'kabeljau', 'dicker', 'spucker'] },
+    vor: [['brummi', 'Der Eispalast … Hier ist niemand. Ganz schön still hier …'], ['brummi', 'Moment … da kommen KABELJAUS! Ganz viele! Das ist eine FALLE! Halte durch!']],
+    nach: [['brummi', 'Puh, geschafft! Aber woher wusste Dr. Papagei, dass hier Kabeljaus warten? Die Kabeljaus gehorchen doch nur …'],
+           ['brummi', '… ihm. In der Fischerei. Hmmm. 🤨'],
+           ['papagei', 'Krah! Was für ein Zufall, diese Kabeljaus! Ganz wilde Kabeljaus! Nicht meine! … Oh, ein Funkspruch vom Vulkan! Vielleicht ist es Tini!']] },
+  { id: 'k2l3', kap: 2, name: 'Funkspruch vom Vulkan', emoji: '📻', karte: 'vulkan', art: 'sammeln', song: 'vulkan', lohn: 260,
+    text: 'Auf der Vulkaninsel liegen 5 Teile von Tinis kaputtem Funkgerät. Sammle sie ein – aber pass auf die Lava und den Ausbruch auf!',
+    items: [[300, 300, '📻', 'das Funkgerät-Gehäuse'], [800, 160, '🔋', 'die Batterie'], [1300, 300, '📡', 'die Antenne'], [800, 840, '🔌', 'das Kabel'], [1300, 720, '🎛️', 'der Lautstärke-Knopf']],
+    fisch: { t: 5, max: 4, arten: ['knirps', 'kabeljau', 'spucker'] },
+    vor: [['brummi', 'Tinis Funkgerät ist kaputt und in Teile zersprungen! Sammle alle 5 Teile, dann kann ich es reparieren!']],
+    nach: [['brummi', 'So … Batterie rein, Antenne dran … Es rauscht! Da ist eine Nachricht!'],
+           ['tini', '„Brummi?! Hörst du mich?! Er will die FORMEL für die SUPER-FARBE! Die ist nur in meinem Kopf gespeichert! Er hat einen Helm, der Gedanken liest! Er ist …“'],
+           ['brummi', '… KRRRRZZZ. Weg. Aber TINI LEBT! Und „er“ will die Formel … Wer ist „er“?!'],
+           ['papagei', 'Krah! Äh … sicher ein Pirat! Ja! Am Schiffswrack wohnen Piraten! Sucht dort!']] },
+  { id: 'k2l4', kap: 2, name: 'Die Geheimbotschaft', emoji: '🖌️', karte: 'wrack', art: 'malen', song: 'kabeljau', lohn: 260, ziel: 35, zeit: 110,
+    text: 'Tini hat am Schiffswrack eine Geheimbotschaft mit unsichtbarer Tinte hinterlassen! Male 35 % der Bucht an, dann wird sie sichtbar.',
+    vor: [['brummi', 'Schau mal, im Sand sind komische Muster. Ich glaube, das ist Tinis unsichtbare Tinte! Mal alles an, dann sehen wir die Botschaft!']],
+    nach: [['brummi', 'Da erscheinen Buchstaben im Sand! F … I … S … C … H … E … R … E … I. FISCHEREI!'],
+           ['brummi', 'Tini ist in der FISCHEREI! Die gehört doch … DR. PAPAGEI! 😨'],
+           ['papagei', 'KRAH!!! Das … das ist eine Falle! Jemand will MIR die Schuld geben! Ich bin unschuldig!'],
+           ['papagei', 'Und … oh nein, die böse ROBO-MÖWE greift die Pirateninsel an! Die war es bestimmt! Schnell, haltet sie auf!']] },
+  { id: 'k2l5', kap: 2, name: 'BOSS: Die Robo-Möwe', emoji: '🤖', karte: 'piraten', art: 'boss', song: 'kabeljauSturm', lohn: 400,
+    text: 'BOSSKAMPF! Eine riesige Roboter-Möwe greift die Pirateninsel an. Weich den Bomben und Feder-Pfeilen aus und besiege sie!',
+    boss: { art: 'robomoewe', hp: 1800, helfer: { t: 9, max: 3, arten: ['knirps', 'knirps'] } },
+    vor: [['brummi', 'Da ist sie! Eine RIESEN-ROBOTER-MÖWE! Die wirft Bomben und schießt Feder-Pfeile!'], ['brummi', 'Wenn ein roter Streifen auf dich zeigt, fliegt sie gleich drüber – spring zur Seite!']],
+    nach: [['brummi', 'Die Robo-Möwe ist kaputt! Moment … da hinten am Flügel klebt ein Schild …'],
+           ['brummi', '„EIGENTUM VON DR. PAPAGEI – FISCHEREI-LABOR“. Und da steckt eine ROTE FEDER drin! 🪶'],
+           ['brummi', 'Die roten Federn … die Vogel-Fußspuren … die Kabeljau-Falle … die Fischerei … DR. PAPAGEI WAR ES DIE GANZE ZEIT!'],
+           ['papagei', '… Krah. Na gut. Ihr habt mich erwischt. Kommt doch in meine Fischerei. Dann … erkläre ich euch ALLES. Krah krah krah …'],
+           ['brummi', 'Das klingt nach einer Falle … Aber wir müssen Tini retten! 🎬 ENDE VON KAPITEL 2 – Kapitel 3 „Das geheime Labor“ kommt bald!']] },
 ];
-const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche' };
+const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche', 2: 'Kapitel 2: Falsche Fährten' };
 const STORY_INTRO = [
   ['brummi', 'Hey du! Gut, dass du da bist! Ich brauche ganz dringend deine Hilfe! 😰'],
   ['brummi', 'TINI IST VERSCHWUNDEN! Sie ist heute nicht zur Farbcast-Sendung gekommen. Das ist ihr noch NIE passiert!'],
@@ -10551,10 +10631,12 @@ function storyOeffnen() {
 function storyKarteZeigen() {
   zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
   musikModusSetzen('menu', 'farbcast');
-  const fertig = konto.story.fertig.length, alle = STORY_LEVELS.length;
-  $('storyKapitel').textContent = `${STORY_KAPITEL[1]} · ${fertig}/${alle} geschafft${fertig >= alle ? ' · 🎬 Kapitel 2 kommt bald!' : ''}`;
+  const fertig = STORY_LEVELS.filter(L => konto.story.fertig.includes(L.id)).length, alle = STORY_LEVELS.length;
+  $('storyKapitel').textContent = `${fertig}/${alle} Levels geschafft${fertig >= alle ? ' · 🎬 Das nächste Kapitel kommt bald!' : ''}`;
   const liste = $('storyLevels'); liste.replaceChildren();
+  let kapVorher = 0, scrollZiel = null;
   STORY_LEVELS.forEach((L, i) => {
+    if (L.kap !== kapVorher) { kapVorher = L.kap; const h = document.createElement('h3'); h.textContent = `📖 ${STORY_KAPITEL[L.kap]}`; h.style.margin = '0.6rem 0 0.2rem'; liste.append(h); }
     const frei = storyFrei(i), ok = konto.story.fertig.includes(L.id);
     const z = document.createElement('div'); z.className = 'storyLevel' + (frei ? '' : ' zu');
     const em = document.createElement('div'); em.className = 'em'; em.textContent = frei ? L.emoji : '🔒';
@@ -10562,10 +10644,11 @@ function storyKarteZeigen() {
     const b = document.createElement('b'); b.textContent = `${i + 1}. ${L.name}${ok ? ' ✅' : ''}`;
     const sm = document.createElement('small'); sm.textContent = frei ? `${ARENEN[L.karte].emoji} ${ARENEN[L.karte].name} · ${L.text} · 🪙 ${L.lohn}` : 'Schaff zuerst das Level davor!';
     info.append(b, sm); z.append(em, info);
-    if (frei) { const k = document.createElement('button'); k.className = 'klein'; k.textContent = ok ? '🔁 Nochmal' : '▶️ Los!'; k.onclick = () => { ton('klick'); storySzene(L.vor, () => storyLevelStarten(L)); }; z.append(k); }
+    if (frei) { const k = document.createElement('button'); k.className = 'klein'; k.textContent = ok ? '🔁 Nochmal' : '▶️ Los!'; k.onclick = () => { ton('klick'); storySzene(L.vor, () => storyLevelStarten(L)); }; z.append(k); if (!ok) scrollZiel = z; }
     liste.append(z);
   });
   nurZeigen('storyKarte');
+  if (scrollZiel) scrollZiel.scrollIntoView({ block: 'center' });   // gleich zum nächsten offenen Level
 }
 // ---------- Ein Level spielen ----------
 function storyItemMesh(emoji) {
@@ -10589,7 +10672,9 @@ function storyLevelStarten(L) {
   baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
   sto = { L, t: 0, items: [], gefunden: 0, ende: null, fischT: 2, bossT: 0 };
   if (L.art === 'sammeln') for (const [x, y, emoji, name] of L.items) {
-    const f = freieStelle(x * KS, y * KS, 14, 0); sto.items.push({ x: f.x, y: f.y, emoji, name, mesh: storyItemMesh(emoji) });
+    let f = freieStelle(x * KS, y * KS, 14, 0);
+    for (let v = 1; v < 40 && (inLava(f.x, f.y) || lavaNah(f.x, f.y, 30)); v++) f = freieStelle(x * KS + Math.cos(v * 2.4) * v * 12, y * KS + Math.sin(v * 2.4) * v * 12, 14, 0);   // nicht in die Lava legen
+    sto.items.push({ x: f.x, y: f.y, emoji, name, mesh: storyItemMesh(emoji) });
   }
   if (L.art === 'ziele') L.ziele.forEach(([x, y], i) => {
     const f = freieStelle(x * KS, y * KS, 16, 0);
@@ -10597,6 +10682,7 @@ function storyLevelStarten(L) {
     p.x = f.x; p.y = f.y; kleckse.push(p);
   });
   if (L.art === 'kampf') for (const a of auf.filter(a => a.team === 1).slice(0, 3)) { const b = neuerKlecks(1, a.nr, aufZuExtra({ ...a, name: ['Kleckerich', 'Schmatz', 'Plörre'][a.nr] || a.name })); kleckse.push(b); }
+  if (L.art === 'jagd') sto.drohne = drohneBauen(L);
   if (L.art === 'boss') {
     const B = L.boss, f = neuerFisch(B.art, W - 360, H / 2); f.hp = f.maxHp = B.hp; f.name = FISCH_ARTEN[B.art].name; kleckse.push(f); sto.boss = f;
   }
@@ -10612,7 +10698,58 @@ function storyLevelStarten(L) {
 function storyAufraeumen() {
   if (!sto) return;
   for (const it of sto.items) if (it.mesh) wegUndEntsorgen(it.mesh);
+  if (sto.drohne) wegUndEntsorgen(sto.drohne.mesh);
   sto = null;
+}
+// 📦 Kurier-Drohne: fliegt vor dir weg, macht ab und zu Pause – triff sie!
+function drohneBauen(L) {
+  const g = new THREE.Group(), ud = g.userData;
+  const grau = mat('#4a4f63', { metalness: 0.6, roughness: 0.35 }), rot = mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1.5 });
+  g.add(klotz(grau, 22, 6, 22, 0, 0, 0), kugel(mat('#1b1f3a', { roughness: 0.2 }), 4, 11, -1, 0, 1, 0.7, 1));
+  ud.rotoren = [];
+  for (const [x, z] of [[-13, -13], [13, -13], [-13, 13], [13, 13]]) {
+    g.add(klotz(grau, 3, 2, 3, x * 0.8, 2, z * 0.8), zylinder(grau, 1, 1, 4, x, 3, z));
+    const ro = new THREE.Group(); ro.position.set(x, 5, z); g.add(ro); ud.rotoren.push(ro);
+    ro.add(klotz(mat('#1b1f3a'), 16, 0.6, 2, 0, 0, 0), klotz(mat('#1b1f3a'), 2, 0.6, 16, 0, 0, 0));
+  }
+  g.add(kugel(rot, 1.8, 0, 4, 0)); ud.licht = rot;
+  g.add(zylinder(mat('#2b2f4a'), 0.3, 0.3, 10, 0, -8, 0), klotz(mat('#b5895a', { roughness: 0.9 }), 14, 11, 14, 0, -18, 0), klotz(mat('#e6d2a0'), 14.4, 2, 3, 0, -16, 0));   // Paket
+  const feder = klotz(mat('#e63946'), 1.2, 9, 3, 7.5, -15, 3); feder.rotation.z = 0.4; g.add(feder);   // 🪶 eine rote Feder steckt im Paket …
+  scene.add(g);
+  const f = freieStelle(W * 0.6, H / 2, 20, 0);
+  return { x: f.x, y: f.y, h: 45, hp: L.drohneHP, maxHp: L.drohneHP, a: Math.PI, pauseT: 0, flugT: 3, mesh: g };
+}
+function drohneUpdate(dt) {
+  const d = sto.drohne; if (!d || d.hp <= 0) return;
+  const ud = d.mesh.userData;
+  ud.rotoren.forEach(ro => { ro.rotation.y += dt * 40; });
+  ud.licht.emissiveIntensity = Math.sin(zeit * 10) > 0 ? 2 : 0.3;
+  if (startCountdown <= 0) {
+    if (d.pauseT > 0) { d.pauseT -= dt; if (d.pauseT <= 0) d.flugT = 2.5 + Math.random() * 2; }   // schwebt kurz – jetzt treffen!
+    else {
+      d.flugT -= dt; if (d.flugT <= 0) d.pauseT = 1.4;
+      const weg = Math.atan2(d.y - spieler.y, d.x - spieler.x), nah = Math.hypot(d.x - spieler.x, d.y - spieler.y) < 380;
+      const wunsch = nah ? weg + Math.sin(zeit * 0.7) * 0.6 : d.a + Math.sin(zeit * 1.3) * 0.8;
+      d.a += Math.atan2(Math.sin(wunsch - d.a), Math.cos(wunsch - d.a)) * Math.min(1, dt * 2.5);
+      const tempo = 145;
+      for (let v = 0; v < 8; v++) {   // nicht gegen Wände oder raus aus der Karte fliegen
+        const nx = d.x + Math.cos(d.a) * tempo * dt, ny = d.y + Math.sin(d.a) * tempo * dt;
+        if (nx > 60 && ny > 60 && nx < W - 60 && ny < H - 60 && !istWand(nx, ny)) { d.x = nx; d.y = ny; break; }
+        d.a += 0.8;
+      }
+    }
+  }
+  const boden = bodenHoehe(d.x, d.y), hoch = boden + d.h + Math.sin(zeit * 2.3) * 4;
+  d.mesh.position.set(d.x, hoch, d.y); d.mesh.rotation.y = -d.a; d.mesh.rotation.z = d.pauseT > 0 ? 0 : -0.15;
+  for (const sh of schuesse) {   // Treffer zählen (jeder Tropfen nur einmal)
+    if (sh.team !== 0 || sh.drohne || Math.hypot(sh.x - d.x, sh.y - d.y) > 24 || Math.abs((sh.h || hoch) - hoch) > 30) continue;
+    sh.drohne = true; d.hp -= (sh.w && sh.w.schaden) || 10; spritzer(d.x, d.y, hoch, 0, 4, 160);
+    if (Math.random() < 0.3) ton('treffer', 0.5);
+  }
+  if (d.hp <= 0) {   // 💥 Paket fällt runter!
+    explodieren(d.x, d.y, 60, 0, 0, spieler, false); ton('ausbruch'); spritzer(d.x, d.y, hoch, 0, 30, 320);
+    d.mesh.visible = false; meldung('📦 Die Drohne ist abgestürzt – das Paket gehört dir!');
+  }
 }
 function storyFischSpawnen(F) {   // Fische kommen vom Rand der Karte, weit weg von dir
   if (kleckse.filter(e => e.fisch && !e.tot).length >= F.max + (sto.boss ? 1 : 0)) return;
@@ -10659,6 +10796,11 @@ function storyUpdate(dt) {
     geschafft = puppen.every(p => p.tot);
   } else if (L.art === 'kampf') geschafft = spieler.ko >= L.ziel;
   else if (L.art === 'boss') geschafft = sto.boss && sto.boss.tot;
+  else if (L.art === 'jagd') { drohneUpdate(dt); geschafft = sto.drohne.hp <= 0; }
+  else if (L.art === 'ueberleben') {
+    geschafft = sto.t >= L.zeit;
+    if (!geschafft && spieler.tode >= L.leben) { sto.ende = { ok: false, t: 2.8 }; ton('vollTraurig'); highlightAnzeige.push({ emoji: '💥', titel: 'ZU OFT ERWISCHT!', text: 'Probier es gleich nochmal!', start: performance.now() / 1000 }); return; }
+  }
   if (geschafft) {
     sto.ende = { ok: true, t: 2.8 }; ton('vollJubel');
     highlightAnzeige.push({ emoji: '✅', titel: 'GESCHAFFT!', text: L.art === 'boss' ? 'Der Boss ist besiegt!' : 'Super Detektiv-Arbeit!', start: performance.now() / 1000 });
@@ -10687,9 +10829,11 @@ function storyHud(cw, ch) {
   else if (L.art === 'malen') { const p = zaehler[1] / flaeche * 100; f = Math.min(1, p / L.ziel); txt = `🎨 Angemalt: ${p.toFixed(1)} % / ${L.ziel} %`; }
   else if (L.art === 'ziele') { const n = kleckse.filter(e => e.puppe && e.tot).length; f = n / L.ziele.length; txt = `🎯 Wach-Puppen: ${n} / ${L.ziele.length}`; }
   else if (L.art === 'kampf') { f = Math.min(1, spieler.ko / L.ziel); txt = `💥 Bande erwischt: ${spieler.ko} / ${L.ziel}`; }
+  else if (L.art === 'jagd' && sto.drohne) { f = Math.max(0, sto.drohne.hp / sto.drohne.maxHp); txt = `📦 Drohne: ${Math.ceil(f * 100)} % – triff sie!`; }
+  else if (L.art === 'ueberleben') { f = Math.min(1, sto.t / L.zeit); txt = `🧊 Durchhalten! ${'❤️'.repeat(Math.max(0, L.leben - spieler.tode))}${'🖤'.repeat(Math.min(L.leben, spieler.tode))}`; }
   else if (L.art === 'boss' && sto.boss) { f = Math.max(0, sto.boss.hp / sto.boss.maxHp); txt = `👑 ${sto.boss.name}: ${Math.ceil(f * 100)} %`; }
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(bx, 44, bw, 18);
-  ctx.fillStyle = L.art === 'boss' ? '#ff4d4d' : '#5be37d'; ctx.fillRect(bx, 44, bw * f, 18);
+  ctx.fillStyle = L.art === 'boss' || L.art === 'jagd' ? '#ff4d4d' : '#5be37d'; ctx.fillRect(bx, 44, bw * f, 18);
   ctx.textAlign = 'center'; ctx.font = 'bold 13px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(txt, cw / 2, 58);
   if (L.art === 'sammeln') {   // Pfeil-Hinweis zum nächsten Hinweis
     let n = null, nd = 1e9; for (const it of sto.items) { const d = Math.hypot(it.x - spieler.x, it.y - spieler.y); if (d < nd) { nd = d; n = it; } }
