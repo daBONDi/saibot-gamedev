@@ -4246,7 +4246,7 @@ function koMeldung(e, wer) {
     return;
   }
   if (spielArt === 'kabeljau') {
-    meldung(e.spieler ? `💥 ${wer ? wer.name + ' hat dich erwischt!' : inLava(e.x, e.y) ? 'Platsch – ins Meer gefallen!' : 'Erwischt!'} Warte, bis dich jemand rettet 🛟` : `🫧 ${e.name} ist eine Rettungsblase – mal sie an!`); if (e.spieler) ton('erwischt');
+    meldung(e.spieler ? `💥 ${wer ? wer.name + ' hat dich erwischt!' : inLava(e.x, e.y) ? 'Platsch – ins Meer gefallen!' : 'Erwischt!'} Warte, bis dich jemand rettet 🛟` : `🛟 ${e.name} ist ein Rettungsring – mal sie an!`); if (e.spieler) ton('erwischt');
     return;
   }
   if (replay) { meldung(wer ? `💥 ${wer.name} ➜ ${e.name}` : `💥 ${e.name} erwischt`); return; }   // 🎬 in der Wiederholung nur eine kleine Meldung
@@ -9671,7 +9671,8 @@ function nachtUpdate() {   // Lampen zeigen dahin, wo man hinschaut
 // --- 🫧 Rettungsblase ---
 function baueRettungsblase(team) {   // 🛟 eigentlich ein Rettungsring (Name bleibt, damit alles weiter passt)
   const g = new THREE.Group(), ud = g.userData;
-  ud.huelle = new THREE.Group(); ud.huelle.rotation.x = -1.15; g.add(ud.huelle);   // leicht schräg, wie er im Wasser schaukelt
+  ud.koerper = new THREE.Group(); g.add(ud.koerper);   // wird beim Robben gestreckt und gekippt
+  ud.huelle = new THREE.Group(); ud.huelle.rotation.x = -Math.PI / 2; ud.huelle.position.y = 5.5; ud.koerper.add(ud.huelle);   // liegt flach am Boden
   const farbe = mat(TEAMS[team].col, { roughness: 0.4, emissive: TEAMS[team].col, emissiveIntensity: 0.15 }), weiss = mat('#f4f6fb', { roughness: 0.45 });
   for (let i = 0; i < 8; i++) {   // 8 Stücke: abwechselnd Teamfarbe und weiß
     const t = new THREE.Mesh(new THREE.TorusGeometry(14, 5.5, 12, 10, Math.PI / 4), i % 2 ? weiss : farbe);
@@ -9680,12 +9681,23 @@ function baueRettungsblase(team) {   // 🛟 eigentlich ein Rettungsring (Name b
   const seil = mat('#d9c9a0', { roughness: 0.9 });
   for (let i = 0; i < 4; i++) { const sl = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.6, 6, 12), seil); const a = i * Math.PI / 2 + Math.PI / 8; sl.position.set(Math.cos(a) * 19, Math.sin(a) * 19, 0); sl.rotation.z = a; ud.huelle.add(sl); }
   ud.huelle.add(new THREE.Mesh(new THREE.TorusGeometry(19.2, 0.45, 6, 40), seil));
-  const weissA = mat('#ffffff'), schw = mat('#111111');
-  for (const s of [-1, 1]) ud.huelle.add(kugel(weissA, 3.2, s * 5, 13, 4.5), kugel(schw, 1.6, s * 5.2, 14, 7));   // traurige Kulleraugen oben auf dem Ring
+  // 👀 Augen im Loch in der Mitte (auf einer kleinen Pfütze in Teamfarbe)
+  const pfuetze = new THREE.Mesh(new THREE.CircleGeometry(9, 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: TEAMS[team].dunkel, roughness: 0.15, metalness: 0.2 }));
+  pfuetze.position.y = 1.2; ud.koerper.add(pfuetze);
+  ud.augen = new THREE.Group(); ud.augen.position.set(1.5, 4.5, 0); ud.koerper.add(ud.augen);
+  ud.pupillen = []; ud.lider = [];
+  for (const z of [-1, 1]) {
+    const au = new THREE.Group(); au.position.set(0, 0, z * 3.4); ud.augen.add(au);
+    au.add(kugel(mat('#ffffff', { roughness: 0.2 }), 3.4, 0, 0, 0));
+    const pu = new THREE.Group(); au.add(pu); ud.pupillen.push(pu);
+    pu.add(kugel(mat('#111111'), 1.8, 2.3, 0.3, 0), kugel(mat('#ffffff'), 0.6, 3.6, 1.1, -0.4));
+    const lid = kugel(mat(TEAMS[team].col, { roughness: 0.5 }), 3.6, 0, 0, 0, 1, 0.15, 1); lid.position.y = 3.2; au.add(lid); ud.lider.push(lid);
+    const braue = klotz(mat('#1b1f3a'), 0.8, 0.8, 3.6, 1.6, 4.4, 0); braue.rotation.x = z * 0.45; au.add(braue);   // traurige Augenbrauen
+  }
   const rg = new THREE.RingGeometry(21, 25, 32, 1, 0, Math.PI * 2);
   ud.ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: '#ffd166', transparent: true, depthTest: false, side: THREE.DoubleSide }));
-  ud.ring.renderOrder = 996; g.add(ud.ring);
-  const sch = schild('🛟 RETTEN!', 'anmalen!', '#ff4d4d', 34, 9); sch.position.y = 30; g.add(sch); ud.schild = sch;
+  ud.ring.renderOrder = 996; ud.ring.position.y = 16; g.add(ud.ring);
+  const sch = schild('🛟 RETTEN!', 'anmalen!', '#ff4d4d', 34, 9); sch.position.y = 34; g.add(sch); ud.schild = sch;
   g.visible = false; scene.add(g);
   return g;
 }
@@ -9706,8 +9718,8 @@ function wiederbeleben(e, wer) {
   spritzer(e.x, e.y, bodenHoehe(e.x, e.y) + 20, e.team, 24, 260);
   if (e.rettungsMesh) e.rettungsMesh.visible = false;
   ton('plopp');
-  if (wer) { wer.rettungen = (wer.rettungen || 0) + 1; meldung(`🫧 ${wer.spieler ? 'Du hast' : wer.name + ' hat'} ${e.spieler ? 'dich' : e.name} gerettet!`); }
-  else meldung(`🫧 ${e.spieler ? 'Du bist' : e.name + ' ist'} wieder da!`);
+  if (wer) { wer.rettungen = (wer.rettungen || 0) + 1; meldung(`🛟 ${wer.spieler ? 'Du hast' : wer.name + ' hat'} ${e.spieler ? 'dich' : e.name} gerettet!`); }
+  else meldung(`🛟 ${e.spieler ? 'Du bist' : e.name + ' ist'} wieder da!`);
 }
 function rettungsUpdate(e, dt) {   // erwischte Spieler schweben als Blase – du kannst sie mit WASD langsam bewegen
   if (!e.rettungsMesh) e.rettungsMesh = baueRettungsblase(e.team);
@@ -9717,12 +9729,35 @@ function rettungsUpdate(e, dt) {   // erwischte Spieler schweben als Blase – d
     let dx = c * vor - s * seit, dy = s * vor + c * seit; const l = Math.hypot(dx, dy) || 1;
     const nx = e.x + dx / l * 70 * dt, ny = e.y + dy / l * 70 * dt;
     if (!kollidiert(nx, ny, 14, bodenHoehe(e.x, e.y) + 5) && nx > 15 && ny > 15 && nx < W - 15 && ny < H - 15) { e.x = nx; e.y = ny; }
+  } else if (!e.mensch) {   // 🤖 Bot-Ringe robben langsam zum nächsten Freund (damit der sie retten kann)
+    let ziel = null, zd = 1e9;
+    for (const o of kleckse) if (o.team === e.team && !o.tot && !o.imHeli && o !== e) { const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < zd) { zd = d; ziel = o; } }
+    if (ziel && zd > 70) {
+      const a = Math.atan2(ziel.y - e.y, ziel.x - e.x), nx = e.x + Math.cos(a) * 40 * dt, ny = e.y + Math.sin(a) * 40 * dt;
+      if (!kollidiert(nx, ny, 14, bodenHoehe(e.x, e.y) + 5) && !inLava(nx, ny)) { e.x = nx; e.y = ny; }
+      e.winkel = drehe(e.winkel, a, dt * 3);
+    }
   }
   const m = e.rettungsMesh, ud = m.userData;
   m.visible = true;
-  m.position.set(e.x, bodenHoehe(e.x, e.y) + 22 + Math.sin(zeit * 2.5 + e.nr) * 3, e.y);
+  // 🦭 Robben: wie schnell bewegt sich der Ring gerade?
+  const alt = e.ringAlt || { x: e.x, y: e.y }, tempo = dt > 0 ? Math.hypot(e.x - alt.x, e.y - alt.y) / dt : 0;
+  e.ringAlt = { x: e.x, y: e.y };
+  e.ringTempo = (e.ringTempo || 0) + (tempo - (e.ringTempo || 0)) * Math.min(1, dt * 8);
+  const bewegt = Math.min(1, e.ringTempo / 40);
+  e.robbT = (e.robbT || 0) + dt * (2 + bewegt * 6);
+  const zug = Math.sin(e.robbT * Math.PI), ruck = Math.max(0, zug);   // vorziehen … ausruhen … vorziehen …
+  m.position.set(e.x, bodenHoehe(e.x, e.y) + ruck * 2.5 * bewegt, e.y);
   m.rotation.y = -e.winkel;
-  ud.huelle.scale.setScalar(1 + Math.sin(zeit * 5) * 0.04);
+  ud.koerper.scale.set(1 + zug * 0.14 * bewegt + Math.sin(zeit * 3) * 0.02, 1 - ruck * 0.12 * bewegt, 1 - zug * 0.07 * bewegt);   // strecken und zusammenschieben
+  ud.koerper.rotation.z = -ruck * 0.16 * bewegt + Math.sin(zeit * 1.7 + e.nr) * 0.03;   // vorne hoch beim Ziehen
+  ud.koerper.rotation.x = Math.sin(e.robbT * Math.PI * 0.5) * 0.06 * bewegt;           // wackelt etwas zur Seite
+  // 👀 Augen: schauen nach vorne beim Robben, sonst traurig herum; blinzeln
+  const blick = bewegt > 0.3 ? 0 : Math.sin(zeit * 0.9 + e.nr) * 0.6;
+  ud.pupillen.forEach(pu => { pu.rotation.y = blick; pu.rotation.z = bewegt > 0.3 ? 0.1 : -0.25; });
+  const zu = ((zeit + e.nr * 0.9) % 3.4) < 0.14;
+  ud.lider.forEach(l => { l.scale.y = zu ? 1 : 0.15; l.position.y = zu ? 0 : 3.2; });
+  ud.augen.position.y = 4.5 + ruck * 1.2 * bewegt;
   const f = Math.min(1, (e.rettungHP || 0) / RETTUNG_HP);
   ud.ring.geometry.dispose(); ud.ring.geometry = new THREE.RingGeometry(21, 25, 32, 1, 0, Math.max(0.01, Math.PI * 2 * f));
   ud.ring.quaternion.copy(kamera.quaternion);
