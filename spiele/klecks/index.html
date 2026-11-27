@@ -3578,6 +3578,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   tasten[e.code] = true;
   if (zustand === 'wahl' && !$('papagei').classList.contains('hidden') && ['Space', 'Enter', 'KeyE', 'NumpadEnter'].includes(e.code) && !e.repeat) { e.preventDefault(); papageiTaste(); return; }   // 🦜 weiterreden
+  if (zustand === 'wahl' && storyDialog && ['Space', 'Enter', 'NumpadEnter', 'KeyE'].includes(e.code) && !e.repeat) { e.preventDefault(); storyWeiter(); return; }   // 🔍 Story weiter
   if (zustand === 'wahl' && farbcast && !e.repeat) {   // 🎙️ Farbcast
     if (['Space', 'Enter', 'NumpadEnter', 'KeyE'].includes(e.code)) { e.preventDefault(); farbcastWeiter(); return; }
     if (e.code === 'Escape') { farbcastEnde(); return; }
@@ -4599,7 +4600,7 @@ function zugUpdate(dt) {
 }
 
 function weltLeeren(meldungenBehalten = false) {
-  kabeljauAufraeumen();
+  kabeljauAufraeumen(); storyAufraeumen();
   if (feier) { feier = null; kameraOverride = null; }   // eine laufende Siegerehrung abbrechen
   buehne.visible = false; kroneMvp.visible = false;
   aufraeumen();
@@ -6089,7 +6090,7 @@ function erwischt(e, wer) {
   klecks(e.x, e.y, 45, farbe, wer);
   spritzer(e.x, e.y, 15, farbe, 40, 260);
   if (wer) wer.ko++;
-  if (e.fisch) { e.totZeit = 0; const A = FISCH_ARTEN[e.fisch]; if (A.boss && !A.keinKaviar) kaviarFallenLassen(e); else if (e.goldfisch) kaviarFallenLassen(e, 1); if (A.boss && wer && !wer.fisch) wer.bossKo = (wer.bossKo || 0) + 1; e.puste = null; e.ramm = null; }   // 🟠 Bossfische (und Goldfische) lassen Kaviar fallen
+  if (e.fisch) { e.totZeit = 0; const A = FISCH_ARTEN[e.fisch]; if (spielArt !== 'kabeljau') { /* im Story-Modus kein Kaviar */ } else if (A.boss && !A.keinKaviar) kaviarFallenLassen(e); else if (e.goldfisch) kaviarFallenLassen(e, 1); if (A.boss && wer && !wer.fisch) wer.bossKo = (wer.bossKo || 0) + 1; e.puste = null; e.ramm = null; }   // 🟠 Bossfische (und Goldfische) lassen Kaviar fallen
   if (spielArt === 'kabeljau' && !e.fisch) { e.wiederT = 1e9; e.rettung = true; e.rettungHP = 0; if (e.traegt) { e.traegt.traeger = null; e.traegt = null; } }   // 🫧 wird zur Rettungsblase
   koMeldung(e, wer);
   if (wer && !wer.spieler && !wer.mensch && !replay && Math.random() < 0.25) rufen(wer, Math.random() < 0.7 ? 'erwischt' : 'xd');   // Bots freuen sich
@@ -6406,6 +6407,7 @@ function update(dt) {
     return;
   }
   else if (spielArt === 'kabeljau') { zeit += dt; klatschCd -= dt; kabeljauUpdate(dt); if (zustand !== 'spiel' && zustand !== 'pause') return; }   // 🐟 Wellen statt Rundenzeit
+  else if (spielArt === 'story') { zeit += dt; klatschCd -= dt; storyUpdate(dt); if (zustand !== 'spiel' && zustand !== 'pause') return; }   // 🔍 Story-Level
   else {
   zeit += dt; rest -= dt; klatschCd -= dt;
   if (rest <= 60 && musikModus === 'spiel') { musikModusSetzen('finale', 'finale'); meldung('⏰ NOCH 1 MINUTE!!'); ton('alarm'); }
@@ -7094,6 +7096,7 @@ function hud() {
 
   if (modus === 'lobby') lobbyHud(cw, ch);
   else if (spielArt === 'kabeljau') kabeljauHud(cw, ch);
+  else if (spielArt === 'story') storyHud(cw, ch);
   else {
   // Zeit + Farbanteil oben
   const pO = zaehler[1] / flaeche, pL = zaehler[2] / flaeche;
@@ -8000,6 +8003,7 @@ $('shopZurueck').onclick = () => { ton('klick'); if (shopVonStadt) stadtBetreten
 
 $('start').onclick = () => { ton('klick'); stadtBetreten(true); farbcastStarten(); };   // 🎙️ erst der Farbcast
 $('fcWeiter').onclick = () => farbcastWeiter();
+$('storyZurueck').onclick = () => { ton('klick'); stadtBetreten(); };
 $('fcSkip').onclick = () => farbcastEnde();
 $('musikKnopf').onclick = () => musikUmschalten();
 $('musikKnopf').textContent = '🎵 Musik: ' + (musikAn ? 'an' : 'aus');
@@ -10441,6 +10445,281 @@ function fcZeichnen(f) {   // Schrift über dem 3D-Bild (Logo, Bauchbinde, Unter
   x.restore();
   x.fillStyle = '#1b1f3a'; x.font = 'bold 22px system-ui'; x.textAlign = 'center'; x.fillText('NEWS', 65, 706);
 }
+// ================== 🔍 STORY-MODUS: „Wo ist Tini?“ (eigene Geschichte!) ==================
+// Kapitel 1 „Spurensuche“: Brummi bittet dich, Tini zu suchen. Dr. Papagei „hilft“ – aber irgendwas stimmt nicht …
+const STORY_NAMEN = { brummi: '🦭 Brummi', tini: '🎧 Tini', papagei: '🦜 Dr. Papagei', bande: '😎 Boss der Kleckerich-Bande', du: '🙂 Du' };
+const STORY_LEVELS = [
+  { id: 'k1l1', kap: 1, name: 'Spuren am Hafen', emoji: '🎧', karte: 'farbhafen', art: 'sammeln', song: 'farbhafen', lohn: 120,
+    text: 'Finde 5 Hinweise auf Tini im Farbhafen! Pass auf die frechen Kabeljau-Knirpse auf.',
+    items: [[420, 220, '🎧', 'Tinis Kopfhörer'], [800, 500, '📒', 'eine Seite aus Tinis Notizbuch'], [1180, 780, '🧣', 'Tinis Schal'], [1200, 220, '🎤', 'Tinis Mikrofon-Kappe'], [600, 820, '👟', 'ein Schuhabdruck']],
+    fisch: { t: 4, max: 5, arten: ['knirps', 'knirps', 'kabeljau'] },
+    vor: [['brummi', 'Tini hat gesagt, sie geht gestern Abend noch zum Farbhafen. Schau dich dort mal um – vielleicht findest du Spuren!']],
+    nach: [['brummi', 'Das sind Tinis Kopfhörer! Und hier … eine Seite aus ihrem Notizbuch. Da steht: „Die FORMEL für die Super-Farbe ist …“ – der Rest ist verwischt. Hmm.'],
+           ['papagei', 'Krah! Ich habe gehört, Tini ist verschwunden?! Wie schrecklich! Ich helfe euch natürlich!'],
+           ['papagei', 'Ich … äh … habe sie gestern im SKATEPARK gesehen. Ganz bestimmt! Krah!'],
+           ['brummi', 'Danke, Dr. Papagei! Los, ab zum Skatepark!']] },
+  { id: 'k1l2', kap: 1, name: 'Unsichtbare Spuren', emoji: '🛹', karte: 'skatepark', art: 'malen', song: 'skatepark', lohn: 150, ziel: 30, zeit: 100,
+    text: 'Male 30 % vom Skatepark an! Die Farbe macht unsichtbare Fußspuren sichtbar. Du hast 100 Sekunden.',
+    vor: [['brummi', 'Im Skatepark sieht man nichts … Aber warte! Wenn du alles mit Farbe anmalst, werden unsichtbare Fußspuren sichtbar!']],
+    nach: [['brummi', 'Da sind Spuren! Aber … das sind keine Schuhe. Das sind VOGEL-Fußspuren! 🐾 Mit drei Zehen!'],
+           ['papagei', 'Krah?! Äh … das … das waren bestimmt Möwen! Ja, Möwen! Hier gibt es VIELE Möwen!'],
+           ['papagei', 'Viel wichtiger: Im Dschungel hat eine Bande ein Versteck. Das wird von Wach-Puppen bewacht. Bestimmt ist Tini dort!']] },
+  { id: 'k1l3', kap: 1, name: 'Dschungel-Wachposten', emoji: '🎯', karte: 'dschungel', art: 'ziele', song: 'dschungel', lohn: 160, zeit: 120,
+    text: 'Erwische alle 10 Wach-Puppen im Dschungel, bevor die Zeit um ist! Sie verstecken sich im Gebüsch.',
+    ziele: [[300, 200], [300, 800], [600, 330], [600, 670], [820, 180], [820, 820], [1000, 360], [1000, 640], [1300, 250], [1300, 750]],
+    vor: [['brummi', 'Da hinten sind die Wach-Puppen! Erwisch sie alle, dann kommen wir an das Versteck ran!']],
+    nach: [['brummi', 'Alle Wach-Puppen erwischt! Und hier ist ein Zettel: „Treffpunkt Bahnhof – die Kleckerich-Bande“.'],
+           ['papagei', 'Krah! Die Kleckerich-Bande! DIE haben Tini entführt! Ganz sicher! Ihr müsst sie am Bahnhof besiegen!']] },
+  { id: 'k1l4', kap: 1, name: 'Der falsche Verdacht', emoji: '🚉', karte: 'bahnhof', art: 'kampf', song: 'bahnhof', lohn: 200, ziel: 5, zeit: 180,
+    text: 'Die Kleckerich-Bande wartet am Bahnhof! Erwische 5-mal einen von ihnen. Achtung, Zug!',
+    vor: [['bande', 'Hey! Was willst DU denn hier? Das ist UNSER Bahnhof!'], ['brummi', 'Gebt Tini zurück!'], ['bande', 'Tini? Keine Ahnung, wovon du redest! Aber wenn du Ärger willst …']],
+    nach: [['bande', 'Aua, aua! Okay, du hast gewonnen! Aber ehrlich: Wir haben Tini NICHT entführt!'],
+           ['bande', 'Wir haben nur das hier am Hafen gefunden … eine große ROTE FEDER. 🪶'],
+           ['brummi', 'Eine rote Feder? Und Vogel-Fußspuren? Moment mal …'],
+           ['papagei', 'Krah! Äh! Eine Feder von einer … Möwe! Rote Möwen gibt es! Vergesst das!'],
+           ['papagei', 'Geht lieber zur Kabeljau-Insel! Der RIESENKABELJAU hat bestimmt etwas gesehen – er sieht ALLES!']] },
+  { id: 'k1l5', kap: 1, name: 'BOSS: Der Riesenkabeljau', emoji: '👑', karte: 'insel', art: 'boss', song: 'kabeljauSturm', lohn: 300,
+    text: 'BOSSKAMPF! Der Riesenkabeljau hat etwas verschluckt, das Tini gehört. Besiege ihn!',
+    boss: { art: 'riese', hp: 1500, helfer: { t: 7, max: 4, arten: ['knirps', 'knirps', 'kabeljau'] } },
+    vor: [['brummi', 'Da ist er! Der Riesenkabeljau! Und … er hat etwas im Maul! Das sieht aus wie Tinis Mikrofon!'], ['brummi', 'Pass auf – wenn er stampft, lauf aus dem roten Kreis!']],
+    nach: [['brummi', 'Er hat das Mikrofon ausgespuckt! Und da klebt ein Zettel dran. Tinis Schrift!'],
+           ['tini', '„HILFE! Ich bin gefangen in der F…“ – mehr steht da nicht.'],
+           ['brummi', 'In der F…? F wie … Farbhafen? Freizeitpark? Oder … FISCHEREI?! 😨'],
+           ['papagei', 'KRAH!!! Äh … Freizeitpark! Ganz bestimmt der Freizeitpark! Ich muss jetzt … dringend weg. Tschüss!'],
+           ['brummi', 'Dr. Papagei benimmt sich komisch … Rote Federn, Vogel-Fußspuren … Ich glaube, wir müssen ihn im Auge behalten.'],
+           ['brummi', '🎬 ENDE VON KAPITEL 1 – Kapitel 2 kommt bald!']] },
+];
+const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche' };
+const STORY_INTRO = [
+  ['brummi', 'Hey du! Gut, dass du da bist! Ich brauche ganz dringend deine Hilfe! 😰'],
+  ['brummi', 'TINI IST VERSCHWUNDEN! Sie ist heute nicht zur Farbcast-Sendung gekommen. Das ist ihr noch NIE passiert!'],
+  ['brummi', 'Ich hab überall angerufen. Niemand weiß, wo sie ist. Hilfst du mir, sie zu suchen?'],
+  ['papagei', 'Krah! Brummi, was ist denn los? … Tini ist weg? Oh nein! Ich helfe euch natürlich. Ich weiß ALLES über diese Stadt!'],
+  ['brummi', 'Danke, Dr. Papagei! Okay, Detektiv: Auf der Spuren-Karte siehst du, wo wir suchen. Los geht\'s! 🔍'],
+];
+let sto = null, storyDialog = null;
+// ---------- Zwischenszenen: Figur + Sprechblase, die sich selbst schreibt ----------
+function storyBildMalen(wer, mund = 0) {
+  const c = $('storyBild'), x = c.getContext('2d');
+  x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, 160, 180);
+  if (wer === 'papagei') { papageiPortraet(c); return; }
+  x.translate(20, 22);
+  if (wer === 'brummi') brummiZeichnen(x, { mund });
+  else if (wer === 'tini') tiniZeichnen(x, { mund, traurig: true });
+  else {   // 😎 Bande-Boss: Kind mit Kappe verkehrtrum und Sonnenbrille
+    const k = (px, py, r, f) => { x.fillStyle = f; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); };
+    x.fillStyle = '#a347ff'; x.beginPath(); x.moveTo(14, 140); x.quadraticCurveTo(60, 88, 106, 140); x.fill();
+    k(60, 66, 32, '#c68642'); x.fillStyle = '#2b2f4a'; x.beginPath(); x.ellipse(60, 44, 32, 14, 0, Math.PI, 0); x.fill(); x.fillRect(20, 40, 18, 6);
+    x.fillStyle = '#111'; x.fillRect(38, 58, 18, 9); x.fillRect(64, 58, 18, 9); x.fillRect(56, 60, 8, 3);
+    x.fillStyle = '#5a1c24'; x.beginPath(); x.ellipse(60, 86, 8, 2 + mund * 5, 0, 0, 7); x.fill();
+  }
+}
+function storySzene(zeilen, danach) {
+  storyDialog = { zeilen, nr: -1, danach, uhr: null, i: 0, text: [] };
+  zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
+  nurZeigen('storySzene'); storyWeiter();
+}
+function storyTippFertig() {
+  const d = storyDialog; if (!d || !d.uhr) return;
+  clearInterval(d.uhr); d.uhr = null; $('storyText').textContent = d.text.join(''); storyBildMalen(d.zeilen[d.nr][0], 0);
+}
+function storyWeiter() {
+  const d = storyDialog; if (!d) return;
+  if (d.uhr) { storyTippFertig(); return; }   // erst fertig schreiben
+  d.nr++;
+  if (d.nr >= d.zeilen.length) { storyDialog = null; ton('klick'); if (d.danach) d.danach(); return; }
+  const [wer, text] = d.zeilen[d.nr];
+  $('storyName').textContent = STORY_NAMEN[wer] || wer; d.text = [...text]; d.i = 0; $('storyText').textContent = '';
+  const knoepfe = $('storyKnoepfe'); knoepfe.replaceChildren();
+  const b = document.createElement('button'); b.className = 'gross'; b.textContent = d.nr === d.zeilen.length - 1 ? '✅ Weiter' : '⏭ Weiter'; b.onclick = () => storyWeiter(); knoepfe.append(b);
+  const plapper = wer === 'papagei' ? 'papageiPlapper' : wer === 'tini' ? 'tiniPlapper' : 'brummiPlapper';
+  d.uhr = setInterval(() => {
+    if (d.i >= d.text.length) { storyTippFertig(); return; }
+    $('storyText').textContent += d.text[d.i];
+    if (d.i % 3 === 0 && /[a-zäöüß]/i.test(d.text[d.i])) ton(SOUNDS[plapper] ? plapper : 'papageiPlapper', 0.7);
+    storyBildMalen(wer, d.i % 4 < 2 ? 0.8 : 0.15);
+    d.i++;
+  }, 24);
+}
+// ---------- Die Spuren-Karte (Level-Auswahl) ----------
+function storyFrei(i) { return i === 0 || konto.story.fertig.includes(STORY_LEVELS[i - 1].id); }
+function storyOeffnen() {
+  if (!konto.story) konto.story = { intro: false, fertig: [] };
+  if (!konto.story.intro) { storySzene(STORY_INTRO, () => { konto.story.intro = true; speichern(); storyKarteZeigen(); }); return; }
+  storyKarteZeigen();
+}
+function storyKarteZeigen() {
+  zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
+  musikModusSetzen('menu', 'farbcast');
+  const fertig = konto.story.fertig.length, alle = STORY_LEVELS.length;
+  $('storyKapitel').textContent = `${STORY_KAPITEL[1]} · ${fertig}/${alle} geschafft${fertig >= alle ? ' · 🎬 Kapitel 2 kommt bald!' : ''}`;
+  const liste = $('storyLevels'); liste.replaceChildren();
+  STORY_LEVELS.forEach((L, i) => {
+    const frei = storyFrei(i), ok = konto.story.fertig.includes(L.id);
+    const z = document.createElement('div'); z.className = 'storyLevel' + (frei ? '' : ' zu');
+    const em = document.createElement('div'); em.className = 'em'; em.textContent = frei ? L.emoji : '🔒';
+    const info = document.createElement('div'); info.className = 'info';
+    const b = document.createElement('b'); b.textContent = `${i + 1}. ${L.name}${ok ? ' ✅' : ''}`;
+    const sm = document.createElement('small'); sm.textContent = frei ? `${ARENEN[L.karte].emoji} ${ARENEN[L.karte].name} · ${L.text} · 🪙 ${L.lohn}` : 'Schaff zuerst das Level davor!';
+    info.append(b, sm); z.append(em, info);
+    if (frei) { const k = document.createElement('button'); k.className = 'klein'; k.textContent = ok ? '🔁 Nochmal' : '▶️ Los!'; k.onclick = () => { ton('klick'); storySzene(L.vor, () => storyLevelStarten(L)); }; z.append(k); }
+    liste.append(z);
+  });
+  nurZeigen('storyKarte');
+}
+// ---------- Ein Level spielen ----------
+function storyItemMesh(emoji) {
+  const g = new THREE.Group(), c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d'); x.fillStyle = 'rgba(255,209,102,0.9)'; x.beginPath(); x.arc(64, 64, 58, 0, 7); x.fill();
+  x.font = '78px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(emoji, 64, 70);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true })); sp.scale.set(26, 26, 1); sp.position.y = 26; g.add(sp);
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(6, 12, 200, 12, 1, true), new THREE.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })).translateY(100));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(14, 18, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.7, depthWrite: false })); ring.position.y = 1; g.add(ring);
+  g.userData.sprite = sp; scene.add(g); return g;
+}
+function storyLevelStarten(L) {
+  if (mp.peer) mpBeenden();
+  farbenSetzen(0);
+  weltLeeren(true); meldungen = [];
+  spielArt = 'story'; modus = 'match'; karteLaden(L.karte);
+  klecks(BASIS[0].x, BASIS[0].y, 110, 0, null);
+  const auf = matchAufstellung(), ich = auf.find(a => a.team === 0 && a.mensch) || auf[0];
+  kleckse = [neuerKlecks(0, 0, aufZuExtra({ ...ich, team: 0, nr: 0 }))];
+  spieler = kleckse[0]; spieler.spieler = true;
+  baueHaendeWaffe(spieler.waffe, kontoAussehen(), konto.an);
+  sto = { L, t: 0, items: [], gefunden: 0, ende: null, fischT: 2, bossT: 0 };
+  if (L.art === 'sammeln') for (const [x, y, emoji, name] of L.items) {
+    const f = freieStelle(x * KS, y * KS, 14, 0); sto.items.push({ x: f.x, y: f.y, emoji, name, mesh: storyItemMesh(emoji) });
+  }
+  if (L.art === 'ziele') L.ziele.forEach(([x, y], i) => {
+    const f = freieStelle(x * KS, y * KS, 16, 0);
+    const p = neuerKlecks(1, i % 4, aufZuExtra({ team: 1, nr: i % 4, puppe: true, heim: { x: f.x, y: f.y }, name: 'Wach-Puppe', set: 'spritzer', ...zufallsLook() }));
+    p.x = f.x; p.y = f.y; kleckse.push(p);
+  });
+  if (L.art === 'kampf') for (const a of auf.filter(a => a.team === 1).slice(0, 3)) { const b = neuerKlecks(1, a.nr, aufZuExtra({ ...a, name: ['Kleckerich', 'Schmatz', 'Plörre'][a.nr] || a.name })); kleckse.push(b); }
+  if (L.art === 'boss') {
+    const B = L.boss, f = neuerFisch(B.art, W - 360, H / 2); f.hp = f.maxHp = B.hp; f.name = FISCH_ARTEN[B.art].name; kleckse.push(f); sto.boss = f;
+  }
+  rest = L.zeit || 0; zeit = 0; pfiff10 = false; lobbySuche = null;
+  matchHighlights = []; splatListe = []; highlightAnzeige = []; todesKam = null; soloAuslo = null; aufnahme = { puffer: [], clips: [], tickT: 0 }; aufnahmeEv = [];
+  nurZeigen(null);
+  zustand = 'spiel'; startCountdown = 3; letzteSek = 99;
+  audioStart(); musikModusSetzen('spiel', SONGS[L.song] ? L.song : spielSong(L.karte)); ton('fanfare');
+  zielRing.material.color.set(TEAMS[0].col);
+  highlightAnzeige.push({ emoji: L.emoji, titel: L.name.toUpperCase(), text: L.text, start: performance.now() / 1000 + 0.3 });
+  mausFangen();
+}
+function storyAufraeumen() {
+  if (!sto) return;
+  for (const it of sto.items) if (it.mesh) wegUndEntsorgen(it.mesh);
+  sto = null;
+}
+function storyFischSpawnen(F) {   // Fische kommen vom Rand der Karte, weit weg von dir
+  if (kleckse.filter(e => e.fisch && !e.tot).length >= F.max + (sto.boss ? 1 : 0)) return;
+  for (let v = 0; v < 30; v++) {
+    const rand = Math.random() < 0.5, x = rand ? (Math.random() < 0.5 ? 60 : W - 60) : 60 + Math.random() * (W - 120), y = rand ? 60 + Math.random() * (H - 120) : (Math.random() < 0.5 ? 60 : H - 60);
+    if (istWand(x, y) || inLava(x, y) || kollidiert(x, y, 14, bodenHoehe(x, y)) || Math.hypot(x - spieler.x, y - spieler.y) < 450) continue;
+    kleckse.push(neuerFisch(zufallAus(F.arten), x, y)); spritzer(x, y, 5, 1, 12, 220); return;
+  }
+}
+function storyUpdate(dt) {
+  if (!sto) return;
+  const L = sto.L; sto.t += dt;
+  for (let i = kleckse.length - 1; i >= 0; i--) {   // erwischte Fische verschwinden
+    const f = kleckse[i]; if (!f.fisch || !f.tot) continue;
+    f.totZeit += dt; if (f.totZeit > 0.7) { if (f.roentgen) scene.remove(f.roentgen); wegUndEntsorgen(f.gruppe); kleckse.splice(i, 1); }
+  }
+  if (sto.ende) {   // kurz jubeln (oder traurig sein), dann geht's weiter
+    sto.ende.t -= dt; if (sto.ende.t <= 0) storyLevelEnde(sto.ende.ok);
+    return;
+  }
+  if (L.zeit) {
+    rest = Math.max(0, L.zeit - sto.t);
+    if (rest <= 10 && !pfiff10) { pfiff10 = true; meldung('⏰ Noch 10 Sekunden!'); }
+    if (rest <= 3 && Math.ceil(rest) !== letzteSek) { letzteSek = Math.ceil(rest); ton('piep'); }
+  }
+  const F = L.fisch || (L.boss && L.boss.helfer);
+  if (F) { sto.fischT -= dt; if (sto.fischT <= 0) { sto.fischT = F.t; storyFischSpawnen(F); } }
+  let geschafft = false;
+  if (L.art === 'sammeln') {
+    for (let i = sto.items.length - 1; i >= 0; i--) {
+      const it = sto.items[i];
+      it.mesh.position.set(it.x, bodenHoehe(it.x, it.y) + Math.sin(zeit * 3 + i) * 3, it.y); it.mesh.userData.sprite.material.rotation = Math.sin(zeit * 2 + i) * 0.2;
+      if (!spieler.tot && Math.hypot(spieler.x - it.x, spieler.y - it.y) < 30 && Math.abs(hAbs(spieler) - bodenHoehe(it.x, it.y)) < 40) {
+        wegUndEntsorgen(it.mesh); sto.items.splice(i, 1); sto.gefunden++;
+        ton('kauf'); spritzer(it.x, it.y, bodenHoehe(it.x, it.y) + 20, 0, 18, 260);
+        meldung(`🔍 Gefunden: ${it.emoji} ${it.name}! (${sto.gefunden}/${L.items.length})`);
+      }
+    }
+    geschafft = sto.items.length === 0;
+  } else if (L.art === 'malen') geschafft = zaehler[1] / flaeche * 100 >= L.ziel;
+  else if (L.art === 'ziele') {
+    const puppen = kleckse.filter(e => e.puppe);
+    for (const p of puppen) if (p.tot && p.wiederT < 1e8) { p.wiederT = 1e9; ton('ding'); meldung(`🎯 Wach-Puppe erwischt! (${puppen.filter(q => q.tot).length}/${L.ziele.length})`); }
+    geschafft = puppen.every(p => p.tot);
+  } else if (L.art === 'kampf') geschafft = spieler.ko >= L.ziel;
+  else if (L.art === 'boss') geschafft = sto.boss && sto.boss.tot;
+  if (geschafft) {
+    sto.ende = { ok: true, t: 2.8 }; ton('vollJubel');
+    highlightAnzeige.push({ emoji: '✅', titel: 'GESCHAFFT!', text: L.art === 'boss' ? 'Der Boss ist besiegt!' : 'Super Detektiv-Arbeit!', start: performance.now() / 1000 });
+    for (const f of kleckse) if (f.fisch && !f.tot) { f.tot = true; f.totZeit = 0.2; }
+  } else if (L.zeit && sto.t >= L.zeit) {
+    sto.ende = { ok: false, t: 2.8 }; ton('vollTraurig');
+    highlightAnzeige.push({ emoji: '⏰', titel: 'ZEIT UM!', text: 'Nicht schlimm – probier es gleich nochmal!', start: performance.now() / 1000 });
+  }
+}
+function storyLevelEnde(ok) {
+  const L = sto.L, erstes = ok && !konto.story.fertig.includes(L.id);
+  if (ok) { if (erstes) konto.story.fertig.push(L.id); konto.muenzen += erstes ? L.lohn : Math.round(L.lohn / 4); speichern(); }
+  weltLeeren(); kameraOverride = null;
+  stadtBetreten();   // im Hintergrund wieder die Stadt
+  if (ok) storySzene([...L.nach, ['brummi', `🪙 Du bekommst ${erstes ? L.lohn : Math.round(L.lohn / 4)} Münzen als Detektiv-Lohn!`]], storyKarteZeigen);
+  else storySzene([['brummi', 'Oh nein, die Zeit ist um! Aber gib nicht auf – Tini braucht uns! Versuch es gleich nochmal.']], storyKarteZeigen);
+}
+function storyHud(cw, ch) {
+  if (!sto) return;
+  const L = sto.L, bw = Math.min(460, cw - 40), bx = (cw - bw) / 2;
+  ctx.fillStyle = '#1b1f3acc'; ctx.beginPath(); ctx.roundRect(bx - 10, 8, bw + 20, 70, 14); ctx.fill();
+  ctx.textAlign = 'left'; ctx.font = 'bold 18px system-ui'; ctx.fillStyle = '#ffd166'; ctx.fillText(`${L.emoji} ${L.name}`, bx, 32);
+  if (L.zeit) { const r = Math.ceil(rest); ctx.textAlign = 'right'; ctx.font = 'bold 22px system-ui'; ctx.fillStyle = r <= 10 ? '#ff6060' : '#fff'; ctx.fillText(`${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`, bx + bw, 32); }
+  let f = 0, txt = '';
+  if (L.art === 'sammeln') { f = sto.gefunden / L.items.length; txt = `🔍 Hinweise: ${sto.gefunden} / ${L.items.length}`; }
+  else if (L.art === 'malen') { const p = zaehler[1] / flaeche * 100; f = Math.min(1, p / L.ziel); txt = `🎨 Angemalt: ${p.toFixed(1)} % / ${L.ziel} %`; }
+  else if (L.art === 'ziele') { const n = kleckse.filter(e => e.puppe && e.tot).length; f = n / L.ziele.length; txt = `🎯 Wach-Puppen: ${n} / ${L.ziele.length}`; }
+  else if (L.art === 'kampf') { f = Math.min(1, spieler.ko / L.ziel); txt = `💥 Bande erwischt: ${spieler.ko} / ${L.ziel}`; }
+  else if (L.art === 'boss' && sto.boss) { f = Math.max(0, sto.boss.hp / sto.boss.maxHp); txt = `👑 ${sto.boss.name}: ${Math.ceil(f * 100)} %`; }
+  ctx.fillStyle = '#ffffff22'; ctx.fillRect(bx, 44, bw, 18);
+  ctx.fillStyle = L.art === 'boss' ? '#ff4d4d' : '#5be37d'; ctx.fillRect(bx, 44, bw * f, 18);
+  ctx.textAlign = 'center'; ctx.font = 'bold 13px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(txt, cw / 2, 58);
+  if (L.art === 'sammeln') {   // Pfeil-Hinweis zum nächsten Hinweis
+    let n = null, nd = 1e9; for (const it of sto.items) { const d = Math.hypot(it.x - spieler.x, it.y - spieler.y); if (d < nd) { nd = d; n = it; } }
+    if (n) { ctx.font = 'bold 14px system-ui'; ctx.fillStyle = '#ffd166'; ctx.fillText(`Nächster Hinweis: ${Math.round(nd / 10)} m – folge den gelben Lichtsäulen!`, cw / 2, 96); }
+  }
+}
+// 🦭 Brummi wartet in der Stadt vor seinem Übertragungswagen
+let brummiStadt = null;
+(function brummiInDerStadt() {
+  const hx = -270, hz = 225;
+  const wagen = mat('#f2f4f8', { roughness: 0.5 }), pink = mat('#ff5fa2', { roughness: 0.5 });
+  sKlotz(wagen, 120, 52, 56, hx - 60, 34, hz + 20, true); sKlotz(wagen, 40, 36, 56, hx + 20, 26, hz + 20);
+  sKlotz(pink, 122, 6, 58, hx - 40, 30, hz + 20); sKlotz(mat('#9fd8ff', { roughness: 0.1, metalness: 0.3 }), 2, 16, 44, hx + 40.5, 34, hz + 20);
+  for (const [x, z] of [[-100, -6], [-20, -6], [-100, 46], [-20, 46]]) { const r = zylinderZ(MAT_GUMMI, 9, 9, 6, hx + x + 20, 9, hz + z); stadtGruppe.add(r); }
+  const schuessel = new THREE.Mesh(new THREE.SphereGeometry(16, 16, 8, 0, Math.PI * 2, 0, 1.1), mat('#c9cfe6', { metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
+  schuessel.position.set(hx - 80, 72, hz + 20); schuessel.rotation.z = 0.9; stadtGruppe.add(schuessel);   // Satellitenschüssel
+  const sch = schild('🎙️ FARBCAST', '🔍 Wo ist Tini?', '#ff5fa2', 110, 28); sch.position.set(hx - 60, 74, hz + 48.6); stadtGruppe.add(sch);
+  brummiStadt = baueBrummi3D(); brummiStadt.scale.setScalar(0.85); brummiStadt.position.set(hx + 70, 0, hz - 10); brummiStadt.rotation.y = -Math.PI / 2 + 0.6; stadtGruppe.add(brummiStadt);
+  stadtHindernisse.push({ x: hx + 70, y: hz - 10, kreis: 20 });
+  STADT_ZIELE.push({ story: true, x: hx + 70, y: hz - 55, r: 55, text: '🔍 Zu Brummi (Story: Wo ist Tini?)' });
+})();
+function brummiStadtAnimieren() {   // Brummi ist nervös: wippt hin und her und winkt
+  if (!brummiStadt) return;
+  const ud = brummiStadt.userData, t = performance.now() / 1000;
+  ud.kopf.rotation.y = Math.sin(t * 1.3) * 0.4; ud.kopf.rotation.z = Math.sin(t * 2.1) * 0.05;
+  ud.flossen[0].rotation.x = Math.sin(t * 0.5) > 0.6 ? -2.2 + Math.sin(t * 9) * 0.4 : Math.sin(t * 2) * 0.1;
+  ud.mund.scale.y = 0.3 + Math.max(0, Math.sin(t * 5)) * 0.6 * (Math.sin(t * 0.7) > 0 ? 1 : 0);
+  brummiStadt.rotation.z = Math.sin(t * 1.7) * 0.03;
+}
+
 // ================== 🦜 DR. PAPAGEI und seine Fischerei (in der Stadt) ==================
 function baueDrPapagei() {
   const g = new THREE.Group(), ud = g.userData;
@@ -10724,6 +11003,7 @@ function stadtBetretenTaste() {
   if (!stadtZiel) return;
   ton('klick');
   if (stadtZiel.papagei) { papageiOeffnen(); papageiPortraet(); return; }   // 🦜 Kabeljau Run
+  if (stadtZiel.story) { storyOeffnen(); return; }   // 🔍 Story-Modus
   if (stadtZiel.arena) {
     zustand = 'wahl';
     if (document.pointerLockElement) document.exitPointerLock();
@@ -10769,7 +11049,7 @@ function stadtZeigen(dt) {
   const q = p.landT > 0 ? Math.sin(p.landT / 0.25 * Math.PI) : 0;
   g.scale.set(1 + q * 0.1, 1 - q * 0.16, 1 + q * 0.1);
   animiereFigur(p, v, dt);
-  papageiAnimieren();
+  papageiAnimieren(); brummiStadtAnimieren();
   for (const n of npcs) {
     n.gruppe.position.set(n.x, 0, n.y); n.gruppe.rotation.y = -n.winkel;
     animiereFigur(n, Math.hypot(n.vx, n.vy), dt);
