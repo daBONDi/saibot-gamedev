@@ -1178,6 +1178,24 @@ Object.assign(SONGS, {
     bass: '0.2.4.2.0.2.4.2.', arp: '',
     mel: ['4...5.4.3...2...', '4...............', '5...6.5.4...3...', '5...............', '4...5.4.3...4...', '5...6...7.......', '6.5.4.3.2...1...', '2...............'],
     kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x..xx..xx..xx..x' },
+  // 🎙️ Für den Farbcast: lockerer Talkshow-Groove
+  farbcast: { name: 'Farbcast-Groove', bpm: 104, swing: 0.1, lead: 'weich', arpArt: 'zupf', pad: 0.03,
+    akkorde: ['Dm7', 'G7', 'Cmaj7', 'Am7', 'Dm7', 'G7', 'Em7', 'A7'],
+    bass: '0..0.2..0..0.2.1', arp: '0.1.2.1.0.1.2.3.',
+    mel: ['3...4.5...4.3...', '2.3.4...........', '3...4.5...6.5...', '4...............', '3...4.5...4.3...', '2.3.4...5.4.3...', '2...1...2...3...', '4...............'],
+    kick: 'x.....x...x.....', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '............x...' },
+  // 🐟 Kabeljau Run: ein Seemannslied mit Rock-Gitarren
+  kabeljau: { name: 'Kabeljau-Shanty', bpm: 132, lead: 'saege', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['Dm', 'Dm', 'C', 'C', 'Dm', 'Bb', 'C', 'Dm'],
+    bass: '0.0.0.0o0.0.0.0o', arp: '0.1.2.1.0.1.2.1.',
+    mel: ['3.3.3.4.5...3...', '4...3...2.......', '2.2.2.3.4...2...', '3...2...1.......', '3.3.3.4.5...6...', '5...4...3.......', '4.3.2.3.4...2...', '3...............'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '............x...' },
+  // 🌊 Welle 3 und Extra-Welle: schneller und wilder
+  kabeljauSturm: { name: 'Sturmflut', bpm: 152, lead: 'saege', arpArt: 'zupf', pad: 0.02,
+    akkorde: ['Em', 'C', 'D', 'B', 'Em', 'C', 'Am', 'B'],
+    bass: '0.0o0.0o0.0o0.0o', arp: '0123210101232101',
+    mel: ['5.5.4.5.6...5...', '4...3...4.......', '5.5.4.5.6...7...', '6...5...4.......', '5.4.3.4.5...3...', '4.3.2.3.4...2...', '3.4.5.6.7.6.5.4.', '5...............'],
+    kick: 'x.x.x...x.x.x...', snare: '....x.......x...', hat: 'xxxxxxxxxxxxxxxx', clap: '....x.......x..x', tom: '............xxxx' },
   // ⏰ Spielt, wenn nur noch 1 Minute übrig ist!
   finale: { name: 'Noch 1 Minute!!', bpm: 150, lead: 'saege', arpArt: 'zupf', pad: 0.025,
     akkorde: ['Am', 'Am', 'F', 'G', 'Am', 'Am', 'F', 'E'],
@@ -8360,6 +8378,12 @@ const FISCH_ARTEN = {
               info: 'BOSS! Hat eine Baggerschaufel vorne dran. Zeigt ein roter Streifen auf dich, rast er gleich los – spring zur Seite! Danach ist er kurz benommen.' },
   kugelfisch: { name: 'Puste-Kugelfisch', emoji: '🎈', hp: 180, tempo: 1.05, r: 16, groesse: 1.0, nah: 0, schaden: 100, cd: 0, spur: 10, farbe: '#d9b44a', bauch: '#fff3c8', angriff: 'Riesen-Platzer', boss: true, platzR: 130,
               info: 'BOSS! Rennt zu dir und bläst sich auf. Erwisch ihn, bevor er PLATZT – sonst gibt es eine Riesen-Explosion und keinen Kaviar!' },
+  wels:     { name: 'Wirbel-Wels',     emoji: '🌀', hp: 280, tempo: 0.75, r: 18, groesse: 1.25, nah: 0, schaden: 22, cd: 4.5, spur: 14, farbe: '#5d5a4a', bauch: '#d8d2b8', angriff: 'Wirbel-Kreisel', boss: true, wirbelR: 115,
+              info: 'BOSS! Hat ganz lange Barthaare. Kommt er nah ran, dreht er sich wie ein Kreisel – wer im roten Kreis steht, kriegt Tinte ab und wird weggeschleudert. Abstand halten!' },
+  rochen:   { name: 'Bomben-Rochen',   emoji: '🛩️', hp: 220, tempo: 0.9, r: 20, groesse: 1.2, nah: 0, schaden: 40, cd: 5, spur: 6, farbe: '#4a6a8a', bauch: '#dfe8f0', angriff: 'Bomben-Teppich', boss: true, koerperHoehe: 70,
+              info: 'BOSS! Fliegt wie ein Flugzeug über dem Boden! Zeigt ein roter Streifen auf dich, saust er drüber und wirft eine ganze Reihe Tintenbomben ab. Schnell zur Seite!' },
+  blase:    { name: 'Blasen-Barsch',   emoji: '🫧', hp: 200, tempo: 0.85, r: 16, groesse: 1.1, nah: 0, schaden: 45, cd: 4.2, spur: 10, farbe: '#c76a8a', bauch: '#fbe3ec', angriff: 'Jagd-Blasen', boss: true,
+              info: 'BOSS! Pustet 3 dicke Blasen, die dich VERFOLGEN! Schieß die Blasen kaputt, bevor sie dich erwischen – oder renn schnell weg!' },
   riese:    { name: 'Riesenkabeljau',  emoji: '👑', hp: 3000, tempo: 0.45, r: 28, groesse: 3.6, nah: 0,  schaden: 110, cd: 5, spur: 45, farbe: '#6f8f6c', bauch: '#e8ecd8', angriff: 'Riesen-Stampfer', boss: true, keinKaviar: true, stampfR: 150, koerperHoehe: 110,
               info: 'DER ENDBOSS! Riesig, mit Krone. Stampft alles platt und spuckt 3 Tintenkugeln auf einmal. Nur in der Extra-Welle!' },
 };
@@ -8370,7 +8394,7 @@ const WELLEN = [
   { zeit: 80, quote: 11, spawn: 1.7, boss: 7,  max: 18, dicker: 0.2 },
   { zeit: 70, quote: 0,  spawn: 3.2, boss: 999, max: 8, dicker: 0, extra: true },   // 👑 Extra-Welle mit dem Riesenkabeljau
 ];
-const BOSS_LISTE = ['panzer', 'spucker', 'flunder', 'stelze', 'ramme', 'kugelfisch'];
+const BOSS_LISTE = ['panzer', 'spucker', 'flunder', 'stelze', 'ramme', 'kugelfisch', 'wels', 'rochen', 'blase'];
 const KORB = { x: BASIS[0].x + 300, y: H / 2, r: 50 };
 const KORB_ORTE = { insel: { x: 800 * KS, y: 500 * KS }, wrack: { x: 862 * KS, y: 500 * KS } };   // immer oben auf der Anhöhe in der Mitte
 const KORB_HOCH = 30, KORB_GITTER = 19, KORB_KOERPER = 25;   // Behälter: so hoch / so groß ist das Gitter oben / so breit ist er
@@ -8455,6 +8479,23 @@ function baueFisch(art) {
       const f = new THREE.Group(); f.position.set(x, 4, z); g.add(f); ud.beine.push(f);
       for (let i = 0; i < 4; i++) f.add(ringY(MAT_METALL, 2, 0.5, 0, -i * 1.1, 0));
     }
+  } else if (art === 'rochen') {   // 🛩️ flacher Rochen, der über dem Boden fliegt
+    k.position.y = 34;
+    k.add(kugel(haut, 12, 0, 0, 0, 1.3, 0.28, 1), kugel(bauch, 11, 0, -1.5, 0, 1.2, 0.2, 0.9));
+    ud.fluegel = [];
+    for (const z of [-1, 1]) {
+      const fl = new THREE.Group(); fl.position.set(0, 0, z * 9); k.add(fl); ud.fluegel.push(fl);
+      const flg = kugel(haut, 10, -2, 0, z * 9, 0.95, 0.16, 1.3); flg.rotation.y = z * 0.5; fl.add(flg);
+      fl.add(kugel(tintenMaterial(1, 0.3), 2.2, 0, 1.2, z * 12, 1, 0.3, 1));   // Tintenpunkt auf dem Flügel
+    }
+    const weiss = mat('#ffffff'), schw = mat('#111111');
+    for (const z of [-1, 1]) k.add(kugel(weiss, 2.8, 11, 3, z * 4), kugel(schw, 1.4, 12.6, 3.6, z * 4.2));
+    k.add(klotz(mat('#2b2f4a'), 1, 0.6, 6, 15.4, 0, 0));   // Mund
+    const schwanz = new THREE.Group(); schwanz.position.set(-15, 0, 0); k.add(schwanz); ud.schwanz = schwanz;
+    schwanz.add(zylinderX(haut, 0.6, 1.4, 26, -13, 0, 0), new THREE.Mesh(new THREE.ConeGeometry(1.4, 5, 6), MAT_GOLD).rotateZ(Math.PI / 2).translateY(26));
+    for (let i = 0; i < 3; i++) k.add(kugel(tintenMaterial(1, 0.5), 2.6, -4 + i * 5, -4.5, 0));   // 💣 Bomben unter dem Bauch
+    k.add(klotz(mat('#ffd21f'), 3, 1, 14, 2, -3.5, 0));
+    ud.beine = [];
   } else if (art === 'kugelfisch') {   // 🎈 rund, mit Stacheln – bläst sich auf
     k.add(kugel(haut, 12, 0, 13, 0), kugel(bauch, 10, 2.5, 10, 0, 1, 0.8, 1));
     const stachel = mat('#8a6a1e', { roughness: 0.5 });
@@ -8489,7 +8530,8 @@ function baueFisch(art) {
     maul.add(klotz(mat(new THREE.Color(A.farbe).multiplyScalar(0.8)), 6, 2, 8, 2, -1, 0), klotz(mat('#c2405a'), 4, 1, 6, 1.5, 0, 0));
     k.add(zylinder(mat('#c9b27a'), 0.4, 0.25, 6, 15, 4, 0));                             // Bartfaden (den haben echte Kabeljaus!)
     for (const [x, h] of [[6, 5], [-1, 6], [-8, 4.5]]) { const f = klotz(tinte, 6, h, 0.8, x, 19 + h / 2 - 1, 0); f.rotation.z = -0.3; k.add(f); }   // 3 Rückenflossen in Tinte
-    for (const s of [-1, 1]) { const f = klotz(tinte, 5, 1, 4, 6, 9, s * 7.5 * dick); f.rotation.x = s * 0.6; k.add(f); }   // Brustflossen
+    ud.flossen = [];
+    for (const s of [-1, 1]) { const f = klotz(tinte, 5, 1, 4, 6, 9, s * 7.5 * dick); f.rotation.x = s * 0.6; f.userData.s = s; k.add(f); ud.flossen.push(f); }   // Brustflossen (schlagen beim Laufen)
     const schwanz = new THREE.Group(); schwanz.position.set(-15, 12, 0); k.add(schwanz); ud.schwanz = schwanz;
     for (const s of [-1, 1]) { const f = klotz(tinte, 9, 7, 1, -4, s * 3, 0); f.rotation.z = s * 0.5; schwanz.add(f); }
     ud.beine = [];
@@ -8537,6 +8579,22 @@ function baueFisch(art) {
       ud.warnlicht = k.children[k.children.length - 1];
       ud.sterne = new THREE.Group(); ud.sterne.position.set(4, 32, 0); ud.sterne.visible = false; k.add(ud.sterne);   // benommen
       for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2; ud.sterne.add(kugel(mat('#ffd166', { emissive: '#ffd166', emissiveIntensity: 1 }), 1.5, Math.cos(a) * 8, 0, Math.sin(a) * 8)); }
+    }
+    if (art === 'wels') {   // 🌀 lange Barthaare + breiter Kopf
+      ud.barteln = [];
+      for (const [z, y, l] of [[-1, 9, 22], [1, 9, 22], [-1, 7, 14], [1, 7, 14]]) {
+        const b = new THREE.Group(); b.position.set(16, y, z * 4); k.add(b); ud.barteln.push(b); b.userData.z = z;
+        const t = zylinder(mat('#2b2a22'), 0.7, 0.3, l, 0, -l / 2, 0); b.add(t); b.rotation.set(z * 1.1, 0, -0.8);
+      }
+      k.add(kugel(haut, 8, 10, 13, 0, 1.1, 0.7, 1.35));
+      for (let i = 0; i < 3; i++) k.add(kugel(mat('#ffd166', { emissive: '#ffb000', emissiveIntensity: 0.4 }), 1.3, -6 + i * 6, 21, 0));   // Wirbel-Lichter auf dem Rücken
+    }
+    if (art === 'blase') {   // 🫧 dicke Pustebacken + Seifenblasen-Ring vor dem Mund
+      ud.backen = [];
+      for (const z of [-1, 1]) { const b = kugel(bauch, 5, 12, 10, z * 6, 1, 1, 1); k.add(b); ud.backen.push(b); }
+      const stab = new THREE.Group(); stab.position.set(20, 10, 0); k.add(stab);
+      stab.add(zylinderX(mat('#8a5a3a'), 0.6, 0.6, 8, -2, 0, 0), new THREE.Mesh(new THREE.TorusGeometry(4, 0.6, 6, 16), mat('#ff5fa2')).rotateY(Math.PI / 2).translateZ(-3));
+      for (const [x, y, z, rr] of [[-2, 24, 2, 2.4], [2, 27, -2, 1.6], [-6, 26, -1, 1.2]]) k.add(kugel(new THREE.MeshStandardMaterial({ color: '#e8f6ff', transparent: true, opacity: 0.5, roughness: 0.05 }), rr, x, y, z));
     }
     if (art === 'spucker') {  // Spuck-Rohr vor dem Mund + Tintentank auf dem Rücken
       k.add(zylinderX(MAT_GRAU, 3, 4.5, 9, 20, 11, 0), ringX(tinte, 4.6, 0.8, 24.5, 11, 0));
@@ -8616,6 +8674,72 @@ function rammeKi(f, dt, A) {
     if (R.t <= 0) { f.ramm = null; f.angriffCd = A.cd; }
   }
 }
+// 🌀 Wirbel-Wels: aufladen ➜ Kreisel (trifft und schleudert alle im Kreis weg)
+function wirbelKi(f, dt, A) {
+  const W2 = f.wirbel; W2.t -= dt; bewege(f, 0, 0, dt);
+  if (W2.phase === 'laden') { if (W2.t <= 0) { W2.phase = 'dreh'; W2.t = 2.2; if (nahBeimSpieler(f)) ton('wind'); } return; }
+  W2.puls -= dt;
+  if (W2.puls <= 0) {
+    W2.puls = 0.25;
+    const ra = Math.random() * Math.PI * 2;
+    klecks(f.x + Math.cos(ra) * A.wirbelR * 0.6, f.y + Math.sin(ra) * A.wirbelR * 0.6, 26, 1, f, false);
+    spritzer(f.x, f.y, hAbs(f) + 15, 1, 6, 300);
+    for (const e of kleckse) {
+      if (e.team !== 0 || e.tot || e.imHeli) continue;
+      const dx = e.x - f.x, dy = e.y - f.y, d = Math.hypot(dx, dy);
+      if (d > A.wirbelR + e.r || Math.abs(hAbs(e) - hAbs(f)) > 40) continue;
+      treffen(e, A.schaden, f); e.vx += dx / (d || 1) * 380; e.vy += dy / (d || 1) * 380;
+    }
+  }
+  if (W2.t <= 0) { f.wirbel = null; f.angriffCd = A.cd; f.landT = 0.3; }
+}
+// 🛩️ Bomben-Rochen: zielen ➜ drüberfliegen und Bomben abwerfen
+function rochenKi(f, dt, A) {
+  const R = f.rochenFlug; R.t -= dt;
+  if (R.phase === 'zielen') { f.winkel = R.a; bewege(f, 0, 0, dt); if (R.t <= 0) { R.phase = 'flug'; R.t = R.len / 430; if (nahBeimSpieler(f)) ton('wusch'); } return; }
+  const sp = 430 * dt, nx = f.x + Math.cos(R.a) * sp, ny = f.y + Math.sin(R.a) * sp;
+  if (R.t <= 0 || inLava(nx, ny) || nx < 30 || ny < 30 || nx > W - 30 || ny > H - 30) {
+    f.rochenFlug = null; f.angriffCd = A.cd; f.vx = f.vy = 0;
+    if (kollidiert(f.x, f.y, f.r, bodenHoehe(f.x, f.y))) { const p = freieStelle(f.x, f.y, f.r, bodenHoehe(f.x, f.y)); f.x = p.x; f.y = p.y; }
+    return;
+  }
+  f.x = nx; f.y = ny; f.vx = Math.cos(R.a) * 430; f.vy = Math.sin(R.a) * 430;   // fliegt über Wände drüber
+  R.bombeT -= dt;
+  if (R.bombeT <= 0) { R.bombeT = 0.17; bombeWerfen(f, f.x, f.y, { ulti: true, max: 600, dauer: 0.45, hoehe: 15, r: 46, schaden: A.schaden }); }
+}
+// 🫧 Jagd-Blasen vom Blasen-Barsch: verfolgen euch – kaputtschießen!
+function jagdBlaseNeu(f, a) {
+  if (!kab) return;
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(13, 18, 12), new THREE.MeshStandardMaterial({ color: TEAMS[1].hell, transparent: true, opacity: 0.45, roughness: 0.05, emissive: TEAMS[1].col, emissiveIntensity: 0.3, depthWrite: false })));
+  g.add(kugel(mat('#ffffff', { transparent: true, opacity: 0.8 }), 3, -4, 6, -6));
+  for (const z of [-1, 1]) g.add(kugel(mat('#ffffff'), 2.6, 9, 3, z * 4), kugel(mat('#111111'), 1.3, 11, 3.4, z * 4.3), klotz(mat('#111111'), 0.6, 0.6, 3.4, 10.5, 6.5, z * 4).rotateX(z * 0.5));   // böse Augen
+  scene.add(g); kabMeshes.push(g);
+  (kab.jagdBlasen = kab.jagdBlasen || []).push({ x: f.x + Math.cos(a) * 20, y: f.y + Math.sin(a) * 20, vx: Math.cos(a) * 160, vy: Math.sin(a) * 160, t: 5.5, wer: f, mesh: g, bob: Math.random() * 6 });
+}
+function jagdBlasePlatzt(b, i, laut = true) {
+  spritzer(b.x, b.y, bodenHoehe(b.x, b.y) + 22, 1, 12, 220);
+  if (laut && Math.hypot(b.x - spieler.x, b.y - spieler.y) < 600) ton('plopp');
+  wegUndEntsorgen(b.mesh); kabMeshes = kabMeshes.filter(m => m !== b.mesh); kab.jagdBlasen.splice(i, 1);
+}
+function jagdBlasenWeg() { if (kab && kab.jagdBlasen) for (let i = kab.jagdBlasen.length - 1; i >= 0; i--) jagdBlasePlatzt(kab.jagdBlasen[i], i, false); }
+function jagdBlasenUpdate(dt) {
+  const L = kab && kab.jagdBlasen; if (!L) return;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const b = L[i]; b.t -= dt;
+    let ziel = null, zd = 1e9;
+    for (const e of kleckse) if (e.team === 0 && !e.tot && !e.imHeli) { const d = Math.hypot(e.x - b.x, e.y - b.y); if (d < zd) { zd = d; ziel = e; } }
+    if (ziel) { const ax = (ziel.x - b.x) / (zd || 1), ay = (ziel.y - b.y) / (zd || 1); b.vx += ax * 260 * dt; b.vy += ay * 260 * dt; }
+    const v = Math.hypot(b.vx, b.vy), max = 125; if (v > max) { b.vx *= max / v; b.vy *= max / v; }
+    b.x = Math.max(15, Math.min(W - 15, b.x + b.vx * dt)); b.y = Math.max(15, Math.min(H - 15, b.y + b.vy * dt));
+    const h = bodenHoehe(b.x, b.y) + 22 + Math.sin(zeit * 3 + b.bob) * 4;
+    b.mesh.position.set(b.x, h, b.y); b.mesh.rotation.y = -Math.atan2(b.vy, b.vx); b.mesh.scale.setScalar(1 + Math.sin(zeit * 6 + b.bob) * 0.06);
+    let weg = b.t <= 0;
+    if (ziel && zd < 22 + ziel.r && Math.abs(hAbs(ziel) + 20 - h) < 30) { treffen(ziel, FISCH_ARTEN.blase.schaden, b.wer); klecks(b.x, b.y, 30, 1, b.wer, false); weg = true; }
+    if (!weg) for (const sh of schuesse) if (sh.team === 0 && Math.hypot(sh.x - b.x, sh.y - b.y) < 20 && Math.abs((sh.h || h) - h) < 28) { weg = true; break; }   // kaputtgeschossen!
+    if (weg) jagdBlasePlatzt(b, i);
+  }
+}
 // 🎈 Puste-Kugelfisch: aufblasen ➜ PLATZEN
 function kugelfischPlatzen(f) {
   const A = FISCH_ARTEN.kugelfisch;
@@ -8629,6 +8753,8 @@ function fischKi(f, dt) {
   f.angriffCd -= dt; f.spurT -= dt; f.beissT = Math.max(0, f.beissT - dt);
   if (f.spurT <= 0) { f.spurT = 0.3; if (f.z <= 1 && !istWand(f.x, f.y)) klecks(f.x, f.y, A.spur, 1, f, false); }   // Fische hinterlassen ihre Tinte
   if (f.ramm) { rammeKi(f, dt, A); return; }
+  if (f.wirbel) { wirbelKi(f, dt, A); return; }
+  if (f.rochenFlug) { rochenKi(f, dt, A); return; }
   if (f.puste != null) {   // bläst sich auf …
     f.puste += dt; bewege(f, 0, 0, dt);
     const vorher = Math.floor((f.puste - dt) / 0.4), jetzt = Math.floor(f.puste / 0.4);
@@ -8675,6 +8801,29 @@ function fischKi(f, dt) {
       warnLinie(f.x, f.y, a, len, 44, 1.0);
       if (nahBeimSpieler(f)) ton('alarm');
       return;
+    }
+  } else if (f.fisch === 'wels') {   // 🌀 rennt hin und wird zum Kreisel
+    if (f.angriffCd <= 0 && zd < 170) {
+      f.wirbel = { phase: 'laden', t: 0.9, puls: 0 };
+      warnRing(f.x, f.y, A.wirbelR, 0.9 + 2.2);
+      if (nahBeimSpieler(f)) { ton('alarm'); meldung('🌀 Der Wirbel-Wels dreht gleich durch – weg da!'); }
+      return;
+    }
+  } else if (f.fisch === 'rochen') {   // 🛩️ hält Abstand, dann Bomben-Überflug
+    vor = zd < 240 ? -1 : zd > 420 ? 1 : 0;
+    if (f.angriffCd <= 0 && zd > 120 && zd < 560) {
+      const len = Math.min(700, zd + 220);
+      f.rochenFlug = { phase: 'zielen', t: 1.0, a, len, bombeT: 0 }; f.winkel = a;
+      warnLinie(f.x, f.y, a, len, 70, 1.0 + len / 430);
+      if (nahBeimSpieler(f)) ton('alarm');
+      return;
+    }
+  } else if (f.fisch === 'blase') {   // 🫧 pustet Jagd-Blasen
+    vor = zd < 230 ? -1 : zd > 400 ? 1 : 0;
+    if (f.angriffCd <= 0 && zd < 620) {
+      f.angriffCd = A.cd; f.beissT = 0.7;
+      for (let i = -1; i <= 1; i++) jagdBlaseNeu(f, a + i * 0.6);
+      if (nahBeimSpieler(f, 800)) ton('blubb');
     }
   } else if (f.fisch === 'kugelfisch') {   // 🎈 rennt hin und bläst sich auf
     if (zd < 95 + ziel.r) { f.puste = 0; warnRing(f.x, f.y, A.platzR, 2.4); if (nahBeimSpieler(f)) meldung('🎈 Ein Puste-Kugelfisch bläst sich auf – schnell erwischen oder weg da!'); return; }
@@ -8891,7 +9040,7 @@ function kabeljauStarten() {
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;   // 🚁 erst kommt der Hubschrauber
   kabIntroStarten();
-  audioStart(); musikModusSetzen('spiel', spielSong('farbhafen')); ton('fanfare');
+  audioStart(); musikModusSetzen('spiel', 'kabeljau'); ton('fanfare');   // 🎵 Kabeljau-Shanty
   zielRing.material.color.set(TEAMS[spieler.team].col);
   mausFangen();
 }
@@ -8922,8 +9071,10 @@ function kabeljauUpdate(dt) {
     if (f.totZeit > 0.7) { if (f.roentgen) scene.remove(f.roentgen); wegUndEntsorgen(f.gruppe); kleckse.splice(i, 1); }
   }
   if (kab.phase === 'heim') { heimUpdate(dt); return; }   // 🚁 zurück in den Hubschrauber
-  if (kab.phase === 'pause') {   // kurze Pause zwischen den Wellen
+  if (kab.phase === 'pause') {   // ⏱️ Countdown bis zur nächsten Welle – man kann sich schon bewegen
     kab.pauseT -= dt;
+    const sek = Math.ceil(kab.pauseT);
+    if (sek !== kab.zaehlSek) { kab.zaehlSek = sek; if (sek <= 3 && sek > 0) ton('piep'); }
     if (kab.pauseT <= 0) {
       kab.phase = 'sammeln'; kab.spawnT = 1; kab.bossT = 4; ton('los');
       if (WELLEN[kab.welle - 1].extra) { kab.riese = fischSpawnen('riese'); if (kab.riese) { kab.riese.x = W - 200; kab.riese.y = H / 2; } }   // 👑 er kommt!
@@ -8973,6 +9124,8 @@ function kabeljauUpdate(dt) {
     const NW = WELLEN[kab.welle - 1];
     rest = NW.zeit;
     ton('fanfare');
+    if (kab.welle >= 3) musikModusSetzen('spiel', 'kabeljauSturm');   // 🎵 jetzt wird's wild!
+    jagdBlasenWeg();
     if (NW.extra) highlightAnzeige.push({ emoji: '👑', titel: 'EXTRA-WELLE!', text: 'Alle 3 Wellen geschafft! Jetzt kommt der RIESENKABELJAU – besiegt ihn!', start: performance.now() / 1000 });
     else {
       highlightAnzeige.push({ emoji: '🌊', titel: `WELLE ${kab.welle}!`, text: `Welle ${kab.welle - 1} geschafft! Jetzt ${wQuote(NW)} Kaviarkugeln sammeln!`, start: performance.now() / 1000 });
@@ -9027,6 +9180,8 @@ function kabeljauHud(cw, ch) {
   ctx.textAlign = 'right'; ctx.fillStyle = r <= 10 && kab.phase !== 'pause' ? '#ff6060' : '#fff'; ctx.font = 'bold 24px system-ui'; ctx.fillText(`${min}:${String(sek).padStart(2, '0')}`, bx + bw, 34);
   ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = kab.genug ? '#5be37d' : '#ffd166';
   const ev = kab.ereignis ? EREIGNISSE[kab.ereignis] : null;
+  if (kab.phase === 'pause') kabCountdownHud(cw, ch);
+  ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = kab.genug ? '#5be37d' : '#ffd166';
   ctx.fillText(kab.phase === 'pause' ? '⏳ Gleich geht\'s los …' : WL.extra ? '👑 Besiegt den Riesen!' : kab.genug ? '✅ Genug Kaviar – überlebe!' : `🟠 Kaviar sammeln!${ev ? '  ' + ev.emoji + ' ' + ev.name : ''}`, cw / 2, 34);
   ctx.fillStyle = '#ffffff22'; ctx.fillRect(bx, 48, bw, 18);
   if (WL.extra) {
@@ -9042,6 +9197,17 @@ function kabeljauHud(cw, ch) {
   if (imFlutWasser(spieler.x, spieler.y) && !spieler.tot) { ctx.textAlign = 'center'; textMitRand('🌊 Raus aus dem Wasser!', cw / 2, ch * 0.3, 30, '#6fe3ff'); }
   if (spieler.traegt && !spieler.tot) { ctx.textAlign = 'center'; textMitRand('🟠 Bring den Kaviar zum Stahlbehälter ⚙️ in der Mitte – oder halte E, ziel aufs Gitter und wirf!', cw / 2, ch - 190, 20, '#ffd166'); }
   if (spieler.traegt && spieler.rettung) { ctx.textAlign = 'center'; textMitRand('🟠 Du hast Kaviar! Lass dich retten – dann kannst du ihn abgeben 🛟', cw / 2, ch - 190, 20, '#ffd166'); }
+}
+function kabCountdownHud(cw, ch) {   // großer Countdown in der Mitte
+  const n = Math.ceil(kab.pauseT), k = kab.pauseT % 1, WL = WELLEN[kab.welle - 1];
+  ctx.save(); ctx.textAlign = 'center';
+  textMitRand(WL.extra ? '👑 EXTRA-WELLE startet in …' : `🌊 WELLE ${kab.welle} startet in …`, cw / 2, ch * 0.28, Math.min(34, cw / 20), '#ffffff');
+  const gr = Math.min(150, cw / 6) * (1 + k * 0.35);
+  ctx.globalAlpha = 0.4 + k * 0.6;
+  textMitRand(String(Math.max(1, n)), cw / 2, ch * 0.28 + gr * 0.95, gr, n <= 3 ? '#ff6060' : '#ffd166');
+  ctx.globalAlpha = 1;
+  textMitRand('🏃 Lauf schon mal los – bring dich in Position!', cw / 2, ch * 0.28 + gr * 1.3, Math.min(20, cw / 36), '#9af5b8');
+  ctx.restore();
 }
 function kabeljauMinikarte(mx, my, mw, mh) {
   if (!kab) return;
@@ -9304,6 +9470,8 @@ function kabIntroFertig() {   // auch beim Überspringen: alle sind sicher gelan
     e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0; if (e.waffenModell) e.waffenModell.visible = true;
   }
   if (heli) { heli.tuerZiel = 0; heli.gelandetT = 0; }
+  startCountdown = 0;   // kein Stillstand: stattdessen läuft der Wellen-Countdown, man kann schon rumlaufen
+  if (kab) { kab.phase = 'pause'; kab.pauseT = 6; }
   const rang = kab ? kab.rang : 0;
   highlightAnzeige.push({ emoji: '🌊', titel: 'WELLE 1', text: `Sammle ${wQuote(WELLEN[0])} Kaviarkugeln und bring sie zum Stahlbehälter ⚙️ in der Mitte! (${RAENGE[rang].emoji} ${RAENGE[rang].name} · ${ARENEN[karte].emoji} ${ARENEN[karte].name})`, start: performance.now() / 1000 + 0.3 });
 }
@@ -9333,6 +9501,7 @@ function kabIntroHud(cw, ch) {
 }
 // ----- 🏠 Ende der Schicht: Dr. Papagei holt alle ab (vorgezielter Supersprung zurück in den Hubschrauber) -----
 function heimStarten(gewonnen, grund) {
+  jagdBlasenWeg();
   kab.phase = 'heim'; kab.heim = { t: 0, gewonnen, grund, sprungNr: 0 };
   for (const f of kleckse) if (f.fisch && !f.tot) { spritzer(f.x, f.y, 10, 1, 10, 200); f.tot = true; f.totZeit = 0.3; }
   for (const k of kaviarKugeln) { if (k.traeger) k.traeger.traegt = null; wegUndEntsorgen(k.mesh); }
@@ -9556,6 +9725,7 @@ function imFlutWasser(x, y) { return kab && kab.ereignis === 'flut' && x > FLUT_
 // --- Gemeinsames pro Bild ---
 function kabeljauTeil2(dt) {
   nachtUpdate();
+  jagdBlasenUpdate(dt);
   korbSchieben();
   for (const e of kleckse) {
     if (e.fisch) continue;
@@ -9736,6 +9906,7 @@ function farbcastStarten() {
   zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
   $('fcWeiter').textContent = '⏭ Weiter';
   nurZeigen('farbcast'); ton('farbcastJingle'); if (fc3) fcKonfetti();
+  audioStart(); musikModusSetzen('menu', 'farbcast');   // 🎵 eigene Show-Musik
   requestAnimationFrame(fcSchleife);
 }
 function fcZeileStarten() {
@@ -9758,6 +9929,7 @@ function farbcastWeiter() {
 }
 function farbcastEnde() {
   farbcast = null; nurZeigen(null); zustand = 'stadt'; ton('klick');
+  musikModusSetzen('menu', listenSong('menu'));
   mausFangen();
 }
 function fcSchleife(jetzt) {
