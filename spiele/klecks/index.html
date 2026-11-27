@@ -4949,7 +4949,7 @@ function bewege(e, dx, dy, dt) {
   }
   // Die gegnerische Basis ist verboten!
   const gb = BASIS[1 - e.team], gd = Math.hypot(e.x - gb.x, e.y - gb.y);
-  if (modus === 'match' && gd < 100) { e.x = gb.x + (e.x - gb.x) / gd * 100; e.y = gb.y + (e.y - gb.y) / gd * 100; }
+  if (modus === 'match' && spielArt !== 'story' && gd < 100) { e.x = gb.x + (e.x - gb.x) / gd * 100; e.y = gb.y + (e.y - gb.y) / gd * 100; }   // (im Story-Modus darf man überall hin)
   werte(e, dt, feind);
 }
 // Hochschwimmen: Shift halten und gegen eine Kletterwand in deiner Farbe laufen
