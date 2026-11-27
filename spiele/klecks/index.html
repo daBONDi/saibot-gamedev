@@ -9261,6 +9261,7 @@ function kabIntroUpdate(dt) {
   // 🚪 Du machst die Tür auf – Dr. Papagei ruft
   if (ueber(I.tuer)) {
     p.emote = { art: 'tuerAuf', t0: zeit };
+    for (const bl of rufBlasen) bl.start = -99;   // Sprechblasen weg
     meldung('🦜 Dr. Papagei: „Wir sind da! Tür auf – und dann SUPERSPRUNG!“'); ton('papageiPlapper');
     for (const e of drin) if (e !== p) { e.emote = null; e.koerper.rotation.z = 0; e.koerper.position.x = 0; e.heliBlick = -Math.PI / 2; if (e.waffenModell) e.waffenModell.visible = true; }
   }
@@ -9277,12 +9278,12 @@ function kabIntroUpdate(dt) {
   } else if (t < I.tuer) {       // 2. Im Hubschrauber
     const f = (t - I.innen) / (I.tuer - I.innen);
     kameraOverride = f < 0.5
-      ? heliKamera(20 - f * 10, 46, 16, -52, 18, -6)       // Blick nach hinten in den Laderaum
+      ? heliKamera(36 - f * 8, 56, 2, -50, 14, 0)       // Blick vom Cockpit nach hinten in den Laderaum
       : heliKamera(-8, 50, 20 - (f - 0.5) * 10, -56, 24, -2);   // näher an die zwei Quatscher
   } else if (t < I.sprung[0]) {  // 3. Du schiebst die Tür auf
     kameraOverride = heliKamera(-44, 46, 22, 0, 26, -40);
   } else if (!heli.gelandetT) {  // 4. Raus! Erst aus dem Hubschrauber gucken, dann hinter dir her
-    if (t < I.ich + 0.15) kameraOverride = heliKamera(-36, 44, 18, 30, -20, -170);
+    if (t < I.ich + 0.15) kameraOverride = heliKamera(-34, 60, 4, 10, -10, -170);
     else { const h = hAbs(p); kameraOverride = { pos: [p.x - 140, h + 120, p.y + 170], ziel: [p.x + 20, h - 10, p.y] }; heli.kamStart = kameraOverride.pos.slice(); }
   } else {                       // 5. Kamera fliegt in deinen Kopf
     const f = weich((t - heli.gelandetT) / (I.kopfDauer - 0.1)), von = heli.kamStart || [p.x - 140, 120, p.y + 170];
