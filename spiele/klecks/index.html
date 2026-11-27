@@ -1184,16 +1184,28 @@ Object.assign(SONGS, {
     bass: '0..0.2..0..0.2.1', arp: '0.1.2.1.0.1.2.3.',
     mel: ['3...4.5...4.3...', '2.3.4...........', '3...4.5...6.5...', '4...............', '3...4.5...4.3...', '2.3.4...5.4.3...', '2...1...2...3...', '4...............'],
     kick: 'x.....x...x.....', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '............x...' },
-  // 🐟 Kabeljau Run: ein Seemannslied mit Rock-Gitarren
-  kabeljau: { name: 'Kabeljau-Shanty', bpm: 132, lead: 'saege', arpArt: 'zupf', pad: 0.02,
+  // 🐟 Kabeljau Run: Seemannslied mit Akkordeon, Blechflöte, Geige, Banjo, Tuba, Schiffsglocke und Stampfen
+  kabeljau: { name: 'Kabeljau-Shanty', bpm: 126, ohneGitarre: true, arpArt: 'banjo', bassArt: 'tuba', glocke: true, pad: 0,
+    leads: ['akkordeon', 'akkordeon', 'akkordeon', 'akkordeon', 'floete', 'floete', 'geige', 'geige'],
+    zweite: [null, null, null, null, 'akkordeon', 'akkordeon', 'akkordeon', 'akkordeon'],
     akkorde: ['Dm', 'Dm', 'C', 'C', 'Dm', 'Bb', 'C', 'Dm'],
-    bass: '0.0.0.0o0.0.0.0o', arp: '0.1.2.1.0.1.2.1.',
+    bass: '0...2...0...2...', arp: '..0...1...0...2.',
     mel: ['3.3.3.4.5...3...', '4...3...2.......', '2.2.2.3.4...2...', '3...2...1.......', '3.3.3.4.5...6...', '5...4...3.......', '4.3.2.3.4...2...', '3...............'],
-    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '............x...' },
-  // 🌊 Welle 3 und Extra-Welle: schneller und wilder
-  kabeljauSturm: { name: 'Sturmflut', bpm: 152, lead: 'saege', arpArt: 'zupf', pad: 0.02,
+    kick: 'x.......x.......', snare: '....x.......x...', stampf: 'x...x...x...x...', clap: '....x.......x...' },
+  // 🐦 Kabeljau Run: fröhliche Polka mit Marimba, Glockenspiel, Akkordeon und Tuba
+  moewenPolka: { name: 'Möwen-Polka', bpm: 140, ohneGitarre: true, arpArt: 'akkordeon', bassArt: 'tuba', glocke: true, pad: 0,
+    leads: ['marimba', 'marimba', 'akkordeon', 'akkordeon', 'glockenspiel', 'glockenspiel', 'floete', 'floete'],
+    zweite: [null, null, null, null, null, null, 'akkordeon', 'akkordeon'],
+    akkorde: ['F', 'C7', 'C7', 'F', 'F', 'C7', 'C7', 'F'],
+    bass: '0...2...0...2...', arp: '..0...1...0...1.',
+    mel: ['3.4.5.4.3...5...', '4.5.6.5.4...2...', '4.5.6.5.4...2...', '3.4.5.4.3.......', '6.5.4.3.4...5...', '4.3.2.1.2...3...', '4.5.6.7.6.5.4.3.', '3...5...3.......'],
+    kick: 'x...x...x...x...', snare: '....x.......x...', stampf: 'x.......x.......' },
+  // 🌊 Welle 3 und Extra-Welle: Geige und Akkordeon über krachenden Rock-Gitarren
+  kabeljauSturm: { name: 'Sturmflut', bpm: 152, arpArt: 'glockenspiel', glocke: true, pad: 0.02,
+    leads: ['geige', 'geige', 'geige', 'geige', 'akkordeon', 'akkordeon', 'geige', 'geige'],
+    zweite: [null, null, 'akkordeon', 'akkordeon', null, null, 'floete', 'floete'],
     akkorde: ['Em', 'C', 'D', 'B', 'Em', 'C', 'Am', 'B'],
-    bass: '0.0o0.0o0.0o0.0o', arp: '0123210101232101',
+    bass: '0.0o0.0o0.0o0.0o', arp: '0...2...1...2...',
     mel: ['5.5.4.5.6...5...', '4...3...4.......', '5.5.4.5.6...7...', '6...5...4.......', '5.4.3.4.5...3...', '4.3.2.3.4...2...', '3.4.5.6.7.6.5.4.', '5...............'],
     kick: 'x.x.x...x.x.x...', snare: '....x.......x...', hat: 'xxxxxxxxxxxxxxxx', clap: '....x.......x..x', tom: '............xxxx' },
   // ⏰ Spielt, wenn nur noch 1 Minute übrig ist!
@@ -1284,9 +1296,31 @@ function stimme(typ, freq, t, lang, laut, { filter = 0, attack = 0.01, hall = 0,
   if (hall && hallBus) { const h = ac.createGain(); h.gain.value = hall; g.connect(h); h.connect(hallBus); }
   if (echo && echoBus) { const h = ac.createGain(); h.gain.value = echo; g.connect(h); h.connect(echoBus); }
 }
+const VOLKS_INSTRUMENTE = new Set(['akkordeon', 'geige', 'floete', 'banjo', 'tuba', 'glockenspiel', 'schiffsglocke', 'marimba']);   // die werden NICHT zur Gitarre
+function stampf(t, laut = 1) {   // 👢 Stampfen auf dem Holzdeck
+  osz('sine', 120, 45, 0.2, 0.55 * laut, t, musikGain); krach(500, 0.07, 0.25 * laut, t, musikGain, 'lowpass');
+}
 function instrument(art, midi, t, d, laut = 1) {
   const f = NOTE(midi);
-  if (soloBus) {   // 🎸 Rock-Version: Melodie = Solo-Gitarre, Begleitung = angeschlagene Gitarre
+  switch (art) {
+    case 'akkordeon':   // 🪗 zwei leicht verstimmte Stimmen = typisches Schwebe-Klang
+      stimme('sawtooth', f, t, d * 1.8, 0.032 * laut, { filter: 2200, verstimmt: 14, attack: 0.025, hall: 0.3 });
+      stimme('square', f / 2, t, d * 1.8, 0.012 * laut, { filter: 1200, attack: 0.025 }); return;
+    case 'geige':   // 🎻 weicher Bogen-Anstrich mit viel Vibrato
+      stimme('sawtooth', f, t, d * 2.2, 0.04 * laut, { filter: 3800, attack: 0.07, vibrato: 25, hall: 0.4, echo: 0.2 }); return;
+    case 'floete':   // 🪈 hohe Blechflöte mit etwas Luft
+      stimme('sine', f * 2, t, d * 1.8, 0.07 * laut, { attack: 0.04, vibrato: 14, hall: 0.4, echo: 0.3 }); stimme('triangle', f * 4, t, d, 0.008 * laut);
+      krach(Math.min(9000, f * 2), 0.06, 0.02 * laut, t, musikGain, 'bandpass'); return;
+    case 'banjo':   // 🪕 kurz und hell gezupft
+      stimme('sawtooth', f, t, 0.2, 0.05 * laut, { filter: 4500 }); stimme('square', f * 2, t, 0.08, 0.014 * laut, { filter: 5000 }); return;
+    case 'tuba':   // 🎺 dicker, runder Bass
+      stimme('sine', f, t, d * 1.4, 0.12 * laut, { attack: 0.03 }); stimme('sawtooth', f, t, d * 1.4, 0.04 * laut, { filter: 420, attack: 0.03 }); return;
+    case 'glockenspiel':
+      stimme('sine', f * 2, t, 0.6, 0.05 * laut, { hall: 0.5 }); stimme('sine', f * 2 * 2.76, t, 0.2, 0.012 * laut); return;
+    case 'schiffsglocke':   // 🔔 DONG – wie auf einem Schiff
+      stimme('sine', f, t, 2.5, 0.06 * laut, { hall: 0.6 }); stimme('sine', f * 2.4, t, 1.5, 0.03 * laut); stimme('sine', f * 3.9, t, 0.8, 0.02 * laut); return;
+  }
+  if (soloBus && !VOLKS_INSTRUMENTE.has(art)) {   // 🎸 Rock-Version: Melodie = Solo-Gitarre, Begleitung = angeschlagene Gitarre
     if (laut >= 1) { gitarre(soloBus, f, t, d * 2.2, 0.32, 14); return; }
     gitarre(rhythmusBus, f, t, d * 1.2, 0.12); return;
   }
@@ -1319,7 +1353,7 @@ function musikSchritt(song, s, t, d, eile) {
   const zeichen = (muster, i) => (muster || '')[i] || '.';
   const ist = (muster) => zeichen(muster, st) === 'x';
   // 🎸 Rhythmus-Gitarre: Powerchords (Grundton + Quinte + Oktave). Am Taktanfang klingt der Akkord lang, sonst gedämpft im Achtel-Takt
-  if (rhythmusBus) {
+  if (rhythmusBus && !song.ohneGitarre) {
     let g = ak[0]; while (g > 52) g -= 12; while (g < 40) g += 12;
     const ruhig = song.bpm < 105, lang = st === 0 || (ruhig && st === 8);
     if (lang) for (const n of [g, g + 7, g + 12]) gitarre(rhythmusBus, NOTE(n), t, d * (ruhig ? 7 : 3.5), 0.22);
@@ -1331,7 +1365,8 @@ function musikSchritt(song, s, t, d, eile) {
   const b = zeichen(song.bass, st);
   if (b !== '.') {
     const n = b === 'o' ? ak[0] : ak[(+b) % ak.length] - 12 + (+b >= ak.length ? 12 : 0);
-    stimme('sawtooth', NOTE(n), t, d * 1.6, 0.08, { filter: 500 }); stimme('sine', NOTE(n), t, d * 1.6, 0.06);
+    if (song.bassArt) instrument(song.bassArt, n, t, d);
+    else { stimme('sawtooth', NOTE(n), t, d * 1.6, 0.08, { filter: 500 }); stimme('sine', NOTE(n), t, d * 1.6, 0.06); }
   }
   // Begleitung
   const a = zeichen(song.arp, st);
@@ -1339,7 +1374,13 @@ function musikSchritt(song, s, t, d, eile) {
   if (ist(song.skank)) for (const n of ak) stimme('square', NOTE(n + 12), t, 0.07, 0.018, { filter: 2500 });
   // Melodie
   const m = zeichen(song.mel[takt], st);
-  if (m !== '.') instrument(song.lead, toene[+m] + 12, t, d);
+  if (m !== '.') {
+    instrument(song.leads ? song.leads[takt] : song.lead, toene[+m] + 12, t, d);   // jeder Takt kann ein anderes Instrument haben
+    const zw = song.zweite && song.zweite[takt];
+    if (zw) instrument(zw, toene[Math.max(0, +m - 1)] + 12, t, d, 0.7);   // zweite Stimme etwas tiefer
+  }
+  if (song.glocke && st === 0 && takt % 4 === 0) instrument('schiffsglocke', ak[0] + 24, t, d);
+  if (ist(song.stampf)) stampf(t);
   // 🥁 Schlagzeug: Rock-Beat (Bassdrum, Snare auf 2 und 4, Becken), am Ende jeder 4. Takte ein Trommelwirbel
   const wirbel = takt % 4 === 3 && st >= 12;
   if (st === 0 && takt % 4 === 0) trommel('crash', t);
@@ -9061,7 +9102,7 @@ function kabeljauStarten() {
   nurZeigen(null);
   zustand = 'intro'; introT = 0; introSkip = false; startCountdown = 0;   // 🚁 erst kommt der Hubschrauber
   kabIntroStarten();
-  audioStart(); musikModusSetzen('spiel', 'kabeljau'); ton('fanfare');   // 🎵 Kabeljau-Shanty
+  audioStart(); musikModusSetzen('spiel', zufallAus(['kabeljau', 'moewenPolka'])); ton('fanfare');   // 🎵 Shanty oder Polka
   zielRing.material.color.set(TEAMS[spieler.team].col);
   mausFangen();
 }
@@ -9146,6 +9187,7 @@ function kabeljauUpdate(dt) {
     rest = NW.zeit;
     ton('fanfare');
     if (kab.welle >= 3) musikModusSetzen('spiel', 'kabeljauSturm');   // 🎵 jetzt wird's wild!
+    else musikModusSetzen('spiel', songName === 'kabeljau' ? 'moewenPolka' : 'kabeljau');   // Welle 2: das andere Lied
     jagdBlasenWeg();
     if (NW.extra) highlightAnzeige.push({ emoji: '👑', titel: 'EXTRA-WELLE!', text: 'Alle 3 Wellen geschafft! Jetzt kommt der RIESENKABELJAU – besiegt ihn!', start: performance.now() / 1000 });
     else {
