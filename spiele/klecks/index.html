@@ -706,6 +706,11 @@ ARENEN.labor = { name: 'Geheimlabor', emoji: '🧪', wandH: 60, nurStory: true, 
   zonen: [{ art: 'band', x: 600, y: 240, w: 200, h: 44, dx: 110 }, { art: 'band', x: 800, y: 716, w: 200, h: 44, dx: -110 }],
   waende: spiegel([[280, 180, 40, 220], [280, 600, 40, 220], [500, 110, 160, 36], [500, 854, 160, 36], [560, 440, 40, 120], [440, 350, 60, 60], [440, 590, 60, 60]]),
   thema: { boden: '#c9d2e3', linie: '#b3bdd2', wand: '#4a5068', himmel: '#1a1830', draussen: '#2a2f45', muster: 'fliesen', wandUnsichtbar: true } };
+// 🌙 Der Mond (nur im Story-Modus): wenig Schwerkraft, Krater, Mondfelsen – und Dr. Papageis gelandete Federrakete
+ARENEN.mond = { name: 'Der Mond', emoji: '🌙', wandH: 45, nurStory: true, spezial: '🌙 Wenig Schwerkraft – du springst super hoch!',
+  zonen: [],
+  waende: spiegel([[380, 200, 70, 70], [380, 730, 70, 70], [560, 120, 90, 50], [560, 830, 90, 50], [250, 470, 50, 60]]),
+  thema: { boden: '#c4c4cc', linie: '#b2b2bc', wand: '#8a8a96', himmel: '#000010', draussen: '#9a9aa6', muster: 'stein' } };
 const KABELJAU_KARTEN = ['insel', 'wrack', 'piraten'];
 function meerKarte(k = karte) { return !!(ARENEN[k] && ARENEN[k].nurKabeljau); }
 const REVIER_ARENEN = Object.keys(ARENEN).filter(id => !ARENEN[id].nurKabeljau && !ARENEN[id].nurStory);   // die Arenen für die Farbschlacht
@@ -735,6 +740,7 @@ const STUFEN_DATEN = {
   vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
   bahnhof:   [[600, 120, 140, 300, 28], [640, 420, 70, 70, 28, 'n'], [600, 580, 140, 300, 28], [640, 510, 70, 70, 28, 's']],   // Bahnsteige mit Rampen zum Übergang
   wrack:     [[760, 380, 340, 240, 42, null, false], [690, 460, 70, 80, 42, 'o', false]],   // 🚢 das Deck vom Wrack + eine Planke als Rampe
+  mond:      [[710, 420, 180, 160, 35, null, false], [770, 350, 60, 70, 35, 's', false], [770, 580, 60, 70, 35, 'n', false]],   // 🌙 Kraterrand in der Mitte
   labor:     [[700, 420, 200, 160, 40, null, false], [770, 350, 60, 70, 40, 's', false], [770, 580, 60, 70, 40, 'n', false]],   // 🧪 Podest mit der Glasröhre
   piraten:   [[690, 410, 220, 180, 45, null, false], [620, 470, 70, 60, 45, 'o', false], [770, 340, 60, 70, 45, 's', false], [770, 590, 60, 70, 45, 'n', false]],   // 💀 Totenkopf-Felsen (Anhöhe)
   insel:     [[700, 420, 200, 160, 40, null, false], [770, 350, 60, 70, 40, 's', false], [770, 580, 60, 70, 40, 'n', false], [630, 470, 70, 60, 40, 'o', false], [900, 470, 70, 60, 40, 'w', false]],   // 🏝️ Anhöhe in der Mitte für den Kaviar-Behälter
@@ -2096,6 +2102,47 @@ const laborBlinker = [];
   // Rohre über dem Labor
   for (const z of [H * 0.15, H * 0.85]) g.add(zylinderX(metall, 5, 5, W, W / 2, 110, z));
 })();
+// 🌙 Mond-Deko: Sterne, die Erde am Himmel, Krater, Papageis Fahne und Farbkleckse, die gelandete Federrakete
+(function mondDeko() {
+  const g = kartenGruppe.mond; if (!g) return;
+  const A = ARENEN.mond;
+  const sterneGeo = new THREE.BufferGeometry(), pos = [];
+  for (let i = 0; i < 1500; i++) {
+    const u = Math.random() * Math.PI * 2, v = Math.acos(Math.random() * 0.95), r = 2600;   // nur am Himmel (obere Halbkugel)
+    pos.push(W / 2 + Math.cos(u) * Math.sin(v) * r, Math.cos(v) * r * 0.8 + 100, H / 2 + Math.sin(u) * Math.sin(v) * r);
+  }
+  sterneGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.add(new THREE.Points(sterneGeo, new THREE.PointsMaterial({ color: '#ffffff', size: 5, sizeAttenuation: false, fog: false })));
+  const erde = new THREE.Group(); erde.position.set(W / 2 - 900, 1300, H / 2 - 2000); g.add(erde);
+  erde.add(new THREE.Mesh(new THREE.SphereGeometry(260, 32, 20), new THREE.MeshBasicMaterial({ color: '#2a6fd8', fog: false })));
+  for (let i = 0; i < 7; i++) { const k = new THREE.Mesh(new THREE.SphereGeometry(80 + i * 12, 12, 8), new THREE.MeshBasicMaterial({ color: '#3fae4a', fog: false })); k.position.set(Math.cos(i * 1.7) * 190, Math.sin(i * 2.3) * 150, 120); k.scale.z = 0.4; erde.add(k); }
+  for (let i = 0; i < 5; i++) { const w = new THREE.Mesh(new THREE.SphereGeometry(60, 10, 6), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.8, fog: false })); w.position.set(Math.cos(i * 2.9) * 200, Math.sin(i * 1.3) * 170, 180); w.scale.set(1.6, 0.4, 0.3); erde.add(w); }
+  const fels = mat('#7a7a86', { roughness: 1 }), kraterM = mat('#a8a8b2', { roughness: 1 });
+  for (const r of A.waende) { const cx = r.x + r.w / 2, cz = r.y + r.h / 2; g.add(kugel(fels, Math.max(r.w, r.h) * 0.62, cx, 20, cz, r.w / Math.max(r.w, r.h), 0.85, r.h / Math.max(r.w, r.h))); }
+  for (const [x, z, rr] of [[300, 300, 60], [1250, 220, 80], [1150, 800, 55], [520, 650, 45], [1450, 520, 40], [880, 140, 50], [700, 860, 65]]) {   // Krater
+    const k = new THREE.Mesh(new THREE.TorusGeometry(rr * KS, 6, 6, 28), kraterM); k.rotation.x = Math.PI / 2; k.position.set(x * KS, 1, z * KS); k.scale.z = 0.5; g.add(k);
+    const boden = new THREE.Mesh(new THREE.CircleGeometry(rr * KS - 4, 24).rotateX(-Math.PI / 2), mat('#9c9ca8', { roughness: 1 })); boden.position.set(x * KS, 0.6, z * KS); g.add(boden);
+  }
+  const pod = A.stufen.find(s => s.hoehe === 35 && !s.rampe && s.x > W * 0.3);
+  if (pod) {   // 🏳️ Papageis Fahne auf dem Kraterrand
+    const cx = pod.x + pod.w / 2, cz = pod.y + pod.h / 2;
+    g.add(zylinder(mat('#c9cfe6', { metalness: 0.8, roughness: 0.25 }), 1.6, 1.6, 90, cx, 35 + 45, cz));
+    const c = document.createElement('canvas'); c.width = 128; c.height = 80; const x = c.getContext('2d');
+    for (const [i, f] of ['#e63946', '#2fb84a', '#ffd21f'].entries()) { x.fillStyle = f; x.fillRect(0, i * 27, 128, 27); }
+    x.font = 'bold 22px system-ui'; x.textAlign = 'center'; x.fillStyle = '#1b1f3a'; x.fillText('PAPAGEI-MOND', 64, 46);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(48, 30), new THREE.MeshStandardMaterial({ map: t, side: THREE.DoubleSide })); fl.position.set(cx + 25, 35 + 75, cz); g.add(fl);
+  }
+  // 🚀 Die gelandete Federrakete hinten (darin ist Tini!)
+  const rak = new THREE.Group(); rak.position.set(W + 260, 0, H / 2 - 150); rak.rotation.z = 0.12; g.add(rak);
+  const gruen = mat('#2fb84a', { roughness: 0.4 }), rot = mat('#e63946', { roughness: 0.4 }), gelb = mat('#ffd21f', { roughness: 0.4 });
+  rak.add(zylinder(gruen, 40, 44, 220, 0, 130, 0), zylinder(rot, 41, 41, 24, 0, 190, 0));
+  const sp = new THREE.Mesh(new THREE.ConeGeometry(40, 90, 20), gelb); sp.position.y = 285; rak.add(sp);
+  rak.add(kugel(mat('#bfe8ff', { emissive: '#5fb0ff', emissiveIntensity: 0.7 }), 14, -38, 215, 0, 0.4, 1, 1));   // Fenster (Tini schaut raus)
+  for (let i = 0; i < 4; i++) { const fe = new THREE.Group(); fe.rotation.y = i * Math.PI / 2; rak.add(fe); const f = kugel([rot, gelb][i % 2], 26, 60, 40, 0, 1.2, 0.35, 0.12); f.rotation.z = 0.5; fe.add(f); }
+  // Papageis Farbkleckse auf dem Mond (rot, grün, gelb)
+  for (let i = 0; i < 12; i++) { const k = new THREE.Mesh(new THREE.CircleGeometry(30 + (i * 13) % 40, 16).rotateX(-Math.PI / 2), mat(['#e63946', '#2fb84a', '#ffd21f'][i % 3], { roughness: 0.3 })); k.position.set(-150 - (i % 3) * 90, 0.5, 100 + i * 100); g.add(k); }
+})();
 const KULISSEN = {
   farbhafen: { oben: '#2f86e0', horizont: '#cdeaff', sonne: '#fff3c0', wolken: 0.55, nebel: [1300, 4300], boden: 'wasser',
     licht: ['#ffffff', '#7f8fb0', 1.6, '#ffffff'],
@@ -2130,6 +2177,8 @@ const KULISSEN = {
     sonneDir: [-0.3, 0.08, 0.7], meerNebel: '#ffc8b8',
     licht: ['#ffd0b8', '#5a4f8a', 1.35, '#ff9a6a'],
     berge: [[3200, 340, '#3a3550', null, 0.6, 15], [3600, 520, '#4a4060', null, 0.8, 16]] },
+  mond: { oben: '#000006', horizont: '#0b0b24', sonne: '#ffffff', wolken: 0, nebel: [2600, 6000], boden: 'asphalt',   // 🌌 Weltall
+    sonneDir: [0.6, 0.35, -0.5], licht: ['#e4e8ff', '#2a2a3a', 1.9, '#ffffff'] },
   labor: { oben: '#07071a', horizont: '#2a2050', sonne: '#c8d4ff', wolken: 0.3, wolkenFarbe: '#3a3060', nebel: [900, 3200], boden: 'asphalt',   // 🌙 Nacht über der Fischerei
     sonneDir: [0.4, 0.35, -0.6], licht: ['#d0d8ff', '#3a3a60', 1.15, '#b0c0ff'], berge: [[3200, 300, '#1e1c30', null, 0.5, 17]] },
   lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
@@ -4851,7 +4900,7 @@ function bewege(e, dx, dy, dt) {
   else if (kletterte) { e.vz = 0; }                    // an der Wand fällt man nicht runter
   else if (e.z > 0 && e.z < 5 && e.vz <= 0 && !e.slam && e.rampeT > 0) { e.z = 0; }   // Rampe runterlaufen: am Boden bleiben
   else if (e.z > 0 || e.vz > 0) {
-    e.vz -= SCHWERKRAFT * dt; e.z += e.vz * dt;
+    e.vz -= SCHWERKRAFT * (karte === 'mond' ? 0.42 : 1) * dt; e.z += e.vz * dt;   // 🌙 auf dem Mond: wenig Schwerkraft
     if (e.z <= 0) {
       e.z = 0; e.vz = 0; e.landT = 0.25;
       if (e.slam) { if (istGast()) { e.slam = false; mpSende({ t: 'slam' }); } else farbsturmLandung(e); }
@@ -8638,6 +8687,8 @@ const FISCH_ARTEN = {
               info: 'BOSS! Fliegt wie ein Flugzeug über dem Boden! Zeigt ein roter Streifen auf dich, saust er drüber und wirft eine ganze Reihe Tintenbomben ab. Schnell zur Seite!' },
   blase:    { name: 'Blasen-Barsch',   emoji: '🫧', hp: 200, tempo: 0.85, r: 16, groesse: 1.1, nah: 0, schaden: 45, cd: 4.2, spur: 10, farbe: '#c76a8a', bauch: '#fbe3ec', angriff: 'Jagd-Blasen', boss: true,
               info: 'BOSS! Pustet 3 dicke Blasen, die dich VERFOLGEN! Schieß die Blasen kaputt, bevor sie dich erwischen – oder renn schnell weg!' },
+  papageimech: { name: 'Dr. Papageis Feder-Mech', emoji: '🦜', hp: 3200, tempo: 0.75, r: 30, groesse: 1.6, nah: 0, schaden: 45, cd: 3, spur: 20, farbe: '#2fb84a', bauch: '#ffd21f', angriff: 'Super-Farb-Strahl', boss: true, keinKaviar: true, koerperHoehe: 125, stampfR: 140,
+              info: 'ENDBOSS der Story: Dr. Papagei in seinem riesigen Feder-Mech.' },
   robomoewe: { name: 'Robo-Möwe', emoji: '🤖', hp: 1800, tempo: 0.95, r: 22, groesse: 1.4, nah: 0, schaden: 40, cd: 3.6, spur: 4, farbe: '#c9cfe6', bauch: '#f2f4f8', angriff: 'Feder-Pfeile & Bomben', boss: true, keinKaviar: true, koerperHoehe: 85,
               info: 'STORY-BOSS! Eine riesige Roboter-Möwe. Fliegt Bomben-Teppiche und schießt Feder-Pfeile.' },
   riese:    { name: 'Riesenkabeljau',  emoji: '👑', hp: 3000, tempo: 0.45, r: 28, groesse: 3.6, nah: 0,  schaden: 110, cd: 5, spur: 45, farbe: '#6f8f6c', bauch: '#e8ecd8', angriff: 'Riesen-Stampfer', boss: true, keinKaviar: true, stampfR: 150, koerperHoehe: 110,
@@ -8735,6 +8786,32 @@ function baueFisch(art) {
       const f = new THREE.Group(); f.position.set(x, 4, z); g.add(f); ud.beine.push(f);
       for (let i = 0; i < 4; i++) f.add(ringY(MAT_METALL, 2, 0.5, 0, -i * 1.1, 0));
     }
+  } else if (art === 'papageimech') {   // 🦜 Dr. Papageis Feder-Mech: Roboter-Papagei auf zwei Beinen, oben im Glas sitzt Dr. Papagei
+    const gruen = mat('#2fb84a', { roughness: 0.4, metalness: 0.35 }), rot = mat('#e63946', { roughness: 0.4, metalness: 0.3 }), gelb = mat('#ffd21f', { roughness: 0.4, metalness: 0.3 }), blau = mat('#3b6fd8', { roughness: 0.4, metalness: 0.3 }), metall = mat('#9aa3b8', { metalness: 0.8, roughness: 0.25 });
+    ud.beine = [];
+    for (const z of [-1, 1]) {   // Beine mit Krallenfüßen
+      const b = new THREE.Group(); b.position.set(0, 36, z * 12); g.add(b); ud.beine.push(b);
+      b.add(zylinder(metall, 3.5, 3, 34, 0, -17, 0), kugel(metall, 5, 0, 0, 0), kugel(mat('#4a4f63', { metalness: 0.7 }), 4, 0, -18, 0));
+      for (const a of [-0.6, 0, 0.6]) { const kr = klotz(gelb, 12, 3, 3, 5, -35, 0); kr.rotation.y = a; b.add(kr); }
+    }
+    k.position.y = 36;
+    k.add(klotz(gruen, 38, 30, 32, 0, 18, 0), klotz(gelb, 4, 22, 24, 19.5, 16, 0), klotz(metall, 40, 4, 34, 0, 2, 0));   // Rumpf + gelber Bauch
+    for (let i = 0; i < 4; i++) k.add(kugel(mat('#ff2a2a', { emissive: '#ff2020', emissiveIntensity: 1.2 }), 1.4, 20, 8 + i * 5, -10));   // Lämpchen
+    const kopf = new THREE.Group(); kopf.position.set(14, 40, 0); k.add(kopf); ud.mechKopf = kopf;
+    kopf.add(kugel(rot, 13, 0, 0, 0), kugel(mat('#f3e7cf'), 7, 9, -2, 0, 1, 0.9, 1.3));
+    const schnabel = new THREE.Mesh(new THREE.ConeGeometry(6, 18, 10), gelb); schnabel.rotation.z = -Math.PI / 2 - 0.4; schnabel.position.set(18, -6, 0); kopf.add(schnabel);
+    for (const z of [-1, 1]) kopf.add(kugel(mat('#ffffff'), 3.4, 8, 4, z * 7), kugel(mat('#111111', { emissive: '#ff2020', emissiveIntensity: 0.6 }), 1.8, 10.5, 4.4, z * 7.4));
+    for (let i = 0; i < 4; i++) { const f = klotz([rot, gelb, blau, rot][i], 3, 14, 2, -4 + i * 2, 14, 0); f.rotation.z = -0.5 + i * 0.25; kopf.add(f); }   // Federkrone
+    const kuppel = new THREE.Mesh(new THREE.SphereGeometry(13, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#bfe8ff', transparent: true, opacity: 0.3, roughness: 0.05, depthWrite: false }));
+    kuppel.position.set(-6, 33, 0); k.add(kuppel);
+    const pilot = baueDrPapagei(); pilot.scale.setScalar(0.42); pilot.position.set(-6, 26, 0); k.add(pilot);   // 🦜 Dr. Papagei steuert!
+    for (const z of [-1, 1]) {   // Arme mit Farb-Kanonen
+      const arm = new THREE.Group(); arm.position.set(4, 26, z * 20); k.add(arm);
+      arm.add(kugel(metall, 5, 0, 0, 0), zylinderX(metall, 3, 3, 14, 7, -4, 0), zylinderX(gruen, 5, 6, 16, 18, -6, 0), ringX(tintenMaterial(1, 0.6), 5.5, 1, 26, -6, 0));
+    }
+    const schwanz = new THREE.Group(); schwanz.position.set(-19, 20, 0); k.add(schwanz); ud.schwanz = schwanz;   // Federn-Düse hinten
+    for (const [z, f] of [[-6, rot], [0, gelb], [6, blau]]) { const fe = klotz(f, 22, 2, 5, -11, 0, z); fe.rotation.z = 0.35; schwanz.add(fe); }
+    k.add(zylinderX(metall, 5, 6, 8, -20, 8, 0), kugel(mat('#5fd3ff', { emissive: '#3fb8ff', emissiveIntensity: 1.6 }), 4, -25, 8, 0));
   } else if (art === 'robomoewe') {   // 🤖 Roboter-Möwe (Story-Boss) – mit einer verdächtigen roten Feder …
     k.position.y = 34;
     const metall = mat('#c9cfe6', { metalness: 0.7, roughness: 0.3 }), weiss = mat('#f2f4f8', { metalness: 0.3, roughness: 0.4 }), dunkel = mat('#3a3f52', { metalness: 0.6, roughness: 0.4 });
@@ -8878,7 +8955,7 @@ function baueFisch(art) {
   g.scale.setScalar(A.groesse);
   ud.basisY = k.position.y;
   if (A.boss) {   // Lebensbalken über dem Boss
-    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : art === 'rochen' ? 58 : art === 'robomoewe' ? 66 : 38); g.add(bar); ud.bar = bar;
+    const bar = new THREE.Group(); bar.position.y = (flach ? 30 : art === 'stelze' ? 82 : art === 'rochen' ? 58 : art === 'robomoewe' ? 66 : art === 'papageimech' ? 95 : 38); g.add(bar); ud.bar = bar;
     bar.add(new THREE.Mesh(new THREE.PlaneGeometry(34, 4.5), new THREE.MeshBasicMaterial({ color: '#1b1f3a', depthTest: false })));
     ud.barFill = new THREE.Mesh(new THREE.PlaneGeometry(32, 3), new THREE.MeshBasicMaterial({ color: '#ff4d4d', depthTest: false }));
     ud.barFill.position.z = 0.1; bar.add(ud.barFill);
@@ -9015,6 +9092,38 @@ function jagdBlasenUpdate(dt) {
     if (weg) jagdBlasePlatzt(b, i);
   }
 }
+// 🌈 Super-Farb-Strahl vom Feder-Mech: erst zielen (roter Streifen), dann ein dicker Strahl, der langsam mitdreht
+function farbStrahlKi(f, dt, A) {
+  const S = f.farbStrahl; S.t -= dt; bewege(f, 0, 0, dt);
+  if (S.phase === 'laden') {
+    f.winkel = S.a;
+    if (S.t <= 0) {
+      S.phase = 'feuer'; S.t = 2.4; S.tick = 0;
+      const geo = new THREE.CylinderGeometry(9, 14, 1, 14, 1, true); geo.rotateZ(Math.PI / 2); geo.translate(0.5, 0, 0);
+      S.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: TEAMS[1].hell, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      S.mesh.scale.set(S.len / A.groesse, 1, 1); S.mesh.position.set(20, 58, 0); f.gruppe.add(S.mesh);   // hängt am Mech (verschwindet mit ihm)
+      if (nahBeimSpieler(f, 1000)) ton('megaton');
+    }
+    return;
+  }
+  // dreht sich langsam zu dir hin
+  const ziel = Math.atan2(spieler.y - f.y, spieler.x - f.x);
+  S.a += Math.atan2(Math.sin(ziel - S.a), Math.cos(ziel - S.a)) * Math.min(1, dt * 0.55);
+  f.winkel = S.a; f.gruppe.rotation.y = -S.a;
+  S.mesh.material.opacity = 0.55 + Math.sin(zeit * 30) * 0.2;
+  S.tick -= dt;
+  if (S.tick <= 0) {
+    S.tick = 0.1;
+    const c = Math.cos(S.a), sn = Math.sin(S.a), l = S.len * (0.2 + Math.random() * 0.8);
+    klecks(f.x + c * l, f.y + sn * l, 22, 1, f, false);
+    for (const e of kleckse) {
+      if (e.team !== 0 || e.tot || e.imHeli) continue;
+      const dx = e.x - f.x, dy = e.y - f.y, entlang = dx * c + dy * sn, quer = Math.abs(-dx * sn + dy * c);
+      if (entlang > 0 && entlang < S.len && quer < 30 + e.r && e.z < 45) treffen(e, 14, f);   // drüberspringen geht!
+    }
+  }
+  if (S.t <= 0) { f.gruppe.remove(S.mesh); S.mesh.geometry.dispose(); S.mesh.material.dispose(); f.farbStrahl = null; f.angriffCd = A.cd; }
+}
 // 🎈 Puste-Kugelfisch: aufblasen ➜ PLATZEN
 function kugelfischPlatzen(f) {
   const A = FISCH_ARTEN.kugelfisch;
@@ -9030,6 +9139,7 @@ function fischKi(f, dt) {
   if (f.ramm) { rammeKi(f, dt, A); return; }
   if (f.wirbel) { wirbelKi(f, dt, A); return; }
   if (f.rochenFlug) { rochenKi(f, dt, A); return; }
+  if (f.farbStrahl) { farbStrahlKi(f, dt, A); return; }
   if (f.puste != null) {   // bläst sich auf …
     f.puste += dt; bewege(f, 0, 0, dt);
     const vorher = Math.floor((f.puste - dt) / 0.4), jetzt = Math.floor(f.puste / 0.4);
@@ -9083,6 +9193,31 @@ function fischKi(f, dt) {
       warnRing(f.x, f.y, A.wirbelR, 0.9 + 2.2);
       if (nahBeimSpieler(f)) { ton('alarm'); meldung('🌀 Der Wirbel-Wels dreht gleich durch – weg da!'); }
       return;
+    }
+  } else if (f.fisch === 'papageimech') {   // 🦜 ENDBOSS: Feder-Pfeile ➜ Stampfer ➜ Super-Farb-Strahl (wird wütender, je weniger Leben)
+    vor = zd < 230 ? -1 : zd > 430 ? 1 : 0;
+    const anteil = f.hp / f.maxHp, stufe = anteil < 0.34 ? 3 : anteil < 0.67 ? 2 : 1;
+    if (stufe !== (f.mechStufe || 1)) {
+      f.mechStufe = stufe; ton('alarm');
+      highlightAnzeige.push({ emoji: '🦜', titel: stufe === 2 ? 'KRAH! SUPER-FARB-STRAHL!' : 'KRAAAH! JETZT WERDE ICH WÜTEND!', text: stufe === 2 ? 'Rote Streifen = Strahl kommt – zur Seite oder drüberspringen!' : 'Der Mech ist schneller und ruft Mond-Kabeljaus!', start: performance.now() / 1000 });
+    }
+    if (f.angriffCd <= 0) {
+      f.mechNr = (f.mechNr || 0) + 1;
+      const art = stufe >= 2 && f.mechNr % 3 === 0 ? 'strahl' : zd < 200 && f.mechNr % 2 === 0 ? 'stampf' : 'federn';
+      if (art === 'strahl') {
+        f.farbStrahl = { phase: 'laden', t: 1.1, a, len: 760 }; f.winkel = a;
+        warnLinie(f.x, f.y, a, 760, 60, 1.1); if (nahBeimSpieler(f, 900)) ton('megaton');
+        return;
+      }
+      if (art === 'stampf') { f.angriffT = 0.9; f.angriffX = f.x + Math.cos(f.winkel) * 30; f.angriffY = f.y + Math.sin(f.winkel) * 30; warnRing(f.angriffX, f.angriffY, A.stampfR, 0.9); f.angriffCd = A.cd / stufe; return; }
+      f.angriffCd = A.cd * (stufe === 3 ? 0.65 : 1); f.beissT = 0.5;
+      const n = stufe === 3 ? 9 : 7;
+      for (let i = 0; i < n; i++) {   // Feder-Pfeile im Fächer
+        const aa = a + (i - (n - 1) / 2) * 0.2, d = Math.min(zd, 460), tx = Math.max(20, Math.min(W - 20, f.x + Math.cos(aa) * d)), ty = Math.max(20, Math.min(H - 20, f.y + Math.sin(aa) * d));
+        bombeWerfen(f, tx, ty, { ulti: true, max: 900, dauer: 0.8, hoehe: 70, r: 34, schaden: 28 }); warnRing(tx, ty, 34, 0.8);
+      }
+      if (nahBeimSpieler(f, 900)) ton('wurf');
+      if (stufe === 3) for (let i = 0; i < 2; i++) { const kf = neuerFisch('knirps', f.x + (Math.random() - 0.5) * 120, f.y + (Math.random() - 0.5) * 120); if (karte === 'mond') raumhelm(kf); kleckse.push(kf); }
     }
   } else if (f.fisch === 'robomoewe') {   // 🤖 abwechselnd Bomben-Überflug und Feder-Pfeile
     vor = zd < 260 ? -1 : zd > 440 ? 1 : 0;
@@ -9193,6 +9328,7 @@ function fischZeigen(e, dt) {
     ud.koerper.rotation.x = laeuft ? Math.sin(e.lauf * 2) * 0.08 : 0;   // wackelt beim Laufen von Seite zu Seite
     ud.koerper.position.x = e.beissT > 0 ? Math.sin(e.beissT / 0.25 * Math.PI) * 5 : 0;   // schnappt nach vorne
   }
+  if (ud.mechKopf) { ud.mechKopf.rotation.y = Math.sin(zeit * 1.3) * 0.25; ud.mechKopf.rotation.z = e.beissT > 0 ? 0.3 : Math.sin(zeit * 2) * 0.05; }
   if (ud.barteln) ud.barteln.forEach((b, i) => { b.rotation.x = b.userData.z * (1.1 + Math.sin(zeit * (kreisel ? 20 : 3) + i) * (kreisel ? 0.5 : 0.15)); b.rotation.z = kreisel ? -1.5 : -0.8 + Math.sin(zeit * 2 + i) * 0.1; });
   if (ud.fluegel) { const fl = e.rochenFlug && e.rochenFlug.phase === 'flug'; ud.fluegel.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * Math.sin(zeit * (fl ? 14 : 5)) * (fl ? 0.55 : 0.3); }); if (ud.koerper) ud.koerper.position.y = 34 + Math.sin(zeit * 2.5) * 4; }
   if (ud.backen) { const p = e.beissT > 0 ? Math.sin(e.beissT / 0.7 * Math.PI) : 0; ud.backen.forEach(b => b.scale.setScalar(1 + p * 0.9 + Math.sin(ph * 3) * 0.05)); }
@@ -10678,9 +10814,50 @@ const STORY_LEVELS = [
            ['papagei', 'KRAH KRAH KRAH! REINGELEGT! Die echte Tini sitzt schon in meiner FEDERRAKETE! Und die Formel für die SUPER-FARBE habe ich auch!'],
            ['papagei', 'Mit der Super-Farbe male ich den MOND an – in MEINEN Farben: Rot, Grün und Gelb! Dann bin ich der berühmteste Papagei des ganzen Universums!'],
            ['papagei', '3 … 2 … 1 … FEDERRAKETE – START!!! 🚀 Tschüssiii, ihr Landratten! KRAH!'],
-           ['brummi', 'Die Rakete fliegt weg! Wir MÜSSEN hinterher – ins WELTALL! 🚀 ENDE VON KAPITEL 3 – Kapitel 4 „Duell im Weltraum“ kommt bald!']] },
+           ['brummi', 'Die Rakete fliegt weg! Wir MÜSSEN hinterher – ins WELTALL! 🚀 ENDE VON KAPITEL 3 – weiter in Kapitel 4: „Duell im Weltraum“!']] },
+  // ===== KAPITEL 4: Duell im Weltraum =====
+  { id: 'k4l1', kap: 4, name: 'Treibstoff für die Ersatzrakete', emoji: '⛽', karte: 'labor', art: 'sammeln', song: 'gewitter', lohn: 350, zeit: 120,
+    text: 'Im Labor steht noch Dr. Papageis ERSATZRAKETE – aber der Tank ist leer! Sammle 5 Treibstoff-Kanister in 120 Sekunden.',
+    items: [[200, 300, '⛽', 'Kanister 1'], [200, 700, '⛽', 'Kanister 2'], [800, 140, '⛽', 'Kanister 3'], [1400, 300, '⛽', 'Kanister 4'], [1400, 700, '⛽', 'Kanister 5']],
+    fisch: { t: 3, max: 6, arten: ['knirps', 'kabeljau', 'spucker', 'dicker'] },
+    vor: [['brummi', 'Wir brauchen eine Rakete! … Moment, im Keller steht ja noch Dr. Papageis ERSATZRAKETE!'], ['brummi', 'Aber der Tank ist leer. Sammle 5 Treibstoff-Kanister! Die Labor-Kabeljaus sind immer noch da – pass auf!']],
+    nach: [['brummi', 'Tank voll! Alle einsteigen! 3 … 2 … 1 … START! 🚀🚀🚀'],
+           ['tini', '„Brummi?! Bist du das? Wir landen gleich auf dem MOND! Er will hier ALLES anmalen! Beeil dich!“'],
+           ['brummi', 'Halte durch, Tini! Wir kommen! … Uff, wir landen! Festhalten!']] },
+  { id: 'k4l2', kap: 4, name: 'Landung auf dem Mond', emoji: '🌙', karte: 'mond', art: 'malen', song: 'stern', lohn: 380, ziel: 30, zeit: 100, bots: 2,
+    text: 'Wir sind auf dem MOND – hier springst du super hoch! Papageis Farb-Roboter malen alles in seinen Farben an. Male 30 % in DEINER Farbe!',
+    vor: [['brummi', 'Wir sind auf dem MOND! 🌙 Hier ist ganz wenig Schwerkraft – spring mal, du fliegst fast!'],
+          ['papagei', 'KRAH! Zu spät! Meine Farb-Roboter malen den Mond schon in MEINEN Farben an!'],
+          ['brummi', 'Nicht, wenn wir schneller sind! Mal mindestens 30 % vom Mond in deiner Farbe an!']],
+    nach: [['papagei', 'NEIN! Mein schöner Papagei-Mond! Dann eben … MOND-KABELJAUS! Mit Raumhelmen! KRAH!'], ['brummi', 'Kabeljaus mit Raumhelmen?! Der spinnt doch!']] },
+  { id: 'k4l3', kap: 4, name: 'Die Mond-Kabeljaus', emoji: '👨‍🚀', karte: 'mond', art: 'ueberleben', song: 'finale', lohn: 400, zeit: 60, leben: 3,
+    text: 'Kabeljaus mit Raumhelmen greifen an! Überlebe 60 Sekunden. Höchstens 3-mal erwischt werden. Tipp: Hoch springen hilft!',
+    fisch: { t: 1.3, max: 10, arten: ['knirps', 'knirps', 'kabeljau', 'dicker', 'spucker', 'flunder'] },
+    vor: [['brummi', 'Da kommen sie – Kabeljaus mit Glas-Helmen! Halte 60 Sekunden durch!']],
+    nach: [['brummi', 'Geschafft! Schau, da oben am Himmel: ein SATELLIT! Er beamt die Formel zu Papageis Rakete!'], ['tini', '„Wenn der Satellit die Formel hat, kann er sie überall hinschicken! Schieß ihn ab!“']] },
+  { id: 'k4l4', kap: 4, name: 'Der Formel-Satellit', emoji: '🛰️', karte: 'mond', art: 'jagd', satellit: true, song: 'stern', lohn: 420, zeit: 120, drohneHP: 550,
+    text: 'Der Formel-Satellit fliegt über den Mond. Triff ihn so lange, bis er abstürzt!',
+    vor: [['brummi', 'Da ist der Satellit! Er fliegt weg, wenn du kommst – aber manchmal bleibt er kurz stehen. DANN treffen!']],
+    nach: [['brummi', 'Satellit kaputt! Die Formel ist futsch!'],
+           ['papagei', 'KRAAAAH! Jetzt reicht es! Jetzt kommt mein GEHEIMSTER Trumpf: der FEDER-MECH! Mit SUPER-FARB-STRAHL!'],
+           ['brummi', 'Ein riesiger Roboter-Papagei! Und Dr. Papagei sitzt oben drin! Das ist der letzte Kampf. Für Tini!']] },
+  { id: 'k4l5', kap: 4, name: 'FINALE: Der Feder-Mech', emoji: '🦜', karte: 'mond', art: 'boss', song: 'kabeljauSturm', lohn: 1000,
+    text: 'DER LETZTE KAMPF! Dr. Papagei im Feder-Mech: Feder-Pfeile, Stampfer und der Super-Farb-Strahl (roter Streifen = weg da!). Besiege ihn und rette Tini!',
+    boss: { art: 'papageimech', hp: 3200, helfer: { t: 9, max: 3, arten: ['knirps', 'kabeljau'] } },
+    vor: [['papagei', 'KRAH KRAH KRAH! Mein FEDER-MECH! Niemand hält den großen Dr. Papagei auf!'],
+          ['brummi', 'Tini ist in der Rakete hinter ihm! Wenn ein roter Streifen auf dich zeigt, kommt der Super-Farb-Strahl – lauf zur Seite oder spring drüber!'],
+          ['brummi', 'Du schaffst das! Für Tini! 💪']],
+    nach: [['papagei', 'Krah … mein schöner Mech … kaputt … ich gebe auf.'],
+           ['brummi', 'Schnell, zur Rakete! … Die Tür geht auf … TINI!!!'],
+           ['tini', 'BRUMMI!!! Und DU hast mich gefunden! DANKE, DANKE, DANKE! 🥹💖'],
+           ['tini', 'Er hat mir diesen Gedanken-Helm aufgesetzt, um die Formel für die Super-Farbe zu lesen. Aber wisst ihr was? Die Formel gibt es GAR NICHT! Das war ein WITZ von mir in der Sendung! 😂'],
+           ['papagei', 'WAS?! Eine Witz-Formel?! … Krah. Ich wollte doch nur berühmt sein. Es … es tut mir wirklich leid.'],
+           ['brummi', 'Berühmt wird man nicht, indem man Leute entführt! Zur Strafe putzt du jetzt den GANZEN Mond. Und danach den Hafen!'],
+           ['papagei', 'Krah … okay. Ich putze. Und der Kabeljau Run bleibt natürlich geöffnet. Versprochen!'],
+           ['tini', 'Und jetzt ab nach Hause! Morgen machen wir wieder FARBCAST – zusammen! 🎙️'],
+           ['brummi', '🎉 DAS ENDE! Du hast Tini gerettet! Danke, Detektiv – du bist ein echter Held! 🦸 (Tini wartet jetzt bei mir in der Stadt.)']] },
 ];
-const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche', 2: 'Kapitel 2: Falsche Fährten', 3: 'Kapitel 3: Das geheime Labor' };
+const STORY_KAPITEL = { 1: 'Kapitel 1: Spurensuche', 2: 'Kapitel 2: Falsche Fährten', 3: 'Kapitel 3: Das geheime Labor', 4: 'Kapitel 4: Duell im Weltraum' };
 const STORY_INTRO = [
   ['brummi', 'Hey du! Gut, dass du da bist! Ich brauche ganz dringend deine Hilfe! 😰'],
   ['brummi', 'TINI IST VERSCHWUNDEN! Sie ist heute nicht zur Farbcast-Sendung gekommen. Das ist ihr noch NIE passiert!'],
@@ -10743,7 +10920,7 @@ function storyKarteZeigen() {
   zustand = 'wahl'; if (document.pointerLockElement) document.exitPointerLock();
   musikModusSetzen('menu', 'farbcast');
   const fertig = STORY_LEVELS.filter(L => konto.story.fertig.includes(L.id)).length, alle = STORY_LEVELS.length;
-  $('storyKapitel').textContent = `${fertig}/${alle} Levels geschafft${fertig >= alle ? ' · 🎬 Das nächste Kapitel kommt bald!' : ''}`;
+  $('storyKapitel').textContent = `${fertig}/${alle} Levels geschafft${fertig >= alle ? ' · 🎉 GESCHICHTE KOMPLETT GESCHAFFT – du hast Tini gerettet!' : ''}`;
   const liste = $('storyLevels'); liste.replaceChildren();
   let kapVorher = 0, scrollZiel = null;
   STORY_LEVELS.forEach((L, i) => {
@@ -10792,6 +10969,7 @@ function storyLevelStarten(L) {
     const p = neuerKlecks(1, i % 4, aufZuExtra({ team: 1, nr: i % 4, puppe: true, heim: { x: f.x, y: f.y }, name: 'Wach-Puppe', set: 'spritzer', ...zufallsLook() }));
     p.x = f.x; p.y = f.y; kleckse.push(p);
   });
+  if (L.bots) for (const a of auf.filter(a => a.team === 1).slice(0, L.bots)) kleckse.push(neuerKlecks(1, a.nr, aufZuExtra({ ...a, name: `Farb-Roboter ${a.nr + 1}` })));
   if (L.art === 'kampf') for (const a of auf.filter(a => a.team === 1).slice(0, 3)) { const b = neuerKlecks(1, a.nr, aufZuExtra({ ...a, name: ['Kleckerich', 'Schmatz', 'Plörre'][a.nr] || a.name })); kleckse.push(b); }
   if (L.art === 'jagd') sto.drohne = drohneBauen(L);
   if (L.art === 'schleichen') {
@@ -10861,6 +11039,7 @@ function schleichUpdate(dt) {   // gibt true zurück, wenn der Alarm losging
 }
 // 📦 Kurier-Drohne: fliegt vor dir weg, macht ab und zu Pause – triff sie!
 function drohneBauen(L) {
+  if (L.satellit) return satellitBauen(L);
   const g = new THREE.Group(), ud = g.userData;
   const grau = mat('#4a4f63', { metalness: 0.6, roughness: 0.35 }), rot = mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1.5 });
   g.add(klotz(grau, 22, 6, 22, 0, 0, 0), kugel(mat('#1b1f3a', { roughness: 0.2 }), 4, 11, -1, 0, 1, 0.7, 1));
@@ -10876,6 +11055,19 @@ function drohneBauen(L) {
   scene.add(g);
   const f = freieStelle(W * 0.6, H / 2, 20, 0);
   return { x: f.x, y: f.y, h: 45, hp: L.drohneHP, maxHp: L.drohneHP, a: Math.PI, pauseT: 0, flugT: 3, mesh: g };
+}
+function satellitBauen(L) {   // 🛰️ goldener Satellit mit Solarflügeln und Schüssel
+  const g = new THREE.Group(), ud = g.userData;
+  const gold = mat('#e8b83a', { metalness: 0.85, roughness: 0.25 }), solar = mat('#1f3f9f', { metalness: 0.5, roughness: 0.2, emissive: '#0a1a5a', emissiveIntensity: 0.4 });
+  g.add(zylinder(gold, 9, 9, 22, 0, 0, 0), ringY(MAT_METALL, 9.3, 1, 0, 8, 0), ringY(MAT_METALL, 9.3, 1, 0, -8, 0));
+  for (const z of [-1, 1]) { g.add(zylinderZ(MAT_METALL, 1, 1, 12, 0, 0, z * 14)); const p = klotz(solar, 18, 1, 26, 0, 0, z * 34); g.add(p); for (let i = -1; i <= 1; i++) g.add(klotz(MAT_METALL, 18.4, 1.2, 0.6, 0, 0, z * 34 + i * 8)); }
+  const sch = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 8, 0, Math.PI * 2, 0, 1.1), mat('#f2f4f8', { side: THREE.DoubleSide, metalness: 0.4 })); sch.rotation.z = Math.PI / 2; sch.position.set(14, 4, 0); g.add(sch);
+  g.add(zylinder(MAT_METALL, 0.4, 0.4, 16, 0, 18, 0)); ud.rotoren = [];
+  const rot = mat('#ff3b3b', { emissive: '#ff3b3b', emissiveIntensity: 1.5 }); g.add(kugel(rot, 2, 0, 26, 0)); ud.licht = rot;
+  const strahl = new THREE.Mesh(new THREE.CylinderGeometry(2, 9, 120, 10, 1, true), new THREE.MeshBasicMaterial({ color: '#7affc8', transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })); strahl.position.y = 75; g.add(strahl);   // Formel-Strahl nach oben
+  scene.add(g);
+  const f = freieStelle(W * 0.6, H / 2, 20, 0);
+  return { x: f.x, y: f.y, h: 70, hp: L.drohneHP, maxHp: L.drohneHP, a: Math.PI, pauseT: 0, flugT: 3, mesh: g };
 }
 function drohneUpdate(dt) {
   const d = sto.drohne; if (!d || d.hp <= 0) return;
@@ -10906,15 +11098,20 @@ function drohneUpdate(dt) {
   }
   if (d.hp <= 0) {   // 💥 Paket fällt runter!
     explodieren(d.x, d.y, 60, 0, 0, spieler, false); ton('ausbruch'); spritzer(d.x, d.y, hoch, 0, 30, 320);
-    d.mesh.visible = false; meldung('📦 Die Drohne ist abgestürzt – das Paket gehört dir!');
+    d.mesh.visible = false; meldung(sto.L.satellit ? '🛰️ Der Satellit ist abgestürzt!' : '📦 Die Drohne ist abgestürzt – das Paket gehört dir!');
   }
+}
+function raumhelm(f) {   // 👨‍🚀 Glas-Helm für Mond-Kabeljaus
+  const k = f.gruppe.userData.koerper || f.gruppe;
+  k.add(new THREE.Mesh(new THREE.SphereGeometry(13, 16, 12), new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.3, depthWrite: false })).translateX(10).translateY(14));
+  k.add(ringX(MAT_METALL, 9, 1.2, 2, 13, 0));
 }
 function storyFischSpawnen(F) {   // Fische kommen vom Rand der Karte, weit weg von dir
   if (kleckse.filter(e => e.fisch && !e.tot).length >= F.max + (sto.boss ? 1 : 0)) return;
   for (let v = 0; v < 30; v++) {
     const rand = Math.random() < 0.5, x = rand ? (Math.random() < 0.5 ? 60 : W - 60) : 60 + Math.random() * (W - 120), y = rand ? 60 + Math.random() * (H - 120) : (Math.random() < 0.5 ? 60 : H - 60);
     if (istWand(x, y) || inLava(x, y) || kollidiert(x, y, 14, bodenHoehe(x, y)) || Math.hypot(x - spieler.x, y - spieler.y) < 450) continue;
-    kleckse.push(neuerFisch(zufallAus(F.arten), x, y)); spritzer(x, y, 5, 1, 12, 220); return;
+    const f = neuerFisch(zufallAus(F.arten), x, y); if (karte === 'mond') raumhelm(f); kleckse.push(f); spritzer(x, y, 5, 1, 12, 220); return;
   }
 }
 function storyUpdate(dt) {
@@ -10992,7 +11189,7 @@ function storyHud(cw, ch) {
   else if (L.art === 'malen') { const p = zaehler[1] / flaeche * 100; f = Math.min(1, p / L.ziel); txt = `🎨 Angemalt: ${p.toFixed(1)} % / ${L.ziel} %`; }
   else if (L.art === 'ziele') { const n = kleckse.filter(e => e.puppe && e.tot).length; f = n / L.ziele.length; txt = `🎯 Wach-Puppen: ${n} / ${L.ziele.length}`; }
   else if (L.art === 'kampf') { f = Math.min(1, spieler.ko / L.ziel); txt = `💥 Bande erwischt: ${spieler.ko} / ${L.ziel}`; }
-  else if (L.art === 'jagd' && sto.drohne) { f = Math.max(0, sto.drohne.hp / sto.drohne.maxHp); txt = `📦 Drohne: ${Math.ceil(f * 100)} % – triff sie!`; }
+  else if (L.art === 'jagd' && sto.drohne) { f = Math.max(0, sto.drohne.hp / sto.drohne.maxHp); txt = `${L.satellit ? '🛰️ Satellit' : '📦 Drohne'}: ${Math.ceil(f * 100)} % – triff ${L.satellit ? 'ihn' : 'sie'}!`; }
   else if (L.art === 'ueberleben') { f = Math.min(1, sto.t / L.zeit); txt = `🧊 Durchhalten! ${'❤️'.repeat(Math.max(0, L.leben - spieler.tode))}${'🖤'.repeat(Math.min(L.leben, spieler.tode))}`; }
   else if (L.art === 'fischjagd') { f = Math.min(1, spieler.ko / L.ziel); txt = `🐟 Labor-Kabeljaus erwischt: ${spieler.ko} / ${L.ziel}`; }
   else if (L.art === 'schleichen') { f = Math.min(1, sto.entdeckt); txt = sto.entdeckt > 0.02 ? `🚨 ENTDECKT: ${Math.round(sto.entdeckt * 100)} % – versteck dich!` : '🤫 Unentdeckt – schleich zur Tür 🚪'; }
@@ -11007,7 +11204,7 @@ function storyHud(cw, ch) {
   }
 }
 // 🦭 Brummi wartet in der Stadt vor seinem Übertragungswagen
-let brummiStadt = null;
+let brummiStadt = null, tiniStadt = null;
 (function brummiInDerStadt() {
   const hx = -270, hz = 225;
   const wagen = mat('#f2f4f8', { roughness: 0.5 }), pink = mat('#ff5fa2', { roughness: 0.5 });
@@ -11017,6 +11214,7 @@ let brummiStadt = null;
   const schuessel = new THREE.Mesh(new THREE.SphereGeometry(16, 16, 8, 0, Math.PI * 2, 0, 1.1), mat('#c9cfe6', { metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide }));
   schuessel.position.set(hx - 80, 72, hz + 20); schuessel.rotation.z = 0.9; stadtGruppe.add(schuessel);   // Satellitenschüssel
   const sch = schild('🎙️ FARBCAST', '🔍 Wo ist Tini?', '#ff5fa2', 110, 28); sch.position.set(hx - 60, 74, hz + 48.6); stadtGruppe.add(sch);
+  tiniStadt = baueTini3D(); tiniStadt.position.set(hx + 70, 0, hz + 40); tiniStadt.rotation.y = -Math.PI / 2 - 0.5; tiniStadt.visible = false; stadtGruppe.add(tiniStadt);   // 🎧 Tini (erst nach der Rettung)
   brummiStadt = baueBrummi3D(); brummiStadt.scale.setScalar(0.85); brummiStadt.position.set(hx + 70, 0, hz - 10); brummiStadt.rotation.y = -Math.PI / 2 + 0.6; stadtGruppe.add(brummiStadt);
   stadtHindernisse.push({ x: hx + 70, y: hz - 10, kreis: 20 });
   STADT_ZIELE.push({ story: true, x: hx + 70, y: hz - 55, r: 55, text: '🔍 Zu Brummi (Story: Wo ist Tini?)' });
@@ -11028,6 +11226,10 @@ function brummiStadtAnimieren() {   // Brummi ist nervös: wippt hin und her und
   ud.flossen[0].rotation.x = Math.sin(t * 0.5) > 0.6 ? -2.2 + Math.sin(t * 9) * 0.4 : Math.sin(t * 2) * 0.1;
   ud.mund.scale.y = 0.3 + Math.max(0, Math.sin(t * 5)) * 0.6 * (Math.sin(t * 0.7) > 0 ? 1 : 0);
   brummiStadt.rotation.z = Math.sin(t * 1.7) * 0.03;
+  if (tiniStadt) {   // 🎧 Tini ist wieder da – sie hüpft vor Freude und winkt
+    tiniStadt.visible = !!(konto && konto.story && konto.story.fertig.includes('k4l5'));
+    if (tiniStadt.visible) { const u = tiniStadt.userData; tiniStadt.position.y = Math.abs(Math.sin(t * 4)) * 3; u.arme[1].schulter.rotation.z = 2.8; u.arme[1].ellbogen.rotation.z = 0.3 + Math.sin(t * 10) * 0.4; u.arme[0].schulter.rotation.z = 0.2; u.kopf.rotation.y = Math.sin(t) * 0.3; u.mundAuf.visible = Math.sin(t * 3) > 0; }
+  }
 }
 
 // ================== 🦜 DR. PAPAGEI und seine Fischerei (in der Stadt) ==================
