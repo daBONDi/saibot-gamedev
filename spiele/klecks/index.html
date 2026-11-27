@@ -576,7 +576,7 @@ function kontoReparieren(k) {
   v.kabStats = {};
   for (const f of ['schichten', 'siege', 'kaviar', 'rettungen', 'bosse', 'riesen']) v.kabStats[f] = Math.max(0, Math.floor(Number(k.kabStats && k.kabStats[f]) || 0));
   v.abzeichen = Array.isArray(k.abzeichen) ? k.abzeichen.filter(a => typeof a === 'string').slice(0, 30) : [];
-  v.kabKarte = ['auto', 'insel', 'wrack'].includes(k.kabKarte) ? k.kabKarte : 'auto';
+  v.kabKarte = ['auto', 'insel', 'wrack', 'piraten'].includes(k.kabKarte) ? k.kabKarte : 'auto';
   for (const slot of Object.keys(SLOT_LISTE)) {
     const liste = SLOT_LISTE[slot];
     if (k.besitz && Array.isArray(k.besitz[slot])) for (const id of k.besitz[slot]) if (hat(liste, id) && !v.besitz[slot].includes(id)) v.besitz[slot].push(id);
@@ -672,7 +672,16 @@ const ARENEN = {
     waende: spiegel([[430, 250, 60, 60, false], [430, 690, 60, 60, false], [560, 170, 240, 28, false], [1180, 180, 70, 70, false], [1180, 750, 70, 70, false], [620, 720, 50, 50, false], [1000, 150, 60, 60, false]]),
     thema: { boden: '#e3cf98', linie: '#d1bb80', wand: '#7a5a3a', himmel: '#ffd6b0', draussen: '#2a7fb8', muster: 'sand', wandMuster: 'gras' } },
 };
-const KABELJAU_KARTEN = ['insel', 'wrack'];
+  // 🏴‍☠️ Pirateninsel (Kabeljau Run): Totenkopf-Felsen in der Mitte, ein Kanal mit Holzsteg, Palisaden und ein Piratenschiff vor der Küste
+ARENEN.piraten = { name: 'Pirateninsel', emoji: '🏴‍☠️', wandH: 50, nurKabeljau: true, spezial: '💀 Kletter auf den Totenkopf-Felsen – und pass auf dem Holzsteg auf!',
+  zonen: [{ art: 'meer', x: 0, y: 0, w: 240, h: 160 }, { art: 'meer', x: 0, y: 840, w: 240, h: 160 },
+          { art: 'meer', x: 520, y: 0, w: 560, h: 110 }, { art: 'meer', x: 520, y: 890, w: 560, h: 110 },
+          { art: 'meer', x: 1080, y: 290, w: 90, h: 170 }, { art: 'meer', x: 1080, y: 540, w: 90, h: 170 },   // Kanal – in der Mitte führt der Holzsteg drüber
+          { art: 'meer', x: 1300, y: 0, w: 300, h: 250 }, { art: 'meer', x: 1300, y: 750, w: 300, h: 250 }],
+  waende: spiegel([[450, 250, 60, 60, false], [450, 690, 60, 60, false], [330, 160, 160, 24, false], [330, 816, 160, 24, false],
+                   [1200, 190, 50, 50, false], [1200, 760, 50, 50, false], [910, 440, 60, 120, false]]),
+  thema: { boden: '#e6d2a0', linie: '#d6c08a', wand: '#6b4a2e', himmel: '#ffc8a0', draussen: '#2a7fb8', muster: 'sand', wandMuster: 'gras' } };
+const KABELJAU_KARTEN = ['insel', 'wrack', 'piraten'];
 function meerKarte(k = karte) { return !!(ARENEN[k] && ARENEN[k].nurKabeljau); }
 const REVIER_ARENEN = Object.keys(ARENEN).filter(id => !ARENEN[id].nurKabeljau);   // die Arenen für die Farbschlacht
 // Lava-Stellen jeder Arena (dort kann man nicht malen – und es tut weh!)
@@ -701,6 +710,7 @@ const STUFEN_DATEN = {
   vulkan:    [[180, 50, 110, 90, 60], [200, 140, 70, 80, 60, 'n'], [180, 860, 110, 90, 60], [200, 780, 70, 80, 60, 's']],
   bahnhof:   [[600, 120, 140, 300, 28], [640, 420, 70, 70, 28, 'n'], [600, 580, 140, 300, 28], [640, 510, 70, 70, 28, 's']],   // Bahnsteige mit Rampen zum Übergang
   wrack:     [[760, 380, 340, 240, 42, null, false], [690, 460, 70, 80, 42, 'o', false]],   // 🚢 das Deck vom Wrack + eine Planke als Rampe
+  piraten:   [[690, 410, 220, 180, 45, null, false], [620, 470, 70, 60, 45, 'o', false], [770, 340, 60, 70, 45, 's', false], [770, 590, 60, 70, 45, 'n', false]],   // 💀 Totenkopf-Felsen (Anhöhe)
   insel:     [[700, 420, 200, 160, 40, null, false], [770, 350, 60, 70, 40, 's', false], [770, 580, 60, 70, 40, 'n', false], [630, 470, 70, 60, 40, 'o', false], [900, 470, 70, 60, 40, 'w', false]],   // 🏝️ Anhöhe in der Mitte für den Kaviar-Behälter
 };
 // Kletterblöcke: diese Wände werden zu Blöcken, die man anmalen und hochschwimmen kann  [x, y, b, t, höhe, spiegeln]
@@ -713,6 +723,7 @@ const KLETTER_BLOECKE = {
   vulkan:    [[300, 180, 60, 60, 60], [300, 760, 60, 60, 60], [600, 420, 40, 160, 70]],
   bahnhof:   [[400, 140, 60, 160, 60], [400, 700, 60, 160, 60]],   // Kofferstapel zum Hochklettern
   wrack:     [[1180, 180, 70, 70, 55, false], [1180, 750, 70, 70, 55, false]],   // Felsen zum Hochklettern
+  piraten:   [[910, 440, 60, 120, 100, false]],   // 💀 der Totenkopf zum Hochklettern
 };
 const RAMPE_SPIEGEL = { w: 'o', o: 'w', n: 'n', s: 's' };
 const gleich = (r, x, y, w, h) => Math.abs(r.x - x) < 0.5 && Math.abs(r.y - y) < 0.5 && Math.abs(r.w - w) < 0.5 && Math.abs(r.h - h) < 0.5;
@@ -1903,6 +1914,102 @@ let leuchtturmLicht = null;
 
 // ================== 🌄 KULISSE: Himmel, Berge, Städte, Wälder, Wetter ==================
 // Jede Arena hat ihren eigenen Hintergrund. Alles weit draußen wirft keine Schatten (spart Rechenzeit).
+// 🏴‍☠️ Pirateninsel-Deko: Totenkopf, Piratenschiff, Holzsteg, Palisaden, Schätze, Fackeln
+function piratenFlaggeTex() {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 84; const x = c.getContext('2d');
+  x.fillStyle = '#111'; x.fillRect(0, 0, 128, 84); x.fillStyle = '#f2efe6';
+  x.beginPath(); x.arc(64, 34, 17, 0, 7); x.fill(); x.fillRect(54, 44, 20, 12);
+  x.fillStyle = '#111'; for (const px of [57, 71]) { x.beginPath(); x.arc(px, 33, 5, 0, 7); x.fill(); } x.fillRect(62, 40, 4, 5);
+  x.strokeStyle = '#f2efe6'; x.lineWidth = 6; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(36, 56); x.lineTo(92, 78); x.moveTo(92, 56); x.lineTo(36, 78); x.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+let piratenSchiff = null;
+const piratenFackeln = [];
+(function piratenDeko() {
+  const g = kartenGruppe.piraten; if (!g) return;
+  const A = ARENEN.piraten;
+  const holz = mat('#7a5a3a', { roughness: 0.9 }), holz2 = mat('#5a3f28', { roughness: 0.9 }), eisen = mat('#2f2f38', { metalness: 0.6, roughness: 0.4 });
+  const gold = mat('#ffc93c', { metalness: 0.85, roughness: 0.25, emissive: '#ffb000', emissiveIntensity: 0.25 }), knochen = mat('#e8e0cc', { roughness: 0.8 }), loch = mat('#14100c');
+  const flagge = new THREE.MeshStandardMaterial({ map: piratenFlaggeTex(), side: THREE.DoubleSide, roughness: 0.9 });
+  // 🌴 Palmen auf den Felsen
+  for (const r of A.waende) if (r.w === r.h && r.w < 90 * KS) palme(g, r.x + r.w / 2, r.y + r.h / 2, A.wandH, 85, 0.3, r.y * 0.01);
+  // 🪵 Palisaden (die langen schmalen Wände)
+  for (const r of A.waende) if (r.w > r.h * 3) for (let x = r.x + 6; x < r.x + r.w; x += 12) {
+    g.add(zylinder(holz2, 5.5, 6, 58, x, 29, r.y + r.h / 2));
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(5.5, 12, 7), holz2); sp.position.set(x, 64, r.y + r.h / 2); g.add(sp);
+  }
+  // 🛢️ Fässer-Stapel (die kleinen Felsen im Osten)
+  for (const r of A.waende) if (r.w === r.h && r.x > W * 0.7) for (const [dx, dz, dy] of [[-14, -14, 0], [14, -14, 0], [-14, 14, 0], [14, 14, 0], [0, 0, 32]]) {
+    const x = r.x + r.w / 2 + dx, z = r.y + r.h / 2 + dz;
+    g.add(zylinder(holz, 13, 12, 30, x, dy + 66, z), ringY(eisen, 13.2, 1, x, dy + 56, z), ringY(eisen, 13.2, 1, x, dy + 76, z));
+  }
+  // 💀 Der Totenkopf-Felsen (um den Kletterblock herum, schaut nach Osten zum Meer)
+  const blk = A.stufen.find(s => s.hoehe === 100);
+  if (blk) {
+    const cx = blk.x + blk.w / 2, cz = blk.y + blk.h / 2, k = new THREE.Group(); k.position.set(cx, 0, cz); g.add(k);
+    const fels = mat('#d9d0bc', { roughness: 0.85 });
+    k.add(kugel(fels, 60, -4, 58, 0, 1.05, 0.82, 1.5));                                   // Schädel
+    k.add(klotz(fels, 70, 34, 130, 14, 18, 0));                                         // Kiefer
+    for (const z of [-34, 34]) k.add(kugel(loch, 20, 50, 66, z, 0.6, 1, 0.9));          // Augenhöhlen
+    const nase = new THREE.Mesh(new THREE.ConeGeometry(11, 20, 3), loch); nase.position.set(56, 42, 0); nase.rotation.z = Math.PI; k.add(nase);
+    for (let i = 0; i < 7; i++) k.add(klotz(knochen, 6, 14, 12, 50, 22, -42 + i * 14));  // Zähne
+    for (let i = 0; i < 5; i++) k.add(kugel(mat('#7a8a5a', { roughness: 1 }), 8 + i * 2, -30 + i * 12, 100 - i * 4, -60 + i * 28, 1, 0.3, 1));   // Moos oben drauf
+  }
+  // 🏴‍☠️ Fahne + Schatzkisten + Kanone + Fackeln auf der Anhöhe
+  const plat = A.stufen.find(s => s.hoehe === 45 && !s.rampe);
+  if (plat) {
+    const top = plat.hoehe, px = plat.x, pz = plat.y, pw = plat.w, ph = plat.h;
+    g.add(zylinder(holz2, 2.2, 2.6, 110, px + 30, top + 55, pz + 30));
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(56, 37), flagge); fl.position.set(px + 30 + 29, top + 92, pz + 30); g.add(fl);
+    for (const [x, z, dreh] of [[px + pw - 40, pz + 34, 0.4], [px + 40, pz + ph - 34, -0.6]]) {
+      const kiste = new THREE.Group(); kiste.position.set(x, top, z); kiste.rotation.y = dreh; g.add(kiste);
+      kiste.add(klotz(holz, 28, 15, 18, 0, 7.5, 0), klotz(gold, 29, 2, 19, 0, 11, 0), klotz(gold, 3, 5, 1, 0, 10, 9.4));
+      const deckel = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 28, 10, 1, false, 0, Math.PI), holz); deckel.rotation.set(-0.9, 0, Math.PI / 2); deckel.position.set(0, 16, -9); kiste.add(deckel);
+      for (let i = 0; i < 9; i++) kiste.add(kugel(gold, 2.2, -10 + (i % 5) * 5, 15 + (i > 4 ? 2 : 0), (i % 3 - 1) * 4, 1, 0.35, 1));   // Goldmünzen
+      kiste.add(kugel(mat('#e63946', { emissive: '#e63946', emissiveIntensity: 0.6 }), 2.4, 4, 18, 0), kugel(mat('#3fd0ff', { emissive: '#3fd0ff', emissiveIntensity: 0.6 }), 2, -5, 17.5, 3));   // Edelsteine
+    }
+    const kan = new THREE.Group(); kan.position.set(px + pw - 26, top, pz + ph - 30); kan.rotation.y = -0.4; g.add(kan);
+    kan.add(klotz(holz2, 20, 8, 14, 0, 4, 0), zylinderX(eisen, 4, 5.5, 28, 8, 12, 0));
+    for (const s of [-1, 1]) kan.add(zylinderZ(holz, 5, 5, 2, -4, 5, s * 8));
+    for (const [x, z] of [[px + 6, pz + 6], [px + pw - 6, pz + 6], [px + 6, pz + ph - 6], [px + pw - 6, pz + ph - 6]]) {
+      g.add(zylinder(holz2, 1.4, 1.8, 26, x, top + 13, z), zylinder(eisen, 3, 2, 4, x, top + 27, z));
+      const flamme = kugel(mat('#ffb347', { emissive: '#ff7a1a', emissiveIntensity: 1.6 }), 3.2, x, top + 32, z, 0.8, 1.5, 0.8); g.add(flamme); piratenFackeln.push(flamme);
+    }
+  }
+  // 🌉 Holzsteg über den Kanal (mit Seil-Geländer)
+  const kanal = A.zonen.filter(z => z.art === 'meer' && z.w < 200 * KS && z.x > W / 2).sort((a, b) => a.y - b.y);
+  if (kanal.length === 2) {
+    const [o, u] = kanal, y0 = o.y + o.h, y1 = u.y, x0 = o.x - 14, x1 = o.x + o.w + 14;
+    for (let x = x0; x < x1; x += 11) g.add(klotz((x / 11) % 2 < 1 ? holz : holz2, 10, 3, y1 - y0 + 6, x + 5, 2.5, (y0 + y1) / 2));
+    for (const z of [y0 + 2, y1 - 2]) {
+      for (const x of [x0, (x0 + x1) / 2, x1]) g.add(zylinder(holz2, 2, 2, 26, x, 6, z));
+      g.add(zylinderX(mat('#d9c9a0', { roughness: 0.9 }), 0.8, 0.8, x1 - x0, (x0 + x1) / 2, 16, z));
+    }
+  }
+  // ❌ Hier ist der Schatz vergraben!
+  for (const dreh of [0.7, -0.7]) { const xx = klotz(mat('#c8102e', { roughness: 0.8 }), 46, 0.8, 8, 520 * KS, 1.1, 500 * KS); xx.rotation.y = dreh; g.add(xx); }
+  // ⛵ Piratenschiff vor der Küste (schaukelt)
+  const schiff = new THREE.Group(); schiff.position.set(W * 0.55, 0, -330); g.add(schiff); piratenSchiff = schiff;
+  const rumpf = mat('#4a2f1c', { roughness: 0.8 }), rot = mat('#8a1c1c', { roughness: 0.7 });
+  schiff.add(klotz(rumpf, 380, 60, 100, 0, 18, 0), klotz(rot, 384, 8, 104, 0, 42, 0), klotz(rumpf, 90, 40, 96, -150, 66, 0));   // Rumpf, Streifen, Achterdeck
+  const bug = new THREE.Mesh(new THREE.ConeGeometry(50, 110, 4), rumpf); bug.rotation.z = -Math.PI / 2; bug.rotation.x = Math.PI / 4; bug.position.set(240, 22, 0); bug.scale.set(1, 1, 0.7); schiff.add(bug);
+  schiff.add(zylinderX(holz2, 2.5, 1.5, 90, 300, 50, 0));   // Bugspriet
+  for (const [x, h] of [[-60, 240], [90, 210]]) {
+    schiff.add(zylinder(holz2, 5, 7, h, x, 46 + h / 2, 0));
+    for (const [y, b] of [[h * 0.45, 150], [h * 0.8, 110]]) {
+      const segel = new THREE.Mesh(new THREE.CylinderGeometry(120, 120, b * 0.55, 16, 1, true, -0.45, 0.9), mat('#efe6d0', { side: THREE.DoubleSide, roughness: 1 }));
+      segel.position.set(x - 112, 46 + y, 0); segel.rotation.y = Math.PI / 2; schiff.add(segel);
+      schiff.add(zylinderZ(holz2, 2, 2, b, x + 4, 46 + y + b * 0.28, 0));
+    }
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(50, 33), flagge); fl.position.set(x + 25, 46 + h + 14, 0); fl.rotation.y = Math.PI / 2; schiff.add(fl);
+  }
+  for (let i = 0; i < 5; i++) { const c = zylinderZ(eisen, 4, 5, 18, -110 + i * 60, 30, 54); schiff.add(c); schiff.add(klotz(loch, 14, 12, 2, -110 + i * 60, 30, 51)); }   // Kanonen zur Insel
+  schiff.add(kugel(mat('#ffd27a', { emissive: '#ffb347', emissiveIntensity: 1.5 }), 6, -195, 96, 0));   // Laterne
+  schiff.traverse(o => { o.castShadow = false; });
+  // kleine Felsen im Meer
+  for (const [x, z, s] of [[-200, 300, 1], [-180, H - 280, 1.3], [W + 220, 160, 1.1], [W + 240, H - 200, 0.9]]) g.add(kugel(mat('#5a5048', { roughness: 1 }), 40 * s, x, 4, z, 1.2, 0.6, 1));
+})();
 const KULISSEN = {
   farbhafen: { oben: '#2f86e0', horizont: '#cdeaff', sonne: '#fff3c0', wolken: 0.55, nebel: [1300, 4300], boden: 'wasser',
     licht: ['#ffffff', '#7f8fb0', 1.6, '#ffffff'],
@@ -1933,6 +2040,10 @@ const KULISSEN = {
     sonneDir: [0.5, 0.07, -0.65], meerNebel: '#ffd8c8',
     licht: ['#ffe2c8', '#6a6fa0', 1.6, '#ffd0a0'],
     berge: [[3300, 300, '#4a5a7a', null, 0.5, 14]] },
+  piraten: { oben: '#3a2a6a', horizont: '#ff8a5a', sonne: '#ff6a3a', wolken: 0.65, wolkenFarbe: '#d09090', nebel: [1000, 3800], boden: 'wasser',   // 🏴‍☠️ Piraten-Abendrot
+    sonneDir: [-0.3, 0.08, 0.7], meerNebel: '#ffc8b8',
+    licht: ['#ffd0b8', '#5a4f8a', 1.35, '#ff9a6a'],
+    berge: [[3200, 340, '#3a3550', null, 0.6, 15], [3600, 520, '#4a4060', null, 0.8, 16]] },
   lobby: { oben: '#4a8fe8', horizont: '#e0efff', sonne: '#fff3c8', wolken: 0.45, nebel: [1300, 4300], boden: 'wiese',
     licht: ['#ffffff', '#8a86a8', 1.6, '#ffffff'], stadt: [[0, Math.PI * 2, 1800, 70]] },
   stadt: { oben: '#4a96ee', horizont: '#e3f0ff', sonne: '#fff3c8', wolken: 0.5, nebel: [1800, 5200], boden: 'asphalt',
@@ -6650,6 +6761,10 @@ function welt3D(dt) {
   if (bildZaehler % 4 === 1) for (const s of stufenListe()) if (s.flaechen) for (const F of s.flaechen) if (F.neu && F.tex) { F.tex.needsUpdate = true; F.neu = false; }   // Kletterwände neu zeichnen
   if (leuchtturmLicht && karte === 'wrack') leuchtturmLicht.rotation.y += dt * 0.9;   // 🗼 das Licht vom Leuchtturm dreht sich
   if (meerKarte()) meerNebelUpdate();
+  if (karte === 'piraten') {   // ⛵ Piratenschiff schaukelt, 🔥 Fackeln flackern
+    if (piratenSchiff) { piratenSchiff.position.y = Math.sin(zeit * 0.9) * 5; piratenSchiff.rotation.x = Math.sin(zeit * 0.7) * 0.04; piratenSchiff.rotation.z = Math.sin(zeit * 0.5) * 0.02; }
+    piratenFackeln.forEach((f, i) => { const k = 1 + Math.sin(zeit * 13 + i * 2) * 0.15 + Math.sin(zeit * 21 + i) * 0.1; f.scale.set(3.2 * 0.8 * k, 3.2 * 1.5 * k, 3.2 * 0.8 * k); });
+  }
   if (heli && zustand !== 'intro') heliUpdate(dt);   // 🚁 fliegt nach dem Absetzen weg
   if (meerKarte()) for (const t of wasserTexturen) { t.offset.x += dt * 0.02; t.offset.y = Math.sin(zeit * 0.5) * 0.05; }   // Wellen bewegen sich
   if (karte === 'vulkan') for (const t of lavaTexturen) { t.offset.x = Math.sin(zeit * 0.4) * 0.3; t.offset.y -= dt * 0.15; }   // Lava brodelt
@@ -8437,7 +8552,7 @@ const WELLEN = [
 ];
 const BOSS_LISTE = ['panzer', 'spucker', 'flunder', 'stelze', 'ramme', 'kugelfisch', 'wels', 'rochen', 'blase'];
 const KORB = { x: BASIS[0].x + 300, y: H / 2, r: 50 };
-const KORB_ORTE = { insel: { x: 800 * KS, y: 500 * KS }, wrack: { x: 862 * KS, y: 500 * KS } };   // immer oben auf der Anhöhe in der Mitte
+const KORB_ORTE = { insel: { x: 800 * KS, y: 500 * KS }, wrack: { x: 862 * KS, y: 500 * KS }, piraten: { x: 790 * KS, y: 500 * KS } };   // immer oben auf der Anhöhe in der Mitte
 const KORB_HOCH = 30, KORB_GITTER = 19, KORB_KOERPER = 25;   // Behälter: so hoch / so groß ist das Gitter oben / so breit ist er
 function korbOben() { return bodenHoehe(KORB.x, KORB.y) + KORB_HOCH; }
 function korbZiel(p) {   // zielt der Spieler aufs Gitter? Dann fliegt die Kugel genau da rein
@@ -10466,7 +10581,7 @@ function papageiZeigen() {
     const st = konto.kabStats;
     zeile(`📊 Schichten: ${st.schichten} · Gewonnen: ${st.siege} · 🟠 Kaviar: ${st.kaviar} · 🫧 Gerettet: ${st.rettungen} · 💪 Bosse: ${st.bosse}${konto.kabeljauRekord ? ` · Rekord: ${konto.kabeljauRekord}/3 Wellen` : ''}`);
     k('🐟 Los, Kabeljau Run starten!', () => kabeljauStarten(), 'gross');
-    const naechste = { auto: 'insel', insel: 'wrack', wrack: 'auto' };
+    const naechste = { auto: 'insel', insel: 'wrack', wrack: 'piraten', piraten: 'auto' };
     k(`🗺️ Karte: ${konto.kabKarte === 'auto' ? `🔄 wechselt (jetzt ${K.emoji} ${K.name})` : `${K.emoji} ${K.name}`}`, () => { konto.kabKarte = naechste[konto.kabKarte] || 'auto'; speichern(); papageiZeigen(); }, 'klein');
     k(`🏅 Abzeichen & Belohnungen (${konto.abzeichen.length}/${ABZEICHEN.length})`, () => { papageiSeite = -2; papageiZeigen(); }, 'klein');
     k('🆕 Neue Bossfische', () => { papageiSeite = -3; papageiZeigen(); }, 'klein');
@@ -10505,7 +10620,7 @@ function papageiZeigen() {
       const sp = document.createElement('span'); sp.textContent = ` – ${A.info} (${A.angriff}, ${A.hp} Leben)`;
       t.append(b, sp); z.append(fischBild(art), t); extra.append(z);
     }
-    zeile(`🗺️ Neue Karte: ${ARENEN.wrack.emoji} ${ARENEN.wrack.name} – ${ARENEN.wrack.spezial}`);
+    zeile(`🗺️ Neue Karte: ${ARENEN.piraten.emoji} ${ARENEN.piraten.name} – ${ARENEN.piraten.spezial}`);
     k('⬅ Zurück', () => { papageiSeite = -1; papageiZeigen(); }, 'gross');
     return;
   }
